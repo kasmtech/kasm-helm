@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    kasm_app: kasm-api
+    app: kasm
+  name: kasm-api
+  namespace: kasm-helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      kasm_app: kasm-api
+  template:
+    metadata:
+      labels:
+        kasm_app: kasm-api
+        app: kasm
+    spec:
+      imagePullSecrets:
+        - name: regcred
+      containers:
+        - name: kasm-api
+          image: kasmweb/api-private:feature_KASM-5313_webui_code_move
+          imagePullPolicy: always
+          env:
+            - name: DB_AUTO_INITIALIZE
+              value: "true"
+            - name: DEFAULT_ADMIN_PASSWORD
+              value: Pa22word
+            - name: DEFAULT_MANAGER_TOKEN
+              value: Gxie9kb1um2rWBU8hzNG
+            - name: DEFAULT_REGISTRATION_TOKEN
+              value: y9QR2KsE4OUOHj1TOWlg
+            - name: DEFAULT_USER_PASSWORD
+              value: Pa22word
+            - name: POSTGRES_PASSWORD
+              value: rSutQYTCMXrFzOdlQVDy
+            - name: SERVER_HOSTNAME
+              value: proxy
+            - name: SERVER_ID
+              value: auto
+          resources: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kasm-api
+  namespace: kasm-helm
+spec:
+  selector:
+    kasm_app: kasm-api
+  ports:
+  - name: kasm-api
+    protocol: TCP
+    port: 8080

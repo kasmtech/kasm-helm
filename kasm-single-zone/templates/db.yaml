@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: db
+  namespace: kasm-helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      kasm_app: db
+  template:
+    metadata:
+      labels:
+        kasm_app: db
+    spec:
+      imagePullSecrets:
+        - name: regcred
+      containers:
+        - env:
+            - name: POSTGRES_DB
+              value: kasm
+            - name: POSTGRES_PASSWORD
+              value: rSutQYTCMXrFzOdlQVDy
+            - name: POSTGRES_USER
+              value: kasmapp
+          image: kasmweb/postgres-private:feature_KASM-5313_webui_code_move
+          name: kasm-db
+          resources: {}
+          volumeMounts:
+            - mountPath: /var/lib/postgresql/data
+              name: kasm-db
+              subPath: postgres
+      volumes:
+        - name: kasm-db
+          persistentVolumeClaim:
+            claimName: kasm-db
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: kasm-db
+  namespace: kasm-helm
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 500Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: db
+  namespace: kasm-helm
+spec:
+  selector:
+    kasm_app: db
+  ports:
+  - name: db
+    protocol: TCP
+    port: 5432

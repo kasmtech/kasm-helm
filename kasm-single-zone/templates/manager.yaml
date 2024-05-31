@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    kasm_app: kasm-manager
+  name: kasm-manager
+  namespace: kasm-helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      kasm_app: kasm-manager
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        kasm_app: kasm-manager
+    spec:
+      imagePullSecrets:
+        - name: regcred
+      containers:
+        - name: kasm-manager
+          image: kasmweb/manager-private:feature_KASM-5313_webui_code_move
+          imagePullPolicy: always
+          env:
+            - name: MANAGER_ID
+              value: auto
+            - name: POSTGRES_PASSWORD
+              value: rSutQYTCMXrFzOdlQVDy
+            - name: SERVER_HOSTNAME
+              value: proxy
+          resources: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kasm-manager
+  namespace: kasm-helm
+spec:
+  selector:
+    kasm_app: kasm-manager
+  ports:
+  - name: kasm-manager
+    protocol: TCP
+    port: 8181

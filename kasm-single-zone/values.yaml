@@ -1,0 +1,24 @@
+global: {}
+
+namespace: kasm-helm
+
+serviceAccount:
+  create: true
+  labels: {}
+  annotations: {}
+  autoMount: true
+  imagePullSecrets:
+  - regcred
+
+#---------------------------------
+# Host name used by nginx and ingress
+#---------------------------------
+host: matt.dev.kasmweb.net
+
+kasmApp:
+  extraLabels: {}
+  annotations: {}
+  replicas: 1
+  name: kasm # Name of deployment 
+  nodeSelector: {}
+  

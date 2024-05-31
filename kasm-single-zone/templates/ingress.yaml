@@ -1,0 +1,21 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kasm-tls-ingress
+  namespace: kasm-helm
+spec:
+  tls:
+  - hosts:
+      - matt.dev.kasmweb.net
+    secretName: nginx-ingress-cert
+  rules:
+  - host: matt.dev.kasmweb.net
+    http:
+      paths:
+      - path: /api/
+        pathType: Prefix
+        backend:
+          service:
+            name: kasm-api
+            port:
+              number: 8080
