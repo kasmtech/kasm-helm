@@ -4,7 +4,7 @@ metadata:
   labels:
     kasm_app: kasm-guac
   name: kasm-guac
-  namespace: kasm
+  namespace: {{ .Values.namespace | default .Release.Namespace }}
 spec:
   replicas: 1
   selector:
@@ -21,7 +21,7 @@ spec:
       containers:
         - name: kasm-guac
           image: kasmweb/kasm-guac-private:feature_KASM-5313_webui_code_move
-          imagePullPolicy: always
+          imagePullPolicy: Always
           env:
             - name: API_HOSTNAME
               value: kasm-api
@@ -43,7 +43,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: kasm-guac
-  namespace: kasm
+  namespace: {{ .Values.namespace | default .Release.Namespace }}
 spec:
   selector:
     kasm_app: kasm-guac

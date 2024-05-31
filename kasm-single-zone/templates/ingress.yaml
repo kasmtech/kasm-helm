@@ -2,7 +2,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: kasm-tls-ingress
-  namespace: kasm-helm
+  namespace: {{ .Values.namespace | default .Release.Namespace }}
 spec:
   tls:
   - hosts:

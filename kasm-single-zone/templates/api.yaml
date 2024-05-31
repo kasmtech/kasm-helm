@@ -5,7 +5,7 @@ metadata:
     kasm_app: kasm-api
     app: kasm
   name: kasm-api
-  namespace: kasm-helm
+  namespace: {{ .Values.namespace | default .Release.Namespace }}
 spec:
   replicas: 1
   selector:
@@ -22,7 +22,7 @@ spec:
       containers:
         - name: kasm-api
           image: kasmweb/api-private:feature_KASM-5313_webui_code_move
-          imagePullPolicy: always
+          imagePullPolicy: Always
           env:
             - name: DB_AUTO_INITIALIZE
               value: "true"
@@ -46,7 +46,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: kasm-api
-  namespace: kasm-helm
+  namespace: {{ .Values.namespace | default .Release.Namespace }}
 spec:
   selector:
     kasm_app: kasm-api
