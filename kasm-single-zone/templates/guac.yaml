@@ -23,20 +23,10 @@ spec:
           image: kasmweb/kasm-guac-private:feature_KASM-5313_webui_code_move
           imagePullPolicy: Always
           env:
-            - name: API_HOSTNAME
-              value: kasm-api
             - name: CLUSTER_SIZE
-              value: "16"
+              value: "4"
             - name: REGISTRATION_TOKEN
               value: y9QR2KsE4OUOHj1TOWlg
-            - name: SERVER_ADDRESS
-              value: proxy
-            - name: SERVER_ID
-              value: auto
-            - name: SERVER_PORT
-              value: "443"
-            - name: ZONE
-              value: default
           resources: {}
 ---
 apiVersion: v1

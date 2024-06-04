@@ -36,10 +36,6 @@ spec:
               value: Pa22word
             - name: POSTGRES_PASSWORD
               value: rSutQYTCMXrFzOdlQVDy
-            - name: SERVER_HOSTNAME
-              value: proxy
-            - name: SERVER_ID
-              value: auto
           resources: {}
 ---
 apiVersion: v1
