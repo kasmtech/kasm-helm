@@ -16,20 +16,20 @@ spec:
       imagePullSecrets:
         - name: regcred
       containers:
-        - env:
-            - name: POSTGRES_DB
-              value: kasm
-            - name: POSTGRES_PASSWORD
-              value: rSutQYTCMXrFzOdlQVDy
-            - name: POSTGRES_USER
-              value: kasmapp
-          image: kasmweb/postgres-private:feature_KASM-5313_webui_code_move
-          name: kasm-db
-          resources: {}
-          volumeMounts:
-            - mountPath: /var/lib/postgresql/data
-              name: kasm-db
-              subPath: postgres
+          - name: kasm-db
+            env:
+              - name: POSTGRES_DB
+                value: kasm
+              - name: POSTGRES_PASSWORD
+                value: rSutQYTCMXrFzOdlQVDy
+              - name: POSTGRES_USER
+                value: kasmapp
+            image: kasmweb/postgres-private:feature_KASM-5313_webui_code_move
+            resources: {}
+            volumeMounts:
+              - mountPath: /var/lib/postgresql/data
+                name: kasm-db
+                subPath: postgres
       volumes:
         - name: kasm-db
           persistentVolumeClaim:
@@ -45,7 +45,7 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 500Mi
+      storage: 1000Mi
 ---
 apiVersion: v1
 kind: Service

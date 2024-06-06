@@ -6,10 +6,10 @@ metadata:
 spec:
   tls:
   - hosts:
-      - matt.dev.kasmweb.net
+      - {{ .Values.host }}
     secretName: nginx-ingress-cert
   rules:
-  - host: matt.dev.kasmweb.net
+  - host: {{ .Values.host }}
     http:
       paths:
       - path: /api/
