@@ -2,41 +2,44 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    kasm_app: kasm-manager
-  name: kasm-manager
+    kasm_app: kasm-redis
+  name: kasm-redis
   namespace: {{ .Values.namespace | default .Release.Namespace }}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      kasm_app: kasm-manager
+      kasm_app: kasm-redis
   strategy: {}
   template:
     metadata:
       labels:
-        kasm_app: kasm-manager
+        kasm_app: kasm-redis
     spec:
       imagePullSecrets:
         - name: regcred
       containers:
-        - name: kasm-manager
-          image: kasmweb/manager-private:feature_KASM-5313_webui_code_move
+        - name: kasm-redis
+          image: redis:5-alpine
           imagePullPolicy: Always
-          env:
-            - name: POSTGRES_PASSWORD
-              value: rSutQYTCMXrFzOdlQVDy
           resources: {}
-
+          env:
+            - name: REDIS_PASSWORD
+              value: Gxie9kb1um2rWBU8hzNG
+      volumes:
+        - name: rdp-proxy-certs
+          secret:
+            secretName: rdp-proxy-cert
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: kasm-manager
+  name: kasm-redis
   namespace: {{ .Values.namespace | default .Release.Namespace }}
 spec:
   selector:
-    kasm_app: kasm-manager
+    kasm_app: kasm-redis
   ports:
-  - name: kasm-manager
+  - name: kasm-redis
     protocol: TCP
-    port: 8181
+    port: 443

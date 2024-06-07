@@ -2,27 +2,35 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    kasm_app: kasm-manager
-  name: kasm-manager
+    kasm_app: kasm-share
+  name: kasm-share
   namespace: {{ .Values.namespace | default .Release.Namespace }}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      kasm_app: kasm-manager
+      kasm_app: kasm-share
   strategy: {}
   template:
     metadata:
       labels:
-        kasm_app: kasm-manager
+        kasm_app: kasm-share
     spec:
       imagePullSecrets:
         - name: regcred
       containers:
-        - name: kasm-manager
-          image: kasmweb/manager-private:feature_KASM-5313_webui_code_move
+        - name: kasm-share
+          image: kasmweb/share-private:feature_KASM-5313_webui_code_move
           imagePullPolicy: Always
           env:
+            - name: REDIS_PASSWORD
+              value: Gxie9kb1um2rWBU8hzNG
+            - name: REDIS_HOST
+              value: kasm-redis
+            - name: SHARE_ID
+              value: auto
+            - name: SERVER_HOSTNAME
+              value: kasm-share
             - name: POSTGRES_PASSWORD
               value: rSutQYTCMXrFzOdlQVDy
           resources: {}
@@ -31,12 +39,12 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: kasm-manager
+  name: kasm-share
   namespace: {{ .Values.namespace | default .Release.Namespace }}
 spec:
   selector:
-    kasm_app: kasm-manager
+    kasm_app: kasm-share
   ports:
-  - name: kasm-manager
+  - name: kasm-share
     protocol: TCP
-    port: 8181
+    port: 8182
