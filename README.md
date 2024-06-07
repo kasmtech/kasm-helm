@@ -22,6 +22,13 @@ A helm chart is used to deploy Kasm. This project contains examples of deploymen
 kubectl create ns kasm-helm --dry-run=client -o yaml | kubectl apply -f -
 ```
 
+**Docker Hub Login**
+If you are using private images in Docker Hub, you will need to login. Substitute with your creds.
+
+```bash
+kubectl create secret docker-registry regcred --docker-server="https://index.docker.io/v2/" --docker-username "username" --docker-password="dckr_pat_xxxxxxxxxxx" --docker-email="user@mail.com" --namespace="kasm-helm"
+```
+
 **Edit values.yaml**
 1. Change the namespace variable if desired.
 2. Change the `host` variable to the hostname of the deployment that is resolvable by clients.
