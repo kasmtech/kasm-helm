@@ -24,7 +24,10 @@ spec:
           imagePullPolicy: Always
           env:
             - name: REDIS_PASSWORD
-              value: Gxie9kb1um2rWBU8hzNG
+              valueFrom:
+                secretKeyRef:
+                  name: kasm-secrets
+                  key: redis-password
             - name: REDIS_HOST
               value: kasm-redis
           command:
@@ -48,7 +51,10 @@ spec:
           imagePullPolicy: Always
           env:
             - name: REDIS_PASSWORD
-              value: Gxie9kb1um2rWBU8hzNG
+              valueFrom:
+                secretKeyRef:
+                  name: kasm-secrets
+                  key: redis-password
             - name: REDIS_HOST
               value: kasm-redis
             - name: SHARE_ID
@@ -56,7 +62,10 @@ spec:
             - name: SERVER_HOSTNAME
               value: kasm-share
             - name: POSTGRES_PASSWORD
-              value: rSutQYTCMXrFzOdlQVDy
+              valueFrom:
+                secretKeyRef:
+                  name: kasm-secrets
+                  key: db-password
           resources: {}
 
 ---

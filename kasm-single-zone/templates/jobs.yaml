@@ -27,15 +27,30 @@ spec:
             - name: DB_AUTO_INITIALIZE
               value: "false"
             - name: DEFAULT_ADMIN_PASSWORD
-              value: Pa22word
+              valueFrom:
+                secretKeyRef:
+                  name: kasm-secrets
+                  key: admin-password
             - name: DEFAULT_MANAGER_TOKEN
-              value: Gxie9kb1um2rWBU8hzNG
+              valueFrom:
+                secretKeyRef:
+                  name: kasm-secrets
+                  key: manager-token
             - name: DEFAULT_REGISTRATION_TOKEN
-              value: y9QR2KsE4OUOHj1TOWlg
+              valueFrom:
+                secretKeyRef:
+                  name: kasm-secrets
+                  key: service-token
             - name: DEFAULT_USER_PASSWORD
-              value: Pa22word
+              valueFrom:
+                secretKeyRef:
+                  name: kasm-secrets
+                  key: user-password
             - name: POSTGRES_PASSWORD
-              value: rSutQYTCMXrFzOdlQVDy
+              valueFrom:
+                secretKeyRef:
+                  name: kasm-secrets
+                  key: db-password
             - name: START_SERVICES
               value: "false"
           command:

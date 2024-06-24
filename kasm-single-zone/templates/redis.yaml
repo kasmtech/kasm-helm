@@ -25,7 +25,10 @@ spec:
           resources: {}
           env:
             - name: REDIS_PASSWORD
-              value: Gxie9kb1um2rWBU8hzNG
+              valueFrom:
+                secretKeyRef:
+                  name: kasm-secrets
+                  key: redis-password
           command:
             - "redis-server"
           args: 

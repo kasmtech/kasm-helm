@@ -43,7 +43,10 @@ spec:
             - name: SERVER_ZONE_NAME
               value: "default"
             - name: REGISTRATION_TOKEN
-              value: y9QR2KsE4OUOHj1TOWlg
+              valueFrom:
+                secretKeyRef:
+                  name: kasm-secrets
+                  key: service-token
           resources: {}
       volumes:
         - name: proxy-cert

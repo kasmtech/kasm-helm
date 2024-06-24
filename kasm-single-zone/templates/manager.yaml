@@ -34,7 +34,10 @@ spec:
           imagePullPolicy: Always
           env:
             - name: POSTGRES_PASSWORD
-              value: rSutQYTCMXrFzOdlQVDy
+              valueFrom:
+                secretKeyRef:
+                  name: kasm-secrets
+                  key: db-password
           resources: {}
 ---
 apiVersion: v1

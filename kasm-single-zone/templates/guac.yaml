@@ -36,7 +36,10 @@ spec:
             - name: CLUSTER_SIZE
               value: "4"
             - name: REGISTRATION_TOKEN
-              value: y9QR2KsE4OUOHj1TOWlg
+              valueFrom:
+                secretKeyRef:
+                  name: kasm-secrets
+                  key: service-token
             - name: ZONE
               value: default
           resources: {}

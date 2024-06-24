@@ -21,7 +21,10 @@ spec:
               - name: POSTGRES_DB
                 value: kasm
               - name: POSTGRES_PASSWORD
-                value: rSutQYTCMXrFzOdlQVDy
+                valueFrom:
+                  secretKeyRef:
+                    name: kasm-secrets
+                    key: db-password
               - name: POSTGRES_USER
                 value: kasmapp
             image: kasmweb/postgres-private:feature_KASM-5313_webui_code_move

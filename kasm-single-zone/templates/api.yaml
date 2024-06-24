@@ -27,7 +27,10 @@ spec:
             - name: DB_AUTO_INITIALIZE
               value: "false"
             - name: POSTGRES_PASSWORD
-              value: rSutQYTCMXrFzOdlQVDy
+              valueFrom:
+                secretKeyRef:
+                  name: kasm-secrets
+                  key: db-password
             - name: START_SERVICES
               value: "false"
           command:
@@ -44,7 +47,10 @@ spec:
             - name: DB_AUTO_INITIALIZE
               value: "false"
             - name: POSTGRES_PASSWORD
-              value: rSutQYTCMXrFzOdlQVDy
+              valueFrom:
+                secretKeyRef:
+                  name: kasm-secrets
+                  key: db-password
           resources: {}
 ---
 apiVersion: v1
