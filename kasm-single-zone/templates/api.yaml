@@ -7,7 +7,7 @@ metadata:
   name: kasm-api
   namespace: {{ .Values.namespace | default .Release.Namespace }}
 spec:
-  replicas: 1
+  replicas: 3
   selector:
     matchLabels:
       kasm_app: kasm-api
@@ -19,21 +19,30 @@ spec:
     spec:
       imagePullSecrets:
         - name: regcred
+      initContainers:
+        - name: db-init
+          image: kasmweb/api-private:feature_KASM-5313_webui_code_move
+          imagePullPolicy: Always
+          env:
+            - name: DB_AUTO_INITIALIZE
+              value: "false"
+            - name: POSTGRES_PASSWORD
+              value: rSutQYTCMXrFzOdlQVDy
+            - name: START_SERVICES
+              value: "false"
+          command:
+            - "/bin/bash"
+            - "-c"
+          args:
+            - |
+              while [ ! $(PGPASSWORD=$POSTGRES_PASSWORD psql -U kasmapp -d kasm -h db -t -c "select zone_id from zones" 2>/dev/null | wc -l) -ge 2 ]; do echo "Waiting for DB to initialize..."; sleep 5; done
       containers:
         - name: kasm-api
           image: kasmweb/api-private:feature_KASM-5313_webui_code_move
           imagePullPolicy: Always
           env:
             - name: DB_AUTO_INITIALIZE
-              value: "true"
-            - name: DEFAULT_ADMIN_PASSWORD
-              value: Pa22word
-            - name: DEFAULT_MANAGER_TOKEN
-              value: Gxie9kb1um2rWBU8hzNG
-            - name: DEFAULT_REGISTRATION_TOKEN
-              value: y9QR2KsE4OUOHj1TOWlg
-            - name: DEFAULT_USER_PASSWORD
-              value: Pa22word
+              value: "false"
             - name: POSTGRES_PASSWORD
               value: rSutQYTCMXrFzOdlQVDy
           resources: {}

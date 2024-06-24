@@ -1,0 +1,47 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  labels:
+    kasm_app: db-init
+  name: db-init
+  namespace: {{ .Values.namespace | default .Release.Namespace }}
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: db-is-ready
+          image: kasmweb/api-private:feature_KASM-5313_webui_code_move
+          imagePullPolicy: IfNotPresent
+          command:
+            - "/bin/bash"
+            - "-c"
+          args:
+            - |
+              while ! pg_isready -h db -p 5432; do echo "Waiting for DB..."; sleep 5; done
+      containers:
+        - name: db-init
+          image: kasmweb/api-private:feature_KASM-5313_webui_code_move
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: DB_AUTO_INITIALIZE
+              value: "false"
+            - name: DEFAULT_ADMIN_PASSWORD
+              value: Pa22word
+            - name: DEFAULT_MANAGER_TOKEN
+              value: Gxie9kb1um2rWBU8hzNG
+            - name: DEFAULT_REGISTRATION_TOKEN
+              value: y9QR2KsE4OUOHj1TOWlg
+            - name: DEFAULT_USER_PASSWORD
+              value: Pa22word
+            - name: POSTGRES_PASSWORD
+              value: rSutQYTCMXrFzOdlQVDy
+            - name: START_SERVICES
+              value: "false"
+          command:
+            - "/bin/bash"
+            - "-c"
+          args:
+            - |
+              if [ ! $(PGPASSWORD=$POSTGRES_PASSWORD psql -U kasmapp -d kasm -h db -t -c "select zone_id from zones" 2>/dev/null | wc -l) -ge 2 ]; then export DB_AUTO_INITIALIZE="true"; fi
+              if [[ "$DB_AUTO_INITIALIZE" == "true" ]]; then cp /usr/bin/startup.sh /tmp/startup.sh && sed -i '/    initialize_db/ s/$/\n    exit 0/' /tmp/startup.sh && chmod +x /tmp/startup.sh && /tmp/startup.sh -s /usr/bin/kasm_server.so -c /opt/kasm/current/conf/app/api.app.config.yaml; else echo "DB already initialized."; fi

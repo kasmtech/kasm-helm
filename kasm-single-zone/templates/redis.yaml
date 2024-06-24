@@ -26,10 +26,11 @@ spec:
           env:
             - name: REDIS_PASSWORD
               value: Gxie9kb1um2rWBU8hzNG
-      volumes:
-        - name: rdp-proxy-certs
-          secret:
-            secretName: rdp-proxy-cert
+          command:
+            - "redis-server"
+          args: 
+            - "--requirepass"
+            - "$(REDIS_PASSWORD)"
 ---
 apiVersion: v1
 kind: Service
@@ -42,4 +43,4 @@ spec:
   ports:
   - name: kasm-redis
     protocol: TCP
-    port: 443
+    port: 6379

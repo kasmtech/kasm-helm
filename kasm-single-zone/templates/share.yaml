@@ -18,6 +18,30 @@ spec:
     spec:
       imagePullSecrets:
         - name: regcred
+      initContainers:
+        - name: redis-is-ready
+          image: redis:5-alpine
+          imagePullPolicy: Always
+          env:
+            - name: REDIS_PASSWORD
+              value: Gxie9kb1um2rWBU8hzNG
+            - name: REDIS_HOST
+              value: kasm-redis
+          command:
+            - "/bin/sh"
+            - "-c"
+          args:
+            - |
+              while ! redis-cli -h $(REDIS_HOST) -p 6379 -a $(REDIS_PASSWORD) ping 2>/dev/null | grep -q PONG; do echo "Waiting for Redis to start..."; sleep 5; done
+        - name: api-is-ready
+          image: kasmweb/share-private:feature_KASM-5313_webui_code_move
+          imagePullPolicy: Always
+          command:
+            - "/bin/bash"
+            - "-c"
+          args:
+            - |
+              while ! curl http://kasm-api:8080/api/__healthcheck 2>/dev/null | grep -q true; do echo "Waiting for the API server to start..."; sleep 5; done
       containers:
         - name: kasm-share
           image: kasmweb/share-private:feature_KASM-5313_webui_code_move

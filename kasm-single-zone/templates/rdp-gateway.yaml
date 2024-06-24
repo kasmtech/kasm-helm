@@ -18,6 +18,16 @@ spec:
     spec:
       imagePullSecrets:
         - name: regcred
+      initContainers:
+        - name: api-is-ready
+          image: kasmweb/manager-private:feature_KASM-5313_webui_code_move
+          imagePullPolicy: Always
+          command:
+            - "/bin/bash"
+            - "-c"
+          args:
+            - |
+              while ! curl http://kasm-api:8080/api/__healthcheck 2>/dev/null | grep -q true; do echo "Waiting for the API server to start..."; sleep 5; done
       containers:
         - name: kasm-rdp-gateway
           image: kasmweb/rdp-gateway-private:feature_KASM-5313_webui_code_move

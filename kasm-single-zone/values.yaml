@@ -13,7 +13,7 @@ serviceAccount:
 #---------------------------------
 # Host name used by nginx and ingress
 #---------------------------------
-host: matt.dev.kasmweb.net
+host: kasm.home.lab
 
 kasmApp:
   extraLabels: {}
@@ -21,4 +21,3 @@ kasmApp:
   replicas: 1
   name: kasm # Name of deployment 
   nodeSelector: {}
-  
