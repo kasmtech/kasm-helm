@@ -2,19 +2,21 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    kasm_app: kasm-share
-  name: kasm-share
+    app: {{ .Values.kasmApp.name | default "kasm" }}
+    kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-share
+  name: {{ .Values.kasmApp.name | default "kasm" }}-share
   namespace: {{ .Values.namespace | default .Release.Namespace }}
 spec:
-  replicas: 1
+  replicas: {{ .Values.shareReplicas }}
   selector:
     matchLabels:
-      kasm_app: kasm-share
+      kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-share
   strategy: {}
   template:
     metadata:
       labels:
-        kasm_app: kasm-share
+        app: {{ .Values.kasmApp.name | default "kasm" }}
+        kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-share
     spec:
       imagePullSecrets:
         - name: regcred
@@ -72,11 +74,13 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
+  labels:
+    app: {{ .Values.kasmApp.name | default "kasm" }}
   name: kasm-share
   namespace: {{ .Values.namespace | default .Release.Namespace }}
 spec:
   selector:
-    kasm_app: kasm-share
+    kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-share
   ports:
   - name: kasm-share
     protocol: TCP

@@ -2,19 +2,21 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    kasm_app: kasm-guac
-  name: kasm-guac
+    app: {{ .Values.kasmApp.name | default "kasm" }}
+    kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-guac
+  name: {{ .Values.kasmApp.name | default "kasm" }}-guac
   namespace: {{ .Values.namespace | default .Release.Namespace }}
 spec:
-  replicas: 1
+  replicas: {{ .Values.guacReplicas }}
   selector:
     matchLabels:
-      kasm_app: kasm-guac
+      kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-guac
   strategy: {}
   template:
     metadata:
       labels:
-        kasm_app: kasm-guac
+        app: {{ .Values.kasmApp.name | default "kasm" }}
+        kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-guac
     spec:
       imagePullSecrets:
         - name: regcred
@@ -49,11 +51,13 @@ spec:
       volumes:
         - name: guac-config
           configMap:
-            name: kasm-guac-configmap
+            name: {{ .Values.kasmApp.name | default "kasm" }}-guac-configmap
 ---
 apiVersion: v1
 kind: Service
 metadata:
+  labels:
+    app: {{ .Values.kasmApp.name | default "kasm" }}
   name: kasm-guac
   namespace: {{ .Values.namespace | default .Release.Namespace }}
 spec:

@@ -2,19 +2,21 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    kasm_app: kasm-manager
-  name: kasm-manager
+    app: {{ .Values.kasmApp.name | default "kasm" }}
+    kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-manager
+  name: {{ .Values.kasmApp.name | default "kasm" }}-manager
   namespace: {{ .Values.namespace | default .Release.Namespace }}
 spec:
-  replicas: 2
+  replicas: {{ .Values.managerReplicas }}
   selector:
     matchLabels:
-      kasm_app: kasm-manager
+      kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-manager
   strategy: {}
   template:
     metadata:
       labels:
-        kasm_app: kasm-manager
+        app: {{ .Values.kasmApp.name | default "kasm" }}
+        kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-manager
     spec:
       imagePullSecrets:
         - name: regcred
@@ -29,25 +31,27 @@ spec:
             - |
               while ! curl http://kasm-api:8080/api/__healthcheck 2>/dev/null | grep -q true; do echo "Waiting for the API server to start..."; sleep 5; done
       containers:
-        - name: kasm-manager
+        - name: {{ .Values.kasmApp.name | default "kasm" }}-manager
           image: kasmweb/manager-private:feature_KASM-5313_webui_code_move
           imagePullPolicy: Always
           env:
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: kasm-secrets
+                  name: {{ .Values.kasmApp.name | default "kasm" }}-secrets
                   key: db-password
           resources: {}
 ---
 apiVersion: v1
 kind: Service
 metadata:
+  labels:
+    app: {{ .Values.kasmApp.name | default "kasm" }}
   name: kasm-manager
   namespace: {{ .Values.namespace | default .Release.Namespace }}
 spec:
   selector:
-    kasm_app: kasm-manager
+    kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-manager
   ports:
   - name: kasm-manager
     protocol: TCP

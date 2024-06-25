@@ -1,26 +1,26 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  labels:
-    kasm_app: kasm-api
-    app: kasm
-  name: kasm-api
+  name: {{ .Values.kasmApp.name | default "kasm" }}-api
   namespace: {{ .Values.namespace | default .Release.Namespace }}
+  labels:
+    kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-api
+{{- include "kasm.defaultLabels" . | nindent 4 }}
 spec:
-  replicas: 3
+  replicas: {{ .Values.apiReplicas }}
   selector:
     matchLabels:
-      kasm_app: kasm-api
+      kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-api
   template:
     metadata:
       labels:
-        kasm_app: kasm-api
-        app: kasm
+        kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-api
+{{- include "kasm.defaultLabels" . | nindent 8 }}
     spec:
       imagePullSecrets:
         - name: regcred
       initContainers:
-        - name: db-init
+        - name: db-is-ready
           image: kasmweb/api-private:feature_KASM-5313_webui_code_move
           imagePullPolicy: Always
           env:
@@ -29,7 +29,7 @@ spec:
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: kasm-secrets
+                  name: {{ .Values.kasmApp.name | default "kasm" }}-secrets
                   key: db-password
             - name: START_SERVICES
               value: "false"
@@ -52,22 +52,24 @@ spec:
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: kasm-secrets
+                  name: {{ .Values.kasmApp.name | default "kasm" }}-secrets
                   key: db-password
           resources: {}
       volumes:
         - name: api-config
           configMap:
-            name: kasm-api-configmap
+            name: {{ .Values.kasmApp.name | default "kasm" }}-api-configmap
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: kasm-api
   namespace: {{ .Values.namespace | default .Release.Namespace }}
+  labels:
+{{- include "kasm.defaultLabels" . | nindent 4 }}
 spec:
   selector:
-    kasm_app: kasm-api
+    kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-api
   ports:
   - name: kasm-api
     protocol: TCP

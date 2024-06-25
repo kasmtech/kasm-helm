@@ -1,9 +1,12 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
+  labels:
+    app: {{ .Values.kasmApp.name | default "kasm" }}
+    kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-db-init
   annotations:
     "helm.sh/hook": "pre-install"
-  name: kasm-db-init-configmap
+  name: {{ .Values.kasmApp.name | default "kasm" }}-db-init-configmap
   namespace: {{ .Values.namespace | default .Release.Namespace }}
 data:
   default_agents.yaml: |
@@ -4239,9 +4242,12 @@ data:
 apiVersion: v1
 kind: ConfigMap
 metadata:
+  labels:
+    app: {{ .Values.kasmApp.name | default "kasm" }}
+    kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-db-init
   annotations:
     "helm.sh/hook": "pre-install"
-  name: kasm-db-init-startup
+  name: {{ .Values.kasmApp.name | default "kasm" }}-db-init-startup
   namespace: {{ .Values.namespace | default .Release.Namespace }}
 data:
   startup.sh: |

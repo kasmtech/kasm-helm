@@ -2,19 +2,21 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    kasm_app: kasm-rdp-gateway
-  name: kasm-rdp-gateway
+    app: {{ .Values.kasmApp.name | default "kasm" }}
+    kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-rdp-gateway
+  name: {{ .Values.kasmApp.name | default "kasm" }}-rdp-gateway
   namespace: {{ .Values.namespace | default .Release.Namespace }}
 spec:
-  replicas: 1
+  replicas: {{ .Values.rdpGatewayReplicas }}
   selector:
     matchLabels:
-      kasm_app: kasm-rdp-gateway
+      kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-rdp-gateway
   strategy: {}
   template:
     metadata:
       labels:
-        kasm_app: kasm-rdp-gateway
+        app: {{ .Values.kasmApp.name | default "kasm" }}
+        kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-rdp-gateway
     spec:
       imagePullSecrets:
         - name: regcred
@@ -66,7 +68,7 @@ spec:
                 path: rdpproxy.ini
         - name: rdp-proxy-kasm
           configMap:
-            name: rdp-proxy-configmap
+            name: {{ .Values.kasmApp.name | default "kasm" }}-gateway-configmap
             items:
               - key: passthrough.app.config.yaml
                 path: passthrough.app.config.yaml     
@@ -74,11 +76,13 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
+  labels:
+    app: {{ .Values.kasmApp.name | default "kasm" }}
   name: rdp-gateway
   namespace: {{ .Values.namespace | default .Release.Namespace }}
 spec:
   selector:
-    kasm_app: kasm-rdp-gateway
+    kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-rdp-gateway
   ports:
   - name: kasm-rdp-5555
     protocol: TCP

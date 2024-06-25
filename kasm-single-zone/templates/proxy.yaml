@@ -2,19 +2,21 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    kasm_app: kasm-proxy
-  name: kasm-proxy
+    app: {{ .Values.kasmApp.name | default "kasm" }}
+    kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-proxy
+  name: {{ .Values.kasmApp.name | default "kasm" }}-proxy
   namespace: {{ .Values.namespace | default .Release.Namespace }}
 spec:
-  replicas: 2
+  replicas: {{ .Values.proxyReplicas }}
   selector:
     matchLabels:
-      kasm_app: kasm-proxy
+      kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-proxy
   strategy: {}
   template:
     metadata:
       labels:
-        kasm_app: kasm-proxy
+        app: {{ .Values.kasmApp.name | default "kasm" }}
+        kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-proxy
     spec:
       imagePullSecrets:
         - name: regcred
@@ -54,20 +56,19 @@ spec:
       volumes:
         - name: rdp-proxy-certs
           secret:
-            secretName: rdp-proxy-cert
-        - name: nginx-agent-config-vol
-          configMap:
-            name: nginx-agent-config-null
+            secretName: {{ .Values.kasmApp.name | default "kasm" }}-rdp-gateway-cert
         - name: nginx-proxy-config
           configMap:
-            name: kasm-proxy-configmap
+            name: {{ .Values.kasmApp.name | default "kasm" }}-proxy-configmap
         - name: nginx-proxy-services-config
           configMap:
-            name: kasm-proxy-services-configmap
+            name: {{ .Values.kasmApp.name | default "kasm" }}-proxy-services-configmap
 ---
 apiVersion: v1
 kind: Service
 metadata:
+  labels:
+    app: {{ .Values.kasmApp.name | default "kasm" }}
   name: kasm-proxy
   namespace: {{ .Values.namespace | default .Release.Namespace }}
 spec:

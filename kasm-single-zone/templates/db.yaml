@@ -1,17 +1,20 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: db
+  labels:
+    app: {{ .Values.kasmApp.name | default "kasm" }}
+  name: {{ .Values.kasmApp.name | default "kasm" }}-db
   namespace: {{ .Values.namespace | default .Release.Namespace }}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      kasm_app: db
+      app: {{ .Values.kasmApp.name | default "kasm" }}
   template:
     metadata:
       labels:
-        kasm_app: db
+        app: {{ .Values.kasmApp.name | default "kasm" }}
+        kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-db
     spec:
       imagePullSecrets:
         - name: regcred
@@ -44,17 +47,19 @@ spec:
             claimName: kasm-db
         - name: kasm-db-sql-config
           configMap:
-            name: kasm-db-configmap
+            name: {{ .Values.kasmApp.name | default "kasm" }}-db-configmap
             items:
               - key: data.sql
                 path: data.sql
         - name: kasm-db-config
           configMap:
-            name: kasm-db-configmap
+            name: {{ .Values.kasmApp.name | default "kasm" }}-db-configmap
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
+  labels:
+    app: {{ .Values.kasmApp.name | default "kasm" }}
   name: kasm-db
   namespace: {{ .Values.namespace | default .Release.Namespace }}
 spec:
@@ -67,11 +72,13 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
+  labels:
+    app: {{ .Values.kasmApp.name | default "kasm" }}
   name: db
   namespace: {{ .Values.namespace | default .Release.Namespace }}
 spec:
   selector:
-    kasm_app: db
+    kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-db
   ports:
   - name: db
     protocol: TCP

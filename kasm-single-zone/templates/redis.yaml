@@ -2,19 +2,21 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    kasm_app: kasm-redis
-  name: kasm-redis
+    app: {{ .Values.kasmApp.name | default "kasm" }}
+    kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-redis
+  name: {{ .Values.kasmApp.name | default "kasm" }}-redis
   namespace: {{ .Values.namespace | default .Release.Namespace }}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      kasm_app: kasm-redis
+      kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-redis
   strategy: {}
   template:
     metadata:
       labels:
-        kasm_app: kasm-redis
+        app: {{ .Values.kasmApp.name | default "kasm" }}
+        kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-redis
     spec:
       imagePullSecrets:
         - name: regcred
@@ -38,11 +40,13 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
+  labels:
+    app: {{ .Values.kasmApp.name | default "kasm" }}
   name: kasm-redis
   namespace: {{ .Values.namespace | default .Release.Namespace }}
 spec:
   selector:
-    kasm_app: kasm-redis
+    kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-redis
   ports:
   - name: kasm-redis
     protocol: TCP

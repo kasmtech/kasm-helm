@@ -1,13 +1,15 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: kasm-tls-ingress
+  labels:
+    app: {{ .Values.kasmApp.name | default "kasm" }}
+  name: {{ .Values.kasmApp.name | default "kasm" }}-tls-ingress
   namespace: {{ .Values.namespace | default .Release.Namespace }}
 spec:
   tls:
   - hosts:
       - {{ .Values.host }}
-    secretName: nginx-ingress-cert
+    secretName: {{ .Values.kasmApp.name | default "kasm" }}-proxy-ingress-cert
   rules:
   - host: {{ .Values.host }}
     http:

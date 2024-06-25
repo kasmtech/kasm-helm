@@ -1,10 +1,13 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
+  name: {{ .Values.kasmApp.name | default "kasm" }}-api-configmap
+  namespace: {{ .Values.namespace | default .Release.Namespace }}
+  labels:
+    kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-api
+{{- include "kasm.defaultLabels" . | nindent 4 }}
   annotations:
     "helm.sh/hook": "pre-install"
-  name: kasm-api-configmap
-  namespace: {{ .Values.namespace | default .Release.Namespace }}
 data:
   api.app.config.yaml: |
     database:

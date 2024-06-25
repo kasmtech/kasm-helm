@@ -1,9 +1,11 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
+  labels:
+    app: {{ .Values.kasmApp.name | default "kasm" }}
   annotations:
     "helm.sh/hook": "pre-install"
-  name: rdp-proxy-configmap
+  name: {{ .Values.kasmApp.name | default "kasm" }}-gateway-configmap
   namespace: {{ .Values.namespace | default .Release.Namespace }}
 data:
   passthrough.app.config.yaml: |

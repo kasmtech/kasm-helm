@@ -8,27 +8,39 @@ serviceAccount:
   annotations: {}
   autoMount: true
   imagePullSecrets:
-  - regcred
+    - regcred
 
-#---------------------------------
-# Host name used by nginx and ingress
-#---------------------------------
-host: kasm.home.lab
+#------------------------------------------------
+# A list of Hostnames used by nginx and ingress
+#------------------------------------------------
+hostnames:
+  - kasm.home.lab
 
 kasmApp:
+  name: kasm # Name of deployment 
   extraLabels: {}
   annotations: {}
-  replicas: 1
-  name: kasm # Name of deployment 
   nodeSelector: {}
+  certs:
+    - proxy
+    - rdpproxy
+
+## Kasm service replica counts
+apiReplicas: 3
+managerReplicas: 2
+proxyReplicas: 2
+guacReplicas: 1
+rdpGatewayReplicas: 1
+shareReplicas: 1
 
 ## Kasm passwords to use at runtime
 ## If values below are not provided, Helm will dynamically generate them. You can find the initial passwords
 ## in the Deployment Namespace > Secrets > kasm-secrets
 ## TODO: Consider actual encrypted secrets using some other secrets management process
-redisPassword: ""
-dbPassword: ""
-managerToken: ""
-serviceToken: ""
-adminPassword: "" 
-userPassword: ""
+kasmPasswords:
+  redis-password: ""
+  db-password: ""
+  manager-token: ""
+  service-token: ""
+  admin-password: "" 
+  user-password: ""

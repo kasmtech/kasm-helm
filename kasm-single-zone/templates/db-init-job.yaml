@@ -2,8 +2,9 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   labels:
-    kasm_app: db-init
-  name: db-init
+    app: {{ .Values.kasmApp.name | default "kasm" }}
+    kasm_app: {{ .Values.kasmApp.name }}
+  name: {{ .Values.kasmApp.name }}-db-init
   namespace: {{ .Values.namespace | default .Release.Namespace }}
 spec:
   template:
@@ -69,9 +70,9 @@ spec:
       volumes:
         - name: db-preseed-data
           configMap:
-            name: kasm-db-init-configmap
+            name: {{ .Values.kasmApp.name | default "kasm" }}-db-init-configmap
         - name: db-init-script
           configMap:
-            name: kasm-db-init-startup
+            name: {{ .Values.kasmApp.name | default "kasm" }}-db-init-startup
             defaultMode: 0755
             
