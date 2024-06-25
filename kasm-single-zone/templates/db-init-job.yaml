@@ -23,6 +23,12 @@ spec:
         - name: db-init
           image: kasmweb/api-private:feature_KASM-5313_webui_code_move
           imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: db-preseed-data
+              mountPath: /opt/kasm/current/conf/database/seed_data
+            - name: db-init-script
+              mountPath: /usr/bin/startup.sh
+              subPath: startup.sh
           env:
             - name: DB_AUTO_INITIALIZE
               value: "false"
@@ -59,4 +65,13 @@ spec:
           args:
             - |
               if [ ! $(PGPASSWORD=$POSTGRES_PASSWORD psql -U kasmapp -d kasm -h db -t -c "select zone_id from zones" 2>/dev/null | wc -l) -ge 2 ]; then export DB_AUTO_INITIALIZE="true"; fi
-              if [[ "$DB_AUTO_INITIALIZE" == "true" ]]; then cp /usr/bin/startup.sh /tmp/startup.sh && sed -i '/    initialize_db/ s/$/\n    exit 0/' /tmp/startup.sh && chmod +x /tmp/startup.sh && /tmp/startup.sh -s /usr/bin/kasm_server.so -c /opt/kasm/current/conf/app/api.app.config.yaml; else echo "DB already initialized."; fi
+              if [[ "$DB_AUTO_INITIALIZE" == "true" ]]; then /usr/bin/startup.sh; else echo "DB already initialized."; fi
+      volumes:
+        - name: db-preseed-data
+          configMap:
+            name: kasm-db-init-configmap
+        - name: db-init-script
+          configMap:
+            name: kasm-db-init-startup
+            defaultMode: 0755
+            

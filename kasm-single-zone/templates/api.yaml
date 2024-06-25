@@ -43,6 +43,9 @@ spec:
         - name: kasm-api
           image: kasmweb/api-private:feature_KASM-5313_webui_code_move
           imagePullPolicy: Always
+          volumeMounts:
+            - name: api-config
+              mountPath: /opt/kasm/current/conf/app
           env:
             - name: DB_AUTO_INITIALIZE
               value: "false"
@@ -52,6 +55,10 @@ spec:
                   name: kasm-secrets
                   key: db-password
           resources: {}
+      volumes:
+        - name: api-config
+          configMap:
+            name: kasm-api-configmap
 ---
 apiVersion: v1
 kind: Service

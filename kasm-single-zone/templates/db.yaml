@@ -30,13 +30,27 @@ spec:
             image: kasmweb/postgres-private:feature_KASM-5313_webui_code_move
             resources: {}
             volumeMounts:
-              - mountPath: /var/lib/postgresql/data
-                name: kasm-db
+              - name: kasm-db
+                mountPath: /var/lib/postgresql/data
                 subPath: postgres
+              - name: kasm-db-sql-config
+                mountPath: /docker-entrypoint-initdb.d/data.sql
+                subPath: data.sql
+              - name: kasm-db-config
+                mountPath: /var/lib/postgresql/conf
       volumes:
         - name: kasm-db
           persistentVolumeClaim:
             claimName: kasm-db
+        - name: kasm-db-sql-config
+          configMap:
+            name: kasm-db-configmap
+            items:
+              - key: data.sql
+                path: data.sql
+        - name: kasm-db-config
+          configMap:
+            name: kasm-db-configmap
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

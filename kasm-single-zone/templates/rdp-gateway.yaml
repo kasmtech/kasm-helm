@@ -39,6 +39,12 @@ spec:
             - name: proxy-cert
               mountPath: /usr/local/etc/rdpproxy/rdpproxy.key
               subPath: tls.key
+            - name: rdp-proxy-ini
+              mountPath: /usr/local/etc/rdpproxy/rdpproxy.ini
+              subPath: rdpproxy.ini
+            - name: rdp-proxy-kasm
+              mountPath: /usr/local/etc/rdpproxy/passthrough.app.config.yaml
+              subPath: passthrough.app.config.yaml
           env:
             - name: SERVER_ZONE_NAME
               value: "default"
@@ -52,6 +58,18 @@ spec:
         - name: proxy-cert
           secret:
             secretName: rdp-proxy-cert
+        - name: rdp-proxy-ini
+          configMap:
+            name: rdp-proxy-configmap
+            items:
+              - key: rdpproxy.ini
+                path: rdpproxy.ini
+        - name: rdp-proxy-kasm
+          configMap:
+            name: rdp-proxy-configmap
+            items:
+              - key: passthrough.app.config.yaml
+                path: passthrough.app.config.yaml     
 ---
 apiVersion: v1
 kind: Service
