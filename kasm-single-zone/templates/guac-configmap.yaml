@@ -1,13 +1,13 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  labels:
-    app: {{ .Values.kasmApp.name | default "kasm" }}
-    kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-guac
-  annotations:
-    "helm.sh/hook": "pre-install"
   name: {{ .Values.kasmApp.name | default "kasm" }}-guac-configmap
   namespace: {{ .Values.namespace | default .Release.Namespace }}
+  labels:
+    kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-guac
+{{- include "kasm.defaultLabels" . | indent 4 }}
+  annotations:
+    "helm.sh/hook": "pre-install"
 data:
   kasmguac.app.config.yaml: |
     kasmguac:

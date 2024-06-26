@@ -1,13 +1,13 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  labels:
-    app: {{ .Values.kasmApp.name | default "kasm" }}
-    kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-db
-  annotations:
-    "helm.sh/hook": "pre-install"
   name: {{ .Values.kasmApp.name | default "kasm" }}-db-configmap
   namespace: {{ .Values.namespace | default .Release.Namespace }}
+  labels:
+    kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-db
+{{- include "kasm.defaultLabels" . | indent 4 }}
+  annotations:
+    "helm.sh/hook": "pre-install"
 data:
   data.sql: |
     CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA public;

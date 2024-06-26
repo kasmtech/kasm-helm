@@ -1,37 +1,37 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  labels:
-    app: {{ .Values.kasmApp.name | default "kasm" }}
   name: {{ .Values.kasmApp.name | default "kasm" }}-tls-ingress
   namespace: {{ .Values.namespace | default .Release.Namespace }}
+  labels:
+{{- include "kasm.defaultLabels" . | indent 4 }}
 spec:
   tls:
   - hosts:
-      - {{ .Values.host }}
-    secretName: {{ .Values.kasmApp.name | default "kasm" }}-proxy-ingress-cert
+      - {{ first .Values.hostnames }}
+    secretName: {{ .Values.kasmApp.name | default "kasm" }}-proxy-cert
   rules:
-  - host: {{ .Values.host }}
+  - host: {{ first .Values.hostnames }}
     http:
       paths:
       - path: /api/
         pathType: Prefix
         backend:
           service:
-            name: kasm-api
+            name: {{ .Values.kasmApp.name | default "kasm" }}-api
             port:
               number: 8080
       - path: /
         pathType: Prefix
         backend:
           service:
-            name: kasm-proxy
+            name: {{ .Values.kasmApp.name | default "kasm" }}-proxy
             port:
               number: 8080
       - path: /api/share/
         pathType: Prefix
         backend:
           service:
-            name: kasm-share
+            name: {{ .Values.kasmApp.name | default "kasm" }}-share
             port:
               number: 8182

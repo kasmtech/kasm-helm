@@ -5,7 +5,7 @@ metadata:
   namespace: {{ .Values.namespace | default .Release.Namespace }}
   labels:
     kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-api
-{{- include "kasm.defaultLabels" . | nindent 4 }}
+{{- include "kasm.defaultLabels" . | indent 4 }}
   annotations:
     "helm.sh/hook": "pre-install"
 data:

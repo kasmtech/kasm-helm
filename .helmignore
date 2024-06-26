@@ -1,0 +1,10 @@
+# Match any file or path named .helmignore
+.helmignore
+
+# Match any file or path named .git
+.git
+
+## Ignore any cert files
+*.key
+*.crt
+*.cert

@@ -1,11 +1,11 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  labels:
-    app: {{ .Values.kasmApp.name | default "kasm" }}
-    kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-share
   name: {{ .Values.kasmApp.name | default "kasm" }}-share
   namespace: {{ .Values.namespace | default .Release.Namespace }}
+  labels:
+    kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-share
+{{- include "kasm.defaultLabels" . | indent 4 }}
 spec:
   replicas: {{ .Values.shareReplicas }}
   selector:
@@ -15,8 +15,8 @@ spec:
   template:
     metadata:
       labels:
-        app: {{ .Values.kasmApp.name | default "kasm" }}
         kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-share
+{{- include "kasm.defaultLabels" . | indent 8 }}
     spec:
       imagePullSecrets:
         - name: regcred
@@ -55,7 +55,7 @@ spec:
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: kasm-secrets
+                  name: {{ .Values.kasmApp.name | default "kasm" }}-secrets
                   key: redis-password
             - name: REDIS_HOST
               value: kasm-redis
@@ -66,7 +66,7 @@ spec:
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: kasm-secrets
+                  name: {{ .Values.kasmApp.name | default "kasm" }}-secrets
                   key: db-password
           resources: {}
 
@@ -74,10 +74,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  labels:
-    app: {{ .Values.kasmApp.name | default "kasm" }}
   name: kasm-share
   namespace: {{ .Values.namespace | default .Release.Namespace }}
+  labels:
+{{- include "kasm.defaultLabels" . | indent 4 }}
 spec:
   selector:
     kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-share

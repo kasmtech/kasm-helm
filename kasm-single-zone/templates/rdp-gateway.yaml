@@ -1,11 +1,11 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  labels:
-    app: {{ .Values.kasmApp.name | default "kasm" }}
-    kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-rdp-gateway
   name: {{ .Values.kasmApp.name | default "kasm" }}-rdp-gateway
   namespace: {{ .Values.namespace | default .Release.Namespace }}
+  labels:
+    kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-rdp-gateway
+{{- include "kasm.defaultLabels" . | indent 4 }}
 spec:
   replicas: {{ .Values.rdpGatewayReplicas }}
   selector:
@@ -15,8 +15,8 @@ spec:
   template:
     metadata:
       labels:
-        app: {{ .Values.kasmApp.name | default "kasm" }}
         kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-rdp-gateway
+{{- include "kasm.defaultLabels" . | indent 8 }}
     spec:
       imagePullSecrets:
         - name: regcred
@@ -41,10 +41,10 @@ spec:
             - name: proxy-cert
               mountPath: /usr/local/etc/rdpproxy/rdpproxy.key
               subPath: tls.key
-            - name: rdp-proxy-ini
+            - name: rdp-gateway-config
               mountPath: /usr/local/etc/rdpproxy/rdpproxy.ini
               subPath: rdpproxy.ini
-            - name: rdp-proxy-kasm
+            - name: rdp-gateway-config
               mountPath: /usr/local/etc/rdpproxy/passthrough.app.config.yaml
               subPath: passthrough.app.config.yaml
           env:
@@ -59,27 +59,18 @@ spec:
       volumes:
         - name: proxy-cert
           secret:
-            secretName: rdp-proxy-cert
-        - name: rdp-proxy-ini
-          configMap:
-            name: rdp-proxy-configmap
-            items:
-              - key: rdpproxy.ini
-                path: rdpproxy.ini
-        - name: rdp-proxy-kasm
+            secretName: {{ .Values.kasmApp.name | default "kasm" }}-rdpproxy-cert
+        - name: rdp-gateway-config
           configMap:
             name: {{ .Values.kasmApp.name | default "kasm" }}-gateway-configmap
-            items:
-              - key: passthrough.app.config.yaml
-                path: passthrough.app.config.yaml     
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  labels:
-    app: {{ .Values.kasmApp.name | default "kasm" }}
   name: rdp-gateway
   namespace: {{ .Values.namespace | default .Release.Namespace }}
+  labels:
+{{- include "kasm.defaultLabels" . | indent 4 }}
 spec:
   selector:
     kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-rdp-gateway

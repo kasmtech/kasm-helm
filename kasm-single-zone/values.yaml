@@ -4,8 +4,6 @@ namespace: kasm-helm
 
 serviceAccount:
   create: true
-  labels: {}
-  annotations: {}
   autoMount: true
   imagePullSecrets:
     - regcred
@@ -15,27 +13,38 @@ serviceAccount:
 #------------------------------------------------
 hostnames:
   - kasm.home.lab
+  - "*.kasm.home.lab"
 
 kasmApp:
   name: kasm # Name of deployment 
-  extraLabels: {}
-  annotations: {}
-  nodeSelector: {}
+  ## Kasm service replica counts
+  apiReplicas: 3
+  managerReplicas: 2
+  proxyReplicas: 2
+  guacReplicas: 1
+  rdpGatewayReplicas: 1
+  shareReplicas: 1
   certs:
-    - proxy
-    - rdpproxy
-
-## Kasm service replica counts
-apiReplicas: 3
-managerReplicas: 2
-proxyReplicas: 2
-guacReplicas: 1
-rdpGatewayReplicas: 1
-shareReplicas: 1
+    - name: nginx-proxy-cert
+      create: true
+      cert: |-
+        ######    Place public SSL Cert here     ######
+        ######  Leave empty for Helm to generate ######
+      key: |-
+        ######    Place public SSL Key here      ######
+        ######  Leave empty for Helm to generate ######
+    - name: rdpproxy-cert
+      create: true
+      cert: |-
+        ######   Place RDP Proxy SSL Cert here   ######
+        ######  Leave empty for Helm to generate ######
+      key: |-
+        ######   Place RDP Proxy SSL Key here    ######
+        ######  Leave empty for Helm to generate ######
 
 ## Kasm passwords to use at runtime
 ## If values below are not provided, Helm will dynamically generate them. You can find the initial passwords
-## in the Deployment Namespace > Secrets > kasm-secrets
+## in the Deployment Namespace > Secrets > "kasm app name"-secrets
 ## TODO: Consider actual encrypted secrets using some other secrets management process
 kasmPasswords:
   redis-password: ""

@@ -1,10 +1,11 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  labels:
-    app: {{ .Values.kasmApp.name | default "kasm" }}
   name: {{ .Values.kasmApp.name | default "kasm" }}-db
   namespace: {{ .Values.namespace | default .Release.Namespace }}
+  labels:
+    kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-db
+{{- include "kasm.defaultLabels" . | indent 4 }}
 spec:
   replicas: 1
   selector:
@@ -13,8 +14,8 @@ spec:
   template:
     metadata:
       labels:
-        app: {{ .Values.kasmApp.name | default "kasm" }}
         kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-db
+{{- include "kasm.defaultLabels" . | indent 8 }}
     spec:
       imagePullSecrets:
         - name: regcred
@@ -26,7 +27,7 @@ spec:
               - name: POSTGRES_PASSWORD
                 valueFrom:
                   secretKeyRef:
-                    name: kasm-secrets
+                    name: {{ .Values.kasmApp.name | default "kasm" }}-secrets
                     key: db-password
               - name: POSTGRES_USER
                 value: kasmapp
@@ -44,13 +45,10 @@ spec:
       volumes:
         - name: kasm-db
           persistentVolumeClaim:
-            claimName: kasm-db
+            claimName: kasm-db-pvc
         - name: kasm-db-sql-config
           configMap:
             name: {{ .Values.kasmApp.name | default "kasm" }}-db-configmap
-            items:
-              - key: data.sql
-                path: data.sql
         - name: kasm-db-config
           configMap:
             name: {{ .Values.kasmApp.name | default "kasm" }}-db-configmap
@@ -58,10 +56,10 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  labels:
-    app: {{ .Values.kasmApp.name | default "kasm" }}
-  name: kasm-db
+  name: kasm-db-pvc
   namespace: {{ .Values.namespace | default .Release.Namespace }}
+  labels:
+{{- include "kasm.defaultLabels" . | indent 4 }}
 spec:
   accessModes:
     - ReadWriteOnce
@@ -72,10 +70,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  labels:
-    app: {{ .Values.kasmApp.name | default "kasm" }}
   name: db
   namespace: {{ .Values.namespace | default .Release.Namespace }}
+  labels:
+{{- include "kasm.defaultLabels" . | indent 4 }}
 spec:
   selector:
     kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-db

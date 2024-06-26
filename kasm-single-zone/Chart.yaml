@@ -1,6 +1,7 @@
 apiVersion: v2
 name: kasm-single-zone
 description: Helm chart for Kasm workspaces
+icon: https://kasm-static-content.s3.amazonaws.com/icons/kasm-logo-small.png
 
 # A chart can be either an 'application' or a 'library' chart.
 #

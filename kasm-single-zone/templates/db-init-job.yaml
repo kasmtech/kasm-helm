@@ -1,13 +1,17 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  labels:
-    app: {{ .Values.kasmApp.name | default "kasm" }}
-    kasm_app: {{ .Values.kasmApp.name }}
   name: {{ .Values.kasmApp.name }}-db-init
   namespace: {{ .Values.namespace | default .Release.Namespace }}
+  labels:
+    kasm_app: {{ .Values.kasmApp.name }}
+{{- include "kasm.defaultLabels" . | indent 4 }}
 spec:
   template:
+    metadata:
+      labels:
+        kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-api
+{{- include "kasm.defaultLabels" . | indent 8 }}
     spec:
       restartPolicy: OnFailure
       initContainers:
@@ -36,27 +40,27 @@ spec:
             - name: DEFAULT_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: kasm-secrets
+                  name: {{ .Values.kasmApp.name | default "kasm" }}-secrets
                   key: admin-password
             - name: DEFAULT_MANAGER_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: kasm-secrets
+                  name: {{ .Values.kasmApp.name | default "kasm" }}-secrets
                   key: manager-token
             - name: DEFAULT_REGISTRATION_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: kasm-secrets
+                  name: {{ .Values.kasmApp.name | default "kasm" }}-secrets
                   key: service-token
             - name: DEFAULT_USER_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: kasm-secrets
+                  name: {{ .Values.kasmApp.name | default "kasm" }}-secrets
                   key: user-password
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: kasm-secrets
+                  name: {{ .Values.kasmApp.name | default "kasm" }}-secrets
                   key: db-password
             - name: START_SERVICES
               value: "false"
