@@ -13,11 +13,15 @@ spec:
         kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-api
 {{- include "kasm.defaultLabels" . | indent 8 }}
     spec:
+{{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets }}
+{{- end }}
       restartPolicy: OnFailure
       initContainers:
         - name: db-is-ready
           image: kasmweb/api-private:feature_KASM-5313_webui_code_move
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
           command:
             - "/bin/bash"
             - "-c"
@@ -27,7 +31,7 @@ spec:
       containers:
         - name: db-init
           image: kasmweb/api-private:feature_KASM-5313_webui_code_move
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
           volumeMounts:
             - name: db-preseed-data
               mountPath: /opt/kasm/current/conf/database/seed_data

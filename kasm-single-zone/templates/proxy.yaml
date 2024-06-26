@@ -7,7 +7,7 @@ metadata:
     kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-proxy
 {{- include "kasm.defaultLabels" . | indent 4 }}
 spec:
-  replicas: {{ .Values.proxyReplicas }}
+  replicas: {{ .Values.kasmApp.proxyReplicas }}
   selector:
     matchLabels:
       kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-proxy
@@ -18,12 +18,14 @@ spec:
         kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-proxy
 {{- include "kasm.defaultLabels" . | indent 8 }}
     spec:
+{{- if .Values.imagePullSecrets }}
       imagePullSecrets:
-        - name: regcred
+        - name: {{ .Values.imagePullSecrets }}
+{{- end }}
       initContainers:
         - name: api-is-ready
           image: curlimages/curl
-          imagePullPolicy: Always
+          imagePullPolicy: {{ .Values.imagePullSecrets }}
           command: ["/bin/sh", "-c"]
           args:
             - |
@@ -31,7 +33,7 @@ spec:
       containers:
         - name: kasm-proxy
           image: kasmweb/proxy-private:feature_KASM-5313_webui_code_move-rolling
-          imagePullPolicy: Always
+          imagePullPolicy: {{ .Values.imagePullSecrets }}
           resources: {}
           volumeMounts:
             - name: rdp-proxy-certs

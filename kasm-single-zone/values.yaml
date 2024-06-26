@@ -2,11 +2,9 @@ global: {}
 
 namespace: kasm-helm
 
-serviceAccount:
-  create: true
-  autoMount: true
-  imagePullSecrets:
-    - regcred
+## Container pull settings
+imagePullSecrets: regcred
+imagePullPolicy: Always
 
 #------------------------------------------------
 # A list of Hostnames used by nginx and ingress
@@ -47,9 +45,9 @@ kasmApp:
 ## in the Deployment Namespace > Secrets > "kasm app name"-secrets
 ## TODO: Consider actual encrypted secrets using some other secrets management process
 kasmPasswords:
-  redis-password: ""
-  db-password: ""
-  manager-token: ""
-  service-token: ""
-  admin-password: "" 
-  user-password: ""
+  redisPassword: ""
+  dbPassword: ""
+  managerToken: ""
+  serviceToken: ""
+  adminPassword: "" 
+  userPassword: ""

@@ -7,7 +7,7 @@ metadata:
     kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-rdp-gateway
 {{- include "kasm.defaultLabels" . | indent 4 }}
 spec:
-  replicas: {{ .Values.rdpGatewayReplicas }}
+  replicas: {{ .Values.kasmApp.rdpGatewayReplicas }}
   selector:
     matchLabels:
       kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-rdp-gateway
@@ -18,12 +18,14 @@ spec:
         kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-rdp-gateway
 {{- include "kasm.defaultLabels" . | indent 8 }}
     spec:
+{{- if .Values.imagePullSecrets }}
       imagePullSecrets:
-        - name: regcred
+        - name: {{ .Values.imagePullSecrets }}
+{{- end }}
       initContainers:
         - name: api-is-ready
           image: kasmweb/manager-private:feature_KASM-5313_webui_code_move
-          imagePullPolicy: Always
+          imagePullPolicy: {{ .Values.imagePullSecrets }}
           command:
             - "/bin/bash"
             - "-c"
@@ -33,7 +35,7 @@ spec:
       containers:
         - name: kasm-rdp-gateway
           image: kasmweb/rdp-gateway-private:feature_KASM-5313_webui_code_move
-          imagePullPolicy: Always
+          imagePullPolicy: {{ .Values.imagePullSecrets }}
           volumeMounts:
             - name: proxy-cert
               mountPath: /usr/local/etc/rdpproxy/rdpproxy.crt

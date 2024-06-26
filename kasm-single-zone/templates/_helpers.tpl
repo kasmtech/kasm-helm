@@ -2,14 +2,14 @@
 Generate Kasm passwords if not added by the user
 */}}
 {{- define "kasm.passwordValues" }}
-{{- $namespace := .Values.namespace | default .Release.Namespace | quote }}
-{{- $secretName := (printf "%s%s" .Values.kasmApp.name "-secrets") | quote }}
-{{- range $key, $value := .Values.kasmPasswords }}
-{{- $secretsObj := (lookup "v1" "Secret" $namespace $secretName) | default dict }}
-{{- $secretsData := (get $secretsObj "data") | default dict }}
-{{- $valueSecret := (get $secretsData $key) | default (randAlphaNum 26 | b64enc) ($value | b64enc) }}
-{{ $key }}: {{ $valueSecret | quote }}
-{{- end }}
+  {{- $namespace := .Values.namespace | default .Release.Namespace | quote }}
+  {{- $secretName := (printf "%s%s" .Values.kasmApp.name "-secrets") | quote }}
+  {{- range $key, $value := .Values.kasmPasswords }}
+    {{- $secretsObj := (lookup "v1" "Secret" $namespace $secretName) | default dict }}
+    {{- $secretsData := (get $secretsObj "data") | default dict }}
+    {{- $valueSecret := (get $secretsData $key) | default (randAlphaNum 26 | b64enc) ($value | b64enc) }}
+{{ kebabcase $key }}: {{ $valueSecret | quote }}
+  {{- end }}
 {{- end }}
 
 {{/*

@@ -7,7 +7,7 @@ metadata:
     kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-guac
 {{- include "kasm.defaultLabels" . | indent 4 }}
 spec:
-  replicas: {{ .Values.guacReplicas }}
+  replicas: {{ .Values.kasmApp.guacReplicas }}
   selector:
     matchLabels:
       kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-guac
@@ -18,12 +18,14 @@ spec:
         kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-guac
 {{- include "kasm.defaultLabels" . | indent 8 }}
     spec:
+{{- if .Values.imagePullSecrets }}
       imagePullSecrets:
-        - name: regcred
+        - name: {{ .Values.imagePullSecrets }}
+{{- end }}
       initContainers:
         - name: api-is-ready
           image: kasmweb/kasm-guac-private:feature_KASM-5313_webui_code_move
-          imagePullPolicy: Always
+          imagePullPolicy: {{ .Values.imagePullSecrets }}
           command:
             - "/bin/bash"
             - "-c"
@@ -33,7 +35,7 @@ spec:
       containers:
         - name: kasm-guac
           image: kasmweb/kasm-guac-private:feature_KASM-5313_webui_code_move
-          imagePullPolicy: Always
+          imagePullPolicy: {{ .Values.imagePullSecrets }}
           volumeMounts:
             - name: guac-config
               mountPath: /opt/kasm/current/conf/app

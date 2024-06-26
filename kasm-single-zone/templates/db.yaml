@@ -17,8 +17,10 @@ spec:
         kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-db
 {{- include "kasm.defaultLabels" . | indent 8 }}
     spec:
+{{- if .Values.imagePullSecrets }}
       imagePullSecrets:
-        - name: regcred
+        - name: {{ .Values.imagePullSecrets }}
+{{- end }}
       containers:
           - name: kasm-db
             env:

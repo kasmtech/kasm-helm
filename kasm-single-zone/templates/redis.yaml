@@ -18,12 +18,14 @@ spec:
         kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-redis
 {{- include "kasm.defaultLabels" . | indent 8 }}
     spec:
+{{- if .Values.imagePullSecrets }}
       imagePullSecrets:
-        - name: regcred
+        - name: {{ .Values.imagePullSecrets }}
+{{- end }}
       containers:
         - name: kasm-redis
           image: redis:5-alpine
-          imagePullPolicy: Always
+          imagePullPolicy: {{ .Values.imagePullSecrets }}
           resources: {}
           env:
             - name: REDIS_PASSWORD
