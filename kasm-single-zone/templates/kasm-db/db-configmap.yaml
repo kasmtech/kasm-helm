@@ -5,9 +5,9 @@ metadata:
   namespace: {{ .Values.namespace | default .Release.Namespace }}
   labels:
     kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-db
-{{- include "kasm.defaultLabels" . | indent 4 }}
+    {{- include "kasm.defaultLabels" . | indent 4 }}
   annotations:
-    "helm.sh/hook": "pre-install"
+    helm.sh/hook: "pre-install"
 data:
   data.sql: |
     CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA public;
@@ -219,12 +219,12 @@ data:
 
     # - SSL -
 
-    #ssl = off
+    ssl = on
     #ssl_ca_file = ''
-    #ssl_cert_file = 'server.crt'
+    ssl_cert_file = '/etc/ssl/certs/db_server.crt'
     #ssl_crl_file = ''
     #ssl_crl_dir = ''
-    #ssl_key_file = 'server.key'
+    ssl_key_file = '/etc/ssl/certs/db_server.key'
     ssl_ciphers = 'TLSv1.2+FIPS:kRSA+FIPS:!eNULL:!aNULL'
     #ssl_prefer_server_ciphers = on
     #ssl_ecdh_curve = 'prime256v1'

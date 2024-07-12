@@ -1,27 +1,27 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ .Values.kasmApp.name }}-db-init
+  name: {{ .Values.kasmApp.name }}-db-init-job
   namespace: {{ .Values.namespace | default .Release.Namespace }}
   labels:
-    kasm_app: {{ .Values.kasmApp.name }}
-{{- include "kasm.defaultLabels" . | indent 4 }}
+    app.kubernetes.io/name: {{ .Values.kasmApp.name }}-db-init
+    {{- include "kasm.defaultLabels" . | indent 4 }}
 spec:
   template:
     metadata:
       labels:
-        kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-api
-{{- include "kasm.defaultLabels" . | indent 8 }}
+        app.kubernetes.io/name: {{ .Values.kasmApp.name }}-db-init
+        {{- include "kasm.defaultLabels" . | indent 8 }}
     spec:
-{{- if .Values.imagePullSecrets }}
+      {{- if .Values.image.pullSecrets }}
       imagePullSecrets:
-        - name: {{ .Values.imagePullSecrets }}
-{{- end }}
+        - name: {{ .Values.image.pullSecrets }}
+      {{- end }}
       restartPolicy: OnFailure
       initContainers:
         - name: db-is-ready
-          image: kasmweb/api-private:feature_KASM-5313_webui_code_move
-          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          image: "{{ .Values.kasmApp.servicesToDeploy.kasmApi.image }}:{{ .Values.kasmApp.servicesToDeploy.kasmApi.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           command:
             - "/bin/bash"
             - "-c"
@@ -29,15 +29,9 @@ spec:
             - |
               while ! pg_isready -h db -p 5432; do echo "Waiting for DB..."; sleep 5; done
       containers:
-        - name: db-init
-          image: kasmweb/api-private:feature_KASM-5313_webui_code_move
-          imagePullPolicy: {{ .Values.imagePullPolicy }}
-          volumeMounts:
-            - name: db-preseed-data
-              mountPath: /opt/kasm/current/conf/database/seed_data
-            - name: db-init-script
-              mountPath: /usr/bin/startup.sh
-              subPath: startup.sh
+        - name: {{ .Values.kasmApp.name }}-db-init-container
+          image: "{{ .Values.kasmApp.servicesToDeploy.kasmApi.image }}:{{ .Values.kasmApp.servicesToDeploy.kasmApi.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: DB_AUTO_INITIALIZE
               value: "false"
@@ -66,8 +60,6 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.kasmApp.name | default "kasm" }}-secrets
                   key: db-password
-            - name: START_SERVICES
-              value: "false"
           command:
             - "/bin/bash"
             - "-c"
@@ -75,12 +67,12 @@ spec:
             - |
               if [ ! $(PGPASSWORD=$POSTGRES_PASSWORD psql -U kasmapp -d kasm -h db -t -c "select zone_id from zones" 2>/dev/null | wc -l) -ge 2 ]; then export DB_AUTO_INITIALIZE="true"; fi
               if [[ "$DB_AUTO_INITIALIZE" == "true" ]]; then /usr/bin/startup.sh; else echo "DB already initialized."; fi
+          volumeMounts:
+            - name: db-init-script
+              mountPath: /usr/bin/startup.sh
+              subPath: startup.sh
       volumes:
-        - name: db-preseed-data
-          configMap:
-            name: {{ .Values.kasmApp.name | default "kasm" }}-db-init-configmap
         - name: db-init-script
           configMap:
             name: {{ .Values.kasmApp.name | default "kasm" }}-db-init-startup
             defaultMode: 0755
-            

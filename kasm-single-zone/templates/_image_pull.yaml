@@ -1,0 +1,4 @@
+{{- define "image.pullSecrets" }}
+imagePullSecrets:
+  - name: {{ .Values.image.pullSecrets }}
+{{- end }}

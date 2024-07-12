@@ -1,0 +1,119 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.name }}-deployment
+  namespace: {{ .Values.namespace | default .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.name }}
+    {{- include "kasm.defaultLabels" . | indent 4 }}
+spec:
+  replicas: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.replicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: {{ add1 .Values.kasmApp.servicesToDeploy.kasmProxy.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.name }}
+        {{- include "kasm.defaultLabels" . | indent 8 }}
+    spec:
+      restartPolicy: {{ .Values.image.restartPolicy }}
+      {{- if .Values.image.pullSecrets }}
+        {{- include "image.pullSecrets" . | indent 6 }}
+      {{- end }}
+      {{- if .Values.kasmApp.applyHardening }}
+        {{- include "kasm.podSecurity" . | indent 6 }}
+      {{- end }}
+      initContainers:
+        {{- if .Values.kasmApp.applyHardening }}
+          {{- include "proxy.podSecurity.initContainer" . | indent 8 }}
+          {{- include "proxy.podSecurity.mounts" . | indent 10 }}
+        {{- end }}
+        {{- include "kasm.apiWaitContainer" . | nindent 8 }}
+        {{- if .Values.kasmApp.applyHardening }}
+          {{- include "kasm.containerSecurity" . | indent 10 }}
+        {{- end }}
+        {{- include "proxy.initContainers" (list . "kasm-manager" "8181" ) | nindent 8 }}
+        {{- if .Values.kasmApp.applyHardening }}
+          {{- include "kasm.containerSecurity" . | indent 10 }}
+        {{- end }}
+        {{- if .Values.kasmApp.servicesToDeploy.kasmGuac.deploy }}
+          {{- include "proxy.initContainers" (list . "kasm-guac" "3000") | nindent 8 }}
+          {{- if .Values.kasmApp.applyHardening }}
+            {{- include "kasm.containerSecurity" . | indent 10 }}
+          {{- end }}
+        {{- end }}
+        {{- if .Values.kasmApp.servicesToDeploy.kasmShare.deploy }}
+          {{- include "proxy.initContainers" (list . "kasm-share" "8182") | nindent 8 }}
+          {{- if .Values.kasmApp.applyHardening }}
+            {{- include "kasm.containerSecurity" . | indent 10 }}
+          {{- end }}
+        {{- end }}
+        {{- if .Values.kasmApp.servicesToDeploy.rdpGateway.deploy }}
+          {{- include "proxy.initContainers" (list . "rdp-gateway" "5555") | nindent 8 }}
+          {{- if .Values.kasmApp.applyHardening }}
+            {{- include "kasm.containerSecurity" . | indent 10 }}
+          {{- end }}
+        {{- end }}
+      containers:
+        - name: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.name }}-container
+          image: "{{ .Values.kasmApp.servicesToDeploy.kasmProxy.image }}:{{ .Values.kasmApp.servicesToDeploy.kasmProxy.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          resources:
+            requests:
+              memory: "100Mi"
+              cpu: "200m"
+          {{- if .Values.kasmApp.applyHardening }}
+            {{- include "kasm.containerSecurity" . | indent 10 }}
+          {{- end }}
+          volumeMounts:
+            - name: nginx-proxy-cert
+              mountPath: /etc/ssl/certs/kasm_nginx.crt
+              subPath: tls.crt
+            - name: nginx-proxy-cert
+              mountPath: /etc/ssl/private/kasm_nginx.key
+              subPath: tls.key
+            - name: nginx-proxy-config
+              mountPath: /etc/nginx/conf.d
+            - name: nginx-proxy-services-config
+              mountPath: /etc/nginx/conf.d/services.d
+            {{- if .Values.kasmApp.applyHardening }}
+              {{- include "proxy.podSecurity.mounts" . | indent 12 }}
+            {{- end }}
+      volumes:
+        - name: nginx-proxy-cert
+          secret:
+            secretName: {{ .Values.kasmCerts.kasmProxy.name }}
+        - name: nginx-proxy-config
+          configMap:
+            name: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.name }}-configmap
+        - name: nginx-proxy-services-config
+          configMap:
+            name: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.name }}-services-configmap
+        {{- if .Values.kasmApp.applyHardening }}
+          {{- include "proxy.podSecurity.volumes" . | indent 8 }}
+        {{- end }}
+{{- if .Values.kasmApp.applyHardening }}
+  {{- include "proxy.podSecurity.pvc" . }}
+{{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kasm-proxy
+  namespace: {{ .Values.namespace | default .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.name }}-svc
+    {{- include "kasm.defaultLabels" . | indent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.name }}
+  ports:
+  - name: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.name }}-8080
+    protocol: TCP
+    port: 8080

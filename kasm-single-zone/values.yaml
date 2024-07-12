@@ -1,44 +1,17 @@
-global: {}
-
+## Deployment namespace
 namespace: kasm-helm
 
-## Container pull settings
-imagePullSecrets: regcred
-imagePullPolicy: Always
+## image supplies the pullSecrets and pullPolicy settings
+image:
+  pullSecrets: regcred
+  pullPolicy: IfNotPresent
+  restartPolicy: Always
 
-#------------------------------------------------
-# A list of Hostnames used by nginx and ingress
-#------------------------------------------------
-hostnames:
-  - kasm.home.lab
+## The primary hostname of the deployment
+hostname: "kasm.home.lab"
+## A list of Alternate Hostnames used by nginx and ingress to generate certificates for, things like *.<hostname>, etc.
+altHostnames:
   - "*.kasm.home.lab"
-
-kasmApp:
-  name: kasm # Name of deployment 
-  ## Kasm service replica counts
-  apiReplicas: 3
-  managerReplicas: 2
-  proxyReplicas: 2
-  guacReplicas: 1
-  rdpGatewayReplicas: 1
-  shareReplicas: 1
-  certs:
-    - name: nginx-proxy-cert
-      create: true
-      cert: |-
-        ######    Place public SSL Cert here     ######
-        ######  Leave empty for Helm to generate ######
-      key: |-
-        ######    Place public SSL Key here      ######
-        ######  Leave empty for Helm to generate ######
-    - name: rdpproxy-cert
-      create: true
-      cert: |-
-        ######   Place RDP Proxy SSL Cert here   ######
-        ######  Leave empty for Helm to generate ######
-      key: |-
-        ######   Place RDP Proxy SSL Key here    ######
-        ######  Leave empty for Helm to generate ######
 
 ## Kasm passwords to use at runtime
 ## If values below are not provided, Helm will dynamically generate them. You can find the initial passwords
@@ -49,5 +22,102 @@ kasmPasswords:
   dbPassword: ""
   managerToken: ""
   serviceToken: ""
-  adminPassword: "" 
+  adminPassword: "password"
   userPassword: ""
+
+## Kasm application settings
+kasmApp:
+  name: kasm # Name of deployment
+  zoneName: default
+  applyHardening: true
+  servicesToDeploy:
+    kasmProxy:
+      name: kasm-proxy
+      deploy: true
+      image: kasmweb/proxy-private
+      tag: feature_KASM-5313_webui_code_move
+      replicas: 2
+    db:
+      name: kasm-db
+      deploy: true
+      image: kasmweb/postgres-private
+      tag: feature_KASM-5313_webui_code_move
+    kasmApi:
+      name: kasm-api
+      deploy: true
+      image: kasmweb/api-private
+      tag: feature_KASM-5313_webui_code_move
+      replicas: 3
+    kasmManager:
+      name: kasm-manager
+      deploy: true
+      image: kasmweb/manager-private
+      tag: feature_KASM-5313_webui_code_move
+      replicas: 2
+    kasmGuac:
+      name: kasm-guac
+      deploy: true
+      image: kasmweb/kasm-guac-private
+      tag: feature_KASM-5313_webui_code_move
+      replicas: 1
+    rdpGateway:
+      name: rdp-gateway
+      deploy: true
+      image: kasmweb/rdp-gateway-private
+      tag: feature_KASM-5313_webui_code_move
+      replicas: 1
+    kasmShare:
+      name: kasm-share
+      deploy: true
+      image: kasmweb/share-private
+      tag: feature_KASM-5313_webui_code_move
+      replicas: 1
+    kasmRedis:
+      name: kasm-redis
+      deploy: true
+      image: redis
+      tag: 5-alpine
+
+## TLS Certificates to create as secrets
+## If create is true and no certificates are provided in this configuration then
+## Helm will automatically generate a self-signed certificate. If you are MANUALLY adding certificates
+## outside of this Helm chart, then make sure to update the name field for each certificate
+## to match what you used in Kubernetes.
+kasmCerts:
+  ingress:
+    name: kasm-ingress-cert
+    create: true
+    cert: |-
+      ######    Place public SSL Cert here     ######
+      ######  Leave empty for Helm to generate ######
+    key: |-
+      ######    Place public SSL Key here      ######
+      ######  Leave empty for Helm to generate ######
+  kasmProxy:
+    name: kasm-nginx-proxy-cert
+    create: true
+    cert: |-
+      ######  Place nginx Proxy SSL Cert here  ######
+      ######  Leave empty for Helm to generate ######
+    key: |-
+      ######   Place nginx Proxy SSL Key here  ######
+      ######  Leave empty for Helm to generate ######
+  rdpGateway:
+    name: kasm-rdpproxy-cert
+    create: true
+    cert: |-
+      ######   Place RDP Proxy SSL Cert here   ######
+      ######  Leave empty for Helm to generate ######
+    key: |-
+      ######   Place RDP Proxy SSL Key here    ######
+      ######  Leave empty for Helm to generate ######
+  db:
+    name: kasm-db-cert
+    create: true
+    cert: |-
+      ######  Place Postgres DB SSL Cert here  ######
+      ######  Leave empty for Helm to generate ######
+    key: |-
+      ######   Place Postgres DB SSL Key here  ######
+      ######  Leave empty for Helm to generate ######
+

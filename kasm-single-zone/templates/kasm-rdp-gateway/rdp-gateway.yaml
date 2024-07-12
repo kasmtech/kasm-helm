@@ -1,0 +1,103 @@
+{{/*
+Deploy the RDP Gateway if .Values.kasmApp.servicesToDeploy.rdpGateway.deploy set to true
+*/}}
+{{- if .Values.kasmApp.servicesToDeploy.rdpGateway.deploy }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.kasmApp.servicesToDeploy.rdpGateway.name }}-deployment
+  namespace: {{ .Values.namespace | default .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.rdpGateway.name }}
+    {{- include "kasm.defaultLabels" . | indent 4 }}
+spec:
+  replicas: {{ .Values.kasmApp.servicesToDeploy.rdpGateway.replicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: {{ add1 .Values.kasmApp.servicesToDeploy.rdpGateway.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.rdpGateway.name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.rdpGateway.name }}
+        {{- include "kasm.defaultLabels" . | indent 8 }}
+    spec:
+      restartPolicy: {{ .Values.image.restartPolicy }}
+      {{- if .Values.image.pullSecrets }}
+        {{- include "image.pullSecrets" . | indent 6 }}
+      {{- end }}
+      {{- if .Values.kasmApp.applyHardening }}
+        {{- include "kasm.podSecurity" . | indent 6 }}
+      {{- end }}
+      initContainers:
+        {{- if .Values.kasmApp.applyHardening }}
+          {{- include "rdpGateway.podSecurity.initContainer" . | indent 8 }}
+          {{- include "rdpGateway.podSecurity.mounts" . | indent 12 }}
+        {{- end }}
+        {{- include "kasm.apiWaitContainer" . | nindent 8 }}
+        {{- if .Values.kasmApp.applyHardening }}
+          {{- include "kasm.containerSecurity" . | indent 10 }}
+        {{- end }}
+      containers:
+        - name: {{ .Values.kasmApp.servicesToDeploy.rdpGateway.name }}-container
+          image: "{{ .Values.kasmApp.servicesToDeploy.rdpGateway.image }}:{{ .Values.kasmApp.servicesToDeploy.rdpGateway.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: SERVER_ZONE_NAME
+              value: {{ .Values.kasmApp.zoneName | default "default" }}
+            - name: REGISTRATION_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.kasmApp.name | default "kasm" }}-secrets
+                  key: service-token
+          resources:
+            requests:
+              memory: "100Mi"
+              cpu: "200m"
+          {{- if .Values.kasmApp.applyHardening }}
+            {{- include "kasm.containerSecurity" . | indent 10 }}
+          {{- end }}
+          volumeMounts:
+            - name: rdp-proxy-cert
+              mountPath: /usr/local/etc/rdpproxy/rdpproxy.crt
+              subPath: tls.crt
+            - name: rdp-proxy-cert
+              mountPath: /usr/local/etc/rdpproxy/rdpproxy.key
+              subPath: tls.key
+            {{- if .Values.kasmApp.applyHardening }}
+              {{- include "rdpGateway.podSecurity.mounts" . | indent 12 }}
+            {{- end }}
+      volumes:
+        - name: rdp-proxy-cert
+          secret:
+            secretName: {{ .Values.kasmCerts.rdpGateway.name }}
+        {{- if .Values.kasmApp.applyHardening }}
+          {{- include "rdpGateway.podSecurity.volumes" . | indent 8 }}
+        {{- end }}
+{{- if .Values.kasmApp.applyHardening }}
+  {{- include "rdpGateway.podSecurity.pvc" . }}
+{{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rdp-gateway
+  namespace: {{ .Values.namespace | default .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.rdpGateway.name }}-svc
+    {{- include "kasm.defaultLabels" . | indent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.rdpGateway.name }}
+  ports:
+  - name: "{{ .Values.kasmApp.servicesToDeploy.rdpGateway.name }}-5555"
+    protocol: TCP
+    port: 5555
+  - name: "{{ .Values.kasmApp.servicesToDeploy.rdpGateway.name }}-3389"
+    protocol: TCP
+    port: 3389
+{{- end }}
