@@ -87,20 +87,5 @@ spec:
           {{- if .Values.kasmApp.applyHardening }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: kasm-share
-  namespace: {{ .Values.namespace | default .Release.Namespace }}
-  labels:
-    app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.kasmShare.name }}-svc
-    {{- include "kasm.defaultLabels" . | indent 4 }}
-spec:
-  selector:
-    app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.kasmShare.name }}
-  ports:
-  - name: "{{ .Values.kasmApp.servicesToDeploy.kasmShare.name }}-8182"
-    protocol: TCP
-    port: 8182
+{{ include "kasm.serviceTemplate" (list . "kasm-share" .Values.kasmApp.servicesToDeploy.kasmShare.name (list 8182) ) }}
 {{- end }}

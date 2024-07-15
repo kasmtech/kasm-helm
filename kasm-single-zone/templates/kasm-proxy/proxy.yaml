@@ -101,19 +101,4 @@ spec:
 {{- if .Values.kasmApp.applyHardening }}
   {{- include "proxy.podSecurity.pvc" . }}
 {{- end }}
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: kasm-proxy
-  namespace: {{ .Values.namespace | default .Release.Namespace }}
-  labels:
-    app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.name }}-svc
-    {{- include "kasm.defaultLabels" . | indent 4 }}
-spec:
-  selector:
-    app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.name }}
-  ports:
-  - name: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.name }}-8080
-    protocol: TCP
-    port: 8080
+{{ include "kasm.serviceTemplate" (list . "kasm-proxy" .Values.kasmApp.servicesToDeploy.kasmProxy.name (list 8080) ) }}

@@ -1,5 +1,5 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: {{ .Values.kasmApp.servicesToDeploy.db.name }}-deployment
   namespace: {{ .Values.namespace | default .Release.Namespace }}
@@ -8,6 +8,10 @@ metadata:
     {{- include "kasm.defaultLabels" . | indent 4 }}
 spec:
   replicas: 1
+  serviceName: db
+  updateStrategy:
+    rollingUpdate: {}
+    type: RollingUpdate
   selector:
     matchLabels:
       app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.db.name }}
@@ -50,6 +54,16 @@ spec:
             - name: {{ .Values.kasmApp.servicesToDeploy.db.name }}-port
               containerPort: 5432
               protocol: TCP
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - --port=5432
+            timeoutSeconds: 10
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            failureThreshold: 5
+            successThreshold: 1
           readinessProbe:
             exec:
               command:
@@ -62,18 +76,17 @@ spec:
             periodSeconds: 30
             failureThreshold: 3
             successThreshold: 1
-          livenessProbe:
-            exec:
-              command:
-                - pg_isready
-                - --port=5432
-            timeoutSeconds: 10
-            initialDelaySeconds: 15
-            periodSeconds: 30
-            failureThreshold: 5
-            successThreshold: 1
+          resources:
+            limits:
+              cpu: 150m
+              ephemeral-storage: 1024Mi
+              memory: 192Mi
+            requests:
+              cpu: 100m
+              ephemeral-storage: 50Mi
+              memory: 128Mi
           {{- if .Values.kasmApp.applyHardening }}
-            {{- include "kasm.containerSecurity" . | indent 10 }}
+            {{- include "db.containerSecurity" . | indent 10 }}
           {{- end }}
           volumeMounts:
           - name: kasm-db-data
@@ -98,9 +111,6 @@ spec:
             {{- include "db.podSecurity.mounts" . | indent 10 }}
           {{- end }}
       volumes:
-        - name: kasm-db-data
-          persistentVolumeClaim:
-            claimName: {{ .Values.kasmApp.servicesToDeploy.db.name }}-pvc
         - name: kasm-db-configs
           configMap:
             name: {{ .Values.kasmApp.servicesToDeploy.db.name }}-configmap
@@ -109,34 +119,20 @@ spec:
           secret:
             secretName: {{ .Values.kasmCerts.db.name }}
             defaultMode: 0600
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: {{ .Values.kasmApp.servicesToDeploy.db.name }}-pvc
-  namespace: {{ .Values.namespace | default .Release.Namespace }}
-  labels:
-    app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.db.name }}-pvc
-    {{- include "kasm.defaultLabels" . | indent 4 }}
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 5Gi
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: db
-  namespace: {{ .Values.namespace | default .Release.Namespace }}
-  labels:
-    app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.db.name }}-svc
-    {{- include "kasm.defaultLabels" . | indent 4 }}
-spec:
-  selector:
-    app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.db.name }}
-  ports:
-    - name: "{{ .Values.kasmApp.servicesToDeploy.db.name }}-5432"
-      protocol: TCP
-      port: 5432
+  {{- if .Values.kasmApp.servicesToDeploy.db.persistentVolumeClaimRetentionPolicy.enabled }}
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: {{ .Values.kasmApp.servicesToDeploy.db.persistentVolumeClaimRetentionPolicy.whenDeleted }}
+    whenScaled: {{ .Values.kasmApp.servicesToDeploy.db.persistentVolumeClaimRetentionPolicy.whenScaled }}
+  {{- end }}
+  volumeClaimTemplates:
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: kasm-db-data
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 5Gi
+{{ include "kasm.serviceTemplate" (list . "db" .Values.kasmApp.servicesToDeploy.db.name (list 5432) ) }}

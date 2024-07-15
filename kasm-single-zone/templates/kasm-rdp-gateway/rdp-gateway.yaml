@@ -38,7 +38,7 @@ spec:
           {{- include "rdpGateway.podSecurity.initContainer" . | indent 8 }}
           {{- include "rdpGateway.podSecurity.mounts" . | indent 12 }}
         {{- end }}
-        {{- include "kasm.apiWaitContainer" . | nindent 8 }}
+        {{- include "kasm.apiWaitContainer" . | indent 8 }}
         {{- if .Values.kasmApp.applyHardening }}
           {{- include "kasm.containerSecurity" . | indent 10 }}
         {{- end }}
@@ -78,26 +78,8 @@ spec:
         {{- if .Values.kasmApp.applyHardening }}
           {{- include "rdpGateway.podSecurity.volumes" . | indent 8 }}
         {{- end }}
-{{- if .Values.kasmApp.applyHardening }}
-  {{- include "rdpGateway.podSecurity.pvc" . }}
-{{- end }}
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: rdp-gateway
-  namespace: {{ .Values.namespace | default .Release.Namespace }}
-  labels:
-    app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.rdpGateway.name }}-svc
-    {{- include "kasm.defaultLabels" . | indent 4 }}
-spec:
-  selector:
-    app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.rdpGateway.name }}
-  ports:
-  - name: "{{ .Values.kasmApp.servicesToDeploy.rdpGateway.name }}-5555"
-    protocol: TCP
-    port: 5555
-  - name: "{{ .Values.kasmApp.servicesToDeploy.rdpGateway.name }}-3389"
-    protocol: TCP
-    port: 3389
+  {{- if .Values.kasmApp.applyHardening }}
+    {{- include "rdpGateway.podSecurity.pvc" . }}
+  {{- end }}
+{{ include "kasm.serviceTemplate" (list . "rdp-gateway" .Values.kasmApp.servicesToDeploy.rdpGateway.name (list "5555" 3389) ) }}
 {{- end }}

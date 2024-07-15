@@ -51,19 +51,4 @@ spec:
           {{- if .Values.kasmApp.applyHardening }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: kasm-manager
-  namespace: {{ .Values.namespace | default .Release.Namespace }}
-  labels:
-    app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.kasmManager.name }}-svc
-    {{- include "kasm.defaultLabels" . | indent 4 }}
-spec:
-  selector:
-    app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.kasmManager.name }}
-  ports:
-  - name: "{{ .Values.kasmApp.servicesToDeploy.kasmManager.name }}-8181"
-    protocol: TCP
-    port: 8181
+{{ include "kasm.serviceTemplate" (list . "kasm-manager" .Values.kasmApp.servicesToDeploy.kasmManager.name (list 8181) ) }}

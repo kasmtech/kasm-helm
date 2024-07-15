@@ -42,6 +42,10 @@ kasmApp:
       deploy: true
       image: kasmweb/postgres-private
       tag: feature_KASM-5313_webui_code_move
+      persistentVolumeClaimRetentionPolicy:
+        enabled: false
+        whenDeleted: Retain
+        whenScaled: Retain
     kasmApi:
       name: kasm-api
       deploy: true

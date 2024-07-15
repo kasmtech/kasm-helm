@@ -69,28 +69,8 @@ spec:
             {{- include "guac.podSecurity.mounts" . | indent 10 }}
             {{- include "guac.podSecurity.volumes" . | indent 6 }}
           {{- end }}
-{{- if .Values.kasmApp.applyHardening }}
-  {{- include "guac.podSecurity.pvc" . }}
-{{- end }}
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: kasm-guac
-  namespace: {{ .Values.namespace | default .Release.Namespace }}
-  labels:
-    app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.kasmGuac.name }}-svc
-    {{- include "kasm.defaultLabels" . | indent 4 }}
-spec:
-  selector:
-    app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.kasmGuac.name }}
-  ports:
-  - name: {{ .Values.kasmApp.servicesToDeploy.kasmGuac.name }}-3000
-    protocol: TCP
-    port: 3000
-  {{- range untilStep 3001 3004 1 }}
-  - name: "{{ $.Values.kasmApp.servicesToDeploy.kasmGuac.name }}-{{ . }}"
-    protocol: TCP
-    port: {{ . }}
+  {{- if .Values.kasmApp.applyHardening }}
+    {{- include "guac.podSecurity.pvc" . }}
   {{- end }}
 {{- end }}
+{{ include "kasm.serviceTemplate" (list . "kasm-guac" .Values.kasmApp.servicesToDeploy.kasmGuac.name (list 3000 3001 3002 3003 3004) ) }}

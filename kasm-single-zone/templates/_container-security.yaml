@@ -10,7 +10,8 @@ securityContext:
   readOnlyRootFilesystem: true
   runAsNonRoot: true
   capabilities:
-    drop: ["ALL"]
+    drop:
+      - ALL
   seccompProfile:
-    type: "RuntimeDefault"
+    type: RuntimeDefault
 {{- end }}
