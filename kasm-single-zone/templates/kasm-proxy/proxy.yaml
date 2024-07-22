@@ -2,17 +2,17 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.name }}-deployment
-  namespace: {{ .Values.namespace | default .Release.Namespace }}
+  namespace: {{ .Values.global.namespace | default .Release.Namespace }}
   labels:
     app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.name }}
     {{- include "kasm.defaultLabels" . | indent 4 }}
 spec:
-  replicas: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.replicas }}
+  replicas: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.replicas | default (include "replicas.preset" (dict "node" "proxy" "size" .Values.kasmApp.deploymentSize)) }}
   strategy:
     type: RollingUpdate
     rollingUpdate:
       maxUnavailable: 1
-      maxSurge: {{ add1 .Values.kasmApp.servicesToDeploy.kasmProxy.replicas }}
+      maxSurge: {{ add1 (.Values.kasmApp.servicesToDeploy.kasmProxy.replicas | default (include "replicas.preset" (dict "node" "proxy" "size" .Values.kasmApp.deploymentSize))) }}
   selector:
     matchLabels:
       app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.name }}
@@ -22,8 +22,8 @@ spec:
         app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.name }}
         {{- include "kasm.defaultLabels" . | indent 8 }}
     spec:
-      restartPolicy: {{ .Values.image.restartPolicy }}
-      {{- if .Values.image.pullSecrets }}
+      restartPolicy: {{ .Values.global.image.restartPolicy }}
+      {{- if .Values.global.image.pullSecrets }}
         {{- include "image.pullSecrets" . | indent 6 }}
       {{- end }}
       {{- if .Values.kasmApp.applyHardening }}
@@ -63,11 +63,12 @@ spec:
       containers:
         - name: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.name }}-container
           image: "{{ .Values.kasmApp.servicesToDeploy.kasmProxy.image }}:{{ .Values.kasmApp.servicesToDeploy.kasmProxy.tag }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          resources:
-            requests:
-              memory: "100Mi"
-              cpu: "200m"
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          {{- if .Values.kasmApp.servicesToDeploy.kasmProxy.resources }}
+          resources: {{- toYaml .Values.kasmApp.servicesToDeploy.kasmProxy.resources | nindent 12 }}
+          {{- else }}
+          resources: {{- include "resources.preset" (dict "node" "proxy" "size" .Values.kasmApp.deploymentSize) | nindent 12 }}
+          {{- end }}
           {{- if .Values.kasmApp.applyHardening }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}
@@ -85,6 +86,18 @@ spec:
             {{- if .Values.kasmApp.applyHardening }}
               {{- include "proxy.podSecurity.mounts" . | indent 12 }}
             {{- end }}
+          ports:
+            - name: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.name }}-port
+              containerPort: 8080
+              protocol: TCP
+          {{- if .Values.kasmApp.servicesToDeploy.kasmProxy.addHealthChecks }}
+          livenessProbe:
+            {{- include "health.tcp" (dict "port" (printf "%s-port" .Values.kasmApp.servicesToDeploy.kasmProxy.name)) | indent 12 }}
+          {{- end }}
+          {{- if .Values.kasmApp.servicesToDeploy.kasmProxy.addHealthChecks }}
+          readinessProbe:
+            {{- include "health.command" (dict "command" "nginx -t") | indent 12 }}
+          {{- end }}
       volumes:
         - name: nginx-proxy-cert
           secret:

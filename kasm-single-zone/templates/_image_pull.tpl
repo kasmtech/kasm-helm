@@ -1,4 +1,4 @@
 {{- define "image.pullSecrets" }}
 imagePullSecrets:
-  - name: {{ .Values.image.pullSecrets }}
+  - name: {{ .Values.global.image.pullSecrets }}
 {{- end }}

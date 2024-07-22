@@ -1,8 +1,8 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ .Values.kasmApp.servicesToDeploy.db.name }}-deployment
-  namespace: {{ .Values.namespace | default .Release.Namespace }}
+  name: {{ .Values.kasmApp.servicesToDeploy.db.name }}-statefulset
+  namespace: {{ .Values.global.namespace | default .Release.Namespace }}
   labels:
     app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.db.name }}
     {{- include "kasm.defaultLabels" . | indent 4 }}
@@ -21,8 +21,8 @@ spec:
         app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.db.name }}
         {{- include "kasm.defaultLabels" . | indent 8 }}
     spec:
-      restartPolicy: {{ .Values.image.restartPolicy }}
-      {{- if .Values.image.pullSecrets }}
+      restartPolicy: {{ .Values.global.image.restartPolicy }}
+      {{- if .Values.global.image.pullSecrets }}
         {{- include "image.pullSecrets" . | indent 6 }}
       {{- end }}
       {{- if .Values.kasmApp.applyHardening }}
@@ -35,7 +35,7 @@ spec:
       containers:
         - name: {{ .Values.kasmApp.servicesToDeploy.db.name }}-container
           image: "{{ .Values.kasmApp.servicesToDeploy.db.image }}:{{ .Values.kasmApp.servicesToDeploy.db.tag }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
           env:
             - name: POSTGRES_DB
               value: kasm
@@ -46,45 +46,23 @@ spec:
                   key: db-password
             - name: POSTGRES_USER
               value: kasmapp
-          resources:
-            requests:
-              memory: "300Mi"
-              cpu: 1
           ports:
             - name: {{ .Values.kasmApp.servicesToDeploy.db.name }}-port
               containerPort: 5432
               protocol: TCP
+          {{- if .Values.kasmApp.servicesToDeploy.db.addHealthChecks }}
           livenessProbe:
-            exec:
-              command:
-                - pg_isready
-                - --port=5432
-            timeoutSeconds: 10
-            initialDelaySeconds: 15
-            periodSeconds: 30
-            failureThreshold: 5
-            successThreshold: 1
+            {{- include "health.command" (dict "command" "pg_isready --port=5432") | indent 12 }}
+          {{- end }}
+          {{- if .Values.kasmApp.servicesToDeploy.db.addHealthChecks }}
           readinessProbe:
-            exec:
-              command:
-                - /bin/sh
-                - -c
-                - |
-                  psql -d kasm -U kasmapp -c 'SELECT 1' || exit 1
-            timeoutSeconds: 10
-            initialDelaySeconds: 20
-            periodSeconds: 30
-            failureThreshold: 3
-            successThreshold: 1
-          resources:
-            limits:
-              cpu: 150m
-              ephemeral-storage: 1024Mi
-              memory: 192Mi
-            requests:
-              cpu: 100m
-              ephemeral-storage: 50Mi
-              memory: 128Mi
+            {{- include "health.command" (dict "command" "psql -d kasm -U kasmapp -c 'SELECT 1' || exit 1") | indent 12 }}
+          {{- end }}
+          {{- if .Values.kasmApp.servicesToDeploy.db.resources }}
+          resources: {{- toYaml .Values.kasmApp.servicesToDeploy.db.resources | nindent 12 }}
+          {{- else }}
+          resources: {{- include "resources.preset" (dict "node" "db" "size" .Values.kasmApp.deploymentSize) | nindent 12 }}
+          {{- end }}
           {{- if .Values.kasmApp.applyHardening }}
             {{- include "db.containerSecurity" . | indent 10 }}
           {{- end }}

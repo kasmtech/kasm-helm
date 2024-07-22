@@ -6,28 +6,29 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ .Values.kasmApp.servicesToDeploy.rdpGateway.name }}-deployment
-  namespace: {{ .Values.namespace | default .Release.Namespace }}
+  namespace: {{ .Values.global.namespace | default .Release.Namespace }}
   labels:
     app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.rdpGateway.name }}
     {{- include "kasm.defaultLabels" . | indent 4 }}
 spec:
-  replicas: {{ .Values.kasmApp.servicesToDeploy.rdpGateway.replicas }}
+  replicas: {{ .Values.kasmApp.servicesToDeploy.rdpGateway.replicas | default (include "replicas.preset" (dict "node" "rdp" "size" .Values.kasmApp.deploymentSize)) }}
   strategy:
     type: RollingUpdate
     rollingUpdate:
       maxUnavailable: 1
-      maxSurge: {{ add1 .Values.kasmApp.servicesToDeploy.rdpGateway.replicas }}
+      maxSurge: {{ add1 (.Values.kasmApp.servicesToDeploy.rdpGateway.replicas | default (include "replicas.preset" (dict "node" "rdp" "size" .Values.kasmApp.deploymentSize))) }}
   selector:
     matchLabels:
       app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.rdpGateway.name }}
   template:
     metadata:
       labels:
+        kasm_role: rdpGateway
         app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.rdpGateway.name }}
         {{- include "kasm.defaultLabels" . | indent 8 }}
     spec:
-      restartPolicy: {{ .Values.image.restartPolicy }}
-      {{- if .Values.image.pullSecrets }}
+      restartPolicy: {{ .Values.global.image.restartPolicy }}
+      {{- if .Values.global.image.pullSecrets }}
         {{- include "image.pullSecrets" . | indent 6 }}
       {{- end }}
       {{- if .Values.kasmApp.applyHardening }}
@@ -45,7 +46,7 @@ spec:
       containers:
         - name: {{ .Values.kasmApp.servicesToDeploy.rdpGateway.name }}-container
           image: "{{ .Values.kasmApp.servicesToDeploy.rdpGateway.image }}:{{ .Values.kasmApp.servicesToDeploy.rdpGateway.tag }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
           env:
             - name: SERVER_ZONE_NAME
               value: {{ .Values.kasmApp.zoneName | default "default" }}
@@ -54,10 +55,23 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.kasmApp.name | default "kasm" }}-secrets
                   key: service-token
-          resources:
-            requests:
-              memory: "100Mi"
-              cpu: "200m"
+          ports:
+            - name: {{ .Values.kasmApp.servicesToDeploy.rdpGateway.name }}-port
+              containerPort: 5555
+              protocol: TCP
+          {{- if .Values.kasmApp.servicesToDeploy.rdpGateway.addHealthChecks }}
+          livenessProbe:
+            {{- include "health.tcp" (dict "port" (printf "%s-port" .Values.kasmApp.servicesToDeploy.rdpGateway.name)) | indent 12 }}
+          {{- end }}
+          {{- if .Values.kasmApp.servicesToDeploy.rdpGateway.addHealthChecks }}
+          readinessProbe:
+            {{- include "health.command" (dict "command" "curl http://localhost:5555/__healthcheck") | indent 12 }}
+          {{- end }}
+          {{- if .Values.kasmApp.servicesToDeploy.rdpGateway.resources }}
+          resources: {{- toYaml .Values.kasmApp.servicesToDeploy.rdpGateway.resources | nindent 12 }}
+          {{- else }}
+          resources: {{- include "resources.preset" (dict "node" "rdp" "size" .Values.kasmApp.deploymentSize) | nindent 12 }}
+          {{- end }}
           {{- if .Values.kasmApp.applyHardening }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}

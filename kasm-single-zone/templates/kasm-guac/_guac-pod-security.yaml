@@ -31,7 +31,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: {{ .Values.kasmApp.servicesToDeploy.kasmGuac.name }}-pvc
-  namespace: {{ .Values.namespace | default .Release.Namespace }}
+  namespace: {{ .Release.Namespace }}
   labels:
     app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.kasmGuac.name }}-pvc
     {{- include "kasm.defaultLabels" . | indent 4 }}

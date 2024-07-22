@@ -1,86 +1,264 @@
-## Deployment namespace
-namespace: kasm-helm
+# yaml-language-server: $schema=values.schema.json
+## @section Global parameters
+## Please, note that this will override the parameters, including dependencies, configured to use the global value
+##
+global:
+  ## @param global.namespace Kubernetes namespace where all Kasm resources will be deployed (overrides Release.Namespace)
+  ##
+  namespace: ""
 
-## image supplies the pullSecrets and pullPolicy settings
-image:
-  pullSecrets: regcred
-  pullPolicy: IfNotPresent
-  restartPolicy: Always
+  ## @param global.image.pullSecrets Global Docker registry secret name
+  ## @param global.image.pullPolicy Global image pull policy
+  ## @param global.image.restartPolicy Global image restart policy
+  ##
+  image:
+    pullSecrets: regcred
+    pullPolicy: IfNotPresent
+    restartPolicy: Always
+    ## @param global.image.pullCredentials Global object to create Docker registry credentials
+    ##  Example
+    ##    pullCredentials:
+    ##      registry: "index.docker.io/v2"
+    ##      username: "docker_username"
+    ##      password: "dckr_pat_xxxxxxxxxxx"
+    ##      email: "user@mail.com"
+    ##      
+    pullCredentials:
+      registry: "index.docker.io/v2"
+      username: "docker_username"
+      password: "dckr_pat_xxxxxxxxxxx"
+      email: "user@mail.com"
 
-## The primary hostname of the deployment
-hostname: "kasm.home.lab"
-## A list of Alternate Hostnames used by nginx and ingress to generate certificates for, things like *.<hostname>, etc.
-altHostnames:
-  - "*.kasm.home.lab"
+  ## @param global.hostname Global hostname to use for TLS Certificates and ingress URL
+  ##
+  hostname: "kasm.home.lab"
+  ## @param global.altHostnames Global list of alternate hostnames to use for TLS Certificates
+  ##
+  altHostnames:
+    - "*.kasm.home.lab"
 
-## Kasm passwords to use at runtime
-## If values below are not provided, Helm will dynamically generate them. You can find the initial passwords
-## in the Deployment Namespace > Secrets > "kasm app name"-secrets
-## TODO: Consider actual encrypted secrets using some other secrets management process
-kasmPasswords:
-  redisPassword: ""
-  dbPassword: ""
-  managerToken: ""
-  serviceToken: ""
-  adminPassword: "password"
-  userPassword: ""
+  ## @param global.kasmPasswords.redisPassword Password for Kasm Redis service (leave blank for Helm to autogenerate)
+  ## @param global.kasmPasswords.dbPassword Password for Kasm Postgresql DB server (leave blank for Helm to autogenerate)
+  ## @param global.kasmPasswords.managerToken Manager token used for Kasm Agent registration (leave blank for Helm to autogenerate)
+  ## @param global.kasmPasswords.serviceToken Service Token used for RDP service registration (leave blank for Helm to autogenerate)
+  ## @param global.kasmPasswords.adminPassword Password for Kasm admin@kasm.local user for initial admin access (leave blank for Helm to autogenerate)
+  ## @param global.kasmPasswords.userPassword Password for Kasm user@kasm.local user for initial user access (leave blank for Helm to autogenerate)
+  ##
+  kasmPasswords:
+    redisPassword: ""
+    dbPassword: ""
+    managerToken: ""
+    serviceToken: ""
+    adminPassword: "password"
+    userPassword: ""
 
-## Kasm application settings
+## @param kasmApp.name Kasm application name used as resource label prefix
+## @param kasmApp.zoneName Kasm service zone name for the initial zone configuration
+## @param kasmApp.applyHardening Apply Pod and Deployment-level STIG hardening to service manifests
+## @param kasmApp.deploymentSize Set container resources and replicas according to a preset calculations (allowed values: small, medium, large)
+##
 kasmApp:
-  name: kasm # Name of deployment
+  name: kasm
   zoneName: default
   applyHardening: true
+  deploymentSize: "small"    
   servicesToDeploy:
+    ## @param kasmApp.servicesToDeploy.kasmProxy.name Name used for kasm-proxy services as label prefix
+    ## @param kasmApp.servicesToDeploy.kasmProxy.addHealthChecks true/false used to enable service health checks
+    ## @param kasmApp.servicesToDeploy.kasmProxy.image Sets Nginx Proxy image name
+    ## @param kasmApp.servicesToDeploy.kasmProxy.tag Sets Nginx Proxy image tag
+    ## @param kasmApp.servicesToDeploy.kasmProxy.replicas Number of Proxy replicas (overrides @param.kasmApp.deploymentSize preset)
+    ##
     kasmProxy:
       name: kasm-proxy
-      deploy: true
+      addHealthChecks: true
       image: kasmweb/proxy-private
       tag: feature_KASM-5313_webui_code_move
-      replicas: 2
+      replicas: ""
+      ## @param kasmApp.servicesToDeploy.kasmProxy.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)
+      ## Example:
+      ## resources:
+      ##   requests:
+      ##     cpu: 100m
+      ##     memory: 128Mi
+      ##   limits:
+      ##     cpu: 300m
+      ##     memory: 512Mi
+      ##
+      resources: {}
+    ## @param kasmApp.servicesToDeploy.db.name Name used for kasm-proxy services as label prefix
+    ## @param kasmApp.servicesToDeploy.db.addHealthChecks true/false used to enable service health checks
+    ## @param kasmApp.servicesToDeploy.db.image Sets Nginx Proxy image name
+    ## @param kasmApp.servicesToDeploy.db.tag Sets Nginx Proxy image tag
+    ##
     db:
       name: kasm-db
-      deploy: true
+      addHealthChecks: true
       image: kasmweb/postgres-private
       tag: feature_KASM-5313_webui_code_move
+      ## @param kasmApp.servicesToDeploy.db.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)
+      ## Example:
+      ## resources:
+      ##   requests:
+      ##     cpu: 100m
+      ##     memory: 128Mi
+      ##   limits:
+      ##     cpu: 300m
+      ##     memory: 512Mi
+      ##
+      resources: {}
+      ## @param kasmApp.servicesToDeploy.db.persistentVolumeClaimRetentionPolicy.enabled Enable retention policies for DB persistent volume
+      ## @param kasmApp.servicesToDeploy.db.persistentVolumeClaimRetentionPolicy.whenDeleted Volume retention behavior that applies when the replica count of the set is reduced
+      ## @param kasmApp.servicesToDeploy.db.persistentVolumeClaimRetentionPolicy.whenScaled Volume retention behavior that applies when the StatefulSet is deleted
+      ##
       persistentVolumeClaimRetentionPolicy:
         enabled: false
         whenDeleted: Retain
         whenScaled: Retain
+    ## @param kasmApp.servicesToDeploy.kasmApi.name Name used for kasm-api services as label prefix
+    ## @param kasmApp.servicesToDeploy.kasmApi.addHealthChecks true/false used to enable service health checks
+    ## @param kasmApp.servicesToDeploy.kasmApi.image Sets Kasm API image name
+    ## @param kasmApp.servicesToDeploy.kasmApi.tag Sets Kasm API image tag
+    ## @param kasmApp.servicesToDeploy.kasmApi.replicas Number of API replicas (overrides @param.kasmApp.deploymentSize preset)
+    ##
     kasmApi:
       name: kasm-api
-      deploy: true
+      addHealthChecks: true
       image: kasmweb/api-private
       tag: feature_KASM-5313_webui_code_move
-      replicas: 3
+      replicas: ""
+      ## @param kasmApp.servicesToDeploy.kasmApi.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)
+      ## Example:
+      ## resources:
+      ##   requests:
+      ##     cpu: 100m
+      ##     memory: 128Mi
+      ##   limits:
+      ##     cpu: 300m
+      ##     memory: 512Mi
+      ##
+      resources: {}
+    ## @param kasmApp.servicesToDeploy.kasmManager.name Name used for kasm-manager services as label prefix
+    ## @param kasmApp.servicesToDeploy.kasmManager.addHealthChecks true/false used to enable service health checks
+    ## @param kasmApp.servicesToDeploy.kasmManager.image Sets Kasm Manager image name
+    ## @param kasmApp.servicesToDeploy.kasmManager.tag Sets Kasm Manager image tag
+    ## @param kasmApp.servicesToDeploy.kasmManager.replicas Number of Manager replicas (overrides @param.kasmApp.deploymentSize preset)
+    ##
     kasmManager:
       name: kasm-manager
-      deploy: true
+      addHealthChecks: true
       image: kasmweb/manager-private
       tag: feature_KASM-5313_webui_code_move
-      replicas: 2
+      replicas: ""
+      ## @param kasmApp.servicesToDeploy.kasmManager.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)
+      ## Example:
+      ## resources:
+      ##   requests:
+      ##     cpu: 100m
+      ##     memory: 128Mi
+      ##   limits:
+      ##     cpu: 300m
+      ##     memory: 512Mi
+      ##
+      resources: {}
+    ## @param kasmApp.servicesToDeploy.kasmGuac.name Name used for kasm-guac services as label prefix
+    ## @param kasmApp.servicesToDeploy.kasmGuac.deploy true/false used to disable deployment of Kasm Guac RDP service container
+    ## @param kasmApp.servicesToDeploy.kasmGuac.addHealthChecks true/false used to enable service health checks
+    ## @param kasmApp.servicesToDeploy.kasmGuac.image Sets Kasm Guac RDP image name
+    ## @param kasmApp.servicesToDeploy.kasmGuac.tag Sets Kasm Guac RDP image tag
+    ## @param kasmApp.servicesToDeploy.kasmGuac.replicas Number of Kasm Guac replicas (overrides @param.kasmApp.deploymentSize preset)
+    ##
     kasmGuac:
       name: kasm-guac
       deploy: true
+      addHealthChecks: true
       image: kasmweb/kasm-guac-private
       tag: feature_KASM-5313_webui_code_move
       replicas: 1
+      ## @param kasmApp.servicesToDeploy.kasmGuac.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)
+      ## Example:
+      ## resources:
+      ##   requests:
+      ##     cpu: 100m
+      ##     memory: 128Mi
+      ##   limits:
+      ##     cpu: 300m
+      ##     memory: 512Mi
+      ##
+      resources: {}
+    ## @param kasmApp.servicesToDeploy.rdpGateway.name Name used for rdp-gateway services as label prefix
+    ## @param kasmApp.servicesToDeploy.rdpGateway.deploy true/false used to disable deployment of Kasm RDP Gateway service container
+    ## @param kasmApp.servicesToDeploy.rdpGateway.addHealthChecks true/false used to enable service health checks
+    ## @param kasmApp.servicesToDeploy.rdpGateway.image Sets Kasm RDP Gateway image name
+    ## @param kasmApp.servicesToDeploy.rdpGateway.tag Sets Kasm RDP Gateway image tag
+    ## @param kasmApp.servicesToDeploy.rdpGateway.replicas Number of RDP Gateway replicas (overrides @param.kasmApp.deploymentSize preset)
+    ##
     rdpGateway:
       name: rdp-gateway
       deploy: true
+      addHealthChecks: true
       image: kasmweb/rdp-gateway-private
       tag: feature_KASM-5313_webui_code_move
       replicas: 1
+      ## @param kasmApp.servicesToDeploy.rdpGateway.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)
+      ## Example:
+      ## resources:
+      ##   requests:
+      ##     cpu: 100m
+      ##     memory: 128Mi
+      ##   limits:
+      ##     cpu: 300m
+      ##     memory: 512Mi
+      ##
+      resources: {}
+    ## @param kasmApp.servicesToDeploy.kasmShare.name Name used for kasm-share services as label prefix
+    ## @param kasmApp.servicesToDeploy.kasmShare.deploy true/false used to disable deployment of Kasm Share service container
+    ## @param kasmApp.servicesToDeploy.kasmShare.addHealthChecks true/false used to enable service health checks
+    ## @param kasmApp.servicesToDeploy.kasmShare.image Sets Kasm Share image name
+    ## @param kasmApp.servicesToDeploy.kasmShare.tag Sets Kasm Share image tag
+    ## @param kasmApp.servicesToDeploy.kasmShare.replicas Number of Share replicas (overrides @param.kasmApp.deploymentSize preset)
+    ##
     kasmShare:
       name: kasm-share
       deploy: true
+      addHealthChecks: true
       image: kasmweb/share-private
       tag: feature_KASM-5313_webui_code_move
       replicas: 1
+      ## @param kasmApp.servicesToDeploy.kasmShare.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)
+      ## Example:
+      ## resources:
+      ##   requests:
+      ##     cpu: 100m
+      ##     memory: 128Mi
+      ##   limits:
+      ##     cpu: 300m
+      ##     memory: 512Mi
+      ##
+      resources: {}
+    ## @param kasmApp.servicesToDeploy.kasmRedis.name Name used for kasm-redis services as label prefix
+    ## @param kasmApp.servicesToDeploy.kasmRedis.deploy true/false used to disable deployment of Kasm Redis service container
+    ## @param kasmApp.servicesToDeploy.kasmRedis.addHealthChecks true/false used to enable service health checks
+    ## @param kasmApp.servicesToDeploy.kasmRedis.image Sets Kasm Redis image name
+    ## @param kasmApp.servicesToDeploy.kasmRedis.tag Sets Kasm Redis image tag
+    ##
     kasmRedis:
       name: kasm-redis
       deploy: true
+      addHealthChecks: true
       image: redis
       tag: 5-alpine
+      ## @param kasmApp.servicesToDeploy.kasmRedis.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)
+      ## Example:
+      ## resources:
+      ##   requests:
+      ##     cpu: 100m
+      ##     memory: 128Mi
+      ##   limits:
+      ##     cpu: 300m
+      ##     memory: 512Mi
+      ##
+      resources: {}
 
 ## TLS Certificates to create as secrets
 ## If create is true and no certificates are provided in this configuration then
@@ -88,6 +266,11 @@ kasmApp:
 ## outside of this Helm chart, then make sure to update the name field for each certificate
 ## to match what you used in Kubernetes.
 kasmCerts:
+  ## @param kasmCerts.ingress.name Name used for Kasm Ingres Certificate Secret (if resource already exists, use resource name here and set create = false)
+  ## @param kasmCerts.ingress.create true/false used to create the Ingress resource
+  ## @param kasmCerts.ingress.cert Add externally-generated Intress TLS Public certificate
+  ## @param kasmCerts.ingress.key Add externally-generated Intress TLS Private key
+  ##
   ingress:
     name: kasm-ingress-cert
     create: true
@@ -97,6 +280,11 @@ kasmCerts:
     key: |-
       ######    Place public SSL Key here      ######
       ######  Leave empty for Helm to generate ######
+  ## @param kasmCerts.ingress.name Name used for Kasm Proxy Certificate Secret (if resource already exists, use resource name here and set create = false)
+  ## @param kasmCerts.ingress.create true/false used to create the Proxy resource
+  ## @param kasmCerts.ingress.cert Add externally-generated Intress TLS Public certificate
+  ## @param kasmCerts.ingress.key Add externally-generated Intress TLS Private key
+  ##
   kasmProxy:
     name: kasm-nginx-proxy-cert
     create: true
@@ -106,6 +294,11 @@ kasmCerts:
     key: |-
       ######   Place nginx Proxy SSL Key here  ######
       ######  Leave empty for Helm to generate ######
+  ## @param kasmCerts.ingress.name Name used for Kasm RDP Gateway Certificate Secret (if resource already exists, use resource name here and set create = false)
+  ## @param kasmCerts.ingress.create true/false used to create the Ingress resource
+  ## @param kasmCerts.ingress.cert Add externally-generated Intress TLS Public certificate
+  ## @param kasmCerts.ingress.key Add externally-generated Intress TLS Private key
+  ##
   rdpGateway:
     name: kasm-rdpproxy-cert
     create: true
@@ -115,6 +308,11 @@ kasmCerts:
     key: |-
       ######   Place RDP Proxy SSL Key here    ######
       ######  Leave empty for Helm to generate ######
+  ## @param kasmCerts.ingress.name Name used for Kasm Database Certificate Secret (if resource already exists, use resource name here and set create = false)
+  ## @param kasmCerts.ingress.create true/false used to create the Ingress resource
+  ## @param kasmCerts.ingress.cert Add externally-generated Intress TLS Public certificate
+  ## @param kasmCerts.ingress.key Add externally-generated Intress TLS Private key
+  ##
   db:
     name: kasm-db-cert
     create: true

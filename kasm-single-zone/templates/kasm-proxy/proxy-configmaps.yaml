@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ .Values.kasmApp.name | default "kasm" }}-proxy-configmap
-  namespace: {{ .Values.namespace | default .Release.Namespace }}
+  namespace: {{ .Release.Namespace }}
   labels:
     kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-proxy
 {{- include "kasm.defaultLabels" . | indent 4 }}
@@ -141,7 +141,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: kasm-proxy-services-configmap
-  namespace: {{ .Values.namespace | default .Release.Namespace }}
+  namespace: {{ .Release.Namespace }}
   labels:
     kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-proxy
 {{- include "kasm.defaultLabels" . | indent 4 }}

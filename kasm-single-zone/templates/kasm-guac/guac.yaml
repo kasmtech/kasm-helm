@@ -6,17 +6,17 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ .Values.kasmApp.servicesToDeploy.kasmGuac.name }}-deployment
-  namespace: {{ .Values.namespace | default .Release.Namespace }}
+  namespace: {{ .Values.global.namespace | default .Release.Namespace }}
   labels:
     app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.kasmGuac.name }}
     {{- include "kasm.defaultLabels" . | indent 4 }}
 spec:
-  replicas: {{ .Values.kasmApp.servicesToDeploy.kasmGuac.replicas }}
+  replicas: {{ .Values.kasmApp.servicesToDeploy.kasmGuac.replicas | default (include "replicas.preset" (dict "node" "guac" "size" .Values.kasmApp.deploymentSize)) }}
   strategy:
     type: RollingUpdate
     rollingUpdate:
       maxUnavailable: 1
-      maxSurge: {{ add1 .Values.kasmApp.servicesToDeploy.kasmGuac.replicas }}
+      maxSurge: {{ add1 (.Values.kasmApp.servicesToDeploy.kasmGuac.replicas | default (include "replicas.preset" (dict "node" "guac" "size" .Values.kasmApp.deploymentSize))) }}
   selector:
     matchLabels:
       app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.kasmGuac.name }}
@@ -26,8 +26,8 @@ spec:
         app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.kasmGuac.name }}
         {{- include "kasm.defaultLabels" . | indent 8 }}
     spec:
-      restartPolicy: {{ .Values.image.restartPolicy }}
-      {{- if .Values.image.pullSecrets }}
+      restartPolicy: {{ .Values.global.image.restartPolicy }}
+      {{- if .Values.global.image.pullSecrets }}
         {{- include "image.pullSecrets" . | indent 6 }}
       {{- end }}
       {{- if .Values.kasmApp.applyHardening }}
@@ -45,7 +45,7 @@ spec:
       containers:
         - name: {{ .Values.kasmApp.servicesToDeploy.kasmGuac.name }}-container
           image: "{{ .Values.kasmApp.servicesToDeploy.kasmGuac.image }}:{{ .Values.kasmApp.servicesToDeploy.kasmGuac.tag }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
           env:
             - name: CLUSTER_SIZE
               value: "4"
@@ -56,12 +56,23 @@ spec:
                   key: service-token
             - name: ZONE
               value: default
-          resources:
-            requests:
-              memory: "150Mi"
-              cpu: "300m"
-            limits:
-              cpu: 4
+          ports:
+            - name: {{ .Values.kasmApp.servicesToDeploy.kasmGuac.name }}-port
+              containerPort: 3000
+              protocol: TCP
+          {{- if .Values.kasmApp.servicesToDeploy.kasmGuac.addHealthChecks }}
+          livenessProbe:
+            {{- include "health.tcp" (dict "port" (printf "%s-port" .Values.kasmApp.servicesToDeploy.kasmGuac.name)) | indent 12 }}
+          {{- end }}
+          {{- if .Values.kasmApp.servicesToDeploy.kasmGuac.addHealthChecks }}
+          readinessProbe:
+            {{- include "health.command" (dict "command" "curl http://localhost:3000/__healthcheck") | indent 12 }}
+          {{- end }}
+          {{- if .Values.kasmApp.servicesToDeploy.kasmGuac.resources }}
+          resources: {{- toYaml .Values.kasmApp.servicesToDeploy.kasmGuac.resources | nindent 12 }}
+          {{- else }}
+          resources: {{- include "resources.preset" (dict "node" "guac" "size" .Values.kasmApp.deploymentSize) | nindent 12 }}
+          {{- end }}
           {{- if .Values.kasmApp.applyHardening }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}

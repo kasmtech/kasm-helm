@@ -2,7 +2,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: {{ .Values.kasmApp.name }}-db-init-job
-  namespace: {{ .Values.namespace | default .Release.Namespace }}
+  namespace: {{ .Values.global.namespace | default .Release.Namespace }}
   labels:
     app.kubernetes.io/name: {{ .Values.kasmApp.name }}-db-init
     {{- include "kasm.defaultLabels" . | indent 4 }}
@@ -13,15 +13,15 @@ spec:
         app.kubernetes.io/name: {{ .Values.kasmApp.name }}-db-init
         {{- include "kasm.defaultLabels" . | indent 8 }}
     spec:
-      {{- if .Values.image.pullSecrets }}
+      {{- if .Values.global.image.pullSecrets }}
       imagePullSecrets:
-        - name: {{ .Values.image.pullSecrets }}
+        - name: {{ .Values.global.image.pullSecrets }}
       {{- end }}
       restartPolicy: OnFailure
       initContainers:
         - name: db-is-ready
           image: "{{ .Values.kasmApp.servicesToDeploy.kasmApi.image }}:{{ .Values.kasmApp.servicesToDeploy.kasmApi.tag }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
           command:
             - "/bin/bash"
             - "-c"
@@ -31,7 +31,7 @@ spec:
       containers:
         - name: {{ .Values.kasmApp.name }}-db-init-container
           image: "{{ .Values.kasmApp.servicesToDeploy.kasmApi.image }}:{{ .Values.kasmApp.servicesToDeploy.kasmApi.tag }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
           env:
             - name: DB_AUTO_INITIALIZE
               value: "false"

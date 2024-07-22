@@ -6,54 +6,54 @@ APP VERSION: {{ .Chart.AppVersion }}
 
 To log into your Kasm deployment use the information below:
 
-Kasm URL:                 https://{{ .Values.hostname }}
+Kasm URL:                 https://{{ .Values.global.hostname }}
 Kasm Admin User:          admin@kasm.local
 Kasm Un-privileged User:  user@kasm.local
 
-{{- if not .Values.kasmPasswords.adminPassword }}
+{{- if not .Values.global.kasmPasswords.adminPassword }}
 
 Retrieve Kasm Admin Password:
-kubectl get secret --namespace {{ .Release.Namespace }} {{ .Values.kasmApp.name | default "kasm" }}-secrets -o jsonpath="{.data.admin-password}" | base64 -d
+kubectl get secret --namespace {{ .Values.global.namespace | default .Release.Namespace }} {{ .Values.kasmApp.name | default "kasm" }}-secrets -o jsonpath="{.data.admin-password}" | base64 -d
 
 {{- end }}
 
-{{- if not .Values.kasmPasswords.userPassword }}
+{{- if not .Values.global.kasmPasswords.userPassword }}
 
 Retrieve Kasm User Password:
-kubectl get secret --namespace {{ .Release.Namespace }} {{ .Values.kasmApp.name | default "kasm" }}-secrets -o jsonpath="{.data.user-password}" | base64 -d
+kubectl get secret --namespace {{ .Values.global.namespace | default .Release.Namespace }} {{ .Values.kasmApp.name | default "kasm" }}-secrets -o jsonpath="{.data.user-password}" | base64 -d
 
 {{- end }}
 
-{{- if or (not .Values.kasmPasswords.dbPassword) (not .Values.kasmPasswords.managerToken) (not .Values.kasmPasswords.serviceToken) (not .Values.kasmPasswords.redisPassword) }}
+{{- if or (not .Values.global.kasmPasswords.dbPassword) (not .Values.global.kasmPasswords.managerToken) (not .Values.global.kasmPasswords.serviceToken) (not .Values.global.kasmPasswords.redisPassword) }}
 
 If you would like to get the remaining password values to store in a secure vault for future use.
 If you update or upgrade your deployment using this Helm chart, these values will be reused
 
-{{- if not .Values.kasmPasswords.dbPassword }}
+{{- if not .Values.global.kasmPasswords.dbPassword }}
 
 Retrieve Kasm DB Password:
-kubectl get secret --namespace {{ .Release.Namespace }} {{ .Values.kasmApp.name | default "kasm" }}-secrets -o jsonpath="{.data.db-password}" | base64 -d
+kubectl get secret --namespace {{ .Values.global.namespace | default .Release.Namespace }} {{ .Values.kasmApp.name | default "kasm" }}-secrets -o jsonpath="{.data.db-password}" | base64 -d
 
 {{- end }}
 
-{{- if not .Values.kasmPasswords.managerToken }}
+{{- if not .Values.global.kasmPasswords.managerToken }}
 
 Retrieve Kasm Manager Token:
-kubectl get secret --namespace {{ .Release.Namespace }} {{ .Values.kasmApp.name | default "kasm" }}-secrets -o jsonpath="{.data.manager-token}" | base64 -d
+kubectl get secret --namespace {{ .Values.global.namespace | default .Release.Namespace }} {{ .Values.kasmApp.name | default "kasm" }}-secrets -o jsonpath="{.data.manager-token}" | base64 -d
 
 {{- end }}
 
-{{- if not .Values.kasmPasswords.serviceToken }}
+{{- if not .Values.global.kasmPasswords.serviceToken }}
 
 Retrieve Kasm Service Registration Token:
-kubectl get secret --namespace {{ .Release.Namespace }} {{ .Values.kasmApp.name | default "kasm" }}-secrets -o jsonpath="{.data.service-token}" | base64 -d
+kubectl get secret --namespace {{ .Values.global.namespace | default .Release.Namespace }} {{ .Values.kasmApp.name | default "kasm" }}-secrets -o jsonpath="{.data.service-token}" | base64 -d
 
 {{- end }}
 
-{{- if and (not .Values.kasmPasswords.redisPassword) .Values.kasmApp.servicesToDeploy.kasmShare.deploy }}
+{{- if and (not .Values.global.kasmPasswords.redisPassword) .Values.kasmApp.servicesToDeploy.kasmShare.deploy }}
 
 Retrieve Kasm Redis Password:
-kubectl get secret --namespace {{ .Release.Namespace }} {{ .Values.kasmApp.name | default "kasm" }}-secrets -o jsonpath="{.data.redis-password}" | base64 -d
+kubectl get secret --namespace {{ .Values.global.namespace | default .Release.Namespace }} {{ .Values.kasmApp.name | default "kasm" }}-secrets -o jsonpath="{.data.redis-password}" | base64 -d
 
 {{- end }}
 

@@ -6,17 +6,17 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ .Values.kasmApp.servicesToDeploy.kasmShare.name }}-deployment
-  namespace: {{ .Values.namespace | default .Release.Namespace }}
+  namespace: {{ .Values.global.namespace | default .Release.Namespace }}
   labels:
     app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.kasmShare.name }}
     {{- include "kasm.defaultLabels" . | indent 4 }}
 spec:
-  replicas: {{ .Values.kasmApp.servicesToDeploy.kasmShare.replicas }}
+  replicas: {{ .Values.kasmApp.servicesToDeploy.kasmShare.replicas | default (include "replicas.preset" (dict "node" "share" "size" .Values.kasmApp.deploymentSize)) }}
   strategy:
     type: RollingUpdate
     rollingUpdate:
       maxUnavailable: 1
-      maxSurge: {{ add1 .Values.kasmApp.servicesToDeploy.kasmShare.replicas }}
+      maxSurge: {{ add1 (.Values.kasmApp.servicesToDeploy.kasmShare.replicas | default (include "replicas.preset" (dict "node" "share" "size" .Values.kasmApp.deploymentSize))) }}
   selector:
     matchLabels:
       app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.kasmShare.name }}
@@ -27,8 +27,8 @@ spec:
         app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.kasmShare.name }}
         {{- include "kasm.defaultLabels" . | indent 8 }}
     spec:
-      restartPolicy: {{ .Values.image.restartPolicy }}
-      {{- if .Values.image.pullSecrets }}
+      restartPolicy: {{ .Values.global.image.restartPolicy }}
+      {{- if .Values.global.image.pullSecrets }}
         {{- include "image.pullSecrets" . | indent 6 }}
       {{- end }}
       {{- if .Values.kasmApp.applyHardening }}
@@ -62,7 +62,7 @@ spec:
       containers:
         - name: {{ .Values.kasmApp.servicesToDeploy.kasmShare.name }}-container
           image: "{{ .Values.kasmApp.servicesToDeploy.kasmShare.image }}:{{ .Values.kasmApp.servicesToDeploy.kasmShare.tag }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
           env:
             - name: REDIS_PASSWORD
               valueFrom:
@@ -80,10 +80,23 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.kasmApp.name | default "kasm" }}-secrets
                   key: db-password
-          resources:
-            requests:
-              memory: "30Mi"
-              cpu: "100m"
+          ports:
+            - name: {{ .Values.kasmApp.servicesToDeploy.kasmShare.name }}-port
+              containerPort: 8182
+              protocol: TCP
+          {{- if .Values.kasmApp.servicesToDeploy.kasmShare.addHealthChecks }}
+          livenessProbe:
+            {{- include "health.tcp" (dict "port" (printf "%s-port" .Values.kasmApp.servicesToDeploy.kasmShare.name)) | indent 12 }}
+          {{- end }}
+          {{- if .Values.kasmApp.servicesToDeploy.kasmShare.addHealthChecks }}
+          readinessProbe:
+            {{- include "health.command" (dict "command" "curl http://localhost:8182/__healthcheck") | indent 12 }}
+          {{- end }}
+          {{- if .Values.kasmApp.servicesToDeploy.kasmShare.resources }}
+          resources: {{- toYaml .Values.kasmApp.servicesToDeploy.kasmShare.resources | nindent 12 }}
+          {{- else }}
+          resources: {{- include "resources.preset" (dict "node" "share" "size" .Values.kasmApp.deploymentSize) | nindent 12 }}
+          {{- end }}
           {{- if .Values.kasmApp.applyHardening }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}

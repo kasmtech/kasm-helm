@@ -1,18 +1,18 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Values.kasmApp.servicesToDeploy.kasmApi.name }}-pod
-  namespace: {{ .Values.namespace | default .Release.Namespace }}
+  name: {{ .Values.kasmApp.servicesToDeploy.kasmApi.name }}-deployment
+  namespace: {{ .Values.global.namespace | default .Release.Namespace }}
   labels:
     app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.kasmApi.name }}
     {{- include "kasm.defaultLabels" . | indent 4 }}
 spec:
-  replicas: {{ .Values.kasmApp.servicesToDeploy.kasmApi.replicas }}
+  replicas: {{ .Values.kasmApp.servicesToDeploy.kasmApi.replicas | default (include "replicas.preset" (dict "node" "api" "size" .Values.kasmApp.deploymentSize)) }}
   strategy:
     type: RollingUpdate
     rollingUpdate:
       maxUnavailable: 1
-      maxSurge: {{ add1 .Values.kasmApp.servicesToDeploy.kasmApi.replicas }}
+      maxSurge: {{ add1 (.Values.kasmApp.servicesToDeploy.kasmApi.replicas | default (include "replicas.preset" (dict "node" "api" "size" .Values.kasmApp.deploymentSize))) }}
   selector:
     matchLabels:
         app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.kasmApi.name }}
@@ -22,8 +22,8 @@ spec:
         app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.kasmApi.name }}
         {{- include "kasm.defaultLabels" . | indent 8 }}
     spec:
-      restartPolicy: {{ .Values.image.restartPolicy }}
-      {{- if .Values.image.pullSecrets }}
+      restartPolicy: {{ .Values.global.image.restartPolicy }}
+      {{- if .Values.global.image.pullSecrets }}
         {{- include "image.pullSecrets" . | indent 6 }}
       {{- end }}
       {{- if .Values.kasmApp.applyHardening }}
@@ -55,7 +55,7 @@ spec:
       containers:
         - name: {{ .Values.kasmApp.servicesToDeploy.kasmApi.name }}-container
           image: "{{ .Values.kasmApp.servicesToDeploy.kasmApi.image }}:{{ .Values.kasmApp.servicesToDeploy.kasmApi.tag }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
           env:
             - name: DB_AUTO_INITIALIZE
               value: "false"
@@ -64,10 +64,23 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.kasmApp.name | default "kasm" }}-secrets
                   key: db-password
-          resources:
-            requests:
-              memory: "250Mi"
-              cpu: "200m"
+          ports:
+            - name: {{ .Values.kasmApp.servicesToDeploy.kasmApi.name }}-port
+              containerPort: 8080
+              protocol: TCP
+          {{- if .Values.kasmApp.servicesToDeploy.kasmApi.addHealthChecks }}
+          livenessProbe:
+            {{- include "health.tcp" (dict "port" (printf "%s-port" .Values.kasmApp.servicesToDeploy.kasmApi.name)) | indent 12 }}
+          {{- end }}
+          {{- if .Values.kasmApp.servicesToDeploy.kasmApi.addHealthChecks }}
+          readinessProbe:
+            {{- include "health.command" (dict "command" "curl http://localhost:8080/api/__healthcheck") | indent 12 }}
+          {{- end }}
+          {{- if .Values.kasmApp.servicesToDeploy.kasmApi.resources }}
+          resources: {{- toYaml .Values.kasmApp.servicesToDeploy.kasmApi.resources | nindent 12 }}
+          {{- else }}
+          resources: {{- include "resources.preset" (dict "node" "api" "size" .Values.kasmApp.deploymentSize) | nindent 12 }}
+          {{- end }}
           {{- if .Values.kasmApp.applyHardening }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}
