@@ -1,0 +1,9 @@
+# repos:
+#   - repo: https://github.com/dadav/helm-schema
+#     rev: 0.11.5
+#     hooks:
+#       - id: helm-schema
+#         args:
+#           - --chart-search-root=.
+#           - --no-dependencies
+#           - --add-schema-reference

@@ -1,0 +1,49 @@
+{{- define "rdpGateway.podSecurity.initContainer" }}
+- name: rdp-gateway-tmp-perms
+  image: busybox
+  imagePullPolicy: IfNotPresent
+  command:
+    - /bin/sh
+    - -ec
+    - |
+      echo "Setting ownership and permissions for /usr/local/etc/rdpproxy/var..." && chown -R 1000:1000 /usr/local/etc/rdpproxy/var && chmod -R 777 /usr/local/etc/rdpproxy/var
+      echo "Setting ownership and permissions for /opt/kasm/current/log..." && chown -R 1000:1000 /opt/kasm/current/log && chmod -R 777 /opt/kasm/current/log
+      echo "Setting ownership and permissions for /tmp" && chown -R 1000:1000 /tmp && chmod -R 777 /tmp
+  securityContext:
+    runAsNonRoot: false
+    runAsUser: 0
+  volumeMounts:
+{{- end }}
+
+{{- define "rdpGateway.podSecurity.mounts" }}
+- name: kasm-rdp-gateway-data
+  mountPath: /usr/local/etc/rdpproxy/var
+- name: kasm-rdp-gateway-data
+  mountPath: /opt/kasm/current/log
+- name: kasm-rdp-gateway-data
+  mountPath: /tmp
+{{- end }}
+
+{{- define "rdpGateway.podSecurity.volumes" }}
+- name: kasm-rdp-gateway-data
+  persistentVolumeClaim:
+    claimName: {{ .Values.kasmApp.servicesToDeploy.rdpGateway.name }}-pvc
+{{- end }}
+
+{{- define "rdpGateway.podSecurity.pvc" }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.kasmApp.servicesToDeploy.rdpGateway.name }}-pvc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.rdpGateway.name }}-pvc
+    {{- include "kasm.defaultLabels" . | indent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Mi
+{{- end }}

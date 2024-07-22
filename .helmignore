@@ -1,0 +1,24 @@
+# Patterns to ignore when building packages.
+# This supports shell glob matching, relative path matching, and
+# negation (prefixed with !). Only one pattern per line.
+.DS_Store
+# Match any file or path named .helmignore
+.helmignore
+# Match any file or path named .git
+.git/
+.gitignore
+## Ignore any cert files
+*.key
+*.crt
+*.cert
+# Changelog
+CHANGELOG.md
+# Common backup files
+*.swp
+*.bak
+*.tmp
+*~
+# Various IDEs
+.project
+.idea/
+*.tmproj

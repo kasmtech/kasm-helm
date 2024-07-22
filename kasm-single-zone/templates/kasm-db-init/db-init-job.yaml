@@ -1,18 +1,27 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
+  name: {{ .Values.kasmApp.name }}-db-init-job
+  namespace: {{ .Values.global.namespace | default .Release.Namespace }}
   labels:
-    kasm_app: db-init
-  name: db-init
-  namespace: {{ .Values.namespace | default .Release.Namespace }}
+    app.kubernetes.io/name: {{ .Values.kasmApp.name }}-db-init
+    {{- include "kasm.defaultLabels" . | indent 4 }}
 spec:
   template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ .Values.kasmApp.name }}-db-init
+        {{- include "kasm.defaultLabels" . | indent 8 }}
     spec:
+      {{- if .Values.global.image.pullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.pullSecrets }}
+      {{- end }}
       restartPolicy: OnFailure
       initContainers:
         - name: db-is-ready
-          image: kasmweb/api-private:feature_KASM-5313_webui_code_move
-          imagePullPolicy: IfNotPresent
+          image: "{{ .Values.kasmApp.servicesToDeploy.kasmApi.image }}:{{ .Values.kasmApp.servicesToDeploy.kasmApi.tag }}"
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
           command:
             - "/bin/bash"
             - "-c"
@@ -20,45 +29,37 @@ spec:
             - |
               while ! pg_isready -h db -p 5432; do echo "Waiting for DB..."; sleep 5; done
       containers:
-        - name: db-init
-          image: kasmweb/api-private:feature_KASM-5313_webui_code_move
-          imagePullPolicy: IfNotPresent
-          volumeMounts:
-            - name: db-preseed-data
-              mountPath: /opt/kasm/current/conf/database/seed_data
-            - name: db-init-script
-              mountPath: /usr/bin/startup.sh
-              subPath: startup.sh
+        - name: {{ .Values.kasmApp.name }}-db-init-container
+          image: "{{ .Values.kasmApp.servicesToDeploy.kasmApi.image }}:{{ .Values.kasmApp.servicesToDeploy.kasmApi.tag }}"
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
           env:
             - name: DB_AUTO_INITIALIZE
               value: "false"
             - name: DEFAULT_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: kasm-secrets
+                  name: {{ .Values.kasmApp.name | default "kasm" }}-secrets
                   key: admin-password
             - name: DEFAULT_MANAGER_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: kasm-secrets
+                  name: {{ .Values.kasmApp.name | default "kasm" }}-secrets
                   key: manager-token
             - name: DEFAULT_REGISTRATION_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: kasm-secrets
+                  name: {{ .Values.kasmApp.name | default "kasm" }}-secrets
                   key: service-token
             - name: DEFAULT_USER_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: kasm-secrets
+                  name: {{ .Values.kasmApp.name | default "kasm" }}-secrets
                   key: user-password
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: kasm-secrets
+                  name: {{ .Values.kasmApp.name | default "kasm" }}-secrets
                   key: db-password
-            - name: START_SERVICES
-              value: "false"
           command:
             - "/bin/bash"
             - "-c"
@@ -66,12 +67,12 @@ spec:
             - |
               if [ ! $(PGPASSWORD=$POSTGRES_PASSWORD psql -U kasmapp -d kasm -h db -t -c "select zone_id from zones" 2>/dev/null | wc -l) -ge 2 ]; then export DB_AUTO_INITIALIZE="true"; fi
               if [[ "$DB_AUTO_INITIALIZE" == "true" ]]; then /usr/bin/startup.sh; else echo "DB already initialized."; fi
+          volumeMounts:
+            - name: db-init-script
+              mountPath: /usr/bin/startup.sh
+              subPath: startup.sh
       volumes:
-        - name: db-preseed-data
-          configMap:
-            name: kasm-db-init-configmap
         - name: db-init-script
           configMap:
-            name: kasm-db-init-startup
+            name: {{ .Values.kasmApp.name | default "kasm" }}-db-init-startup
             defaultMode: 0755
-            

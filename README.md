@@ -3,58 +3,111 @@
 Kasm has been modified to run inside Kubernetes. The service containers will automatically detect they are running in Kubernetes and they will talk directly to each other rather than assume they are talking through an NGINX server as is the case for a normal Kasm deployment. Additionally, components need to talk to the name of the service defined, not to individual containers. A Kubernetes service has a resolvable DNS name that all containers should be able to talk with. API containers will not talk to an individual rdp gateway or guac container, but rather be load balanced to all existing respective containers. The reverse is also true. The API servers have been modified to only return a single entry when guac or rdp gateways call to get a list of API servers. 
 
 ## Current Limitations/Work Remaining
+
 The following limitations are still be worked out.
-1. Database initialization is done by the API container, which means there can only be one API container when the database is first initialized. After the deployment is up and running, it should be possible to add more replicas. They will not initialize the database if the schema already exists, but starting the deployment with more than one API pod might result in race conditions with both attempting to deploy the database schema at the same time. We need to remove database initialization to something external, because we can't assume they will keep the db in kubernetes. So it needs to be changed from something that is automatic to something that is a manual prerequisite step, or optionally automatic.
-2. The RDP Gateway component provides native RDP proxying for RDP clients. It is currently not exposed and would require 3389 to be defined in the ingress. We are currently working on an update that will support RDP over HTTPS, which is supported by most RDP clients. Therefore, this will not be required in the future.
-3. Container based agents need to be external to Kubernetes. We are currently working on Kubevirt autoscaling. A kubernetes native agent would be needed to provide container desktops/apps and that is not currently being worked at this time.
-4. This goes along with 3, we currently have values in the api.yaml file for default credentials, used for seeding the database. Those need removed.
-5. Database and Redis credentials need moved to secrets.
+1. The RDP Gateway component provides native RDP proxying for RDP clients. It is currently not exposed and would require 3389 to be defined in the ingress. We are currently working on an update that will support RDP over HTTPS, which is supported by most RDP clients. Therefore, this will not be required in the future.
+2. Container based agents need to be external to Kubernetes. We are currently working on Kubevirt autoscaling. A kubernetes native agent would be needed to provide container desktops/apps and that is not currently being worked at this time.
+3. Currently the Kasm Guacamole service fails when applying CPU limits. Need to figure out why this happens and resolve the problem so that limits can be applied.
 
 ## Helm
 
-A helm chart is used to deploy Kasm. This project contains examples of deployments, there is a sub directory for each deployment example. For example, `kasm-single-zone`, contains a simple single zone deployment of Kasm.
+A helm chart is used to deploy Kasm. This project contains a Kasm helm chart in the `kasm-single-zone` directory with a templated deployment. Follow the instructions below to deploy this chart.
 
-### Prerequisites
+### Deploy
 
-**Create the Namespace**
+> ***NOTE:*** There are a few steps that can be performed manually like creating the [namespace](#optional-manually-create-namespace), generating [certificates](#optional-manually-generate-certs-for-deployment), or adding [Docker credentials](#optional-manually-log-into-docker-and-create-secret). Check out the *(Optional)* sections below for reference. These can also be added directly to the `values.yaml` file. Review the settings documentation in the `values.yaml` file for reference.
+
+The following will deploy Kasm in a single zone configuration.
 
 ```bash
-kubectl create ns kasm-helm --dry-run=client -o yaml | kubectl apply -f -
+## Use this if you manually created the namespace
+helm install <release name> kasm-single-zone --namespace <namespace name>
+
+## Use this if you want Helm to create the namespace
+helm install <release name> kasm-single-zone --namespace <namespace name> --create-namespace
 ```
 
+## *(Optional)* Manually create namespace
+
+**Create the namespace**
+
+```bash
+NAMESPACE="<namespace name>"
+kubectl create ns "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
+```
+
+## *(Optional)* Manually log into Docker and create secret
+
 **Docker Hub Login**
+
 If you are using private images in Docker Hub, you will need to login. Substitute with your creds.
 
 ```bash
-kubectl create secret docker-registry regcred --docker-server="https://index.docker.io/v2/" --docker-username "username" --docker-password="dckr_pat_xxxxxxxxxxx" --docker-email="user@mail.com" --namespace="kasm-helm"
+NAMESPACE="<namespace name>"
+SECRET="<secret name>"
+USERNAME="<docker username>"
+PASSWORD="<dckr_pat_xxxxxxxxxxx>"
+EMAIL="<user@mail.com>"
+kubectl create secret docker-registry "${SECRET}" --docker-server="https://index.docker.io/v2/" --docker-username "${USERNAME}" --docker-password="${PASSWORD}" --docker-email="${EMAIL}" --namespace="${NAMESPACE}"
 ```
 
 **Edit values.yaml**
 1. Change the namespace variable if desired.
-2. Change the `host` variable to the hostname of the deployment that is resolvable by clients.
+2. Add a `global.hostname` value for the resolvable hostname and certificate registration values.
+3. *(Optional)* Modify the `global.altHostnames` to add a list of Alternate hostnames for the Ingress certificate (e.g. "*.kasmweb.com")
+4. Set the `global.image.PullSecrets` name from the `Docker Hub Login` stage above if Docker login is required
+5. *(Optional)* Configure Kasm passwords. If these values are left blank, Helm will automatically set them for you. If you are running a `helm upgrade` of this deployment, Helm will reuse any password values that already exist in the location of the secrets generated by this helm chart.
+6. Review the notes for the remaining values in the `values.yaml` file and make adjustments as necessar
+
+
+## *(Optional)* Manually generate certs for deployment:
+
+> **NOTE:** If you manually run the steps below, make sure to modify the `values.yaml` file and set the `create` value in each of the `kasmCerts` objects to `false` so Helm doesn't attempt to change or overwrite your existing certs.
 
 **Create Secrets**
-Before you can deploy the helm chart, you must create the required secrets, substitute the namespace name if you have changed it in the values.yaml file.
+This step will generate self-signed certificates for your Kasm services.
 
 ```bash
-# Create a cert and create secret, change hostname and IP as needed
-HOST=matt.dev.kasmweb.net openssl req -x509 -newkey rsa:4096 -keyout keyfile.key -out certfile.crt -sha256 -days 365 -nodes -extensions san -config \
+# Set the Kasm Domain Name, K8s Ingress IP, and K8s namespace as needed
+IP="<k8s ingress ip>"
+HOST="<kasm ingress domain name>"
+NAMESPACE="<namespace name>"
+NGINX_SERVICE_NAME="kasm-proxy"
+RDPPROXY_SERVICE_NAME="rdp-gateway"
+DB_SERVICE_NAME="db"
+
+## Make necessary directories - required to prevent certificates from being overwritten
+mkdir -p certs/{ingress,proxy,rdp,db}
+
+## Generate certs
+## Ingress cert
+openssl req -x509 -newkey rsa:4096 -keyout certs/ingress/tls.key -out certs/ingress/tls.crt -sha256 -days 365 -nodes -extensions san -config \
   <(echo "[req]";
     echo distinguished_name=req;
     echo "[san]";
-    echo subjectAltName=DNS:$HOST,IP:8.67.53.09
+    echo subjectAltName=DNS:${HOST},IP:${IP}
     ) \
-    -subj "/C=US/O=KASM/CN=$HOST" &> /dev/null
-kubectl create secret tls nginx-ingress-cert --namespace "kasm-helm" --key keyfile.key --cert certfile.crt
+    -subj "/C=US/O=KASM/CN=${HOST}" &> /dev/null
 
-# Create a cert for the RDP proxy component
-openssl req -x509 -nodes -days 1825 -newkey rsa:2048 -keyout rdpproxy.key -out rdpproxy.crt -subj "/C=US/ST=VA/L=None/O=None/OU=DoFu/CN=$(hostname)/emailAddress=none@none.none"
-kubectl create secret tls rdp-proxy-cert --namespace "kasm-helm" --key rdpproxy.key --cert rdpproxy.crt
-```
+## Nginx proxy cert
+openssl req -x509 -nodes -days 1825 -newkey rsa:2048 -keyout certs/proxy/tls.key -out certs/proxy/tls.crt -subj "/C=US/ST=VA/L=None/O=None/OU=DoFu/CN=${NGINX_SERVICE_NAME}/emailAddress=none@none.none"
 
-### Deploy
-The following will deploy Kasm in a single zone configuration.
+## RDP Gateway cert
+openssl req -x509 -nodes -days 1825 -newkey rsa:2048 -keyout certs/rdp/tls.key -out certs/rdp/tls.crt -subj "/C=US/ST=VA/L=None/O=None/OU=DoFu/CN=${RDPPROXY_SERVICE_NAME}/emailAddress=none@none.none"
 
-```bash
-helm install --replace kasmdemo kasm-single-zone
+## Kasm DB cert
+openssl req -x509 -nodes -days 1825 -newkey rsa:2048 -keyout certs/db/tls.key -out certs/db/tls.crt -subj "/C=US/ST=VA/L=None/O=None/OU=DoFu/CN=${DB_SERVICE_NAME}/emailAddress=none@none.none"
+
+## Upload certs to K8s
+## Ingress cert
+kubectl create secret tls kasm-ingress-cert --namespace "${NAMESPACE}" --key certs/ingress/tls.key --cert certs/ingress/tls.crt
+
+## Nginx cert
+kubectl create secret tls kasm-nginx-proxy-cert --namespace "${NAMESPACE}" --key certs/proxy/tls.key --cert certs/proxy/tls.crt
+
+# RDP Gateway cert
+kubectl create secret tls kasm-rdpproxy-cert --namespace "${NAMESPACE}" --key certs/rdp/tls.key --cert certs/rdp/tls.crt
+
+# Kasm DB cert
+kubectl create secret tls kasm-db-cert --namespace "${NAMESPACE}" --key certs/db/tls.key --cert certs/db/tls.crt
 ```

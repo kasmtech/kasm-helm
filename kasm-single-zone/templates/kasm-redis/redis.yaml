@@ -1,0 +1,69 @@
+{{/*
+Deploy the Redis if .Values.kasmApp.servicesToDeploy.share.deploy set to true
+*/}}
+{{- if and (.Values.kasmApp.servicesToDeploy.kasmRedis.deploy) (.Values.kasmApp.servicesToDeploy.kasmShare.deploy) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.kasmApp.servicesToDeploy.kasmRedis.name }}-deployment
+  namespace: {{ .Values.global.namespace | default .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.kasmRedis.name }}
+    {{- include "kasm.defaultLabels" . | indent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.kasmRedis.name }}
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        kasm_role: redis
+        app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.kasmRedis.name }}
+        {{- include "kasm.defaultLabels" . | indent 8 }}
+    spec:
+      restartPolicy: {{ .Values.global.image.restartPolicy }}
+      {{- if .Values.global.image.pullSecrets }}
+        {{- include "image.pullSecrets" . | indent 6 }}
+      {{- end }}
+      {{- if .Values.kasmApp.applyHardening }}
+        {{- include "kasm.podSecurity" . | indent 6 }}
+      {{- end }}
+      containers:
+        - name: {{ .Values.kasmApp.servicesToDeploy.kasmRedis.name }}-container
+          image: "{{ .Values.kasmApp.servicesToDeploy.kasmRedis.image }}:{{ .Values.kasmApp.servicesToDeploy.kasmRedis.tag }}"
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.kasmApp.name | default "kasm" }}-secrets
+                  key: redis-password
+          {{- if .Values.kasmApp.servicesToDeploy.kasmRedis.resources }}
+          resources: {{- toYaml .Values.kasmApp.servicesToDeploy.kasmRedis.resources | nindent 12 }}
+          {{- else }}
+          resources: {{- include "resources.preset" (dict "node" "redis" "size" .Values.kasmApp.deploymentSize) | nindent 12 }}
+          {{- end }}
+          command:
+            - redis-server
+          args: 
+            - |
+              --requirepass $(REDIS_PASSWORD)
+          ports:
+            - name: {{ .Values.kasmApp.servicesToDeploy.kasmRedis.name }}-pt
+              containerPort: 6379
+              protocol: TCP
+          {{- if .Values.kasmApp.servicesToDeploy.kasmRedis.addHealthChecks }}
+          livenessProbe:
+            {{- include "health.tcp" (dict "portName" (printf "%s-pt" .Values.kasmApp.servicesToDeploy.kasmRedis.name)) | indent 12 }}
+          {{- end }}
+          {{- if .Values.kasmApp.servicesToDeploy.kasmRedis.addHealthChecks }}
+          readinessProbe:
+            {{- include "health.command" (dict "command" "redis-cli -p 6379 -a $REDIS_PASSWORD ping 2>/dev/null | grep -q PONG") | indent 12 }}
+          {{- end }}
+          {{- if .Values.kasmApp.applyHardening }}
+            {{- include "kasm.containerSecurity" . | indent 10 }}
+          {{- end }}
+{{ include "kasm.serviceTemplate" (list . "kasm-redis" .Values.kasmApp.servicesToDeploy.kasmRedis.name (list 6379) ) }}
+{{- end }}

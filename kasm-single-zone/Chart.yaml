@@ -1,24 +1,33 @@
+annotations:
+  category: Virtual Desktop
+  images: |
+    - name: api-wait-container
+      image: alpine/curl:8.8.0
+    - name: kasm-api
+      image: kasmweb/api:1.16.0
+    - name: kasm-manager
+      image: kasmweb/manager:1.16.0
+    - name: kasm-db
+      image: kasmweb/postgres:1.16.0
+    - name: kasm-proxy
+      image: kasmweb/proxy:1.16.0
+    - name: kasm-guac
+      image: kasmweb/kasm-guac:1.16.0
+    - name: rdp-gateway
+      image: kasmweb/rdp-gateway:1.16.0
+    - name: kasm-redis
+      image: redis:5-alpine
 apiVersion: v2
+appVersion: 1.16.0
 name: kasm-single-zone
-description: Helm chart for Kasm workspaces
-
-# A chart can be either an 'application' or a 'library' chart.
-#
-# Application charts are a collection of templates that can be packaged into versioned archives
-# to be deployed.
-#
-# Library charts provide useful utilities or functions for the chart developer. They're included as
-# a dependency of application charts to inject those utilities and functions into the rendering
-# pipeline. Library charts do not define any templates and therefore cannot be deployed.
-type: application
-
-# This is the chart version. This version number should be incremented each time you make changes
-# to the chart and its templates, including the app version.
-# Versions are expected to follow Semantic Versioning (https://semver.org/)
+description: Kasm is a platform specializing in providing secure browser-based workspaces for a wide range of applications and industries. Its main goal is to provide isolated and secure environments that can be accessed via web browsers, ensuring that users can perform tasks without risking the security of their local systems.
+icon: https://kasm-static-content.s3.amazonaws.com/icons/kasm-logo-small.png
+home: https://kasmweb.com
+keywords:
+  - kasm
+  - vdi
+  - workspaces
+maintainers:
+  - name: Kasm Technologies, Inc.
+    url: https://github.com/kasmtech/kasm-single-server
 version: 0.1.0
-
-# This is the version number of the application being deployed. This version number should be
-# incremented each time you make changes to the application. Versions are not expected to
-# follow Semantic Versioning. They should reflect the version the application is using.
-# It is recommended to use it with quotes.
-appVersion: "1.16"
