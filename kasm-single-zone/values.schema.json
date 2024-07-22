@@ -27,37 +27,9 @@
           "properties": {
             "pullCredentials": {
               "additionalProperties": false,
-              "properties": {
-                "email": {
-                  "default": "user@mail.com",
-                  "title": "email",
-                  "type": "string"
-                },
-                "password": {
-                  "default": "dckr_pat_xxxxxxxxxxx",
-                  "title": "password",
-                  "type": "string"
-                },
-                "registry": {
-                  "default": "index.docker.io/v2",
-                  "title": "registry",
-                  "type": "string"
-                },
-                "username": {
-                  "default": "docker_username",
-                  "title": "username",
-                  "type": "string"
-                }
-              },
               "description": "## @param global.image.pullCredentials Global object to create Docker registry credentials\n##  Example\n##    pullCredentials:\n##      registry: \"index.docker.io/v2\"\n##      username: \"docker_username\"\n##      password: \"dckr_pat_xxxxxxxxxxx\"\n##      email: \"user@mail.com\"\n##      ",
               "title": "pullCredentials",
-              "type": "object",
-              "required": [
-                "registry",
-                "username",
-                "password",
-                "email"
-              ]
+              "type": "object"
             },
             "pullPolicy": {
               "default": "IfNotPresent",

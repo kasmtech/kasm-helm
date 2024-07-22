@@ -23,11 +23,7 @@ global:
     ##      password: "dckr_pat_xxxxxxxxxxx"
     ##      email: "user@mail.com"
     ##      
-    pullCredentials:
-      registry: "index.docker.io/v2"
-      username: "docker_username"
-      password: "dckr_pat_xxxxxxxxxxx"
-      email: "user@mail.com"
+    pullCredentials: {}
 
   ## @param global.hostname Global hostname to use for TLS Certificates and ingress URL
   ##
