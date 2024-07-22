@@ -190,6 +190,50 @@
                 },
                 "resources": {
                   "additionalProperties": false,
+                  "properties": {
+                    "limits": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "cpu": {
+                          "default": "300m",
+                          "title": "cpu",
+                          "type": "string"
+                        },
+                        "memory": {
+                          "default": "512Mi",
+                          "title": "memory",
+                          "type": "string"
+                        }
+                      },
+                      "title": "limits",
+                      "type": "object",
+                      "required": [
+                        "cpu",
+                        "memory"
+                      ]
+                    },
+                    "requests": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "cpu": {
+                          "default": "100m",
+                          "title": "cpu",
+                          "type": "string"
+                        },
+                        "memory": {
+                          "default": "128Mi",
+                          "title": "memory",
+                          "type": "string"
+                        }
+                      },
+                      "title": "requests",
+                      "type": "object",
+                      "required": [
+                        "cpu",
+                        "memory"
+                      ]
+                    }
+                  },
                   "description": "## @param kasmApp.servicesToDeploy.db.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)\n## Example:\n## resources:\n##   requests:\n##     cpu: 100m\n##     memory: 128Mi\n##   limits:\n##     cpu: 300m\n##     memory: 512Mi\n##",
                   "title": "resources",
                   "type": "object"
@@ -237,6 +281,50 @@
                 },
                 "resources": {
                   "additionalProperties": false,
+                  "properties": {
+                    "limits": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "cpu": {
+                          "default": "300m",
+                          "title": "cpu",
+                          "type": "string"
+                        },
+                        "memory": {
+                          "default": "512Mi",
+                          "title": "memory",
+                          "type": "string"
+                        }
+                      },
+                      "title": "limits",
+                      "type": "object",
+                      "required": [
+                        "cpu",
+                        "memory"
+                      ]
+                    },
+                    "requests": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "cpu": {
+                          "default": "100m",
+                          "title": "cpu",
+                          "type": "string"
+                        },
+                        "memory": {
+                          "default": "128Mi",
+                          "title": "memory",
+                          "type": "string"
+                        }
+                      },
+                      "title": "requests",
+                      "type": "object",
+                      "required": [
+                        "cpu",
+                        "memory"
+                      ]
+                    }
+                  },
                   "description": "## @param kasmApp.servicesToDeploy.kasmApi.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)\n## Example:\n## resources:\n##   requests:\n##     cpu: 100m\n##     memory: 128Mi\n##   limits:\n##     cpu: 300m\n##     memory: 512Mi\n##",
                   "title": "resources",
                   "type": "object"
@@ -289,6 +377,50 @@
                 },
                 "resources": {
                   "additionalProperties": false,
+                  "properties": {
+                    "limits": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "cpu": {
+                          "default": "300m",
+                          "title": "cpu",
+                          "type": "string"
+                        },
+                        "memory": {
+                          "default": "512Mi",
+                          "title": "memory",
+                          "type": "string"
+                        }
+                      },
+                      "title": "limits",
+                      "type": "object",
+                      "required": [
+                        "cpu",
+                        "memory"
+                      ]
+                    },
+                    "requests": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "cpu": {
+                          "default": "100m",
+                          "title": "cpu",
+                          "type": "string"
+                        },
+                        "memory": {
+                          "default": "128Mi",
+                          "title": "memory",
+                          "type": "string"
+                        }
+                      },
+                      "title": "requests",
+                      "type": "object",
+                      "required": [
+                        "cpu",
+                        "memory"
+                      ]
+                    }
+                  },
                   "description": "## @param kasmApp.servicesToDeploy.kasmGuac.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)\n## Example:\n## resources:\n##   requests:\n##     cpu: 100m\n##     memory: 128Mi\n##   limits:\n##     cpu: 300m\n##     memory: 512Mi\n##",
                   "title": "resources",
                   "type": "object"
@@ -337,6 +469,50 @@
                 },
                 "resources": {
                   "additionalProperties": false,
+                  "properties": {
+                    "limits": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "cpu": {
+                          "default": "300m",
+                          "title": "cpu",
+                          "type": "string"
+                        },
+                        "memory": {
+                          "default": "512Mi",
+                          "title": "memory",
+                          "type": "string"
+                        }
+                      },
+                      "title": "limits",
+                      "type": "object",
+                      "required": [
+                        "cpu",
+                        "memory"
+                      ]
+                    },
+                    "requests": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "cpu": {
+                          "default": "100m",
+                          "title": "cpu",
+                          "type": "string"
+                        },
+                        "memory": {
+                          "default": "128Mi",
+                          "title": "memory",
+                          "type": "string"
+                        }
+                      },
+                      "title": "requests",
+                      "type": "object",
+                      "required": [
+                        "cpu",
+                        "memory"
+                      ]
+                    }
+                  },
                   "description": "## @param kasmApp.servicesToDeploy.kasmManager.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)\n## Example:\n## resources:\n##   requests:\n##     cpu: 100m\n##     memory: 128Mi\n##   limits:\n##     cpu: 300m\n##     memory: 512Mi\n##",
                   "title": "resources",
                   "type": "object"
@@ -384,6 +560,50 @@
                 },
                 "resources": {
                   "additionalProperties": false,
+                  "properties": {
+                    "limits": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "cpu": {
+                          "default": "300m",
+                          "title": "cpu",
+                          "type": "string"
+                        },
+                        "memory": {
+                          "default": "512Mi",
+                          "title": "memory",
+                          "type": "string"
+                        }
+                      },
+                      "title": "limits",
+                      "type": "object",
+                      "required": [
+                        "cpu",
+                        "memory"
+                      ]
+                    },
+                    "requests": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "cpu": {
+                          "default": "100m",
+                          "title": "cpu",
+                          "type": "string"
+                        },
+                        "memory": {
+                          "default": "128Mi",
+                          "title": "memory",
+                          "type": "string"
+                        }
+                      },
+                      "title": "requests",
+                      "type": "object",
+                      "required": [
+                        "cpu",
+                        "memory"
+                      ]
+                    }
+                  },
                   "description": "## @param kasmApp.servicesToDeploy.kasmProxy.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)\n## Example:\n## resources:\n##   requests:\n##     cpu: 100m\n##     memory: 128Mi\n##   limits:\n##     cpu: 300m\n##     memory: 512Mi\n##",
                   "title": "resources",
                   "type": "object"
@@ -431,6 +651,50 @@
                 },
                 "resources": {
                   "additionalProperties": false,
+                  "properties": {
+                    "limits": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "cpu": {
+                          "default": "300m",
+                          "title": "cpu",
+                          "type": "string"
+                        },
+                        "memory": {
+                          "default": "512Mi",
+                          "title": "memory",
+                          "type": "string"
+                        }
+                      },
+                      "title": "limits",
+                      "type": "object",
+                      "required": [
+                        "cpu",
+                        "memory"
+                      ]
+                    },
+                    "requests": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "cpu": {
+                          "default": "100m",
+                          "title": "cpu",
+                          "type": "string"
+                        },
+                        "memory": {
+                          "default": "128Mi",
+                          "title": "memory",
+                          "type": "string"
+                        }
+                      },
+                      "title": "requests",
+                      "type": "object",
+                      "required": [
+                        "cpu",
+                        "memory"
+                      ]
+                    }
+                  },
                   "description": "## @param kasmApp.servicesToDeploy.kasmRedis.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)\n## Example:\n## resources:\n##   requests:\n##     cpu: 100m\n##     memory: 128Mi\n##   limits:\n##     cpu: 300m\n##     memory: 512Mi\n##",
                   "title": "resources",
                   "type": "object"
@@ -483,6 +747,50 @@
                 },
                 "resources": {
                   "additionalProperties": false,
+                  "properties": {
+                    "limits": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "cpu": {
+                          "default": "300m",
+                          "title": "cpu",
+                          "type": "string"
+                        },
+                        "memory": {
+                          "default": "512Mi",
+                          "title": "memory",
+                          "type": "string"
+                        }
+                      },
+                      "title": "limits",
+                      "type": "object",
+                      "required": [
+                        "cpu",
+                        "memory"
+                      ]
+                    },
+                    "requests": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "cpu": {
+                          "default": "100m",
+                          "title": "cpu",
+                          "type": "string"
+                        },
+                        "memory": {
+                          "default": "128Mi",
+                          "title": "memory",
+                          "type": "string"
+                        }
+                      },
+                      "title": "requests",
+                      "type": "object",
+                      "required": [
+                        "cpu",
+                        "memory"
+                      ]
+                    }
+                  },
                   "description": "## @param kasmApp.servicesToDeploy.kasmShare.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)\n## Example:\n## resources:\n##   requests:\n##     cpu: 100m\n##     memory: 128Mi\n##   limits:\n##     cpu: 300m\n##     memory: 512Mi\n##",
                   "title": "resources",
                   "type": "object"
@@ -536,6 +844,50 @@
                 },
                 "resources": {
                   "additionalProperties": false,
+                  "properties": {
+                    "limits": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "cpu": {
+                          "default": "300m",
+                          "title": "cpu",
+                          "type": "string"
+                        },
+                        "memory": {
+                          "default": "512Mi",
+                          "title": "memory",
+                          "type": "string"
+                        }
+                      },
+                      "title": "limits",
+                      "type": "object",
+                      "required": [
+                        "cpu",
+                        "memory"
+                      ]
+                    },
+                    "requests": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "cpu": {
+                          "default": "100m",
+                          "title": "cpu",
+                          "type": "string"
+                        },
+                        "memory": {
+                          "default": "128Mi",
+                          "title": "memory",
+                          "type": "string"
+                        }
+                      },
+                      "title": "requests",
+                      "type": "object",
+                      "required": [
+                        "cpu",
+                        "memory"
+                      ]
+                    }
+                  },
                   "description": "## @param kasmApp.servicesToDeploy.rdpGateway.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)\n## Example:\n## resources:\n##   requests:\n##     cpu: 100m\n##     memory: 128Mi\n##   limits:\n##     cpu: 300m\n##     memory: 512Mi\n##",
                   "title": "resources",
                   "type": "object"
