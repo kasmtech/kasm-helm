@@ -16,6 +16,8 @@
 volumeMounts:
   - name: kasm-guac-data
     mountPath: /tmp
+  - name: kasm-guac-data
+    mountPath: /opt/kasm/current/log
 {{- end }}
 
 {{- define "guac.podSecurity.volumes" }}
@@ -40,5 +42,5 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 1Mi
+      storage: 100Mi
 {{- end }}

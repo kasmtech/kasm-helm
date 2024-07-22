@@ -51,12 +51,12 @@ spec:
             - |
               --requirepass $(REDIS_PASSWORD)
           ports:
-            - name: {{ .Values.kasmApp.servicesToDeploy.kasmRedis.name }}-port
+            - name: {{ .Values.kasmApp.servicesToDeploy.kasmRedis.name }}-pt
               containerPort: 6379
               protocol: TCP
           {{- if .Values.kasmApp.servicesToDeploy.kasmRedis.addHealthChecks }}
           livenessProbe:
-            {{- include "health.tcp" (dict "port" (printf "%s-port" .Values.kasmApp.servicesToDeploy.kasmRedis.name)) | indent 12 }}
+            {{- include "health.tcp" (dict "portName" (printf "%s-pt" .Values.kasmApp.servicesToDeploy.kasmRedis.name)) | indent 12 }}
           {{- end }}
           {{- if .Values.kasmApp.servicesToDeploy.kasmRedis.addHealthChecks }}
           readinessProbe:

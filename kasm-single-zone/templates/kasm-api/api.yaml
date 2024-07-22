@@ -65,16 +65,16 @@ spec:
                   name: {{ .Values.kasmApp.name | default "kasm" }}-secrets
                   key: db-password
           ports:
-            - name: {{ .Values.kasmApp.servicesToDeploy.kasmApi.name }}-port
+            - name: {{ .Values.kasmApp.servicesToDeploy.kasmApi.name }}-pt
               containerPort: 8080
               protocol: TCP
           {{- if .Values.kasmApp.servicesToDeploy.kasmApi.addHealthChecks }}
           livenessProbe:
-            {{- include "health.tcp" (dict "port" (printf "%s-port" .Values.kasmApp.servicesToDeploy.kasmApi.name)) | indent 12 }}
+            {{- include "health.tcp" (dict "portName" (printf "%s-pt" .Values.kasmApp.servicesToDeploy.kasmApi.name) ) | indent 12 }}
           {{- end }}
           {{- if .Values.kasmApp.servicesToDeploy.kasmApi.addHealthChecks }}
           readinessProbe:
-            {{- include "health.command" (dict "command" "curl http://localhost:8080/api/__healthcheck") | indent 12 }}
+            {{- include "health.http" (dict "path" "/api/__healthcheck" "portName" (printf "%s-pt" .Values.kasmApp.servicesToDeploy.kasmApi.name) ) | indent 12 }}
           {{- end }}
           {{- if .Values.kasmApp.servicesToDeploy.kasmApi.resources }}
           resources: {{- toYaml .Values.kasmApp.servicesToDeploy.kasmApi.resources | nindent 12 }}

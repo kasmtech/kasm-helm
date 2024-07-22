@@ -8,12 +8,25 @@ The following limitations are still be worked out.
 1. The RDP Gateway component provides native RDP proxying for RDP clients. It is currently not exposed and would require 3389 to be defined in the ingress. We are currently working on an update that will support RDP over HTTPS, which is supported by most RDP clients. Therefore, this will not be required in the future.
 2. Container based agents need to be external to Kubernetes. We are currently working on Kubevirt autoscaling. A kubernetes native agent would be needed to provide container desktops/apps and that is not currently being worked at this time.
 
-
 ## Helm
 
 A helm chart is used to deploy Kasm. This project contains a Kasm helm chart in the `kasm-single-zone` directory with a templated deployment. Follow the instructions below to deploy this chart.
 
-### Prerequisites
+### Deploy
+
+> ***NOTE:*** There are a few steps that can be performed manually like creating the [namespace]() or creating the [certificates](). Check out the *(Optional)* sections below for reference.
+
+The following will deploy Kasm in a single zone configuration.
+
+```bash
+## Use this if you manually created the namespace
+helm install <release name> kasm-single-zone --namespace <namespace name>
+
+## Use this if you manually created the namespace
+helm install <release name> kasm-single-zone --namespace <namespace name> --create-namespace
+```
+
+## *(Optional)* Manually create namespace
 
 **Create the namespace**
 
@@ -23,6 +36,7 @@ kubectl create ns "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
 ```
 
 **Docker Hub Login**
+
 If you are using private images in Docker Hub, you will need to login. Substitute with your creds.
 
 ```bash
@@ -43,15 +57,7 @@ kubectl create secret docker-registry "${SECRET}" --docker-server="https://index
 6. Review the notes for the remaining values in the `values.yaml` file and make adjustments as necessar
 
 
-### Deploy
-The following will deploy Kasm in a single zone configuration.
-
-```bash
-## Use this if you manually created the namespace
-helm install <release name> kasm-single-zone --namespace <namespace name>
-```
-
-## Manually generate certs for deployment:
+## *(Optional)* Manually generate certs for deployment:
 
 > **NOTE:** If you manually run the steps below, make sure to modify the `values.yaml` file and set the `create` value in each of the `kasmCerts` objects to `false` so Helm doesn't attempt to change or overwrite your existing certs.
 

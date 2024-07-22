@@ -92,7 +92,7 @@ spec:
               protocol: TCP
           {{- if .Values.kasmApp.servicesToDeploy.kasmProxy.addHealthChecks }}
           livenessProbe:
-            {{- include "health.tcp" (dict "port" (printf "%s-port" .Values.kasmApp.servicesToDeploy.kasmProxy.name)) | indent 12 }}
+            {{- include "health.tcp" (dict "portName" (printf "%s-port" .Values.kasmApp.servicesToDeploy.kasmProxy.name) ) | indent 12 }}
           {{- end }}
           {{- if .Values.kasmApp.servicesToDeploy.kasmProxy.addHealthChecks }}
           readinessProbe:

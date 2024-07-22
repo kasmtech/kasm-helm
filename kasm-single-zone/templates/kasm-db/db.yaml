@@ -47,7 +47,7 @@ spec:
             - name: POSTGRES_USER
               value: kasmapp
           ports:
-            - name: {{ .Values.kasmApp.servicesToDeploy.db.name }}-port
+            - name: {{ .Values.kasmApp.servicesToDeploy.db.name }}-pt
               containerPort: 5432
               protocol: TCP
           {{- if .Values.kasmApp.servicesToDeploy.db.addHealthChecks }}
@@ -92,11 +92,11 @@ spec:
         - name: kasm-db-configs
           configMap:
             name: {{ .Values.kasmApp.servicesToDeploy.db.name }}-configmap
-            defaultMode: 0644
+            defaultMode: 0o644
         - name: kasm-db-cert
           secret:
             secretName: {{ .Values.kasmCerts.db.name }}
-            defaultMode: 0600
+            defaultMode: 0o600
   {{- if .Values.kasmApp.servicesToDeploy.db.persistentVolumeClaimRetentionPolicy.enabled }}
   persistentVolumeClaimRetentionPolicy:
     whenDeleted: {{ .Values.kasmApp.servicesToDeploy.db.persistentVolumeClaimRetentionPolicy.whenDeleted }}
@@ -112,5 +112,5 @@ spec:
         - ReadWriteOnce
       resources:
         requests:
-          storage: 5Gi
+          storage: 8Gi
 {{ include "kasm.serviceTemplate" (list . "db" .Values.kasmApp.servicesToDeploy.db.name (list 5432) ) }}

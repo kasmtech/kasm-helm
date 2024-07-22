@@ -45,16 +45,16 @@ spec:
                   key: db-password
           imagePullPolicy: {{ .Values.global.image.pullPolicy }}
           ports:
-            - name: {{ .Values.kasmApp.servicesToDeploy.kasmManager.name }}-port
+            - name: {{ .Values.kasmApp.servicesToDeploy.kasmManager.name }}-pt
               containerPort: 8181
               protocol: TCP
           {{- if .Values.kasmApp.servicesToDeploy.kasmManager.addHealthChecks }}
           livenessProbe:
-            {{- include "health.tcp" (dict "port" (printf "%s-port" .Values.kasmApp.servicesToDeploy.kasmManager.name)) | indent 12 }}
+            {{- include "health.tcp" (dict "portName" (printf "%s-pt" .Values.kasmApp.servicesToDeploy.kasmManager.name) ) | indent 12 }}
           {{- end }}
           {{- if .Values.kasmApp.servicesToDeploy.kasmManager.addHealthChecks }}
           readinessProbe:
-            {{- include "health.command" (dict "command" "curl http://localhost:8181/__healthcheck") | indent 12 }}
+            {{- include "health.http" (dict "path" "/__healthcheck" "portName" (printf "%s-pt" .Values.kasmApp.servicesToDeploy.kasmManager.name) ) | indent 12 }}
           {{- end }}
           {{- if .Values.kasmApp.servicesToDeploy.kasmManager.resources }}
           resources: {{- toYaml .Values.kasmApp.servicesToDeploy.kasmManager.resources | nindent 12 }}

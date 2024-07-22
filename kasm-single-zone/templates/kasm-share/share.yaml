@@ -81,16 +81,16 @@ spec:
                   name: {{ .Values.kasmApp.name | default "kasm" }}-secrets
                   key: db-password
           ports:
-            - name: {{ .Values.kasmApp.servicesToDeploy.kasmShare.name }}-port
+            - name: {{ .Values.kasmApp.servicesToDeploy.kasmShare.name }}-pt
               containerPort: 8182
               protocol: TCP
           {{- if .Values.kasmApp.servicesToDeploy.kasmShare.addHealthChecks }}
           livenessProbe:
-            {{- include "health.tcp" (dict "port" (printf "%s-port" .Values.kasmApp.servicesToDeploy.kasmShare.name)) | indent 12 }}
+            {{- include "health.tcp" (dict "portName" (printf "%s-pt" .Values.kasmApp.servicesToDeploy.kasmShare.name) ) | indent 12 }}
           {{- end }}
           {{- if .Values.kasmApp.servicesToDeploy.kasmShare.addHealthChecks }}
           readinessProbe:
-            {{- include "health.command" (dict "command" "curl http://localhost:8182/__healthcheck") | indent 12 }}
+            {{- include "health.http" (dict "path" "/__healthcheck" "portName" (printf "%s-pt" .Values.kasmApp.servicesToDeploy.kasmShare.name) ) | indent 12 }}
           {{- end }}
           {{- if .Values.kasmApp.servicesToDeploy.kasmShare.resources }}
           resources: {{- toYaml .Values.kasmApp.servicesToDeploy.kasmShare.resources | nindent 12 }}

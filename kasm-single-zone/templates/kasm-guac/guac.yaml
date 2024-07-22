@@ -57,16 +57,16 @@ spec:
             - name: ZONE
               value: default
           ports:
-            - name: {{ .Values.kasmApp.servicesToDeploy.kasmGuac.name }}-port
+            - name: {{ .Values.kasmApp.servicesToDeploy.kasmGuac.name }}-pt
               containerPort: 3000
               protocol: TCP
           {{- if .Values.kasmApp.servicesToDeploy.kasmGuac.addHealthChecks }}
           livenessProbe:
-            {{- include "health.tcp" (dict "port" (printf "%s-port" .Values.kasmApp.servicesToDeploy.kasmGuac.name)) | indent 12 }}
+            {{- include "health.tcp" (dict "portName" (printf "%s-pt" .Values.kasmApp.servicesToDeploy.kasmGuac.name) ) | indent 12 }}
           {{- end }}
           {{- if .Values.kasmApp.servicesToDeploy.kasmGuac.addHealthChecks }}
           readinessProbe:
-            {{- include "health.command" (dict "command" "curl http://localhost:3000/__healthcheck") | indent 12 }}
+            {{- include "health.http" (dict "path" "/__healthcheck" "portName" (printf "%s-pt" .Values.kasmApp.servicesToDeploy.kasmGuac.name) ) | indent 12 }}
           {{- end }}
           {{- if .Values.kasmApp.servicesToDeploy.kasmGuac.resources }}
           resources: {{- toYaml .Values.kasmApp.servicesToDeploy.kasmGuac.resources | nindent 12 }}
