@@ -34,11 +34,20 @@ spec:
         {{- include "kasm.podSecurity" . | indent 6 }}
       {{- end }}
       initContainers:
-        {{- if .Values.kasmApp.applyHardening }}
-          {{- include "guac.podSecurity.initContainer" . | indent 8 }}
-          {{- include "guac.podSecurity.mounts" . | indent 10 }}
-        {{- end }}
-        {{- include "kasm.apiWaitContainer" . | nindent 8 }}
+        - name: guac-tmp-perms
+          image: busybox
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Setting permissions and ownership for /tmp..." && chown -R 1000:1000 /tmp && chmod -R 777 /tmp
+              echo "Setting permissions and ownership for /opt/kasm/current..." && chown -R 1000:1000 /opt/kasm/current && chmod -R 0770 /opt/kasm/current
+              echo "Done"
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+        {{- include "kasm.initContainer" (dict "serviceName" "kasm-api" "servicePort" "8080" "path" "/api/__healthcheck") | nindent 8 }}
         {{- if .Values.kasmApp.applyHardening }}
           {{- include "kasm.containerSecurity" . | indent 10 }}
         {{- end }}
@@ -60,6 +69,11 @@ spec:
             - name: {{ .Values.kasmApp.servicesToDeploy.kasmGuac.name }}-pt
               containerPort: 3000
               protocol: TCP
+          volumeMounts:
+            - name: kasm-guac-data
+              mountPath: /tmp
+            - name: kasm-guac-data
+              mountPath: /opt/kasm/current/log
           {{- if .Values.kasmApp.servicesToDeploy.kasmGuac.addHealthChecks }}
           livenessProbe:
             {{- include "health.tcp" (dict "portName" (printf "%s-pt" .Values.kasmApp.servicesToDeploy.kasmGuac.name) ) | indent 12 }}
@@ -76,12 +90,24 @@ spec:
           {{- if .Values.kasmApp.applyHardening }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}
-          {{- if .Values.kasmApp.applyHardening }}
-            {{- include "guac.podSecurity.mounts" . | indent 10 }}
-            {{- include "guac.podSecurity.volumes" . | indent 6 }}
-          {{- end }}
-  {{- if .Values.kasmApp.applyHardening }}
-    {{- include "guac.podSecurity.pvc" . }}
-  {{- end }}
+      volumes:
+        - name: kasm-guac-data
+          persistentVolumeClaim:
+            claimName: {{ .Values.kasmApp.servicesToDeploy.kasmGuac.name }}-pvc
 {{- end }}
 {{ include "kasm.serviceTemplate" (list . "kasm-guac" .Values.kasmApp.servicesToDeploy.kasmGuac.name (list 3000 3001 3002 3003 3004) ) }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.kasmApp.servicesToDeploy.kasmGuac.name }}-pvc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.kasmGuac.name }}-pvc
+    {{- include "kasm.defaultLabels" . | indent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi

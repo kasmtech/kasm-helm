@@ -6,7 +6,7 @@ Example usage:
 {{- define "replicas.preset" }}
   {{- $presetSizes := dict
     "proxy" (dict
-      "small" 1
+      "small" 2
       "medium" 2
       "large" 4
     )
@@ -21,7 +21,7 @@ Example usage:
       "large" 6
     )
     "manager" (dict
-      "small" 1
+      "small" 2
       "medium" 2
       "large" 4
     )

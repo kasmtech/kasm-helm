@@ -34,28 +34,28 @@ spec:
           {{- include "proxy.podSecurity.initContainer" . | indent 8 }}
           {{- include "proxy.podSecurity.mounts" . | indent 10 }}
         {{- end }}
-        {{- include "kasm.apiWaitContainer" . | nindent 8 }}
+        {{- include "kasm.initContainer" (dict "serviceName" "kasm-api" "servicePort" "8080" "path" "/api/__healthcheck") | nindent 8 }}
         {{- if .Values.kasmApp.applyHardening }}
           {{- include "kasm.containerSecurity" . | indent 10 }}
         {{- end }}
-        {{- include "proxy.initContainers" (list . "kasm-manager" "8181" ) | nindent 8 }}
+        {{- include "kasm.initContainer" (dict "serviceName" "kasm-manager" "servicePort" "8181" "path" "/__healthcheck") | nindent 8 }}
         {{- if .Values.kasmApp.applyHardening }}
           {{- include "kasm.containerSecurity" . | indent 10 }}
         {{- end }}
-        {{- if .Values.kasmApp.servicesToDeploy.kasmGuac.deploy }}
-          {{- include "proxy.initContainers" (list . "kasm-guac" "3000") | nindent 8 }}
+        {{- if .Values.kasmApp.servicesToDeploy.kasmShare.deploy }}
+          {{- include "kasm.initContainer" (dict "serviceName" "kasm-share" "servicePort" "8182" "path" "/__healthcheck") | nindent 8 }}
           {{- if .Values.kasmApp.applyHardening }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}
         {{- end }}
-        {{- if .Values.kasmApp.servicesToDeploy.kasmShare.deploy }}
-          {{- include "proxy.initContainers" (list . "kasm-share" "8182") | nindent 8 }}
+        {{- if .Values.kasmApp.servicesToDeploy.kasmGuac.deploy }}
+          {{- include "kasm.initContainer" (dict "serviceName" "kasm-guac" "servicePort" "3000" "path" "/__healthcheck") | nindent 8 }}
           {{- if .Values.kasmApp.applyHardening }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}
         {{- end }}
         {{- if .Values.kasmApp.servicesToDeploy.rdpGateway.deploy }}
-          {{- include "proxy.initContainers" (list . "rdp-gateway" "5555") | nindent 8 }}
+          {{- include "kasm.initContainer" (dict "serviceName" "rdp-gateway" "servicePort" "5555" "path" "/__healthcheck") | nindent 8 }}
           {{- if .Values.kasmApp.applyHardening }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}

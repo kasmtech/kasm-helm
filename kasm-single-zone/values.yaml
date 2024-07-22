@@ -23,11 +23,7 @@ global:
     ##      password: "dckr_pat_xxxxxxxxxxx"
     ##      email: "user@mail.com"
     ##      
-    pullCredentials:
-      registry: "index.docker.io/v2"
-      username: "bryanscarbrough"
-      password: "dckr_pat_Tmn3DzBRFP2kSBEtPZgDUVulixI"
-      email: "bryan.scarbrough@kasmweb.com"
+    pullCredentials: {}
 
   ## @param global.hostname Global hostname to use for TLS Certificates and ingress URL
   ##
@@ -60,7 +56,7 @@ global:
 kasmApp:
   name: kasm
   zoneName: default
-  applyHardening: false
+  applyHardening: true
   deploymentSize: "small"    
   servicesToDeploy:
     ## @param kasmApp.servicesToDeploy.kasmProxy.name Name used for kasm-proxy services as label prefix

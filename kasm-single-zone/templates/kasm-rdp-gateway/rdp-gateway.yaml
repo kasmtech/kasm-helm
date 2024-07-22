@@ -39,7 +39,7 @@ spec:
           {{- include "rdpGateway.podSecurity.initContainer" . | indent 8 }}
           {{- include "rdpGateway.podSecurity.mounts" . | indent 12 }}
         {{- end }}
-        {{- include "kasm.apiWaitContainer" . | indent 8 }}
+        {{- include "kasm.initContainer" (dict "serviceName" "kasm-api" "servicePort" "8080" "path" "/api/__healthcheck") | indent 8 }}
         {{- if .Values.kasmApp.applyHardening }}
           {{- include "kasm.containerSecurity" . | indent 10 }}
         {{- end }}

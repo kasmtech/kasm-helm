@@ -25,11 +25,9 @@ spec:
       {{- if .Values.global.image.pullSecrets }}
         {{- include "image.pullSecrets" . | indent 6 }}
       {{- end }}
+      {{- include "db.podSecurity" . | indent 6 }}
+      {{- include "db.initContainer" . | indent 6 }}
       {{- if .Values.kasmApp.applyHardening }}
-        {{include "db.podSecurity" . | indent 6 }}
-      {{- end }}
-      {{- if .Values.kasmApp.applyHardening }}
-        {{- include "db.podSecurity.initContainer" . | indent 6 }}
         {{- include "db.podSecurity.mounts" . | indent 12 }}
       {{- end }}
       containers:
@@ -85,6 +83,8 @@ spec:
           - name: kasm-db-cert
             mountPath: /etc/ssl/certs/db_server.key
             subPath: tls.key
+          - name: kasm-db-data
+            mountPath: /tmp
           {{- if .Values.kasmApp.applyHardening }}
             {{- include "db.podSecurity.mounts" . | indent 10 }}
           {{- end }}

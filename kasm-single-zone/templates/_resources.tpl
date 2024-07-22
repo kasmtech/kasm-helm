@@ -8,7 +8,7 @@ Example usage:
     "proxy" (dict
       "small" (dict 
           "requests" (dict "cpu" "100m" "memory" "64Mi" "ephemeral-storage" "50Mi")
-          "limits" (dict "cpu" "150m" "memory" "128Mi" "ephemeral-storage" "1Gi")
+          "limits" (dict "cpu" "250m" "memory" "128Mi" "ephemeral-storage" "1Gi")
       )
       "medium" (dict 
           "requests" (dict "cpu" "150m" "memory" "64Mi" "ephemeral-storage" "50Mi")
@@ -63,16 +63,16 @@ Example usage:
     )
     "guac" (dict
       "small" (dict 
-          "requests" (dict "cpu" "100m" "memory" "64Mi" "ephemeral-storage" "50Mi")
-          "limits" (dict "cpu" "200m" "memory" "128Mi" "ephemeral-storage" "2Gi")
+          "requests" (dict "cpu" "250m" "memory" "64Mi" "ephemeral-storage" "50Mi")
+          "limits" (dict "memory" "256Mi" "ephemeral-storage" "2Gi")
       )
       "medium" (dict 
-          "requests" (dict "cpu" "150m" "memory" "64Mi" "ephemeral-storage" "50Mi")
-          "limits" (dict "cpu" "300m" "memory" "256Mi" "ephemeral-storage" "2Gi")
+          "requests" (dict "cpu" "500m" "memory" "64Mi" "ephemeral-storage" "50Mi")
+          "limits" (dict "memory" "512Mi" "ephemeral-storage" "2Gi")
       )
       "large" (dict 
-          "requests" (dict "cpu" "150m" "memory" "64Mi" "ephemeral-storage" "50Mi")
-          "limits" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
+          "requests" (dict "cpu" "750m" "memory" "64Mi" "ephemeral-storage" "50Mi")
+          "limits" (dict "memory" "768Mi" "ephemeral-storage" "2Gi")
       )
     )
     "rdp" (dict

@@ -7,6 +7,7 @@ Kasm has been modified to run inside Kubernetes. The service containers will aut
 The following limitations are still be worked out.
 1. The RDP Gateway component provides native RDP proxying for RDP clients. It is currently not exposed and would require 3389 to be defined in the ingress. We are currently working on an update that will support RDP over HTTPS, which is supported by most RDP clients. Therefore, this will not be required in the future.
 2. Container based agents need to be external to Kubernetes. We are currently working on Kubevirt autoscaling. A kubernetes native agent would be needed to provide container desktops/apps and that is not currently being worked at this time.
+3. Currently the Kasm Guacamole service fails when applying CPU limits. Need to figure out why this happens and resolve the problem so that limits can be applied.
 
 ## Helm
 
@@ -14,7 +15,7 @@ A helm chart is used to deploy Kasm. This project contains a Kasm helm chart in 
 
 ### Deploy
 
-> ***NOTE:*** There are a few steps that can be performed manually like creating the [namespace]() or creating the [certificates](). Check out the *(Optional)* sections below for reference.
+> ***NOTE:*** There are a few steps that can be performed manually like creating the [namespace](#optional-manually-create-namespace), generating [certificates](#optional-manually-generate-certs-for-deployment), or adding [Docker credentials](#optional-manually-log-into-docker-and-create-secret). Check out the *(Optional)* sections below for reference. These can also be added directly to the `values.yaml` file. Review the settings documentation in the `values.yaml` file for reference.
 
 The following will deploy Kasm in a single zone configuration.
 
@@ -22,7 +23,7 @@ The following will deploy Kasm in a single zone configuration.
 ## Use this if you manually created the namespace
 helm install <release name> kasm-single-zone --namespace <namespace name>
 
-## Use this if you manually created the namespace
+## Use this if you want Helm to create the namespace
 helm install <release name> kasm-single-zone --namespace <namespace name> --create-namespace
 ```
 
@@ -34,6 +35,8 @@ helm install <release name> kasm-single-zone --namespace <namespace name> --crea
 NAMESPACE="<namespace name>"
 kubectl create ns "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
 ```
+
+## *(Optional)* Manually log into Docker and create secret
 
 **Docker Hub Login**
 

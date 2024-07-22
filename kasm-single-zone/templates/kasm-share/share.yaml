@@ -52,10 +52,11 @@ spec:
           args:
             - |
               while ! redis-cli -h $(REDIS_HOST) -p 6379 -a $(REDIS_PASSWORD) ping 2>/dev/null | grep -q PONG; do echo "Waiting for Redis to start..."; sleep 5; done
+              echo "Redis online. Connecting!"
           {{- if .Values.kasmApp.applyHardening }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}
-        {{- include "kasm.apiWaitContainer" . | nindent 8 }}
+        {{- include "kasm.initContainer" (dict "serviceName" "kasm-api" "servicePort" "8080" "path" "/api/__healthcheck") | nindent 8 }}
         {{- if .Values.kasmApp.applyHardening }}
           {{- include "kasm.containerSecurity" . | indent 10 }}
         {{- end }}
@@ -90,7 +91,7 @@ spec:
           {{- end }}
           {{- if .Values.kasmApp.servicesToDeploy.kasmShare.addHealthChecks }}
           readinessProbe:
-            {{- include "health.http" (dict "path" "/__healthcheck" "portName" (printf "%s-pt" .Values.kasmApp.servicesToDeploy.kasmShare.name) ) | indent 12 }}
+            {{- include "health.tcp" (dict "portName" (printf "%s-pt" .Values.kasmApp.servicesToDeploy.kasmShare.name) ) | indent 12 }}
           {{- end }}
           {{- if .Values.kasmApp.servicesToDeploy.kasmShare.resources }}
           resources: {{- toYaml .Values.kasmApp.servicesToDeploy.kasmShare.resources | nindent 12 }}
