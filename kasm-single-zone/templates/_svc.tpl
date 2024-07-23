@@ -1,5 +1,7 @@
 {{/*
-Deploy the RDP Gateway if .Values.kasmApp.servicesToDeploy.rdpGateway.deploy set to true
+Service template to use for Kasm services used to generate service definitions
+Example:
+  {{ include "kasm.serviceTemplate" (list . "service-name" "kasm-role-name" (list <port1> <port2> <etc>) ) }}
 */}}
 {{- define "kasm.serviceTemplate" }}
 {{- $values := index . 0 -}}

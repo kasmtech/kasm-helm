@@ -1,3 +1,8 @@
+{{/*
+HTTP Healthcheck template
+Example usage:
+  {{- include "health.http" (dict "path" "healthcheck-path" "portName" "service-port-name") }}
+*/}}
 {{- define "health.http" }}
   {{- if and (hasKey . "path") (hasKey . "portName") }}
 httpGet:
@@ -13,6 +18,11 @@ successThreshold: 1
   {{- end }}
 {{- end }}
 
+{{/*
+TCP Healthcheck template
+Example usage:
+  {{- include "health.tcp" (dict "portName" "service-port-name") }}
+*/}}
 {{- define "health.tcp" }}
   {{- if hasKey . "portName" }}
 tcpSocket:
@@ -27,6 +37,11 @@ successThreshold: 1
   {{- end }}
 {{- end }}
 
+{{/*
+Command-based Healthcheck template
+Example usage:
+  {{- include "health.command" (dict "command" "healthcheck-command") }}
+*/}}
 {{- define "health.command" }}
   {{- if hasKey . "command" }}
 exec:

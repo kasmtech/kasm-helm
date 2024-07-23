@@ -1,3 +1,6 @@
+{{/*
+Pod hardening/security settings
+*/}}
 {{- define "kasm.podSecurity" }}
 securityContext:
   runAsUser: 1000
@@ -6,6 +9,9 @@ securityContext:
   fsGroupChangePolicy: Always
 {{- end }}
 
+{{/*
+Container hardening/security settings
+*/}}
 {{- define "kasm.containerSecurity" }}
 securityContext:
   runAsUser: 1000
