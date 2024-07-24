@@ -12,7 +12,7 @@ global:
   ## @param global.image.restartPolicy Global image restart policy
   ##
   image:
-    pullSecrets: regcred
+    pullSecrets: ""
     pullPolicy: IfNotPresent
     restartPolicy: Always
     ## @param global.image.pullCredentials Global object to create Docker registry credentials
@@ -27,11 +27,10 @@ global:
 
   ## @param global.hostname Global hostname to use for TLS Certificates and ingress URL
   ##
-  hostname: "kasm.home.lab"
+  hostname: ""
   ## @param global.altHostnames Global list of alternate hostnames to use for TLS Certificates
   ##
-  altHostnames:
-    - "*.kasm.home.lab"
+  altHostnames: []
 
   ## @param global.kasmPasswords.redisPassword Password for Kasm Redis service (leave blank for Helm to autogenerate)
   ## @param global.kasmPasswords.dbPassword Password for Kasm Postgresql DB server (leave blank for Helm to autogenerate)
@@ -45,7 +44,7 @@ global:
     dbPassword: ""
     managerToken: ""
     serviceToken: ""
-    adminPassword: "password"
+    adminPassword: ""
     userPassword: ""
 
 ## @param kasmApp.name Kasm application name used as resource label prefix

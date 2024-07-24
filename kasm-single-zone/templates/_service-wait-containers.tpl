@@ -1,3 +1,8 @@
+{{/*
+Init container used to wait for upstream services before attempting to start the primary pod container
+Example:
+  {{ include "kasm.initContainer" (dict "serviceName" "kasm-service-name" "servicePort" "kasm-service-port" "path" "healthcheck-path") }}
+*/}}
 {{- define "kasm.initContainer" }}
   {{- if and (hasKey . "serviceName") (hasKey . "servicePort") ( hasKey . "path" )}}
 - name: {{ .serviceName }}-is-ready

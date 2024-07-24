@@ -29,5 +29,5 @@ keywords:
   - workspaces
 maintainers:
   - name: Kasm Technologies, Inc.
-    url: https://github.com/kasmtech/kasm-single-server
-version: 0.1.0
+    url: https://github.com/kasmtech/kasm-helm
+version: 1.16.0-develop
