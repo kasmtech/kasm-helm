@@ -18,7 +18,7 @@ global:
     ## @param global.image.pullCredentials Global object to create Docker registry credentials
     ##  Example
     ##    pullCredentials:
-    ##      registry: "index.docker.io/v2"
+    ##      registry: "docker.io/kasmweb"
     ##      username: "docker_username"
     ##      password: "dckr_pat_xxxxxxxxxxx"
     ##      email: "user@mail.com"
