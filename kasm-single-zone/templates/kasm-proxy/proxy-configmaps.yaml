@@ -2,12 +2,12 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ .Values.kasmApp.name | default "kasm" }}-proxy-configmap
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ .Values.global.namespace | default .Release.Namespace }}
   labels:
     kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-proxy
 {{- include "kasm.defaultLabels" . | indent 4 }}
   annotations:
-    helm.sh/hook: "pre-install"
+    helm.sh/hook: pre-install,pre-upgrade,post-delete
 data:
   compress.conf: |
     gzip on;
@@ -104,6 +104,17 @@ data:
           return 500 "<H1>Internal Error</H1>";
       }
     }
+  
+  upstream_api.conf: |
+    upstream kasm-api {
+      server kasm-api:8080;
+    }
+  
+  upstream_manager.conf: |
+    upstream kasm-manager {
+      server kasm-manager:8181;
+    }
+
 {{/*
 Add nginx proxy service configs based on values
 */}}
@@ -114,12 +125,8 @@ Add nginx proxy service configs based on values
     {{- $upstream = printf "%s%s" (kebabcase $key) "-backend" -}}
   {{- end }}
   {{- if eq $value.deploy true }}
-    {{- if eq $key "kasmApi" }}
-      {{- $ports = (list "8080") -}}
-    {{- else if eq $key "kasmGuac" }}
+    {{- if eq $key "kasmGuac" }}
       {{- $ports = (list "3001" "3002" "3003" "3004") -}}
-    {{- else if eq $key "kasmManager" }}
-      {{- $ports = (list "8181") -}}
     {{- else if eq $key "rdpGateway" }}
       {{- $ports = (list "5555") -}}
     {{- else if eq $key "kasmShare" }}
