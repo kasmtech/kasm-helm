@@ -5,15 +5,15 @@
 global:
   ## @param global.namespace Kubernetes namespace where all Kasm resources will be deployed (overrides Release.Namespace)
   ##
-  namespace: ""
+  namespace: "kasm"
 
   ## @param global.image.pullSecrets Global Docker registry secret name
   ## @param global.image.pullPolicy Global image pull policy
   ## @param global.image.restartPolicy Global image restart policy
   ##
   image:
-    pullSecrets: ""
-    pullPolicy: IfNotPresent
+    pullSecrets: "dockerhub"
+    pullPolicy: Always
     restartPolicy: Always
     ## @param global.image.pullCredentials Global object to create Docker registry credentials
     ##  Example
@@ -27,7 +27,7 @@ global:
 
   ## @param global.hostname Global hostname to use for TLS Certificates and ingress URL
   ##
-  hostname: ""
+  hostname: "matt.dev.kasmweb.net"
   ## @param global.altHostnames Global list of alternate hostnames to use for TLS Certificates
   ##
   altHostnames: []
@@ -121,7 +121,7 @@ kasmApp:
       addHealthChecks: true
       image: kasmweb/api-private
       tag: feature_KASM-5313_webui_code_move
-      replicas: ""
+      replicas: "1"
       ## @param kasmApp.servicesToDeploy.kasmApi.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)
       ## Example:
       ## resources:
@@ -144,7 +144,7 @@ kasmApp:
       addHealthChecks: true
       image: kasmweb/manager-private
       tag: feature_KASM-5313_webui_code_move
-      replicas: ""
+      replicas: "1"
       ## @param kasmApp.servicesToDeploy.kasmManager.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)
       ## Example:
       ## resources:

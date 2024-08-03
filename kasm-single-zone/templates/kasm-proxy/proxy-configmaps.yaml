@@ -224,7 +224,7 @@ data:
   upstream_proxy.conf: |
     location /kasm_connect {
       internal;
-      proxy_pass http://kasm-api/api/kasm_connect/;
+      proxy_pass http://kasm_api/api/kasm_connect/;
       proxy_pass_request_body off;
       proxy_set_header        Content-Length '';
       proxy_set_header        X-Original-URI $request_uri;
@@ -261,7 +261,79 @@ data:
       proxy_send_timeout      1800s;
       proxy_connect_timeout   1800s;
       proxy_buffering         off;
-      client_max_body_size    1G;
+      client_max_body_size 1G;
+      expires                 4h;
+      add_header              Cache-Control "private";
+
+      proxy_hide_header   'Access-Control-Allow-Credentials';
+      proxy_hide_header   'Access-Control-Allow-Origin';
+      proxy_hide_header   'Access-Control-Allow-Methods';
+      proxy_hide_header   'Access-Control-Allow-Headers';
+      proxy_hide_header   'Strict-Transport-Security';
+      proxy_hide_header   'X-Content-Type-Options';
+      add_header 'Access-Control-Allow-Origin' $http_origin 'always';
+      add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS' 'always';
+      add_header 'Access-Control-Allow-Headers' 'DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range' 'always';
+      add_header 'Access-Control-Allow-Credentials' 'true' 'always';
+      add_header 'Strict-Transport-Security' "max-age=63072000" always;
+      add_header 'X-Content-Type-Options' 'nosniff';
+
+    }
+
+    location ~ /kasmguac/([0-9a-f-]+)/(\w+)(?!/vnc.htmlguaclite)(/.+) {
+      if ($request_method = OPTIONS) {
+        rewrite .* /_options_response last;
+      }
+
+      set $kasm_id  $1;
+      set $service  $2;
+      set $new_path $3;
+
+      proxy_http_version      1.1;
+      proxy_set_header        Host $host;
+      proxy_set_header        Upgrade $http_upgrade;
+      proxy_set_header        Connection "upgrade";
+      proxy_set_header        X-Real-IP $remote_addr;
+      proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header        X-Forwarded-Proto $scheme;
+      proxy_set_header        X-Kasm-ID "${kasm_id}";
+      proxy_set_header        Authorization "Bearer ${connect_auth}";
+      proxy_set_header        Cookie "username=$cookie_username; session_token=$cookie_session_token; kasm_client_key=$cookie_kasm_client_key";
+
+      proxy_pass              http://127.0.0.1:8080/guac_connect/$service$new_path;
+      proxy_read_timeout      1800s;
+      proxy_send_timeout      1800s;
+      proxy_connect_timeout   1800s;
+      proxy_buffering         off;
+      client_max_body_size 1G;
+      expires                 4h;
+
+      add_header              Cache-Control "private";
+      add_header              Strict-Transport-Security "max-age=63072000" always;
+    }
+
+    location ~ /kasmguac/([0-9a-f-]+)/vnc/vnc.htmlguaclite {
+      if ($request_method = OPTIONS) {
+        rewrite .* /_options_response last;
+      }
+
+      set $kasm_id $1;
+
+      proxy_http_version      1.1;
+      proxy_set_header        Host $host;
+      proxy_set_header        Upgrade $http_upgrade;
+      proxy_set_header        Connection "upgrade";
+      proxy_set_header        X-Real-IP $remote_addr;
+      proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header        X-Kasm-ID "${kasm_id}";
+      proxy_set_header        Cookie "username=$cookie_username; session_token=$cookie_session_token; kasm_client_key=$cookie_kasm_client_key";
+
+      proxy_pass              http://kasm_guac_backend/vnc.htmlguaclite$is_args$args;
+      proxy_read_timeout      1800s;
+      proxy_send_timeout      1800s;
+      proxy_connect_timeout   1800s;
+      proxy_buffering         off;
+      client_max_body_size 1G;
       expires                 4h;
       add_header              Cache-Control "private";
 
