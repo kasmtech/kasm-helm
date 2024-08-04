@@ -58,6 +58,8 @@ data:
     error_log  /var/log/external/nginx/error.log warn;
 
   orchestrator.conf: |
+    limit_req_zone $binary_remote_addr zone=kasmconnect:10m rate=10r/s;
+
     server {
       listen 443 ssl;
       server_name ubuntu-base;
@@ -224,11 +226,13 @@ data:
   upstream_proxy.conf: |
     location /kasm_connect {
       internal;
-      proxy_pass http://kasm_api/api/kasm_connect/;
+      proxy_pass http://kasm-api/api/kasm_connect/;
       proxy_pass_request_body off;
       proxy_set_header        Content-Length '';
       proxy_set_header        X-Original-URI $request_uri;
       proxy_set_header        Cookie "username=$cookie_username; session_token=$cookie_session_token; kasm_client_key=$cookie_kasm_client_key";
+
+      limit_req               zone=kasmconnect burst=20;
     }
 
     location /desktop/ {
@@ -328,7 +332,7 @@ data:
       proxy_set_header        X-Kasm-ID "${kasm_id}";
       proxy_set_header        Cookie "username=$cookie_username; session_token=$cookie_session_token; kasm_client_key=$cookie_kasm_client_key";
 
-      proxy_pass              http://kasm_guac_backend/vnc.htmlguaclite$is_args$args;
+      proxy_pass              http://kasm-guac-backend/vnc.htmlguaclite$is_args$args;
       proxy_read_timeout      1800s;
       proxy_send_timeout      1800s;
       proxy_connect_timeout   1800s;

@@ -74,6 +74,8 @@ spec:
               mountPath: /tmp
             - name: kasm-guac-data
               mountPath: /opt/kasm/current/log
+            - name: kasm-guac-data
+              mountPath: /opt/kasm/current/tmp/guac
           {{- if .Values.kasmApp.servicesToDeploy.kasmGuac.addHealthChecks }}
           livenessProbe:
             {{- include "health.tcp" (dict "portName" (printf "%s-pt" .Values.kasmApp.servicesToDeploy.kasmGuac.name) ) | indent 12 }}
