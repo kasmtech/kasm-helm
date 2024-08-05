@@ -13,7 +13,7 @@ global:
   ##
   image:
     pullSecrets: ""
-    pullPolicy: Always
+    pullPolicy: IfNotPresent
     restartPolicy: Always
     ## @param global.image.pullCredentials Global object to create Docker registry credentials
     ##  Example
