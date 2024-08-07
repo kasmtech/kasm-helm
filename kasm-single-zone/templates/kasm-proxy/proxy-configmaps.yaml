@@ -108,13 +108,13 @@ data:
   upstream_api.conf: |
     upstream kasm-api {
       server kasm-api:8080;
-      keepalive 16;
+      keepalive {{ .Values.kasmApp.servicesToDeploy.kasmProxy.serviceKeepalive }};
     }
   
   upstream_manager.conf: |
     upstream kasm-manager {
       server kasm-manager:8181;
-      keepalive 16;
+      keepalive {{ .Values.kasmApp.servicesToDeploy.kasmProxy.serviceKeepalive }};
     }
 
 {{/*
