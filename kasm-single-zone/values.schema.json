@@ -548,6 +548,11 @@
                   "title": "replicas",
                   "type": "string"
                 },
+                "serviceKeepalive": {
+                  "default": "16",
+                  "title": "serivceKeepalive",
+                  "type": "string"
+                },
                 "resources": {
                   "additionalProperties": false,
                   "properties": {

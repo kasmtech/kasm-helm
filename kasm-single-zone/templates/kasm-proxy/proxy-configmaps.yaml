@@ -58,8 +58,6 @@ data:
     error_log  /var/log/external/nginx/error.log warn;
 
   orchestrator.conf: |
-    limit_req_zone $binary_remote_addr zone=kasmconnect:10m rate=10r/s;
-
     server {
       listen 443 ssl;
       server_name ubuntu-base;
@@ -110,16 +108,19 @@ data:
   upstream_api.conf: |
     upstream kasm-api {
       server kasm-api:8080;
+      keepalive 16;
     }
   
   upstream_manager.conf: |
     upstream kasm-manager {
       server kasm-manager:8181;
+      keepalive 16;
     }
 
 {{/*
 Add nginx proxy service configs based on values
 */}}
+{{- $keepalive := .Values.kasmApp.servicesToDeploy.kasmProxy.serviceKeepalive }}
 {{- range $key, $value := .Values.kasmApp.servicesToDeploy }}
   {{- $upstream := kebabcase $key -}}
   {{- $ports := list -}}
@@ -138,6 +139,7 @@ Add nginx proxy service configs based on values
   {{- if $ports }}
     {{- printf "\n  upstream_%s.conf: |" (snakecase $key) -}}
     {{- printf "\n    upstream %s {\n" $upstream -}}
+    {{- printf "      keepalive %s;\n" $keepalive -}}
     {{- range $port := $ports }}
       {{- printf "      %s %s:%s;\n" "server" (kebabcase $key) $port -}}
     {{- end }}
@@ -232,7 +234,8 @@ data:
       proxy_set_header        X-Original-URI $request_uri;
       proxy_set_header        Cookie "username=$cookie_username; session_token=$cookie_session_token; kasm_client_key=$cookie_kasm_client_key";
 
-      limit_req               zone=kasmconnect burst=20;
+      proxy_http_version       1.1;
+      proxy_set_header        Connection "";
     }
 
     location /desktop/ {
@@ -432,6 +435,9 @@ data:
       proxy_pass_request_body off;
       proxy_set_header        Content-Length '';
       proxy_set_header        X-Original-URI $request_uri;
+
+      proxy_http_version       1.1;
+      proxy_set_header        Connection "";
     }
 
     location /guac_connect/uploads/ {
