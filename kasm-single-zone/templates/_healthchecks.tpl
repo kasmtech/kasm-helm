@@ -19,6 +19,27 @@ successThreshold: 1
 {{- end }}
 
 {{/*
+HTTPS Healthcheck template
+Example usage:
+  {{- include "health.https" (dict "path" "healthcheck-path" "portName" "service-port-name") }}
+*/}}
+{{- define "health.https" }}
+  {{- if and (hasKey . "path") (hasKey . "portName") }}
+httpGet:
+  path: {{ .path }}
+  port: {{ .portName }}
+  scheme: HTTPS
+timeoutSeconds: 10
+initialDelaySeconds: 10
+periodSeconds: 30
+failureThreshold: 3
+successThreshold: 1
+  {{- else }}
+    {{- printf "ERROR: Invalid or non-existent key. Allowed values are %s" "path, portName" | fail}}
+  {{- end }}
+{{- end }}
+
+{{/*
 TCP Healthcheck template
 Example usage:
   {{- include "health.tcp" (dict "portName" "service-port-name") }}
