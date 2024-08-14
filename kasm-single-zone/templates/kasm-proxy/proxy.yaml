@@ -9,10 +9,7 @@ metadata:
 spec:
   replicas: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.replicas | default (include "replicas.preset" (dict "node" "proxy" "size" .Values.kasmApp.deploymentSize)) }}
   strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxUnavailable: 1
-      maxSurge: {{ add1 (.Values.kasmApp.servicesToDeploy.kasmProxy.replicas | default (include "replicas.preset" (dict "node" "proxy" "size" .Values.kasmApp.deploymentSize))) }}
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.name }}
@@ -31,8 +28,26 @@ spec:
       {{- end }}
       initContainers:
         {{- if .Values.kasmApp.applyHardening }}
-          {{- include "proxy.podSecurity.initContainer" . | indent 8 }}
-          {{- include "proxy.podSecurity.mounts" . | indent 10 }}
+        - name: proxy-data-perms
+          image: busybox
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              echo "Setting permissions and ownership for /var/cache/nginx..." && chown -R 1000:1000 /var/cache/nginx && chmod -R 755 /var/cache/nginx
+              echo "Setting permissions and ownership for /var/log/external/nginx..." && chown -R 1000:1000 /var/log/external/nginx && chmod -R 755 /var/log/external/nginx
+              echo "Setting permissions and ownership for /tmp..." && chmod -R 777 /tmp
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+          volumeMounts:
+            - name: kasm-proxy-data
+              mountPath: /var/cache/nginx
+            - name: kasm-proxy-data
+              mountPath: /var/log/external/nginx
+            - name: kasm-proxy-data
+              mountPath: /run
         {{- end }}
         {{- include "kasm.initContainer" (dict "serviceName" "kasm-api" "servicePort" "8080" "path" "/api/__healthcheck") | nindent 8 }}
         {{- if .Values.kasmApp.applyHardening }}
@@ -84,7 +99,12 @@ spec:
             - name: nginx-proxy-services-config
               mountPath: /etc/nginx/conf.d/services.d
             {{- if .Values.kasmApp.applyHardening }}
-              {{- include "proxy.podSecurity.mounts" . | indent 12 }}
+            - name: kasm-proxy-data
+              mountPath: /var/cache/nginx
+            - name: kasm-proxy-data
+              mountPath: /var/log/external/nginx
+            - name: kasm-proxy-data
+              mountPath: /run
             {{- end }}
           ports:
             - name: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.name }}-port
@@ -109,9 +129,8 @@ spec:
           configMap:
             name: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.name }}-services-configmap
         {{- if .Values.kasmApp.applyHardening }}
-          {{- include "proxy.podSecurity.volumes" . | indent 8 }}
+        - name: kasm-proxy-data
+          emptyDir:
+            sizeLimit: 1Gi
         {{- end }}
-{{- if .Values.kasmApp.applyHardening }}
-  {{- include "proxy.podSecurity.pvc" . }}
-{{- end }}
 {{ include "kasm.serviceTemplate" (list . "kasm-proxy" .Values.kasmApp.servicesToDeploy.kasmProxy.name (list 8080) ) }}

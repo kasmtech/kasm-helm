@@ -29,22 +29,18 @@
               "additionalProperties": false,
               "properties": {
                 "email": {
-                  "default": "user@mail.com",
                   "title": "email",
                   "type": "string"
                 },
                 "password": {
-                  "default": "dckr_pat_xxxxxxxxxxx",
                   "title": "password",
                   "type": "string"
                 },
                 "registry": {
-                  "default": "index.docker.io/v2",
                   "title": "registry",
                   "type": "string"
                 },
                 "username": {
-                  "default": "docker_username",
                   "title": "username",
                   "type": "string"
                 }
@@ -59,7 +55,6 @@
               "type": "string"
             },
             "pullSecrets": {
-              "default": "regcred",
               "title": "pullSecrets",
               "type": "string"
             },
@@ -83,32 +78,26 @@
           "additionalProperties": false,
           "properties": {
             "adminPassword": {
-              "default": "password",
               "title": "adminPassword",
               "type": "string"
             },
             "dbPassword": {
-              "default": "",
               "title": "dbPassword",
               "type": "string"
             },
             "managerToken": {
-              "default": "",
               "title": "managerToken",
               "type": "string"
             },
             "redisPassword": {
-              "default": "",
               "title": "redisPassword",
               "type": "string"
             },
             "serviceToken": {
-              "default": "",
               "title": "serviceToken",
               "type": "string"
             },
             "userPassword": {
-              "default": "",
               "title": "userPassword",
               "type": "string"
             }
@@ -126,7 +115,6 @@
           ]
         },
         "namespace": {
-          "default": "",
           "description": "## @param global.namespace Kubernetes namespace where all Kasm resources will be deployed (overrides Release.Namespace)\n##",
           "title": "namespace",
           "type": "string"
@@ -173,12 +161,15 @@
                   "type": "boolean"
                 },
                 "image": {
-                  "default": "kasmweb/postgres-private",
                   "title": "image",
                   "type": "string"
                 },
                 "name": {
                   "default": "kasm-db",
+                  "title": "name",
+                  "type": "string"
+                },
+                "storageClassName": {
                   "title": "name",
                   "type": "string"
                 },
@@ -191,12 +182,10 @@
                       "type": "boolean"
                     },
                     "whenDeleted": {
-                      "default": "Retain",
                       "title": "whenDeleted",
                       "type": "string"
                     },
                     "whenScaled": {
-                      "default": "Retain",
                       "title": "whenScaled",
                       "type": "string"
                     }
@@ -217,12 +206,10 @@
                       "additionalProperties": false,
                       "properties": {
                         "cpu": {
-                          "default": "",
                           "title": "cpu",
                           "type": "string"
                         },
                         "memory": {
-                          "default": "",
                           "title": "memory",
                           "type": "string"
                         }
@@ -234,12 +221,10 @@
                       "additionalProperties": false,
                       "properties": {
                         "cpu": {
-                          "default": "",
                           "title": "cpu",
                           "type": "string"
                         },
                         "memory": {
-                          "default": "",
                           "title": "memory",
                           "type": "string"
                         }
@@ -253,7 +238,6 @@
                   "type": "object"
                 },
                 "tag": {
-                  "default": "feature_KASM-5313_webui_code_move",
                   "title": "tag",
                   "type": "string"
                 }
@@ -267,7 +251,8 @@
                 "image",
                 "tag",
                 "resources",
-                "persistentVolumeClaimRetentionPolicy"
+                "persistentVolumeClaimRetentionPolicy",
+                "storageClassName"
               ]
             },
             "kasmApi": {
@@ -279,19 +264,20 @@
                   "type": "boolean"
                 },
                 "image": {
-                  "default": "kasmweb/api-private",
                   "title": "image",
                   "type": "string"
                 },
                 "name": {
-                  "default": "kasm-api",
                   "title": "name",
                   "type": "string"
                 },
                 "replicas": {
-                  "default": "",
                   "title": "replicas",
-                  "type": "string"
+                  "type": [
+                    "integer",
+                    "null",
+                    "string"
+                  ]
                 },
                 "resources": {
                   "additionalProperties": false,
@@ -300,12 +286,10 @@
                       "additionalProperties": false,
                       "properties": {
                         "cpu": {
-                          "default": "",
                           "title": "cpu",
                           "type": "string"
                         },
                         "memory": {
-                          "default": "",
                           "title": "memory",
                           "type": "string"
                         }
@@ -317,12 +301,10 @@
                       "additionalProperties": false,
                       "properties": {
                         "cpu": {
-                          "default": "",
                           "title": "cpu",
                           "type": "string"
                         },
                         "memory": {
-                          "default": "",
                           "title": "memory",
                           "type": "string"
                         }
@@ -336,7 +318,6 @@
                   "type": "object"
                 },
                 "tag": {
-                  "default": "feature_KASM-5313_webui_code_move",
                   "title": "tag",
                   "type": "string"
                 }
@@ -367,7 +348,6 @@
                   "type": "boolean"
                 },
                 "image": {
-                  "default": "kasmweb/kasm-guac-private",
                   "title": "image",
                   "type": "string"
                 },
@@ -377,9 +357,12 @@
                   "type": "string"
                 },
                 "replicas": {
-                  "default": 1,
                   "title": "replicas",
-                  "type": "integer"
+                  "type": [
+                    "integer",
+                    "null",
+                    "string"
+                  ]
                 },
                 "resources": {
                   "additionalProperties": false,
@@ -388,12 +371,10 @@
                       "additionalProperties": false,
                       "properties": {
                         "cpu": {
-                          "default": "",
                           "title": "cpu",
                           "type": "string"
                         },
                         "memory": {
-                          "default": "",
                           "title": "memory",
                           "type": "string"
                         }
@@ -405,12 +386,10 @@
                       "additionalProperties": false,
                       "properties": {
                         "cpu": {
-                          "default": "",
                           "title": "cpu",
                           "type": "string"
                         },
                         "memory": {
-                          "default": "",
                           "title": "memory",
                           "type": "string"
                         }
@@ -424,7 +403,6 @@
                   "type": "object"
                 },
                 "tag": {
-                  "default": "feature_KASM-5313_webui_code_move",
                   "title": "tag",
                   "type": "string"
                 }
@@ -451,7 +429,6 @@
                   "type": "boolean"
                 },
                 "image": {
-                  "default": "kasmweb/manager-private",
                   "title": "image",
                   "type": "string"
                 },
@@ -461,9 +438,12 @@
                   "type": "string"
                 },
                 "replicas": {
-                  "default": "",
                   "title": "replicas",
-                  "type": "string"
+                  "type": [
+                    "integer",
+                    "null",
+                    "string"
+                  ]
                 },
                 "resources": {
                   "additionalProperties": false,
@@ -472,12 +452,10 @@
                       "additionalProperties": false,
                       "properties": {
                         "cpu": {
-                          "default": "",
                           "title": "cpu",
                           "type": "string"
                         },
                         "memory": {
-                          "default": "",
                           "title": "memory",
                           "type": "string"
                         }
@@ -489,12 +467,10 @@
                       "additionalProperties": false,
                       "properties": {
                         "cpu": {
-                          "default": "",
                           "title": "cpu",
                           "type": "string"
                         },
                         "memory": {
-                          "default": "",
                           "title": "memory",
                           "type": "string"
                         }
@@ -508,7 +484,6 @@
                   "type": "object"
                 },
                 "tag": {
-                  "default": "feature_KASM-5313_webui_code_move",
                   "title": "tag",
                   "type": "string"
                 }
@@ -534,7 +509,6 @@
                   "type": "boolean"
                 },
                 "image": {
-                  "default": "kasmweb/proxy-private",
                   "title": "image",
                   "type": "string"
                 },
@@ -544,14 +518,20 @@
                   "type": "string"
                 },
                 "replicas": {
-                  "default": "",
                   "title": "replicas",
-                  "type": "string"
+                  "type": [
+                    "string",
+                    "integer",
+                    "null"
+                  ]
                 },
                 "serviceKeepalive": {
-                  "default": "16",
+                  "default": 16,
                   "title": "serivceKeepalive",
-                  "type": "string"
+                  "type": [
+                    "integer",
+                    "string"
+                  ]
                 },
                 "resources": {
                   "additionalProperties": false,
@@ -560,12 +540,10 @@
                       "additionalProperties": false,
                       "properties": {
                         "cpu": {
-                          "default": "",
                           "title": "cpu",
                           "type": "string"
                         },
                         "memory": {
-                          "default": "",
                           "title": "memory",
                           "type": "string"
                         }
@@ -577,12 +555,10 @@
                       "additionalProperties": false,
                       "properties": {
                         "cpu": {
-                          "default": "",
                           "title": "cpu",
                           "type": "string"
                         },
                         "memory": {
-                          "default": "",
                           "title": "memory",
                           "type": "string"
                         }
@@ -596,7 +572,6 @@
                   "type": "object"
                 },
                 "tag": {
-                  "default": "feature_KASM-5313_webui_code_move",
                   "title": "tag",
                   "type": "string"
                 }
@@ -643,12 +618,10 @@
                       "additionalProperties": false,
                       "properties": {
                         "cpu": {
-                          "default": "",
                           "title": "cpu",
                           "type": "string"
                         },
                         "memory": {
-                          "default": "",
                           "title": "memory",
                           "type": "string"
                         }
@@ -660,12 +633,10 @@
                       "additionalProperties": false,
                       "properties": {
                         "cpu": {
-                          "default": "",
                           "title": "cpu",
                           "type": "string"
                         },
                         "memory": {
-                          "default": "",
                           "title": "memory",
                           "type": "string"
                         }
@@ -679,7 +650,6 @@
                   "type": "object"
                 },
                 "tag": {
-                  "default": "5-alpine",
                   "title": "tag",
                   "type": "string"
                 }
@@ -722,7 +692,11 @@
                 "replicas": {
                   "default": 1,
                   "title": "replicas",
-                  "type": "integer"
+                  "type": [
+                    "integer",
+                    "string",
+                    "null"
+                  ]
                 },
                 "resources": {
                   "additionalProperties": false,
@@ -731,12 +705,10 @@
                       "additionalProperties": false,
                       "properties": {
                         "cpu": {
-                          "default": "",
                           "title": "cpu",
                           "type": "string"
                         },
                         "memory": {
-                          "default": "",
                           "title": "memory",
                           "type": "string"
                         }
@@ -748,12 +720,10 @@
                       "additionalProperties": false,
                       "properties": {
                         "cpu": {
-                          "default": "",
                           "title": "cpu",
                           "type": "string"
                         },
                         "memory": {
-                          "default": "",
                           "title": "memory",
                           "type": "string"
                         }
@@ -767,7 +737,6 @@
                   "type": "object"
                 },
                 "tag": {
-                  "default": "feature_KASM-5313_webui_code_move",
                   "title": "tag",
                   "type": "string"
                 }
@@ -799,7 +768,6 @@
                   "type": "boolean"
                 },
                 "image": {
-                  "default": "kasmweb/rdp-gateway-private",
                   "title": "image",
                   "type": "string"
                 },
@@ -811,7 +779,11 @@
                 "replicas": {
                   "default": 1,
                   "title": "replicas",
-                  "type": "integer"
+                  "type": [
+                    "integer",
+                    "string",
+                    "null"
+                  ]
                 },
                 "resources": {
                   "additionalProperties": false,
@@ -820,12 +792,10 @@
                       "additionalProperties": false,
                       "properties": {
                         "cpu": {
-                          "default": "",
                           "title": "cpu",
                           "type": "string"
                         },
                         "memory": {
-                          "default": "",
                           "title": "memory",
                           "type": "string"
                         }
@@ -837,12 +807,10 @@
                       "additionalProperties": false,
                       "properties": {
                         "cpu": {
-                          "default": "",
                           "title": "cpu",
                           "type": "string"
                         },
                         "memory": {
-                          "default": "",
                           "title": "memory",
                           "type": "string"
                         }
@@ -856,7 +824,6 @@
                   "type": "object"
                 },
                 "tag": {
-                  "default": "feature_KASM-5313_webui_code_move",
                   "title": "tag",
                   "type": "string"
                 }

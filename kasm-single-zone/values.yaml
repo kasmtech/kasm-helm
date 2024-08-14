@@ -30,7 +30,7 @@ global:
   hostname: ""
   ## @param global.altHostnames Global list of alternate hostnames to use for TLS Certificates
   ##
-  altHostnames: []
+  altHostnames: [""]
 
   ## @param global.kasmPasswords.redisPassword Password for Kasm Redis service (leave blank for Helm to autogenerate)
   ## @param global.kasmPasswords.dbPassword Password for Kasm Postgresql DB server (leave blank for Helm to autogenerate)
@@ -63,14 +63,15 @@ kasmApp:
     ## @param kasmApp.servicesToDeploy.kasmProxy.image Sets Nginx Proxy image name
     ## @param kasmApp.servicesToDeploy.kasmProxy.tag Sets Nginx Proxy image tag
     ## @param kasmApp.servicesToDeploy.kasmProxy.replicas Number of Proxy replicas (overrides @param.kasmApp.deploymentSize preset)
+    ## @param kasmApp.servicesToDeploy.kasmProxy.serviceKeepalive Time in seconds for nginx proxy to send keepalives to services
     ##
     kasmProxy:
       name: kasm-proxy
       addHealthChecks: true
       image: kasmweb/proxy-private
       tag: feature_KASM-5313_webui_code_move
-      replicas: ""
-      serviceKeepalive: "16"
+      replicas: null
+      serviceKeepalive: 16
       ## @param kasmApp.servicesToDeploy.kasmProxy.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)
       ## Example:
       ## resources:
@@ -86,12 +87,14 @@ kasmApp:
     ## @param kasmApp.servicesToDeploy.db.addHealthChecks true/false used to enable service health checks
     ## @param kasmApp.servicesToDeploy.db.image Sets Nginx Proxy image name
     ## @param kasmApp.servicesToDeploy.db.tag Sets Nginx Proxy image tag
+    ## @param kasmApp.servicesToDeploy.db.storageClassName Name of Storage Class to use for PVC (leave empty to use default SC)
     ##
     db:
       name: kasm-db
       addHealthChecks: true
       image: kasmweb/postgres-private
       tag: feature_KASM-5313_webui_code_move
+      storageClassName: ""
       ## @param kasmApp.servicesToDeploy.db.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)
       ## Example:
       ## resources:
@@ -102,7 +105,7 @@ kasmApp:
       ##     cpu: 300m
       ##     memory: 512Mi
       ##
-      resources:   {}
+      resources: {}
       ## @param kasmApp.servicesToDeploy.db.persistentVolumeClaimRetentionPolicy.enabled Enable retention policies for DB persistent volume
       ## @param kasmApp.servicesToDeploy.db.persistentVolumeClaimRetentionPolicy.whenDeleted Volume retention behavior that applies when the replica count of the set is reduced
       ## @param kasmApp.servicesToDeploy.db.persistentVolumeClaimRetentionPolicy.whenScaled Volume retention behavior that applies when the StatefulSet is deleted
@@ -122,7 +125,7 @@ kasmApp:
       addHealthChecks: true
       image: kasmweb/api-private
       tag: feature_KASM-5313_webui_code_move
-      replicas: ""
+      replicas: null
       ## @param kasmApp.servicesToDeploy.kasmApi.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)
       ## Example:
       ## resources:
@@ -133,7 +136,7 @@ kasmApp:
       ##     cpu: 300m
       ##     memory: 512Mi
       ##
-      resources:   {}
+      resources: {}
     ## @param kasmApp.servicesToDeploy.kasmManager.name Name used for kasm-manager services as label prefix
     ## @param kasmApp.servicesToDeploy.kasmManager.addHealthChecks true/false used to enable service health checks
     ## @param kasmApp.servicesToDeploy.kasmManager.image Sets Kasm Manager image name
@@ -145,7 +148,7 @@ kasmApp:
       addHealthChecks: true
       image: kasmweb/manager-private
       tag: feature_KASM-5313_webui_code_move
-      replicas: ""
+      replicas: null
       ## @param kasmApp.servicesToDeploy.kasmManager.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)
       ## Example:
       ## resources:
@@ -156,7 +159,7 @@ kasmApp:
       ##     cpu: 300m
       ##     memory: 512Mi
       ##
-      resources:   {}
+      resources: {}
     ## @param kasmApp.servicesToDeploy.kasmGuac.name Name used for kasm-guac services as label prefix
     ## @param kasmApp.servicesToDeploy.kasmGuac.deploy true/false used to disable deployment of Kasm Guac RDP service container
     ## @param kasmApp.servicesToDeploy.kasmGuac.addHealthChecks true/false used to enable service health checks
@@ -181,7 +184,7 @@ kasmApp:
       ##     cpu: 300m
       ##     memory: 512Mi
       ##
-      resources:   {}
+      resources: {}
     ## @param kasmApp.servicesToDeploy.rdpGateway.name Name used for rdp-gateway services as label prefix
     ## @param kasmApp.servicesToDeploy.rdpGateway.deploy true/false used to disable deployment of Kasm RDP Gateway service container
     ## @param kasmApp.servicesToDeploy.rdpGateway.addHealthChecks true/false used to enable service health checks
@@ -206,7 +209,7 @@ kasmApp:
       ##     cpu: 300m
       ##     memory: 512Mi
       ##
-      resources:   {}
+      resources: {}
     ## @param kasmApp.servicesToDeploy.kasmShare.name Name used for kasm-share services as label prefix
     ## @param kasmApp.servicesToDeploy.kasmShare.deploy true/false used to disable deployment of Kasm Share service container
     ## @param kasmApp.servicesToDeploy.kasmShare.addHealthChecks true/false used to enable service health checks
@@ -231,7 +234,7 @@ kasmApp:
       ##     cpu: 300m
       ##     memory: 512Mi
       ##
-      resources:   {}
+      resources: {}
     ## @param kasmApp.servicesToDeploy.kasmRedis.name Name used for kasm-redis services as label prefix
     ## @param kasmApp.servicesToDeploy.kasmRedis.deploy true/false used to disable deployment of Kasm Redis service container
     ## @param kasmApp.servicesToDeploy.kasmRedis.addHealthChecks true/false used to enable service health checks
@@ -254,7 +257,7 @@ kasmApp:
       ##     cpu: 300m
       ##     memory: 512Mi
       ##
-      resources:   {}
+      resources: {}
 
 ## TLS Certificates to create as secrets
 ## If create is true and no certificates are provided in this configuration then
