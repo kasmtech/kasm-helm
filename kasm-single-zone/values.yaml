@@ -30,7 +30,7 @@ global:
   hostname: ""
   ## @param global.altHostnames Global list of alternate hostnames to use for TLS Certificates
   ##
-  altHostnames: [""]
+  altHostnames: []
 
   ## @param global.kasmPasswords.redisPassword Password for Kasm Redis service (leave blank for Helm to autogenerate)
   ## @param global.kasmPasswords.dbPassword Password for Kasm Postgresql DB server (leave blank for Helm to autogenerate)
