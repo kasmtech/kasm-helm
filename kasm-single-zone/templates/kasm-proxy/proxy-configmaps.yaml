@@ -141,7 +141,7 @@ Add nginx proxy service configs based on values
   {{- if $ports }}
     {{- printf "\n  upstream_%s.conf: |" (snakecase $key) -}}
     {{- printf "\n    upstream %s {\n" $upstream -}}
-    {{- printf "      keepalive %s;\n" $keepalive -}}
+    {{- printf "      keepalive %.0f;\n" $keepalive -}}
     {{- range $port := $ports }}
       {{- printf "      %s %s:%s;\n" "server" (kebabcase $key) $port -}}
     {{- end }}

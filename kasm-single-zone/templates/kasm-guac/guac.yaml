@@ -33,6 +33,7 @@ spec:
       {{- if .Values.kasmApp.applyHardening }}
         {{- include "kasm.podSecurity" . | indent 6 }}
       {{- end }}
+      {{- if .Values.kasmApp.applyHardening }}
       initContainers:
         - name: guac-tmp-perms
           image: busybox
@@ -47,6 +48,7 @@ spec:
           securityContext:
             runAsNonRoot: false
             runAsUser: 0
+        {{- end }}
         {{- include "kasm.initContainer" (dict "serviceName" "kasm-api" "servicePort" "8080" "path" "/api/__healthcheck" "schema" "http") | nindent 8 }}
         {{- if .Values.kasmApp.applyHardening }}
           {{- include "kasm.containerSecurity" . | indent 10 }}
@@ -69,6 +71,7 @@ spec:
             - name: {{ .Values.kasmApp.servicesToDeploy.kasmGuac.name }}-pt
               containerPort: 3000
               protocol: TCP
+          {{- if .Values.kasmApp.applyHardening }}
           volumeMounts:
             - name: kasm-guac-data
               mountPath: /tmp
@@ -76,6 +79,7 @@ spec:
               mountPath: /opt/kasm/current/log
             - name: kasm-guac-data
               mountPath: /opt/kasm/current/tmp/guac
+          {{- end }}
           {{- if .Values.kasmApp.servicesToDeploy.kasmGuac.addHealthChecks }}
           livenessProbe:
             {{- include "health.tcp" (dict "portName" (printf "%s-pt" .Values.kasmApp.servicesToDeploy.kasmGuac.name) ) | indent 12 }}
@@ -92,24 +96,11 @@ spec:
           {{- if .Values.kasmApp.applyHardening }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}
+      {{- if .Values.kasmApp.applyHardening }}
       volumes:
         - name: kasm-guac-data
-          persistentVolumeClaim:
-            claimName: {{ .Values.kasmApp.servicesToDeploy.kasmGuac.name }}-pvc
+          emptyDir:
+            sizeLimit: 1Gi
+      {{- end }}
 {{- end }}
 {{ include "kasm.serviceTemplate" (list . "kasm-guac" .Values.kasmApp.servicesToDeploy.kasmGuac.name (list 3000 3001 3002 3003 3004) ) }}
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: {{ .Values.kasmApp.servicesToDeploy.kasmGuac.name }}-pvc
-  namespace: {{ .Release.Namespace }}
-  labels:
-    app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.kasmGuac.name }}-pvc
-    {{- include "kasm.defaultLabels" . | indent 4 }}
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 1Gi
