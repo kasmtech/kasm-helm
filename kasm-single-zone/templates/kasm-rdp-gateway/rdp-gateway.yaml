@@ -35,10 +35,26 @@ spec:
         {{- include "kasm.podSecurity" . | indent 6 }}
       {{- end }}
       initContainers:
-        {{- if .Values.kasmApp.applyHardening }}
-          {{- include "rdpGateway.podSecurity.initContainer" . | indent 8 }}
-          {{- include "rdpGateway.podSecurity.mounts" . | indent 12 }}
-        {{- end }}
+        - name: rdp-gateway-tmp-perms
+          image: busybox
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              echo "Setting ownership and permissions for /usr/local/etc/rdpproxy/var..." && chown -R 1000:1000 /usr/local/etc/rdpproxy/var && chmod -R 777 /usr/local/etc/rdpproxy/var
+              echo "Setting ownership and permissions for /opt/kasm/current/log..." && chown -R 1000:1000 /opt/kasm/current/log && chmod -R 777 /opt/kasm/current/log
+              echo "Setting ownership and permissions for /tmp" && chown -R 1000:1000 /tmp && chmod -R 777 /tmp
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+          volumeMounts:
+            - name: kasm-rdp-gateway-data
+              mountPath: /usr/local/etc/rdpproxy/var
+            - name: kasm-rdp-gateway-data
+              mountPath: /opt/kasm/current/log
+            - name: kasm-rdp-gateway-data
+              mountPath: /tmp
         {{- include "kasm.initContainer" (dict "serviceName" "kasm-api" "servicePort" "8080" "path" "/api/__healthcheck") | indent 8 }}
         {{- if .Values.kasmApp.applyHardening }}
           {{- include "kasm.containerSecurity" . | indent 10 }}
@@ -82,18 +98,18 @@ spec:
             - name: rdp-proxy-cert
               mountPath: /usr/local/etc/rdpproxy/rdpproxy.key
               subPath: tls.key
-            {{- if .Values.kasmApp.applyHardening }}
-              {{- include "rdpGateway.podSecurity.mounts" . | indent 12 }}
-            {{- end }}
+            - name: kasm-rdp-gateway-data
+              mountPath: /usr/local/etc/rdpproxy/var
+            - name: kasm-rdp-gateway-data
+              mountPath: /opt/kasm/current/log
+            - name: kasm-rdp-gateway-data
+              mountPath: /tmp
       volumes:
         - name: rdp-proxy-cert
           secret:
             secretName: {{ .Values.kasmCerts.rdpGateway.name }}
-        {{- if .Values.kasmApp.applyHardening }}
-          {{- include "rdpGateway.podSecurity.volumes" . | indent 8 }}
-        {{- end }}
-  {{- if .Values.kasmApp.applyHardening }}
-    {{- include "rdpGateway.podSecurity.pvc" . }}
-  {{- end }}
-{{ include "kasm.serviceTemplate" (list . "rdp-gateway" .Values.kasmApp.servicesToDeploy.rdpGateway.name (list "5555" 3389) ) }}
+        - name: kasm-rdp-gateway-data
+          emptyDir:
+            sizeLimit: 50Mi
+{{ include "kasm.serviceTemplate" (list . "rdp-gateway" .Values.kasmApp.servicesToDeploy.rdpGateway.name (list 5555 3389) ) }}
 {{- end }}
