@@ -840,6 +840,95 @@
                 "replicas",
                 "resources"
               ]
+            },
+            "rdpHttpsGateway": {
+              "additionalProperties": false,
+              "properties": {
+                "addHealthChecks": {
+                  "default": true,
+                  "title": "addHealthChecks",
+                  "type": "boolean"
+                },
+                "deploy": {
+                  "default": true,
+                  "title": "deploy",
+                  "type": "boolean"
+                },
+                "image": {
+                  "default": "kasmweb/rdp-https-gateway-private",
+                  "title": "image",
+                  "type": "string"
+                },
+                "name": {
+                  "default": "rdp-https-gw",
+                  "title": "name",
+                  "type": "string"
+                },
+                "replicas": {
+                  "default": 1,
+                  "title": "replicas",
+                  "type": "integer"
+                },
+                "resources": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "limits": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "cpu": {
+                          "default": "",
+                          "title": "cpu",
+                          "type": "string"
+                        },
+                        "memory": {
+                          "default": "",
+                          "title": "memory",
+                          "type": "string"
+                        }
+                      },
+                      "title": "limits",
+                      "type": "object"
+                    },
+                    "requests": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "cpu": {
+                          "default": "",
+                          "title": "cpu",
+                          "type": "string"
+                        },
+                        "memory": {
+                          "default": "",
+                          "title": "memory",
+                          "type": "string"
+                        }
+                      },
+                      "title": "requests",
+                      "type": "object"
+                    }
+                  },
+                  "description": "## @param kasmApp.servicesToDeploy.rdpHttpsGateway.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)\n## Example:\n## resources:\n##   requests:\n##     cpu: 100m\n##     memory: 128Mi\n##   limits:\n##     cpu: 300m\n##     memory: 512Mi\n##",
+                  "title": "resources",
+                  "type": "object"
+                },
+                "tag": {
+                  "default": "feature_KASM-5313_webui_code_move",
+                  "title": "tag",
+                  "type": "string"
+                }
+              },
+              "description": "## @param kasmApp.servicesToDeploy.rdpHttpsGateway.name Name used for rdp-https-gateway services as label prefix\n## @param kasmApp.servicesToDeploy.rdpHttpsGateway.deploy true/false used to disable deployment of Kasm RDP HTTPS Gateway service container\n## @param kasmApp.servicesToDeploy.rdpGateway.addHealthChecks true/false used to enable service health checks\n## @param kasmApp.servicesToDeploy.rdpHttpsGateway.image Sets Kasm RDP HTTPS Gateway image name\n## @param kasmApp.servicesToDeploy.rdpHttpsGateway.tag Sets Kasm RDP HTTPS Gateway image tag\n## @param kasmApp.servicesToDeploy.rdpHttpsGateway.replicas Number of RDP HTTPS Gateway replicas (overrides @param.kasmApp.deploymentSize preset)\n##",
+              "title": "rdpHttpsGateway",
+              "type": "object",
+              "required": [
+                "name",
+                "deploy",
+                "addHealthChecks",
+                "image",
+                "tag",
+                "replicas",
+                "resources"
+              ]
             }
           },
           "title": "servicesToDeploy",
