@@ -94,10 +94,13 @@ spec:
             - name: nginx-proxy-cert
               mountPath: /etc/ssl/private/kasm_nginx.key
               subPath: tls.key
-            - name: nginx-proxy-config
+            - name: nginx-proxy-settings-config
               mountPath: /etc/nginx/conf.d
             - name: nginx-proxy-services-config
               mountPath: /etc/nginx/conf.d/services.d
+            - name: nginx-proxy-base-config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
             {{- if .Values.kasmApp.applyHardening }}
             - name: kasm-proxy-data
               mountPath: /var/cache/nginx
@@ -122,9 +125,12 @@ spec:
         - name: nginx-proxy-cert
           secret:
             secretName: {{ .Values.kasmCerts.kasmProxy.name }}
-        - name: nginx-proxy-config
+        - name: nginx-proxy-base-config
           configMap:
-            name: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.name }}-configmap
+            name: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.name }}-base-configmap
+        - name: nginx-proxy-settings-config
+          configMap:
+            name: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.name }}-settings-configmap
         - name: nginx-proxy-services-config
           configMap:
             name: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.name }}-services-configmap

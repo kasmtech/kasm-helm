@@ -1,11 +1,51 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ .Values.kasmApp.name | default "kasm" }}-proxy-configmap
+  name: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.name }}-base-configmap
   namespace: {{ .Values.global.namespace | default .Release.Namespace }}
   labels:
-    kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-proxy
+    kasm_app: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.name }}
 {{- include "kasm.defaultLabels" . | indent 4 }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade,post-delete
+data:
+  nginx.conf: |
+    user  nginx;
+    worker_processes {{ include "resources.preset" (dict "node" "proxy-processes" "size" .Values.kasmApp.deploymentSize) }};
+
+    error_log  /var/log/nginx/error.log notice;
+    pid        /var/run/nginx.pid;
+
+    events {
+      worker_connections  1024;
+    }
+
+    http {
+      include       /etc/nginx/mime.types;
+      default_type  application/octet-stream;
+
+      log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                        '$status $body_bytes_sent "$http_referer" '
+                        '"$http_user_agent" "$http_x_forwarded_for"';
+
+      access_log  /var/log/nginx/access.log  main;
+
+      sendfile        on;
+
+      keepalive_timeout  65;
+
+      include /etc/nginx/conf.d/*.conf;
+    }
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.name }}-settings-configmap
+  namespace: {{ .Values.global.namespace | default .Release.Namespace }}
+  labels:
+    kasm_app: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.name }}
+    {{- include "kasm.defaultLabels" . | indent 4 }}
   annotations:
     helm.sh/hook: pre-install,pre-upgrade,post-delete
 data:
@@ -27,7 +67,7 @@ data:
         '"request_method": "$request_method",'
         '"http_referer": "$http_referer",'
         '"http_user_agent": "$http_user_agent",'
-        '"http_x_forwarded_for": [ $http_x_forwarded_for ],'
+        '"http_x_forwarded_for": $http_x_forwarded_for,'
         '"http_x_header": "$http_x_header",'
         '"nginx_version": "$nginx_version",'
         '"server_protocol": "$server_protocol",'
@@ -59,7 +99,7 @@ data:
 
   orchestrator.conf: |
     server {
-      listen 443 ssl;
+      listen 8443 ssl;
       server_name ubuntu-base;
 
       ssl_certificate /etc/ssl/certs/kasm_nginx.crt;
@@ -153,13 +193,13 @@ Add nginx proxy service configs based on values
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: kasm-proxy-services-configmap
-  namespace: {{ .Release.Namespace }}
+  name: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.name }}-services-configmap
+  namespace: {{ .Values.global.namespace | default .Release.Namespace }}
   labels:
-    kasm_app: {{ .Values.kasmApp.name | default "kasm" }}-proxy
-{{- include "kasm.defaultLabels" . | indent 4 }}
+    kasm_app: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.name }}
+    {{- include "kasm.defaultLabels" . | indent 4 }}
   annotations:
-    helm.sh/hook: "pre-install"
+    helm.sh/hook: pre-install,pre-upgrade,post-delete
 data:
   admin_api.conf: |
     location /api/admin/ {

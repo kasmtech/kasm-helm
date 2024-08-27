@@ -37,7 +37,22 @@ spec:
       initContainers:
         {{- include "kasm.initContainer" (dict "serviceName" "kasm-api" "servicePort" "8080" "path" "/api/__healthcheck" "schema" "http") | nindent 8 }}
         {{- if .Values.kasmApp.applyHardening }}
-          {{- include "kasm.containerSecurity" . | indent 10 }}
+        - name: rdp-https-gateway-tmp-perms
+          image: busybox
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              echo "No customizations needed yet."
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+          volumeMounts:
+            - name: kasm-rdp-https-gateway-data
+              mountPath: /opt/kasm/current/log
+            - name: kasm-rdp-https-gateway-data
+              mountPath: /tmp
         {{- end }}
       containers:
         - name: {{ .Values.kasmApp.servicesToDeploy.rdpHttpsGateway.name }}-container
@@ -78,18 +93,16 @@ spec:
             - name: rdp-proxy-cert
               mountPath: /opt/rdpgw/key.pem
               subPath: tls.key
-            {{- if .Values.kasmApp.applyHardening }}
-              {{- include "rdpHttpsGateway.podSecurity.mounts" . | indent 12 }}
-            {{- end }}
+            - name: kasm-rdp-https-gateway-data
+              mountPath: /opt/kasm/current/log
+            - name: kasm-rdp-https-gateway-data
+              mountPath: /tmp
       volumes:
         - name: rdp-proxy-cert
           secret:
             secretName: {{ .Values.kasmCerts.rdpGateway.name }}
-        {{- if .Values.kasmApp.applyHardening }}
-          {{- include "rdpHttpsGateway.podSecurity.volumes" . | indent 8 }}
-        {{- end }}
-  {{- if .Values.kasmApp.applyHardening }}
-    {{- include "rdpHttpsGateway.podSecurity.pvc" . }}
-  {{- end }}
+        - name: kasm-rdp-https-gateway-data
+          emptyDir:
+            sizeLimit: 150Mi
 {{ include "kasm.serviceTemplate" (list . "rdp-https-gateway" .Values.kasmApp.servicesToDeploy.rdpHttpsGateway.name (list "9443" ) ) }}
 {{- end }}

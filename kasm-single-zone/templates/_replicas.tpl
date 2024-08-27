@@ -27,18 +27,18 @@ Example usage:
     )
     "guac" (dict
       "small" 1
-      "medium" 1
-      "large" 2
+      "medium" 2
+      "large" 3
     )
     "rdp" (dict
       "small" 1
       "medium" 1
-      "large" 2
+      "large" 3
     )
     "share" (dict
       "small" 1
-      "medium" 1
-      "large" 2
+      "medium" 2
+      "large" 3
     )
     "redis" (dict
       "small" 1

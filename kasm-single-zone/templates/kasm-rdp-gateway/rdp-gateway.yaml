@@ -110,6 +110,6 @@ spec:
             secretName: {{ .Values.kasmCerts.rdpGateway.name }}
         - name: kasm-rdp-gateway-data
           emptyDir:
-            sizeLimit: 50Mi
+            sizeLimit: 150Mi
 {{ include "kasm.serviceTemplate" (list . "rdp-gateway" .Values.kasmApp.servicesToDeploy.rdpGateway.name (list 5555 3389) ) }}
 {{- end }}

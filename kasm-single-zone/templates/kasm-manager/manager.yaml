@@ -64,4 +64,11 @@ spec:
           {{- if .Values.kasmApp.applyHardening }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}
+          volumeMounts:
+            - name: manager-tmp
+              mountPath: /tmp
+      volumes:
+        - name: manager-tmp
+          emptyDir:
+            sizeLimit: 1Gi
 {{ include "kasm.serviceTemplate" (list . "kasm-manager" .Values.kasmApp.servicesToDeploy.kasmManager.name (list 8181) ) }}
