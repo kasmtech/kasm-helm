@@ -67,7 +67,7 @@ data:
         '"request_method": "$request_method",'
         '"http_referer": "$http_referer",'
         '"http_user_agent": "$http_user_agent",'
-        '"http_x_forwarded_for": $http_x_forwarded_for,'
+        '"http_x_forwarded_for": "$http_x_forwarded_for",'
         '"http_x_header": "$http_x_header",'
         '"nginx_version": "$nginx_version",'
         '"server_protocol": "$server_protocol",'
