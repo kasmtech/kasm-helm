@@ -248,7 +248,7 @@ kasmApp:
       addHealthChecks: true
       image: kasmweb/share-private
       tag: feature_KASM-5313_webui_code_move
-      replicas: 1
+      replicas: null
       ## @param kasmApp.servicesToDeploy.kasmShare.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)
       ## Example:
       ## resources:
