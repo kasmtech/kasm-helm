@@ -855,7 +855,6 @@
                   "type": "boolean"
                 },
                 "image": {
-                  "default": "kasmweb/rdp-https-gateway-private",
                   "title": "image",
                   "type": "string"
                 },
@@ -865,9 +864,11 @@
                   "type": "string"
                 },
                 "replicas": {
-                  "default": 1,
                   "title": "replicas",
-                  "type": "integer"
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
                 },
                 "resources": {
                   "additionalProperties": false,

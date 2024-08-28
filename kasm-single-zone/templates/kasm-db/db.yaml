@@ -110,6 +110,7 @@ spec:
     spec:
       accessModes:
         - ReadWriteOnce
+      storageClassName: {{ .Values.kasmApp.servicesToDeploy.db.storageClassName }}
       resources:
         requests:
           storage: 8Gi

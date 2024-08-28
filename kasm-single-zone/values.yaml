@@ -173,7 +173,7 @@ kasmApp:
       addHealthChecks: true
       image: kasmweb/kasm-guac-private
       tag: feature_KASM-5313_webui_code_move
-      replicas: 1
+      replicas: null
       ## @param kasmApp.servicesToDeploy.kasmGuac.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)
       ## Example:
       ## resources:
@@ -198,7 +198,7 @@ kasmApp:
       addHealthChecks: true
       image: kasmweb/rdp-gateway-private
       tag: feature_KASM-5313_webui_code_move
-      replicas: 1
+      replicas: null
       ## @param kasmApp.servicesToDeploy.rdpGateway.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)
       ## Example:
       ## resources:
@@ -209,7 +209,7 @@ kasmApp:
       ##     cpu: 300m
       ##     memory: 512Mi
       ##
-      resources:   {}
+      resources: {}
     ## @param kasmApp.servicesToDeploy.rdpHttpsGateway.name Name used for rdp-gateway services as label prefix
     ## @param kasmApp.servicesToDeploy.rdpHttpsGateway.deploy true/false used to disable deployment of Kasm RDP Gateway service container
     ## @param kasmApp.servicesToDeploy.rdpHttpsGateway.addHealthChecks true/false used to enable service health checks
@@ -223,7 +223,7 @@ kasmApp:
       addHealthChecks: true
       image: kasmweb/rdp-https-gateway-private
       tag: feature_KASM-5313_webui_code_move
-      replicas: 1
+      replicas: null
       ## @param kasmApp.servicesToDeploy.rdpHttpsGateway.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)
       ## Example:
       ## resources:
@@ -234,7 +234,7 @@ kasmApp:
       ##     cpu: 300m
       ##     memory: 512Mi
       ##
-      resources:   {}
+      resources: {}
     ## @param kasmApp.servicesToDeploy.kasmShare.name Name used for kasm-share services as label prefix
     ## @param kasmApp.servicesToDeploy.kasmShare.deploy true/false used to disable deployment of Kasm Share service container
     ## @param kasmApp.servicesToDeploy.kasmShare.addHealthChecks true/false used to enable service health checks
@@ -248,7 +248,7 @@ kasmApp:
       addHealthChecks: true
       image: kasmweb/share-private
       tag: feature_KASM-5313_webui_code_move
-      replicas: 1
+      replicas: null
       ## @param kasmApp.servicesToDeploy.kasmShare.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)
       ## Example:
       ## resources:
