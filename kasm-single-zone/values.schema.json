@@ -118,13 +118,18 @@
           "description": "## @param global.namespace Kubernetes namespace where all Kasm resources will be deployed (overrides Release.Namespace)\n##",
           "title": "namespace",
           "type": "string"
+        },
+        "clusterDomain": {
+          "description": "## @param global.clusterDomain Kubernetes clusterDomain name - default K8s Cluster Domain is `cluster.local`. Consult your K8s admin for your cluster domain name.\n##",
+          "title": "clusterDomain",
+          "type": "string",
+          "default": "cluster.local"
         }
       },
       "description": "yaml-language-server: $schema=values.schema.json\n## @section Global parameters\n## Please, note that this will override the parameters, including dependencies, configured to use the global value\n##",
       "title": "global",
       "type": "object",
       "required": [
-        "namespace",
         "image",
         "hostname",
         "altHostnames",
@@ -680,7 +685,7 @@
                   "type": "boolean"
                 },
                 "image": {
-                  "default": "kasmweb/share-private",
+                  "default": "kasmweb/share",
                   "title": "image",
                   "type": "string"
                 },
@@ -913,7 +918,7 @@
                   "type": "object"
                 },
                 "tag": {
-                  "default": "feature_KASM-5313_webui_code_move",
+                  "default": "develop",
                   "title": "tag",
                   "type": "string"
                 }

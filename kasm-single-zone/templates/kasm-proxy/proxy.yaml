@@ -139,4 +139,4 @@ spec:
           emptyDir:
             sizeLimit: 1Gi
         {{- end }}
-{{ include "kasm.serviceTemplate" (list . "kasm-proxy" .Values.kasmApp.servicesToDeploy.kasmProxy.name (list 8080) ) }}
+{{ include "kasm.serviceTemplate" (list . "kasm-proxy" .Values.kasmApp.servicesToDeploy.kasmProxy.name (list 8080 8443) ) }}

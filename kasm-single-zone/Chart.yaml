@@ -15,6 +15,8 @@ annotations:
       image: kasmweb/kasm-guac:1.16.0
     - name: rdp-gateway
       image: kasmweb/rdp-gateway:1.16.0
+    - name: rdp-gateway
+      image: kasmweb/rdp-https-gateway:1.16.0
     - name: kasm-redis
       image: redis:5-alpine
 apiVersion: v2

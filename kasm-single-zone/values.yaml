@@ -4,8 +4,10 @@
 ##
 global:
   ## @param global.namespace Kubernetes namespace where all Kasm resources will be deployed (overrides Release.Namespace)
+  ## @param global.clusterDomain Kubernetes clusterDomain name - default K8s Cluster Domain is "cluster.local". Consult your K8s admin for your cluster domain name.
   ##
   namespace: ""
+  clusterDomain: "cluster.local"
 
   ## @param global.image.pullSecrets Global Docker registry secret name
   ## @param global.image.pullPolicy Global image pull policy
@@ -68,8 +70,8 @@ kasmApp:
     kasmProxy:
       name: kasm-proxy
       addHealthChecks: true
-      image: kasmweb/proxy-private
-      tag: feature_KASM-5313_webui_code_move
+      image: kasmweb/proxy
+      tag: develop
       replicas: null
       serviceKeepalive: 16
       ## @param kasmApp.servicesToDeploy.kasmProxy.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)
@@ -92,8 +94,8 @@ kasmApp:
     db:
       name: kasm-db
       addHealthChecks: true
-      image: kasmweb/postgres-private
-      tag: feature_KASM-5313_webui_code_move
+      image: kasmweb/postgres
+      tag: develop
       storageClassName: ""
       ## @param kasmApp.servicesToDeploy.db.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)
       ## Example:
@@ -123,8 +125,8 @@ kasmApp:
     kasmApi:
       name: kasm-api
       addHealthChecks: true
-      image: kasmweb/api-private
-      tag: feature_KASM-5313_webui_code_move
+      image: kasmweb/api
+      tag: develop
       replicas: null
       ## @param kasmApp.servicesToDeploy.kasmApi.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)
       ## Example:
@@ -146,8 +148,8 @@ kasmApp:
     kasmManager:
       name: kasm-manager
       addHealthChecks: true
-      image: kasmweb/manager-private
-      tag: feature_KASM-5313_webui_code_move
+      image: kasmweb/manager
+      tag: develop
       replicas: null
       ## @param kasmApp.servicesToDeploy.kasmManager.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)
       ## Example:
@@ -171,8 +173,8 @@ kasmApp:
       name: kasm-guac
       deploy: true
       addHealthChecks: true
-      image: kasmweb/kasm-guac-private
-      tag: feature_KASM-5313_webui_code_move
+      image: kasmweb/kasm-guac
+      tag: develop
       replicas: null
       ## @param kasmApp.servicesToDeploy.kasmGuac.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)
       ## Example:
@@ -196,8 +198,8 @@ kasmApp:
       name: rdp-gateway
       deploy: true
       addHealthChecks: true
-      image: kasmweb/rdp-gateway-private
-      tag: feature_KASM-5313_webui_code_move
+      image: kasmweb/rdp-gateway
+      tag: develop
       replicas: null
       ## @param kasmApp.servicesToDeploy.rdpGateway.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)
       ## Example:
@@ -221,8 +223,8 @@ kasmApp:
       name: rdp-https-gw
       deploy: true
       addHealthChecks: true
-      image: kasmweb/rdp-https-gateway-private
-      tag: feature_KASM-5313_webui_code_move
+      image: kasmweb/rdp-https-gateway
+      tag: develop
       replicas: null
       ## @param kasmApp.servicesToDeploy.rdpHttpsGateway.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)
       ## Example:
@@ -246,8 +248,8 @@ kasmApp:
       name: kasm-share
       deploy: true
       addHealthChecks: true
-      image: kasmweb/share-private
-      tag: feature_KASM-5313_webui_code_move
+      image: kasmweb/share
+      tag: develop
       replicas: null
       ## @param kasmApp.servicesToDeploy.kasmShare.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)
       ## Example:
