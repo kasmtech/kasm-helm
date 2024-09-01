@@ -6,9 +6,10 @@ APP VERSION: {{ .Chart.AppVersion }}
 
 To log into your Kasm deployment use the information below:
 
-Kasm URL:                 https://{{ .Values.global.hostname }}
-Kasm Admin User:          admin@kasm.local
-Kasm Un-privileged User:  user@kasm.local
+Kasm URL:                    https://{{ .Values.global.hostname }}
+Kasm Upstream Auth Address:  {{ printf "%s.%s.svc.%s" .Values.kasmApp.servicesToDeploy.kasmProxy.name (.Values.global.namespace | default .Release.Namespace) (.Values.global.clusterDomain | default "--seeK8sAdminForClusterDomain--") }}
+Kasm Admin User:             admin@kasm.local
+Kasm Un-privileged User:     user@kasm.local
 
 {{- if not .Values.global.kasmPasswords.adminPassword }}
 
