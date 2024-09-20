@@ -6,7 +6,7 @@ Kasm has been modified to run inside Kubernetes. The service containers will aut
 
 ## Techincal Preview
 
-Kasm Workspaces on Kubernetes is currently in **Technical Preview** for 1.16.0. For this versions we recommend organizations try Kasm in Kubernetes on non-production deployments. We welcome any and all feedback in the issue tracker for this project. Kasm deployed to Kubernetes is not supported through normal support contracts until it is out of the Technical Preview phase. 
+Kasm Workspaces on Kubernetes is currently in **Technical Preview** for 1.16.0. For this version we recommend organizations try Kasm in Kubernetes on non-production deployments. We welcome any and all feedback in the issue tracker for this project. Kasm deployed to Kubernetes is not supported through normal support contracts until it is out of the Technical Preview phase.
 
 ## Branches
 
