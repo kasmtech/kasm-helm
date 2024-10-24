@@ -22,6 +22,12 @@
           "title": "hostname",
           "type": "string"
         },
+        "ingressClassName": {
+          "default": "",
+          "description": "##@param global.ingressClass Global ingress class to use for ingress object\n##",
+          "title": "ingressClassName",
+          "type": "string"
+        },
         "image": {
           "additionalProperties": false,
           "properties": {

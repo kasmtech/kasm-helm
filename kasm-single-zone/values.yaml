@@ -30,6 +30,11 @@ global:
   ## @param global.hostname Global hostname to use for TLS Certificates and ingress URL
   ##
   hostname: ""
+
+  ## @param global.ingressClass Global ingress class to use for ingress object
+  ##
+  ingressClassName: ""
+
   ## @param global.altHostnames Global list of alternate hostnames to use for TLS Certificates
   ##
   altHostnames: []
