@@ -74,6 +74,11 @@
             "pullCredentials"
           ]
         },
+        "ingressAnnotations": {
+          "description": "## @param global.ingressAnnotations annotations of the ingress \n##",
+          "title": "ingressAnnotations",
+          "type": "object"
+        },
         "kasmPasswords": {
           "additionalProperties": false,
           "properties": {

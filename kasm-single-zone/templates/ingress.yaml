@@ -3,6 +3,10 @@ kind: Ingress
 metadata:
   name: {{ .Values.kasmApp.name | default "kasm" }}-ingress
   namespace: {{ .Values.global.namespace | default .Release.Namespace }}
+  {{- with .Values.global.ingressAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   labels:
     app.kubernetes.io/name: {{ .Values.kasmApp.name }}-ingress
 {{- include "kasm.defaultLabels" . | indent 4 }}
