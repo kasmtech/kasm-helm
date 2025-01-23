@@ -27,6 +27,10 @@ global:
     ##      
     pullCredentials: {}
 
+  ## @param global.ingressAnnotations annotations of the ingress
+  ##
+  ingressAnnotations: {}
+
   ## @param global.hostname Global hostname to use for TLS Certificates and ingress URL
   ##
   hostname: ""
