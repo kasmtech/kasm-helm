@@ -4,7 +4,7 @@
 
 Kasm has been modified to run inside Kubernetes. The service containers will automatically detect they are running in Kubernetes and they will talk directly to each other rather than assume they are talking through an NGINX server as is the case for a normal Kasm deployment. Additionally, components need to talk to the name of the service defined, not to individual containers. A Kubernetes service has a resolvable DNS name that all containers should be able to talk with. API containers will not talk to an individual rdp gateway or guac container, but rather be load balanced to all existing respective containers. The reverse is also true. The API servers have been modified to only return a single entry when guac or rdp gateways call to get a list of API servers.
 
-## Techincal Preview
+## Technical Preview
 
 Kasm Workspaces on Kubernetes is currently in **Technical Preview** for 1.16.0. For this version we recommend organizations try Kasm in Kubernetes on non-production deployments. We welcome any and all feedback in the issue tracker for this project. Kasm deployed to Kubernetes is not supported through normal support contracts until it is out of the Technical Preview phase.
 
