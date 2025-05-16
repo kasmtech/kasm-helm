@@ -27,7 +27,7 @@ spec:
             - "-c"
           args:
             - |
-              while ! pg_isready -h db -p 5432; do echo "Waiting for DB..."; sleep 5; done
+              while ! pg_isready -h db -p 5432 -t 10; do echo "Waiting for DB..."; sleep 5; done
       containers:
         - name: {{ .Values.kasmApp.name }}-db-init-container
           image: "{{ .Values.kasmApp.servicesToDeploy.kasmApi.image }}:{{ .Values.kasmApp.servicesToDeploy.kasmApi.tag }}"

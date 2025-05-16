@@ -50,7 +50,7 @@ spec:
               protocol: TCP
           {{- if .Values.kasmApp.servicesToDeploy.db.addHealthChecks }}
           livenessProbe:
-            {{- include "health.command" (dict "command" "pg_isready --port=5432") | indent 12 }}
+            {{- include "health.command" (dict "command" "pg_isready --port=5432 -t 10") | indent 12 }}
           {{- end }}
           {{- if .Values.kasmApp.servicesToDeploy.db.addHealthChecks }}
           readinessProbe:
