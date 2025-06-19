@@ -1,26 +1,30 @@
+{{- if .Values.ingress.enabled }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ .Values.kasmApp.name | default "kasm" }}-ingress
+  name: kasm-ingress
   namespace: {{ .Values.global.namespace | default .Release.Namespace }}
   labels:
-    app.kubernetes.io/name: {{ .Values.kasmApp.name }}-ingress
+    app.kubernetes.io/name: kasm-ingress
 {{- include "kasm.defaultLabels" . | indent 4 }}
+  {{- if .Values.ingress.annotations }}
+  annotations: {{- toYaml .Values.ingress.annotations | nindent 4 }}
+  {{- end }}
 spec:
-{{- if .Values.global.ingressClassName }}
-  ingressClassName: {{ .Values.global.ingressClassName }}
+{{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
 {{- end }}
   tls:
   - hosts:
-      - {{ .Values.global.hostname | quote }}
-      {{- if gt (len .Values.global.altHostnames) 0 }}
-        {{- range .Values.global.altHostnames }}
+      - {{ .Values.hostname | quote }}
+      {{- if gt (len .Values.altHostnames) 0 }}
+        {{- range .Values.altHostnames }}
       - {{ . | quote }}
       {{- end }}
       {{- end }}
-    secretName: {{ .Values.kasmCerts.ingress.name }}
+    secretName: {{ .Values.ingress.tls.secretName }}
   rules:
-  - host: {{ .Values.global.hostname | quote }}
+  - host: {{ .Values.hostname | quote }}
     http:
       paths:
       - path: /
@@ -37,7 +41,7 @@ spec:
             name: kasm-api
             port:
               number: 8080
-{{- if .Values.kasmApp.servicesToDeploy.kasmShare.deploy }}
+{{- if .Values.components.share.deploy }}
       - path: /api/share/
         pathType: Prefix
         backend:
@@ -45,4 +49,5 @@ spec:
             name: kasm-share
             port:
               number: 8182
+{{- end }}
 {{- end }}

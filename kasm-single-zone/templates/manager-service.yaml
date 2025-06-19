@@ -1,0 +1,18 @@
+{{/*
+Deploy the Manager .Values.components.manager
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.components.manager.name }}
+  namespace: {{ $values.Values.namespace | default $values.Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.components.manager.name }}-svc
+    {{- include "kasm.defaultLabels" $values | indent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: {{ .Values.components.manager.name }}
+  ports:
+    - name: {{ .Values.components.manager.name }}-svc-8181
+      protocol: TCP
+      port: 8181

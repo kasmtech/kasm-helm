@@ -56,14 +56,26 @@ spec:
               protocol: TCP
           {{- if .Values.kasmApp.servicesToDeploy.kasmRedis.addHealthChecks }}
           livenessProbe:
-            {{- include "health.tcp" (dict "portName" (printf "%s-pt" .Values.kasmApp.servicesToDeploy.kasmRedis.name)) | indent 12 }}
-          {{- end }}
-          {{- if .Values.kasmApp.servicesToDeploy.kasmRedis.addHealthChecks }}
+            tcpSocket:
+              port: 6379
+            timeoutSeconds: 10
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 3
+            successThreshold: 3
           readinessProbe:
-            {{- include "health.command" (dict "command" "redis-cli -p 6379 -a $REDIS_PASSWORD ping 2>/dev/null | grep -q PONG") | indent 12 }}
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - redis-cli -p 6379 -a $REDIS_PASSWORD ping 2>/dev/null | grep -q PONG
+            timeoutSeconds: 10
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            failureThreshold: 3
+            successThreshold: 3
           {{- end }}
           {{- if .Values.kasmApp.applyHardening }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}
-{{ include "kasm.serviceTemplate" (list . "kasm-redis" .Values.kasmApp.servicesToDeploy.kasmRedis.name (list 6379) ) }}
 {{- end }}

@@ -119,5 +119,4 @@ spec:
         - name: kasm-rpd-gateway-config
           configMap:
             name: {{ .Values.kasmApp.servicesToDeploy.rdpGateway.name }}-configmap
-{{ include "kasm.serviceTemplate" (list . "rdp-gateway" .Values.kasmApp.servicesToDeploy.rdpGateway.name (list 5555 3389) ) }}
 {{- end }}

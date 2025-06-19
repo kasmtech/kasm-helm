@@ -1,145 +1,131 @@
 {
   "additionalProperties": false,
   "properties": {
-    "global": {
+    "altHostnames": {
+      "items": {
+        "anyOf": [
+          {
+            "type": "string"
+          }
+        ]
+      },
+      "description": "## @param altHostnames Global list of alternate hostnames to use for TLS Certificates\n##",
+      "title": "altHostnames",
+      "type": "array"
+    },
+    "hostname": {
+      "default": "kasm.home.lab",
+      "description": "## @param hostname Global hostname to use for TLS Certificates and ingress URL\n##",
+      "title": "hostname",
+      "type": "string"
+    },
+    "ingressClassName": {
+      "description": "## @param ingressClassName Global ingress class name to use when generating ingress resource",
+      "title": "ingressClassName",
+      "type": "string"
+    },
+    "image": {
       "additionalProperties": false,
       "properties": {
-        "altHostnames": {
-          "items": {
-            "anyOf": [
-              {
-                "type": "string"
-              }
-            ]
-          },
-          "description": "## @param global.altHostnames Global list of alternate hostnames to use for TLS Certificates\n##",
-          "title": "altHostnames",
-          "type": "array"
-        },
-        "hostname": {
-          "default": "kasm.home.lab",
-          "description": "## @param global.hostname Global hostname to use for TLS Certificates and ingress URL\n##",
-          "title": "hostname",
-          "type": "string"
-        },
-        "ingressClassName": {
-          "description": "## @param global.ingressClassName Global ingress class name to use when generating ingress resource",
-          "title": "ingressClassName",
-          "type": "string"
-        },
-        "image": {
+        "pullCredentials": {
           "additionalProperties": false,
           "properties": {
-            "pullCredentials": {
-              "additionalProperties": false,
-              "properties": {
-                "email": {
-                  "title": "email",
-                  "type": "string"
-                },
-                "password": {
-                  "title": "password",
-                  "type": "string"
-                },
-                "registry": {
-                  "title": "registry",
-                  "type": "string"
-                },
-                "username": {
-                  "title": "username",
-                  "type": "string"
-                }
-              },
-              "description": "## @param global.image.pullCredentials Global object to create Docker registry credentials\n##  Example\n##    pullCredentials:\n##      registry: \"index.docker.io/v2\"\n##      username: \"docker_username\"\n##      password: \"dckr_pat_xxxxxxxxxxx\"\n##      email: \"user@mail.com\"\n##      ",
-              "title": "pullCredentials",
-              "type": "object"  
-            },
-            "pullPolicy": {
-              "default": "IfNotPresent",
-              "title": "pullPolicy",
+            "email": {
+              "title": "email",
               "type": "string"
             },
-            "pullSecrets": {
-              "title": "pullSecrets",
+            "password": {
+              "title": "password",
               "type": "string"
             },
-            "restartPolicy": {
-              "default": "Always",
-              "title": "restartPolicy",
+            "registry": {
+              "title": "registry",
+              "type": "string"
+            },
+            "username": {
+              "title": "username",
               "type": "string"
             }
           },
-          "description": "## @param global.image.pullSecrets Global Docker registry secret name\n## @param global.image.pullPolicy Global image pull policy\n## @param global.image.restartPolicy Global image restart policy\n##",
-          "title": "image",
-          "type": "object",
-          "required": [
-            "pullSecrets",
-            "pullPolicy",
-            "restartPolicy",
-            "pullCredentials"
-          ]
+          "description": "## @param image.pullCredentials Global object to create Docker registry credentials\n##  Example\n##    pullCredentials:\n##      registry: \"index.docker.io/v2\"\n##      username: \"docker_username\"\n##      password: \"dckr_pat_xxxxxxxxxxx\"\n##      email: \"user@mail.com\"\n##      ",
+          "title": "pullCredentials",
+          "type": "object"
         },
-        "kasmPasswords": {
-          "additionalProperties": false,
-          "properties": {
-            "adminPassword": {
-              "title": "adminPassword",
-              "type": "string"
-            },
-            "dbPassword": {
-              "title": "dbPassword",
-              "type": "string"
-            },
-            "managerToken": {
-              "title": "managerToken",
-              "type": "string"
-            },
-            "redisPassword": {
-              "title": "redisPassword",
-              "type": "string"
-            },
-            "serviceToken": {
-              "title": "serviceToken",
-              "type": "string"
-            },
-            "userPassword": {
-              "title": "userPassword",
-              "type": "string"
-            }
-          },
-          "description": "## @param global.kasmPasswords.redisPassword Password for Kasm Redis service (leave blank for Helm to autogenerate)\n## @param global.kasmPasswords.dbPassword Password for Kasm Postgresql DB server (leave blank for Helm to autogenerate)\n## @param global.kasmPasswords.managerToken Manager token used for Kasm Agent registration (leave blank for Helm to autogenerate)\n## @param global.kasmPasswords.serviceToken Service Token used for RDP service registration (leave blank for Helm to autogenerate)\n## @param global.kasmPasswords.adminPassword Password for Kasm admin@kasm.local user for initial admin access (leave blank for Helm to autogenerate)\n## @param global.kasmPasswords.userPassword Password for Kasm user@kasm.local user for initial user access (leave blank for Helm to autogenerate)\n##",
-          "title": "kasmPasswords",
-          "type": "object",
-          "required": [
-            "redisPassword",
-            "dbPassword",
-            "managerToken",
-            "serviceToken",
-            "adminPassword",
-            "userPassword"
-          ]
-        },
-        "namespace": {
-          "description": "## @param global.namespace Kubernetes namespace where all Kasm resources will be deployed (overrides Release.Namespace)\n##",
-          "title": "namespace",
+        "pullPolicy": {
+          "default": "IfNotPresent",
+          "title": "pullPolicy",
           "type": "string"
         },
-        "clusterDomain": {
-          "description": "## @param global.clusterDomain Kubernetes clusterDomain name - default K8s Cluster Domain is `cluster.local`. Consult your K8s admin for your cluster domain name.\n##",
-          "title": "clusterDomain",
-          "type": "string",
-          "default": "cluster.local"
+        "pullSecrets": {
+          "title": "pullSecrets",
+          "type": "string"
+        },
+        "restartPolicy": {
+          "default": "Always",
+          "title": "restartPolicy",
+          "type": "string"
         }
       },
-      "description": "yaml-language-server: $schema=values.schema.json\n## @section Global parameters\n## Please, note that this will override the parameters, including dependencies, configured to use the global value\n##",
-      "title": "global",
+      "description": "## @param image.pullSecrets Global Docker registry secret name\n## @param image.pullPolicy Global image pull policy\n## @param image.restartPolicy Global image restart policy\n##",
+      "title": "image",
       "type": "object",
       "required": [
-        "image",
-        "hostname",
-        "altHostnames",
-        "kasmPasswords"
+        "pullSecrets",
+        "pullPolicy",
+        "restartPolicy",
+        "pullCredentials"
       ]
+    },
+    "kasmPasswords": {
+      "additionalProperties": false,
+      "properties": {
+        "adminPassword": {
+          "title": "adminPassword",
+          "type": "string"
+        },
+        "dbPassword": {
+          "title": "dbPassword",
+          "type": "string"
+        },
+        "managerToken": {
+          "title": "managerToken",
+          "type": "string"
+        },
+        "redisPassword": {
+          "title": "redisPassword",
+          "type": "string"
+        },
+        "serviceToken": {
+          "title": "serviceToken",
+          "type": "string"
+        },
+        "userPassword": {
+          "title": "userPassword",
+          "type": "string"
+        }
+      },
+      "description": "## @param kasmPasswords.redisPassword Password for Kasm Redis service (leave blank for Helm to autogenerate)\n## @param kasmPasswords.dbPassword Password for Kasm Postgresql DB server (leave blank for Helm to autogenerate)\n## @param kasmPasswords.managerToken Manager token used for Kasm Agent registration (leave blank for Helm to autogenerate)\n## @param kasmPasswords.serviceToken Service Token used for RDP service registration (leave blank for Helm to autogenerate)\n## @param kasmPasswords.adminPassword Password for Kasm admin@kasm.local user for initial admin access (leave blank for Helm to autogenerate)\n## @param kasmPasswords.userPassword Password for Kasm user@kasm.local user for initial user access (leave blank for Helm to autogenerate)\n##",
+      "title": "kasmPasswords",
+      "type": "object",
+      "required": [
+        "redisPassword",
+        "dbPassword",
+        "managerToken",
+        "serviceToken",
+        "adminPassword",
+        "userPassword"
+      ]
+    },
+    "namespace": {
+      "description": "## @param namespace Kubernetes namespace where all Kasm resources will be deployed (overrides Release.Namespace)\n##",
+      "title": "namespace",
+      "type": "string"
+    },
+    "clusterDomain": {
+      "description": "## @param clusterDomain Kubernetes clusterDomain name - default K8s Cluster Domain is `cluster.local`. Consult your K8s admin for your cluster domain name.\n##",
+      "title": "clusterDomain",
+      "type": "string",
+      "default": "cluster.local"
     },
     "kasmApp": {
       "additionalProperties": false,
@@ -203,11 +189,7 @@
                   "description": "## @param kasmApp.servicesToDeploy.db.persistentVolumeClaimRetentionPolicy.enabled Enable retention policies for DB persistent volume\n## @param kasmApp.servicesToDeploy.db.persistentVolumeClaimRetentionPolicy.whenDeleted Volume retention behavior that applies when the replica count of the set is reduced\n## @param kasmApp.servicesToDeploy.db.persistentVolumeClaimRetentionPolicy.whenScaled Volume retention behavior that applies when the StatefulSet is deleted\n##",
                   "title": "persistentVolumeClaimRetentionPolicy",
                   "type": "object",
-                  "required": [
-                    "enabled",
-                    "whenDeleted",
-                    "whenScaled"
-                  ]
+                  "required": ["enabled", "whenDeleted", "whenScaled"]
                 },
                 "resources": {
                   "additionalProperties": false,
@@ -225,7 +207,7 @@
                         }
                       },
                       "title": "limits",
-                      "type": "object"  
+                      "type": "object"
                     },
                     "requests": {
                       "additionalProperties": false,
@@ -240,7 +222,7 @@
                         }
                       },
                       "title": "requests",
-                      "type": "object"  
+                      "type": "object"
                     }
                   },
                   "description": "## @param kasmApp.servicesToDeploy.db.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)\n## Example:\n## resources:\n##   requests:\n##     cpu: 100m\n##     memory: 128Mi\n##   limits:\n##     cpu: 300m\n##     memory: 512Mi\n##",
@@ -283,11 +265,7 @@
                 },
                 "replicas": {
                   "title": "replicas",
-                  "type": [
-                    "integer",
-                    "null",
-                    "string"
-                  ]
+                  "type": ["integer", "null", "string"]
                 },
                 "resources": {
                   "additionalProperties": false,
@@ -305,7 +283,7 @@
                         }
                       },
                       "title": "limits",
-                      "type": "object"  
+                      "type": "object"
                     },
                     "requests": {
                       "additionalProperties": false,
@@ -320,7 +298,7 @@
                         }
                       },
                       "title": "requests",
-                      "type": "object"  
+                      "type": "object"
                     }
                   },
                   "description": "## @param kasmApp.servicesToDeploy.kasmApi.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)\n## Example:\n## resources:\n##   requests:\n##     cpu: 100m\n##     memory: 128Mi\n##   limits:\n##     cpu: 300m\n##     memory: 512Mi\n##",
@@ -368,11 +346,7 @@
                 },
                 "replicas": {
                   "title": "replicas",
-                  "type": [
-                    "integer",
-                    "null",
-                    "string"
-                  ]
+                  "type": ["integer", "null", "string"]
                 },
                 "resources": {
                   "additionalProperties": false,
@@ -390,7 +364,7 @@
                         }
                       },
                       "title": "limits",
-                      "type": "object"  
+                      "type": "object"
                     },
                     "requests": {
                       "additionalProperties": false,
@@ -405,7 +379,7 @@
                         }
                       },
                       "title": "requests",
-                      "type": "object"  
+                      "type": "object"
                     }
                   },
                   "description": "## @param kasmApp.servicesToDeploy.kasmGuac.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)\n## Example:\n## resources:\n##   requests:\n##     cpu: 100m\n##     memory: 128Mi\n##   limits:\n##     cpu: 300m\n##     memory: 512Mi\n##",
@@ -449,11 +423,7 @@
                 },
                 "replicas": {
                   "title": "replicas",
-                  "type": [
-                    "integer",
-                    "null",
-                    "string"
-                  ]
+                  "type": ["integer", "null", "string"]
                 },
                 "resources": {
                   "additionalProperties": false,
@@ -471,7 +441,7 @@
                         }
                       },
                       "title": "limits",
-                      "type": "object"  
+                      "type": "object"
                     },
                     "requests": {
                       "additionalProperties": false,
@@ -486,7 +456,7 @@
                         }
                       },
                       "title": "requests",
-                      "type": "object"  
+                      "type": "object"
                     }
                   },
                   "description": "## @param kasmApp.servicesToDeploy.kasmManager.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)\n## Example:\n## resources:\n##   requests:\n##     cpu: 100m\n##     memory: 128Mi\n##   limits:\n##     cpu: 300m\n##     memory: 512Mi\n##",
@@ -529,19 +499,12 @@
                 },
                 "replicas": {
                   "title": "replicas",
-                  "type": [
-                    "string",
-                    "integer",
-                    "null"
-                  ]
+                  "type": ["string", "integer", "null"]
                 },
                 "serviceKeepalive": {
                   "default": 16,
                   "title": "serivceKeepalive",
-                  "type": [
-                    "integer",
-                    "string"
-                  ]
+                  "type": ["integer", "string"]
                 },
                 "resources": {
                   "additionalProperties": false,
@@ -559,7 +522,7 @@
                         }
                       },
                       "title": "limits",
-                      "type": "object"  
+                      "type": "object"
                     },
                     "requests": {
                       "additionalProperties": false,
@@ -574,7 +537,7 @@
                         }
                       },
                       "title": "requests",
-                      "type": "object"  
+                      "type": "object"
                     }
                   },
                   "description": "## @param kasmApp.servicesToDeploy.kasmProxy.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)\n## Example:\n## resources:\n##   requests:\n##     cpu: 100m\n##     memory: 128Mi\n##   limits:\n##     cpu: 300m\n##     memory: 512Mi\n##",
@@ -637,7 +600,7 @@
                         }
                       },
                       "title": "limits",
-                      "type": "object"  
+                      "type": "object"
                     },
                     "requests": {
                       "additionalProperties": false,
@@ -652,7 +615,7 @@
                         }
                       },
                       "title": "requests",
-                      "type": "object"  
+                      "type": "object"
                     }
                   },
                   "description": "## @param kasmApp.servicesToDeploy.kasmRedis.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)\n## Example:\n## resources:\n##   requests:\n##     cpu: 100m\n##     memory: 128Mi\n##   limits:\n##     cpu: 300m\n##     memory: 512Mi\n##",
@@ -702,11 +665,7 @@
                 "replicas": {
                   "default": 1,
                   "title": "replicas",
-                  "type": [
-                    "integer",
-                    "string",
-                    "null"
-                  ]
+                  "type": ["integer", "string", "null"]
                 },
                 "resources": {
                   "additionalProperties": false,
@@ -724,7 +683,7 @@
                         }
                       },
                       "title": "limits",
-                      "type": "object"  
+                      "type": "object"
                     },
                     "requests": {
                       "additionalProperties": false,
@@ -739,7 +698,7 @@
                         }
                       },
                       "title": "requests",
-                      "type": "object"  
+                      "type": "object"
                     }
                   },
                   "description": "## @param kasmApp.servicesToDeploy.kasmShare.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)\n## Example:\n## resources:\n##   requests:\n##     cpu: 100m\n##     memory: 128Mi\n##   limits:\n##     cpu: 300m\n##     memory: 512Mi\n##",
@@ -789,11 +748,7 @@
                 "replicas": {
                   "default": 1,
                   "title": "replicas",
-                  "type": [
-                    "integer",
-                    "string",
-                    "null"
-                  ]
+                  "type": ["integer", "string", "null"]
                 },
                 "resources": {
                   "additionalProperties": false,
@@ -811,7 +766,7 @@
                         }
                       },
                       "title": "limits",
-                      "type": "object"  
+                      "type": "object"
                     },
                     "requests": {
                       "additionalProperties": false,
@@ -826,7 +781,7 @@
                         }
                       },
                       "title": "requests",
-                      "type": "object"  
+                      "type": "object"
                     }
                   },
                   "description": "## @param kasmApp.servicesToDeploy.rdpGateway.resources Set container requests and limits for different resources like CPU or memory (overrides @param.kasmApp.deploymentSize preset)\n## Example:\n## resources:\n##   requests:\n##     cpu: 100m\n##     memory: 128Mi\n##   limits:\n##     cpu: 300m\n##     memory: 512Mi\n##",
@@ -875,10 +830,7 @@
                 },
                 "replicas": {
                   "title": "replicas",
-                  "type": [
-                    "integer",
-                    "null"
-                  ]
+                  "type": ["integer", "null"]
                 },
                 "resources": {
                   "additionalProperties": false,
@@ -1002,12 +954,7 @@
           "description": "## @param kasmCerts.ingress.name Name used for Kasm Database Certificate Secret (if resource already exists, use resource name here and set create = false)\n## @param kasmCerts.ingress.create true/false used to create the Ingress resource\n## @param kasmCerts.ingress.cert Add externally-generated Intress TLS Public certificate\n## @param kasmCerts.ingress.key Add externally-generated Intress TLS Private key\n##",
           "title": "db",
           "type": "object",
-          "required": [
-            "name",
-            "create",
-            "cert",
-            "key"
-          ]
+          "required": ["name", "create", "cert", "key"]
         },
         "ingress": {
           "additionalProperties": false,
@@ -1036,12 +983,7 @@
           "description": "## @param kasmCerts.ingress.name Name used for Kasm Ingres Certificate Secret (if resource already exists, use resource name here and set create = false)\n## @param kasmCerts.ingress.create true/false used to create the Ingress resource\n## @param kasmCerts.ingress.cert Add externally-generated Intress TLS Public certificate\n## @param kasmCerts.ingress.key Add externally-generated Intress TLS Private key\n##",
           "title": "ingress",
           "type": "object",
-          "required": [
-            "name",
-            "create",
-            "cert",
-            "key"
-          ]
+          "required": ["name", "create", "cert", "key"]
         },
         "kasmProxy": {
           "additionalProperties": false,
@@ -1070,12 +1012,7 @@
           "description": "## @param kasmCerts.ingress.name Name used for Kasm Proxy Certificate Secret (if resource already exists, use resource name here and set create = false)\n## @param kasmCerts.ingress.create true/false used to create the Proxy resource\n## @param kasmCerts.ingress.cert Add externally-generated Intress TLS Public certificate\n## @param kasmCerts.ingress.key Add externally-generated Intress TLS Private key\n##",
           "title": "kasmProxy",
           "type": "object",
-          "required": [
-            "name",
-            "create",
-            "cert",
-            "key"
-          ]
+          "required": ["name", "create", "cert", "key"]
         },
         "rdpGateway": {
           "additionalProperties": false,
@@ -1104,30 +1041,16 @@
           "description": "## @param kasmCerts.ingress.name Name used for Kasm RDP Gateway Certificate Secret (if resource already exists, use resource name here and set create = false)\n## @param kasmCerts.ingress.create true/false used to create the Ingress resource\n## @param kasmCerts.ingress.cert Add externally-generated Intress TLS Public certificate\n## @param kasmCerts.ingress.key Add externally-generated Intress TLS Private key\n##",
           "title": "rdpGateway",
           "type": "object",
-          "required": [
-            "name",
-            "create",
-            "cert",
-            "key"
-          ]
+          "required": ["name", "create", "cert", "key"]
         }
       },
       "description": "## TLS Certificates to create as secrets\n## If create is true and no certificates are provided in this configuration then\n## Helm will automatically generate a self-signed certificate. If you are MANUALLY adding certificates\n## outside of this Helm chart, then make sure to update the name field for each certificate\n## to match what you used in Kubernetes.",
       "title": "kasmCerts",
       "type": "object",
-      "required": [
-        "ingress",
-        "kasmProxy",
-        "rdpGateway",
-        "db"
-      ]
+      "required": ["ingress", "kasmProxy", "rdpGateway", "db"]
     }
   },
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
-  "required": [
-    "global",
-    "kasmApp",
-    "kasmCerts"
-  ]
+  "required": ["global", "kasmApp", "kasmCerts"]
 }

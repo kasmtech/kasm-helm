@@ -73,4 +73,3 @@ spec:
         - name: manager-tmp
           emptyDir:
             sizeLimit: 1Gi
-{{ include "kasm.serviceTemplate" (list . "kasm-manager" .Values.kasmApp.servicesToDeploy.kasmManager.name (list 8181) ) }}

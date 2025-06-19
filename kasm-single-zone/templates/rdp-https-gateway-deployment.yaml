@@ -106,5 +106,4 @@ spec:
         - name: kasm-rdp-https-gateway-data
           emptyDir:
             sizeLimit: 150Mi
-{{ include "kasm.serviceTemplate" (list . "rdp-https-gateway" .Values.kasmApp.servicesToDeploy.rdpHttpsGateway.name (list "9443" ) ) }}
 {{- end }}

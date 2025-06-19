@@ -1,0 +1,18 @@
+{{/*
+Deploy Kasm API Service .Values.components.api service definition
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.components.api.name }}
+  namespace: {{ $values.Values.namespace | default $values.Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.components.api.name }}-svc
+    {{- include "kasm.defaultLabels" $values | indent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: {{ .Values.components.api.name }}
+  ports:
+    - name: {{ .Values.components.api.name }}-svc-8080
+      protocol: TCP
+      port: 8080

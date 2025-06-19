@@ -1,0 +1,23 @@
+{{/*
+Deploy the Redis if .Values.components.rdpGateway.enabled set to true
+*/}}
+{{- if .Values.components.rdpGateway.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.components.rdpGateway.name }}
+  namespace: {{ $values.Values.namespace | default $values.Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.components.rdpGateway.name }}-svc
+    {{- include "kasm.defaultLabels" $values | indent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: {{ .Values.components.rdpGateway.name }}
+  ports:
+    - name: {{ .Values.components.rdpGateway.name }}-svc-5555
+      protocol: TCP
+      port: 5555
+    - name: {{ .Values.components.rdpGateway.name }}-svc-3389
+      protocol: TCP
+      port: 3389
+{{- end }}

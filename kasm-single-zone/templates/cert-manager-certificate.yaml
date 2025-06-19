@@ -1,0 +1,14 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: teleport-public-cert
+  namespace: teleport-cluster
+spec:
+  commonName: teleport.secops.kasmweb.io
+  dnsNames:
+    - teleport.secops.kasmweb.io
+    - "*.teleport.secops.kasmweb.io"
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  secretName: teleport-tls-certs

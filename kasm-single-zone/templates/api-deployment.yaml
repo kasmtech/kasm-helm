@@ -1,25 +1,26 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Values.kasmApp.servicesToDeploy.kasmApi.name }}-deployment
+  name: {{ .Values.components.api.name }}-deployment
   namespace: {{ .Values.global.namespace | default .Release.Namespace }}
   labels:
-    app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.kasmApi.name }}
+    app.kubernetes.io/name: {{ .Values.components.api.name }}
+    app.kubernetes.io/component: api
     {{- include "kasm.defaultLabels" . | indent 4 }}
 spec:
-  replicas: {{ .Values.kasmApp.servicesToDeploy.kasmApi.replicas | default (include "replicas.preset" (dict "node" "api" "size" .Values.kasmApp.deploymentSize)) }}
+  replicas: {{ .Values.components.api.replicas | default (include "replicas.preset" (dict "node" "api" "size" .Values.deploymentSize)) }}
   strategy:
     type: RollingUpdate
     rollingUpdate:
       maxUnavailable: 1
-      maxSurge: {{ add1 (.Values.kasmApp.servicesToDeploy.kasmApi.replicas | default (include "replicas.preset" (dict "node" "api" "size" .Values.kasmApp.deploymentSize))) }}
+      maxSurge: {{ add1 (.Values.components.api.replicas | default (include "replicas.preset" (dict "node" "api" "size" .Values.deploymentSize))) }}
   selector:
     matchLabels:
-        app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.kasmApi.name }}
+        app.kubernetes.io/name: {{ .Values.components.api.name }}
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.kasmApi.name }}
+        app.kubernetes.io/name: {{ .Values.components.api.name }}
         {{- include "kasm.defaultLabels" . | indent 8 }}
     spec:
       restartPolicy: {{ .Values.global.image.restartPolicy }}
@@ -31,7 +32,7 @@ spec:
       {{- end }}
       initContainers:
         - name: db-is-ready
-          image: "{{ .Values.kasmApp.servicesToDeploy.kasmApi.image }}:{{ .Values.kasmApp.servicesToDeploy.kasmApi.tag }}"
+          image: "{{ .Values.components.api.image }}:{{ .Values.components.api.tag }}"
           imagePullPolicy: IfNotPresent
           env:
             - name: POSTGRES_PASSWORD
@@ -49,8 +50,8 @@ spec:
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}
       containers:
-        - name: {{ .Values.kasmApp.servicesToDeploy.kasmApi.name }}-container
-          image: "{{ .Values.kasmApp.servicesToDeploy.kasmApi.image }}:{{ .Values.kasmApp.servicesToDeploy.kasmApi.tag }}"
+        - name: {{ .Values.components.api.name }}-container
+          image: "{{ .Values.components.api.image }}:{{ .Values.components.api.tag }}"
           imagePullPolicy: {{ .Values.global.image.pullPolicy }}
           env:
             - name: START_SERVICES
@@ -63,23 +64,22 @@ spec:
                   name: {{ .Values.kasmApp.name | default "kasm" }}-secrets
                   key: db-password
           ports:
-            - name: {{ .Values.kasmApp.servicesToDeploy.kasmApi.name }}-pt
+            - name: {{ .Values.components.api.name }}-pt
               containerPort: 8080
               protocol: TCP
-          {{- if .Values.kasmApp.servicesToDeploy.kasmApi.addHealthChecks }}
+          {{- if .Values.components.api.addHealthChecks }}
           livenessProbe:
-            {{- include "health.tcp" (dict "portName" (printf "%s-pt" .Values.kasmApp.servicesToDeploy.kasmApi.name) ) | indent 12 }}
+            {{- include "health.tcp" (dict "portName" (printf "%s-pt" .Values.components.api.name) ) | indent 12 }}
           {{- end }}
-          {{- if .Values.kasmApp.servicesToDeploy.kasmApi.addHealthChecks }}
+          {{- if .Values.components.api.addHealthChecks }}
           readinessProbe:
-            {{- include "health.http" (dict "path" "/api/__healthcheck" "portName" (printf "%s-pt" .Values.kasmApp.servicesToDeploy.kasmApi.name) ) | indent 12 }}
+            {{- include "health.http" (dict "path" "/api/__healthcheck" "portName" (printf "%s-pt" .Values.components.api.name) ) | indent 12 }}
           {{- end }}
-          {{- if .Values.kasmApp.servicesToDeploy.kasmApi.resources }}
-          resources: {{- toYaml .Values.kasmApp.servicesToDeploy.kasmApi.resources | nindent 12 }}
+          {{- if .Values.components.api.resources }}
+          resources: {{- toYaml .Values.components.api.resources | nindent 12 }}
           {{- else }}
-          resources: {{- include "resources.preset" (dict "node" "api" "size" .Values.kasmApp.deploymentSize) | nindent 12 }}
+          resources: {{- include "resources.preset" (dict "node" "api" "size" .Values.deploymentSize) | nindent 12 }}
           {{- end }}
-          {{- if .Values.kasmApp.applyHardening }}
+          {{- if .Values.applyPodSecurity }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}
-{{ include "kasm.serviceTemplate" (list . "kasm-api" .Values.kasmApp.servicesToDeploy.kasmApi.name (list 8080) ) }}

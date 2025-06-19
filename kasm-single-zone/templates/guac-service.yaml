@@ -1,0 +1,32 @@
+{{/*
+Deploy the Guac if .Values.components.guac.enabled set to true
+*/}}
+{{- if .Values.components.guac.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.components.guac.name }}
+  namespace: {{ $values.Values.namespace | default $values.Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.components.guac.name }}-svc
+    {{- include "kasm.defaultLabels" $values | indent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: {{ .Values.components.guac.name }}
+  ports:
+    - name: {{ .Values.components.guac.name }}-svc-3000
+      protocol: TCP
+      port: 3000
+    - name: {{ .Values.components.guac.name }}-svc-3001
+      protocol: TCP
+      port: 3001
+    - name: {{ .Values.components.guac.name }}-svc-3002
+      protocol: TCP
+      port: 3002
+    - name: {{ .Values.components.guac.name }}-svc-3003
+      protocol: TCP
+      port: 3003
+    - name: {{ .Values.components.guac.name }}-svc-3004
+      protocol: TCP
+      port: 3004
+{{- end }}

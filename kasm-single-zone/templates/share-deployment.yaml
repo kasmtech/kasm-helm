@@ -101,5 +101,4 @@ spec:
           {{- if .Values.kasmApp.applyHardening }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}
-{{ include "kasm.serviceTemplate" (list . "kasm-share" .Values.kasmApp.servicesToDeploy.kasmShare.name (list 8182) ) }}
 {{- end }}

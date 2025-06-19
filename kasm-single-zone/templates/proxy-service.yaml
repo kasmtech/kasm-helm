@@ -1,0 +1,21 @@
+{{/*
+Deploy the Nginx .Values.components.proxy
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.components.proxy.name }}
+  namespace: {{ $values.Values.namespace | default $values.Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.components.proxy.name }}-svc
+    {{- include "kasm.defaultLabels" $values | indent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: {{ .Values.components.proxy.name }}
+  ports:
+    - name: {{ .Values.components.proxy.name }}-svc-8080
+      protocol: TCP
+      port: 8080
+    - name: {{ .Values.components.proxy.name }}-svc-8443
+      protocol: TCP
+      port: 8443
