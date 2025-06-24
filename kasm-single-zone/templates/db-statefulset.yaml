@@ -1,117 +1,168 @@
+{{/*
+Kasm DB server StatefullSet definition
+*/}}
+{{- $dbComponent := "db" -}}
+{{- $dbName := (printf "%s-%s" .Release.Name $dbComponent) -}}
+{{- $dbImage := (printf "%s:%s" .Values.database.image.repository .Values.database.image.tag) -}}
+{{- $dbReplicas := include "replicas.preset" (dict "node" $dbComponent "size" .Values.deploymentSize) -}}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ .Values.kasmApp.servicesToDeploy.db.name }}-statefulset
-  namespace: {{ .Values.global.namespace | default .Release.Namespace }}
+  name: {{ $dbName }}-statefulset
+  namespace: {{ .Release.Namespace }}
   labels:
-    app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.db.name }}
+    app.kubernetes.io/name: {{ $dbName }}
+    app.kubernetes.io/component: {{ $dbComponent }}
     {{- include "kasm.defaultLabels" . | indent 4 }}
+  {{- if or .Values.database.labels .Values.extraLabels.statefulSet .Value.labels }}
+    {{- with .Values.database.labels }}{{- toYaml . | indent 4 }}{{- end }}
+    {{- with .Values.extraLabels.statefulSet }}{{- toYaml . | indent 4 }}{{- end }}
+    {{- with .Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
+  {{- end }}
+  {{- if or .Values.database.annotations .Values.annotations.statefulSet }}
+  annotations:
+    {{- with .Values.annotations.statefulSet }}{{- toYaml . | indent 4 }}{{- end }}
+    {{- with .Values.database.annotations }}{{- toYaml . | indent 4 }}{{- end }}
+  {{- end }}
 spec:
   replicas: 1
-  serviceName: db
+  serviceName: {{ $dbComponent }}
   updateStrategy:
-    rollingUpdate: {}
     type: RollingUpdate
   selector:
     matchLabels:
-      app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.db.name }}
+      app.kubernetes.io/name: {{ $dbName }}
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.db.name }}
+        app.kubernetes.io/name: {{ $dbName }}
+        app.kubernetes.io/component: {{ $dbComponent }}
         {{- include "kasm.defaultLabels" . | indent 8 }}
+      {{- if or .Values.database.labels .Values.extraLabels.pod .Value.labels }}
+        {{- with .Values.database.labels }}{{- toYaml . | indent 8 }}{{- end }}
+        {{- with .Values.extraLabels.pod }}{{- toYaml . | indent 8 }}{{- end }}
+        {{- with .Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
+      {{- end }}
+      {{- if or .Values.database.annotations .Values.annotations.pod }}
+      annotations:
+        {{- with .Values.annotations.pod }}{{- toYaml . | indent 8 }}{{- end }}
+        {{- with .Values.database.annotations }}{{- toYaml . | indent 8 }}{{- end }}
+      {{- end }}
     spec:
-      restartPolicy: {{ .Values.global.image.restartPolicy }}
-      {{- if .Values.global.image.pullSecrets }}
-        {{- include "image.pullSecrets" . | indent 6 }}
+      restartPolicy: {{ .Values.restartPolicy }}
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets }}
       {{- end }}
       {{- include "db.podSecurity" . | indent 6 }}
-      {{- include "db.initContainer" . | indent 6 }}
-      {{- if .Values.kasmApp.applyHardening }}
-        {{- include "db.podSecurity.mounts" . | indent 12 }}
+      initContainers:
+        - name: {{ $dbName }}-data-perms
+          image: busybox
+          command:
+            - /bin/sh
+            - -ec
+          args:
+            - |
+              echo "Setting permissions and ownership on /var/lib/postgresql/data..." && mkdir -p /var/lib/postgresql/data/postgres && chown -R 70:70 /var/lib/postgresql/data && chmod -R 0700 /var/lib/postgresql/data
+              echo "Setting permissions and ownership on /var/run/postgresql..." && chown -R 70:70 /var/run/postgresql && chmod -R 0700 /var/run/postgresql
+              echo "Setting permissions and ownership on /tmp..." && mkdir -p /tmp/postgres && chmod -R 0700 /tmp/postgres && chmod -R 777 /tmp
+              echo "Done"
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+          volumeMounts:
+            - name: {{ $dbName }}-data
+              mountPath: /var/lib/postgresql/data
+            - name: {{ $dbName }}-data
+              mountPath: /tmp
+      {{- if .Values.applySecurity }}
+            - name: {{ $dbName }}-data
+              mountPath: /var/run/postgresql
       {{- end }}
       containers:
-        - name: {{ .Values.kasmApp.servicesToDeploy.db.name }}-container
-          image: "{{ .Values.kasmApp.servicesToDeploy.db.image }}:{{ .Values.kasmApp.servicesToDeploy.db.tag }}"
-          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        - name: {{ $dbName }}-container
+          image: {{ $dbImage }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
           env:
             - name: POSTGRES_DB
               value: kasm
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.kasmApp.name | default "kasm" }}-secrets
+                  name: {{ .Release.Name }}-secrets
                   key: db-password
             - name: POSTGRES_USER
               value: kasmapp
           ports:
-            - name: {{ .Values.kasmApp.servicesToDeploy.db.name }}-pt
-              containerPort: 5432
+            - name: {{ $dbSvcName }}-pt
+              containerPort: {{ $dbSvcPort }}
               protocol: TCP
-          {{- if .Values.kasmApp.servicesToDeploy.db.addHealthChecks }}
+          {{- if .Values.addHealthChecks }}
           livenessProbe:
             {{- include "health.command" (dict "command" "pg_isready --port=5432 -t 10") | indent 12 }}
           {{- end }}
-          {{- if .Values.kasmApp.servicesToDeploy.db.addHealthChecks }}
+          {{- if .Values.addHealthChecks }}
           readinessProbe:
             {{- include "health.command" (dict "command" "psql -d kasm -U kasmapp -c 'SELECT 1' || exit 1") | indent 12 }}
           {{- end }}
-          {{- if .Values.kasmApp.servicesToDeploy.db.resources }}
-          resources: {{- toYaml .Values.kasmApp.servicesToDeploy.db.resources | nindent 12 }}
+          {{- if .Values.database.resources }}
+          resources: {{- toYaml .Values.database.resources | nindent 12 }}
           {{- else }}
-          resources: {{- include "resources.preset" (dict "node" "db" "size" .Values.kasmApp.deploymentSize) | nindent 12 }}
+          resources: {{- include "resources.preset" (dict "node" $dbComponent "size" .Values.deploymentSize) | nindent 12 }}
           {{- end }}
-          {{- if .Values.kasmApp.applyHardening }}
+          {{- if .Values.applySecurity }}
             {{- include "db.containerSecurity" . | indent 10 }}
           {{- end }}
           volumeMounts:
-          - name: kasm-db-data
+          - name: {{ $dbName }}-data
             mountPath: /var/lib/postgresql/data
             subPath: postgres
-          - name: kasm-db-configs
+          - name: {{ $dbName }}-configs
             mountPath: /docker-entrypoint-initdb.d/data.sql
             subPath: data.sql
-          - name: kasm-db-configs
+          - name: {{ $dbName }}-configs
             mountPath: /var/lib/postgresql/conf/postgresql.conf
             subPath: postgresql.conf
-          - name: kasm-db-configs
+          - name: {{ $dbName }}-configs
             mountPath: /var/lib/postgresql/conf/pg_hba.conf
             subPath: pg_hba.conf
-          - name: kasm-db-cert
+          - name: {{ $dbName }}-cert
             mountPath: /etc/ssl/certs/db_server.crt
             subPath: tls.crt
-          - name: kasm-db-cert
+          - name: {{ $dbName }}-cert
             mountPath: /etc/ssl/certs/db_server.key
             subPath: tls.key
-          - name: kasm-db-data
+          - name: {{ $dbName }}-data
             mountPath: /tmp
-          {{- if .Values.kasmApp.applyHardening }}
-            {{- include "db.podSecurity.mounts" . | indent 10 }}
+          {{- if .Values.applySecurity }}
+          - name: {{ $dbName }}-data
+            mountPath: /var/run/postgresql
           {{- end }}
       volumes:
-        - name: kasm-db-configs
+        - name: {{ $dbName }}-configs
           configMap:
-            name: {{ .Values.kasmApp.servicesToDeploy.db.name }}-configmap
+            name: {{ $dbName }}-configmap
             defaultMode: 0o644
-        - name: kasm-db-cert
+        - name: {{ $dbName }}-cert
           secret:
-            secretName: {{ .Values.kasmCerts.db.name }}
+            secretName: {{ .Values.certificate.secretName }}
             defaultMode: 0o600
-  {{- if .Values.kasmApp.servicesToDeploy.db.persistentVolumeClaimRetentionPolicy.enabled }}
+  {{- if .Values.database.storage.retentionPolicy }}
   persistentVolumeClaimRetentionPolicy:
-    whenDeleted: {{ .Values.kasmApp.servicesToDeploy.db.persistentVolumeClaimRetentionPolicy.whenDeleted }}
-    whenScaled: {{ .Values.kasmApp.servicesToDeploy.db.persistentVolumeClaimRetentionPolicy.whenScaled }}
+    whenDeleted: {{ .Values.database.storage.retentionPolicy.whenDeleted }}
+    whenScaled: {{ .Values.database.storage.retentionPolicy.whenScaled }}
   {{- end }}
   volumeClaimTemplates:
-  - apiVersion: v1
-    kind: PersistentVolumeClaim
-    metadata:
-      name: kasm-db-data
-    spec:
-      accessModes:
-        - ReadWriteOnce
-      storageClassName: {{ .Values.kasmApp.servicesToDeploy.db.storageClassName }}
-      resources:
-        requests:
-          storage: 8Gi
-{{ include "kasm.serviceTemplate" (list . "db" .Values.kasmApp.servicesToDeploy.db.name (list 5432) ) }}
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: {{ $dbName }}-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        {{- if ne .Values.database.storage.storageClassName "" }}
+        storageClassName: {{ .Values.database.storage.storageClassName }}
+        {{- end }}
+        resources:
+          requests:
+            storage: 8Gi

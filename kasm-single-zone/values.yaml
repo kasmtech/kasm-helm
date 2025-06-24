@@ -1,318 +1,221 @@
-# yaml-language-server: $schema=values.schema.json
-## @section Global parameters
-## Please, note that this will override the parameters, including dependencies, configured to use the global value
-##
-## @param namespace Kubernetes namespace where all Kasm resources will be deployed (overrides Release.Namespace)
-##
-namespace: ""
-
-## @param deploymentSize Size of deployment
-##    - small = Pod specs and replicas sized to manage up to 20 sessions
-##    - medium = Pod specs and replicas sized to manage up to 50 sessions
-##    - large = Pod specs and replicas sized to manage up to 100+ sessions
-##
-##   Use the components.component_name to override these settings and configure your own resource settings
-##
+# -- Define the estimated size of the Kasm deployment in expected session load.
+#      small  = Up to 10-15 sessions
+#      medium = Up to 25-30 sessions
+#      large  = Up to 50+ sessions
 deploymentSize: "small"
 
-## @param imagePullSecrets list of existing imagePullSecrets to use when pulling containers
-##
-imagePullSecrets: []
+# -- Set the access URL to be used for the Kasm deployment.
+# This is the value that should be used when generating a certificate and that this
+# chart uses when the `certificate.certManager.enabled` is set to true.
+publicAddr: ""
 
-## @param imageCredentials Create Docker registry credentials if you don't already have any
-##  Example
-##    imageCredentials:
-##      name: "cred-secret-name"
-##      registry: "docker.io/kasmweb"
-##      username: "docker_username"
-##      password: "dckr_pat_xxxxxxxxxxx"
-##      email: "user@mail.com"
-##
-imageCredentials: {}
-
-## @param ingress.enabled Enable Ingress
-##
+# 
 ingress:
   enabled: true
+  ingressClassName: ""
   annotations: {}
-  spec:
-    ingressClassName: ""
+  labels: {}
 
+#
 service:
   type: ClusterIP
   annotations: {}
 
-certificates:
-  enabled: true
-  secretName: kasm-tls
-  hosts:
-    - some.domain.com
-  cert-manager: {}
-  small-step: {}
+# -- Configure certificate settings.
+# You can create your own certificate and upload it to the `secretName` supplied below, or if you have
+# an existing cert-manager configured and you wish to use that, set the `secretName` and configure the
+# associated cert-manager settings.
+#
+certificate:
+  # -- Set the secret name where the certificate is stored
+  # This secret name will store a certificate created by `cert-manager` if you set `cert-manager.enabled` to true
+  secretName: ""
+  # -- For additional cert-manager configuration/deployment information refer to the online documentation
+  # https://cert-manager.io/v1.1-docs/installation/kubernetes/
+  # 
+  # NOTE: If you do not enable `cert-manager`, you must generate your own certificates and add them to
+  # Kubernetes
+  certManager:
+    enabled: true
+    # -- Setting addWildCard to true will automatically add *.<publicAddr> as a hostname served
+    # by the Ingress, as well as adding it to the list of domains to generate a certificate for.
+    addWildCard: true
+    # -- Name of the Issuer/ClusterIssuer to use for certs
+    # NOTE: You will always need to create this yourself when `certManager.enabled` is true.
+    issuerName: ""
+    # -- Provide the kind of certificate to use, defaults to `Issuer` for security to scope the certificate to the
+    # Kasm namespace.
+    issuerKind: ""
+    # -- Provide the group of Issuer that cert-manager should use, defaults to 'cert-manager.io' which is the
+    # default Issuer group.
+    issuerGroup: ""
 
-## @param passwords.redis Password for Kasm Redis service (leave blank for Helm to autogenerate)
-## @param passwords.manager Manager token used for Kasm Agent registration (leave blank for Helm to autogenerate)
-## @param passwords.service Service Token used for RDP service registration (leave blank for Helm to autogenerate)
-## @param passwords.admin Password for Kasm admin@kasm.local user for initial admin access (leave blank for Helm to autogenerate)
-## @param passwords.user Password for Kasm user@kasm.local user for initial user access (leave blank for Helm to autogenerate)
-##
-passwords:
-  redis: ""
-  manager: ""
-  service: ""
-  admin: ""
-  user: ""
-
-  ## @param database.name Name used for kasm-proxy services as label prefix
-  ## @param database.addHealthChecks true/false used to enable service health checks
-  ## @param database.image Sets Nginx Proxy image name
-  ## @param database.tag Sets Nginx Proxy image tag
-  ## @param database.storageClassName Name of Storage Class to use for PVC (leave empty to use default SC)
-  ## @param database.resources Set container requests and limits for different resources like CPU or memory (overrides @param.deploymentSize preset)
-  ## @param database.persistentVolumeClaimRetentionPolicy.enabled Enable retention policies for DB persistent volume
-  ## @param database.persistentVolumeClaimRetentionPolicy.whenDeleted Volume retention behavior that applies when the replica count of the set is reduced
-  ## @param database.persistentVolumeClaimRetentionPolicy.whenScaled Volume retention behavior that applies when the StatefulSet is deleted
-  ##
-  database:
-    name: kasm-db
-    addHealthChecks: true
-    image:
-      repository: kasmweb/postgres
-      tag: 1.17.0
-    annotations: {}
-    resources: {}
-    ##  requests:
-    ##    cpu: 500m
-    ##    memory: 128Mi
-    ##  limits:
-    ##    cpu: 750m
-    ##    memory: 512Mi
-    persistentVolumeClaimRetentionPolicy:
-      enabled: false
-      whenDeleted: Retain
+# -- Kasm DB settings and configuration options
+#
+database:
+  # -- Setting `initialize_db` to true assumes you want a newly initialized Kasm deployment. Setting this to false
+  # is useful for deployment testing where you don't want to wait for DB initialization before using Kasm, or if
+  # running Kasm upgrades.
+  initialize_db: true
+  image:
+    repository: kasmweb/postgres
+    tag: 1.17.0
+  storage:
+    # -- Set the storage class to attach to the DB for storage.
+    # NOTE: Leaving this blank will use the cluster-default storage class
+    storageClassName: ""
+    # -- Configure how the DB volume should be retained or deleted throughout the DB's lifecycle
+    retentionPolicy:
+      whenDeleted: Delete
       whenScaled: Retain
+  annotations: {}
+  resources: {}
+  labels: {}
 
-## Kasm component containers/pods and associated settings
-##
+# Kasm component resources and associated settings
+#
 components:
-  ## @param components.proxy.name Name used for kasm-proxy services as label prefix
-  ## @param components.proxy.image.repository Sets Kasm proxy image name
-  ## @param components.proxy.image.tag Sets Kasm proxy image tag
-  ## @param components.proxy.resources Set container requests and limits for different resources like CPU or memory (overrides @param.deploymentSize preset)
-  nginx:
-    name: kasm-proxy
-    replicas: 2
+  # -- Configuration settings for the Kasm Nginx Proxy service
+  proxy:
     image:
       repository: kasmweb/proxy
       tag: 1.17.0
     annotations: {}
-    ##
     resources: {}
-    ##  requests:
-    ##    cpu: 150m
-    ##    memory: 64Mi
-    ##  limits:
-    ##    cpu: 500m
-    ##    memory: 512Mi
-  ## @param components.api.name Name used for kasm-api services as label prefix
-  ## @param components.api.image.repository Sets Kasm API image name
-  ## @param components.api.image.tag Sets Kasm API image tag
-  ## @param components.api.resources Set container requests and limits for different resources like CPU or memory (overrides @param.deploymentSize preset)
-  ##
+    labels: {}
+  # -- Configuration settings for the Kasm API service
   api:
-    name: kasm-api
-    replicas: 2
     image:
       repository: kasmweb/api
       tag: 1.17.0
     annotations: {}
     resources: {}
-    ##  requests:
-    ##    cpu: 150m
-    ##    memory: 64Mi
-    ##  limits:
-    ##    cpu: 300m
-    ##    memory: 512Mi
-  ## @param components.manager.name Name used for kasm-manager services as label prefix
-  ## @param components.manager.image.repository Sets Kasm Manager image name
-  ## @param components.manager.image.tag Sets Kasm Manager image tag
-  ## @param components.manager.replicas Number of Manager replicas (overrides @param.deploymentSize preset)
-  ## @param components.manager.resources Set container requests and limits for different resources like CPU or memory (overrides @param.deploymentSize preset)
-  ##
+    labels: {}
+  # -- Configuration settings for the Kasm Manager service
   manager:
-    name: kasm-manager
-    replicas: 2
     image:
       repository: kasmweb/manager
       tag: 1.17.0
     annotations: {}
     resources: {}
-    ##  requests:
-    ##    cpu: 150m
-    ##    memory: 64Mi
-    ##  limits:
-    ##    cpu: 500m
-    ##    memory: 512Mi
-  ## @param components.guac.name Name used for kasm-guac services as label prefix
-  ## @param components.guac.deploy true/false used to disable deployment of Kasm Guac RDP service container
-  ## @param components.guac.image.repository Sets Kasm Guac RDP image name
-  ## @param components.guac.image.tag Sets Kasm Guac RDP image tag
-  ## @param components.guac.resources Set container requests and limits for different resources like CPU or memory (overrides @param.deploymentSize preset)
-  ##
+    labels: {}
+  # -- Configuration settings for the Kasm Guac RDP service
   guac:
-    name: kasm-guac
-    replicas: 1
-    enabled: true
     image:
       repository: kasmweb/kasm-guac
       tag: 1.17.0
+    enabled: true
     annotations: {}
     resources: {}
-    ##  requests:
-    ##    cpu: 100m
-    ##    memory: 128Mi
-    ##  limits:
-    ##    memory: 512Mi
-  ## @param components.rdpGateway.name Name used for rdp-gateway services as label prefix
-  ## @param components.rdpGateway.deploy true/false used to disable deployment of Kasm RDP Gateway service container
-  ## @param components.rdpGateway.image.repository Sets Kasm RDP Gateway image name
-  ## @param components.rdpGateway.image.tag Sets Kasm RDP Gateway image tag
-  ## @param components.rdpGateway.resources Set container requests and limits for different resources like CPU or memory (overrides @param.deploymentSize preset)
-  ##
+    labels: {}
+  # -- Configuration settings for the Kasm RDP Gateway service
   rdpGateway:
-    name: rdp-gateway
-    replicas: 1
-    enabled: true
     image:
       repository: kasmweb/rdp-gateway
       tag: 1.17.0
+    enabled: true
     annotations: {}
     resources: {}
-    ##  requests:
-    ##    cpu: 150m
-    ##    memory: 128Mi
-    ##  limits:
-    ##    cpu: 500m
-    ##    memory: 512Mi
-  ## @param components.rdpHttpsGateway.name Name used for rdp-gateway services as label prefix
-  ## @param components.rdpHttpsGateway.enabled true/false used to disable deployment of Kasm RDP Gateway service container
-  ## @param components.rdpHttpsGateway.image.repository Sets Kasm RDP Gateway image name
-  ## @param components.rdpHttpsGateway.image.tag Sets Kasm RDP Gateway image tag
-  ## @param components.rdpHttpsGateway.resources Set container requests and limits for different resources like CPU or memory (overrides @param.deploymentSize preset)
-  ##
+    labels: {}
+  # -- Configuration settings for the Kasm RDP HTTPS Gateway service
   rdpHttpsGateway:
-    name: rdp-https-gw
-    replicas: 1
-    enabled: true
     image:
       repository: kasmweb/rdp-https-gateway
       tag: 1.17.0
+    enabled: true
     annotations: {}
     resources: {}
-    ##  requests:
-    ##    cpu: 150m
-    ##    memory: 128Mi
-    ##  limits:
-    ##    cpu: 500m
-    ##    memory: 512Mi
-  ## @param components.share.name Name used for kasm-share services as label prefix
-  ## @param components.share.enabled true/false used to disable deployment of Kasm Share service container
-  ## @param components.share.image.repository Sets Kasm Share image name
-  ## @param components.share.image.tag Sets Kasm Share image tag
-  ## @param components.share.resources Set container requests and limits for different resources like CPU or memory (overrides @param.deploymentSize preset)
-  ##
+    labels: {}
+  # -- Configuration settings for the Kasm Share service
   share:
-    name: kasm-share
-    replicas: 1
-    enabled: true
     image:
       repository: kasmweb/share
       tag: 1.17.0
+    enabled: true
     annotations: {}
     resources: {}
-    ##  requests:
-    ##    cpu: 150m
-    ##    memory: 128Mi
-    ##  limits:
-    ##    cpu: 500m
-    ##    memory: 512Mi
-  ## ** Redis pod only deployed if share component is deployed **
-  ## @param components.redis.name Name used for kasm-redis services as label prefix
-  ## @param components.redis.image Sets Kasm Redis image name
-  ## @param components.redis.tag Sets Kasm Redis image tag
-  ## @param components.redis.resources Set container requests and limits for different resources like CPU or memory (overrides @param.deploymentSize preset)
-  ##
+    labels: {}
+  # -- Configuration settings for the Kasm Share Redis backend service
   redis:
-    name: kasm-redis
-    replicas: 1
     image:
       repository: redis
       tag: 5-alpine
     annotations: {}
     resources: {}
-    ##  requests:
-    ##    cpu: 150m
-    ##    memory: 128Mi
-    ##  limits:
-    ##    cpu: 500m
-    ##    memory: 512Mi
-
-labels: {}
+    labels: {}
 
 ####################################
 # Extra Kubernetes config settings #
 ####################################
 
-## @param global.clusterDomain Set the cluster-wide Kubernetes DNS domain name
-global:
-  clusterDomain: "cluster.local"
+# -- Configure global image pull policy
+imagePullPolicy: "IfNotExists"
 
-## @param nodeSelector to apply for pod assignment
-## https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector
+# -- Use credentials for custom images or image repositories. Useful for offline or self-hosted repos, or dev builds.
+imagePullSecrets: ""
+
+# -- Create a dockerconfigjson secret as an image pull credential. Useful for offline or self-hosted repos, or dev builds.
+imageCredentials: {}
+
+# -- Cluster-wide Kubernetes DNS domain name
+clusterDomain: "cluster.local"
+
+# -- nodeSelector to apply for pod assignment
+# https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector
 nodeSelector: {}
 
-## @param applyPodSecurity enables pre-defined Pod security settings across all Kasm resources
-applyPodSecurity: true
+# -- Apply Pod/Container security settings for Kasm resources
+applySecurity: true
 
-## Kubernetes annotations to apply
-## https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
-## @param annotations.configMap Set annotations for the ConfigMap
-## @param annotations.deployment Set annotations for the Deployment
-## @param annotations.pod Set annotations for each Pod in the Deployment
-## @param annotations.service Set Service object annotations
-## @param annotations.certSecret Set cert-manager certificate secret annotations
-## @param annotations.ingress Set Ingress annotations
+# -- Add Pod/Container healthchecks settings for Kasm resources
+applyHealthChecks: true
+
+# -- Configure global Pod restart policy for Kasm resources
+restartPolicy: "Always"
+
+# -- Custom labels to apply to all deployed resources
+labels: {}
+
+# Additional resource annotations to apply to resources created by this chart
 annotations:
+  # -- Additional certSecret annotations to apply to resources created by this chart
+  certSecret: {}
+  # -- Additional configMap annotations to apply to resources created by this chart
   configMap: {}
+  # -- Additional deployment annotations to apply to resources created by this chart
   deployment: {}
+  # -- Additional pod annotations to apply to resources created by this chart
   pod: {}
+  # -- Additional service annotations to apply to resources created by this chart
   service: {}
-  certSecret: {}
-  ingress: {}
-
-## extraLabels contains additional Kubernetes labels to apply to resources created by this chart
-## See https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/ for more information
-##
-extraLabels:
-  ## @param extraLabels.certSecret(object) Set labels on the certificate secret
-  certSecret: {}
-  ## @param extraLabels.role(object) Set labels on the Role.
-  config: {}
-  ## @param extraLabels.deployment(object) Set labels on the Deployment.
-  deployment: {}
-  ## @param extraLabels.ingress(object) Set labels on the Ingress.
-  ingress: {}
-  ## @param extraLabels.job(object) Set labels on the Job run by the Helm hook
-  job: {}
-  ## @param extraLabels.jobPod(object) Set labels on the Pods created by the Job run by Helm hook
-  jobPod: {}
-  ## extraLabels.persistentVolumeClaim(object) Set labels on the PersistentVolumeClaim
-  persistentVolumeClaim: {}
-  ## @param extraLabels.pod(object) Set labels on the Pods created by the Deployment
-  pod: {}
-  ## @param extraLabels.podDisruptionBudget(object) Set labels on the podDisruptionBudget
-  podDisruptionBudget: {}
-  ## @param extraLabels.secret(object) Set labels on the Secret
+  # -- Additional secret annotations to apply to resources created by this chart
   secret: {}
-  ## @param extraLabels.service(object) Set labels on the Service
+  # -- Additional ingress annotations to apply to resources created by this chart
+  ingress: {}
+  # -- Additional statefulSet annotations to apply to resources created by this chart
+  statefulSet: {}
+
+# Additional Kubernetes labels to apply to resources created by this chart
+# See https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/ for more information
+#
+extraLabels:
+  # -- Additional statefulSet labels to apply to resources created by this chart
+  certSecret: {}
+  # -- Additional configMap labels to apply to resources created by this chart
+  configMap: {}
+  # -- Additional deployment labels to apply to resources created by this chart
+  deployment: {}
+  # -- Additional pod labels to apply to resources created by this chart
+  pod: {}
+  # -- Additional secret labels to apply to resources created by this chart
+  secret: {}
+  # -- Additional service labels to apply to resources created by this chart
   service: {}
+  # -- Additional ingress labels to apply to resources created by this chart
+  ingress: {}
+  # -- Additional job labels to apply to resources created by this chart
+  job: {}
+  # -- Additional jobPod labels to apply to resources created by this chart
+  jobPod: {}
+  # -- Additional statefulSet labels to apply to resources created by this chart
+  statefulSet: {}

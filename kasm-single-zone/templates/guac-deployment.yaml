@@ -1,46 +1,74 @@
 {{/*
 Deploy the Guacamole Web RDP if .Values.components.guac.enabled set to true
 */}}
-{{- if .Values.components.guac.enabled }}
+{{- $guacComponent := "guac" -}}
+{{- $guacName := (printf "%s-%s" $.Release.Name $guacComponent) -}}
+{{- $guacImage := (printf "%s:%s" $.Values.components.guac.image.repository $.Values.components.guac.image.tag) -}}
+{{- $guacReplicas := include "replicas.preset" (dict "node" $guacComponent "size" $.Values.deploymentSize) -}}
+{{- if eq .Values.components.guac.enabled true }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Values.components.guac.name }}-deployment
-  namespace: {{ .Values.global.namespace | default .Release.Namespace }}
+  name: {{ $guacName }}-deployment
+  namespace: {{ $.Release.Namespace }}
   labels:
-    app.kubernetes.io/name: {{ .Values.components.guac.name }}
+    app.kubernetes.io/name: {{ $guacName }}
+    app.kubernetes.io/component: {{ $guacComponent }}
     {{- include "kasm.defaultLabels" . | indent 4 }}
+  {{- if or .Values.components.guac.labels .Values.extraLabels.deployment .Value.labels }}
+    {{- with .Values.components.guac.labels }}{{- toYaml . | indent 4 }}{{- end }}
+    {{- with .Values.extraLabels.deployment }}{{- toYaml . | indent 4 }}{{- end }}
+    {{- with .Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
+  {{- end }}
+  {{- if or .Values.components.guac.annotations .Values.annotations.deployment }}
+  annotations:
+    {{- with .Values.annotations.deployment }}{{- toYaml . | indent 4 }}{{- end }}
+    {{- with .Values.components.guac.annotations }}{{- toYaml . | indent 4 }}{{- end }}
+  {{- end }}
 spec:
-  replicas: {{ .Values.components.guac.replicas | default (include "replicas.preset" (dict "node" "guac" "size" .Values.deploymentSize)) }}
+  replicas: {{ $guacReplicas }}
   strategy:
     type: RollingUpdate
     rollingUpdate:
       maxUnavailable: 1
-      maxSurge: {{ add1 ( default (include "replicas.preset" (dict "node" "guac" "size" .Values.deploymentSize))) }}
+      maxSurge: {{ add1 $guacReplicas }}
   selector:
     matchLabels:
-      app.kubernetes.io/name: {{ .Values.components.guac.name }}
+      app.kubernetes.io/name: {{ $guacName }}
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: {{ .Values.components.guac.name }}
+        app.kubernetes.io/name: {{ $guacName }}
+        app.kubernetes.io/component: {{ $guacComponent }}
         {{- include "kasm.defaultLabels" . | indent 8 }}
+      {{- if or .Values.components.guac.labels .Values.extraLabels.pod .Value.labels }}
+        {{- with .Values.components.guac.labels }}{{- toYaml . | indent 8 }}{{- end }}
+        {{- with .Values.extraLabels.pod }}{{- toYaml . | indent 8 }}{{- end }}
+        {{- with .Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
+      {{- end }}
+      {{- if or .Values.components.guac.annotations .Values.annotations.pod }}
+      annotations:
+        {{- with .Values.annotations.pod }}{{- toYaml . | indent 8 }}{{- end }}
+        {{- with .Values.components.guac.annotations }}{{- toYaml . | indent 8 }}{{- end }}
+      {{- end }}
     spec:
-      restartPolicy: {{ .Values.global.image.restartPolicy }}
-      {{- if .Values.global.image.pullSecrets }}
-        {{- include "image.pullSecrets" . | indent 6 }}
+      restartPolicy: {{ .Values.restartPolicy }}
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets }}
       {{- end }}
       {{- if .Values.applyHardening }}
         {{- include "kasm.podSecurity" . | indent 6 }}
       {{- end }}
       initContainers:
       {{- if .Values.applyHardening }}
-        - name: guac-tmp-perms
-          image: busybox
-          imagePullPolicy: IfNotPresent
+        - name: {{ $guacName }}-tmp-perms
+          image: {{ $apiImage }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
           command:
             - /bin/sh
             - -c
+          args:
             - |
               echo "Setting permissions and ownership for /tmp..." && chown -R 1000:1000 /tmp && chmod -R 777 /tmp
               echo "Setting permissions and ownership for /opt/kasm/current..." && chown -R 1000:1000 /opt/kasm/current && chmod -R 0770 /opt/kasm/current
@@ -49,66 +77,66 @@ spec:
             runAsNonRoot: false
             runAsUser: 0
         {{- end }}
-        {{- include "kasm.initContainer" (dict "serviceName" "kasm-api" "servicePort" "8080" "path" "/api/__healthcheck" "schema" "http") | nindent 8 }}
+        {{- include "kasm.initContainer" (dict "serviceName" $apiSvcName "servicePort" $apiSvcPort "path" "/api/__healthcheck" "schema" "http") | nindent 8 }}
         {{- if .Values.applyHardening }}
           {{- include "kasm.containerSecurity" . | indent 10 }}
         {{- end }}
       containers:
-        - name: {{ .Values.components.guac.name }}-container
-          image: "{{ .Values.components.guac.image }}:{{ .Values.components.guac.tag }}"
-          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        - name: {{ $guacName }}-container
+          image: {{ $guacImage }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
           env:
             - name: CLUSTER_SIZE
               value: "4"
             - name: REGISTRATION_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.kasmApp.name | default "kasm" }}-secrets
+                  name: {{ .Release.Name }}-secrets
                   key: service-token
             - name: ZONE
               value: default
             - name: KUBERNETES_SERVICE_HOST
               value: "true"
             - name: SERVER_ADDRESS
-              value: "kasm-proxy"
+              value: {{ $proxySvcName }}
             - name: SERVER_PORT
-              value: "8080"
+              value: {{ $proxyHttpPort }}
           ports:
-            - name: {{ .Values.components.guac.name }}-pt
-              containerPort: 3000
+            - name: {{ $guacName }}-pt
+              containerPort: {{ $guacSvcPort }}
               protocol: TCP
           {{- if .Values.applyHardening }}
           volumeMounts:
-            - name: kasm-guac-data
+            - name: {{ $guacName }}-data
               mountPath: /tmp
-            - name: kasm-guac-readonly
+            - name: {{ $guacName }}-readonly
               mountPath: /opt/kasm/current/log
               readOnly: true
-            - name: kasm-guac-data
+            - name: {{ $guacName }}-data
               mountPath: /opt/kasm/current/tmp/guac
           {{- end }}
-          {{- if .Values.components.guac.addHealthChecks }}
+          {{- if .Values.addHealthChecks }}
           livenessProbe:
-            {{- include "health.tcp" (dict "portName" (printf "%s-pt" .Values.components.guac.name) ) | indent 12 }}
+            {{- include "health.tcp" (dict "portName" (printf "%s-pt" $guacName) ) | indent 12 }}
           {{- end }}
-          {{- if .Values.components.guac.addHealthChecks }}
+          {{- if .Values.addHealthChecks }}
           readinessProbe:
-            {{- include "health.http" (dict "path" "/__healthcheck" "portName" (printf "%s-pt" .Values.components.guac.name) ) | indent 12 }}
+            {{- include "health.http" (dict "path" "/__healthcheck" "portName" (printf "%s-pt" $guacName) ) | indent 12 }}
           {{- end }}
           {{- if .Values.components.guac.resources }}
           resources: {{- toYaml .Values.components.guac.resources | nindent 12 }}
           {{- else }}
-          resources: {{- include "resources.preset" (dict "node" "guac" "size" .Values.deploymentSize) | nindent 12 }}
+          resources: {{- include "resources.preset" (dict "node" $guacComponent "size" .Values.deploymentSize) | nindent 12 }}
           {{- end }}
           {{- if .Values.applyHardening }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}
       {{- if .Values.applyHardening }}
       volumes:
-        - name: kasm-guac-data
+        - name: {{ $guacName }}-data
           emptyDir:
             sizeLimit: 1Gi
-        - name: kasm-guac-readonly
+        - name: {{ $guacName }}-readonly
           emptyDir:
             sizeLimit: 150Mi
       {{- end }}

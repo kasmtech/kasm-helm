@@ -1,75 +1,105 @@
+{{/*
+Kasm Manager server Deployment definition
+*/}}
+{{- $managerComponent := "manager" -}}
+{{- $managerName := (printf "%s-%s" .Release.Name $managerComponent) -}}
+{{- $managerImage := (printf "%s:%s" .Values.components.manager.image.repository .Values.components.manager.image.tag) -}}
+{{- $managerReplicas := include "replicas.preset" (dict "node" $managerComponent "size" .Values.deploymentSize) -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Values.kasmApp.servicesToDeploy.kasmManager.name }}-deployment
-  namespace: {{ .Values.global.namespace | default .Release.Namespace }}
+  name: {{ $managerName }}-deployment
+  namespace: {{ .Release.Namespace }}
   labels:
-    app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.kasmManager.name }}
+    app.kubernetes.io/name: {{ $managerName }}
+    app.kubernetes.io/component: {{ $managerComponent }}
     {{- include "kasm.defaultLabels" . | indent 4 }}
+  {{- if or .Values.components.manager.labels .Values.extraLabels.deployment .Value.labels }}
+    {{- with .Values.components.manager.labels }}{{- toYaml . | indent 4 }}{{- end }}
+    {{- with .Values.extraLabels.deployment }}{{- toYaml . | indent 4 }}{{- end }}
+    {{- with .Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
+  {{- end }}
+  {{- if or .Values.components.manager.annotations .Values.annotations.deployment }}
+  annotations:
+    {{- with .Values.annotations.deployment }}{{- toYaml . | indent 4 }}{{- end }}
+    {{- with .Values.components.manager.annotations }}{{- toYaml . | indent 4 }}{{- end }}
+  {{- end }}
 spec:
-  replicas: {{ .Values.kasmApp.servicesToDeploy.kasmManager.replicas | default (include "replicas.preset" (dict "node" "manager" "size" .Values.kasmApp.deploymentSize)) }}
+  replicas: {{ $managerReplicas }}
   strategy:
     type: RollingUpdate
     rollingUpdate:
       maxUnavailable: 1
-      maxSurge: {{ add1 (.Values.kasmApp.servicesToDeploy.kasmManager.replicas | default (include "replicas.preset" (dict "node" "manager" "size" .Values.kasmApp.deploymentSize))) }}
+      maxSurge: {{ add1 $managerReplicas }}
   selector:
     matchLabels:
-      app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.kasmManager.name }}
+      app.kubernetes.io/name: {{ $managerName }}
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: {{ .Values.kasmApp.servicesToDeploy.kasmManager.name }}
+        app.kubernetes.io/name: {{ $managerName }}
+        app.kubernetes.io/component: {{ $managerComponent }}
         {{- include "kasm.defaultLabels" . | indent 8 }}
-    spec:
-      restartPolicy: {{ .Values.global.image.restartPolicy }}
-      {{- if .Values.global.image.pullSecrets }}
-        {{- include "image.pullSecrets" . | indent 6 }}
+      {{- if or .Values.components.manager.labels .Values.extraLabels.pod .Value.labels }}
+        {{- with .Values.components.manager.labels }}{{- toYaml . | indent 8 }}{{- end }}
+        {{- with .Values.extraLabels.pod }}{{- toYaml . | indent 8 }}{{- end }}
+        {{- with .Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
       {{- end }}
-      {{- if .Values.kasmApp.applyHardening }}
+      {{- if or .Values.components.manager.annotations .Values.annotations.pod }}
+      annotations:
+        {{- with .Values.annotations.pod }}{{- toYaml . | indent 8 }}{{- end }}
+        {{- with .Values.components.manager.annotations }}{{- toYaml . | indent 8 }}{{- end }}
+      {{- end }}
+    spec:
+      restartPolicy: {{ .Values.restartPolicy }}
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets }}
+      {{- end }}
+      {{- if .Values.applySecurity }}
         {{- include "kasm.podSecurity" . | indent 6 }}
       {{- end }}
       initContainers:
-        {{- include "kasm.initContainer" (dict "serviceName" "kasm-api" "servicePort" "8080" "path" "/api/__healthcheck" "schema" "http") | nindent 8 }}
-        {{- if .Values.kasmApp.applyHardening }}
+        {{- include "kasm.initContainer" (dict "serviceName" $apiName "servicePort" "8080" "path" "/api/__healthcheck" "schema" "http") | nindent 8 }}
+        {{- if .Values.applySecurity }}
           {{- include "kasm.containerSecurity" . | indent 10 }}
         {{- end }}
       containers:
-        - name: {{ .Values.kasmApp.servicesToDeploy.kasmManager.name }}-container
-          image: "{{ .Values.kasmApp.servicesToDeploy.kasmManager.image }}:{{ .Values.kasmApp.servicesToDeploy.kasmManager.tag }}"
+        - name: {{ $managerName }}-container
+          image: {{ $managerImage }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
           env:
             - name: LOG_LEVEL
               value: INFO
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.kasmApp.name | default "kasm" }}-secrets
+                  name: {{ .Release.Name }}-secrets
                   key: db-password
-          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
           ports:
-            - name: {{ .Values.kasmApp.servicesToDeploy.kasmManager.name }}-pt
+            - name: {{ $managerName }}-pt
               containerPort: 8181
               protocol: TCP
-          {{- if .Values.kasmApp.servicesToDeploy.kasmManager.addHealthChecks }}
+          {{- if .Values.addHealthChecks }}
           livenessProbe:
-            {{- include "health.tcp" (dict "portName" (printf "%s-pt" .Values.kasmApp.servicesToDeploy.kasmManager.name) ) | indent 12 }}
+            {{- include "health.tcp" (dict "portName" (printf "%s-pt" $managerImage) ) | indent 12 }}
           {{- end }}
-          {{- if .Values.kasmApp.servicesToDeploy.kasmManager.addHealthChecks }}
+          {{- if .Values.addHealthChecks }}
           readinessProbe:
-            {{- include "health.http" (dict "path" "/__healthcheck" "portName" (printf "%s-pt" .Values.kasmApp.servicesToDeploy.kasmManager.name) ) | indent 12 }}
+            {{- include "health.http" (dict "path" "/__healthcheck" "portName" (printf "%s-pt" $managerImage) ) | indent 12 }}
           {{- end }}
-          {{- if .Values.kasmApp.servicesToDeploy.kasmManager.resources }}
-          resources: {{- toYaml .Values.kasmApp.servicesToDeploy.kasmManager.resources | nindent 12 }}
+          {{- if .Values.components.manager.resources }}
+          resources: {{- toYaml .Values.components.manager.resources | nindent 12 }}
           {{- else }}
-          resources: {{- include "resources.preset" (dict "node" "manager" "size" .Values.kasmApp.deploymentSize) | nindent 12 }}
+          resources: {{- include "resources.preset" (dict "node" $managerComponent "size" .Values.deploymentSize) | nindent 12 }}
           {{- end }}
-          {{- if .Values.kasmApp.applyHardening }}
+          {{- if .Values.applyHardening }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}
           volumeMounts:
-            - name: manager-tmp
+            - name: {{ $managerName }}-tmp
               mountPath: /tmp
       volumes:
-        - name: manager-tmp
+        - name: {{ $managerName }}-tmp
           emptyDir:
             sizeLimit: 1Gi

@@ -1,21 +1,39 @@
 {{/*
-Deploy the Nginx .Values.components.proxy
+Deploy the Kasm Proxy service
 */}}
+{{- if and .Values.ingress.enabled (eq .Values.service.type "LoadBalancer") -}}
+  {{- fail "The service.type must not be LoadBalancer when using an ingress - any load balancer should be provisioned by your ingress controller. Set service.type=ClusterIP instead" -}}
+{{- end -}}
+{{- $proxySvcName  := "kasm-proxy" -}}
+{{- $proxyHttpPort := 8080 -}}
+{{- $proxyHttpsPort := 8443 -}}
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ .Values.components.proxy.name }}
-  namespace: {{ $values.Values.namespace | default $values.Release.Namespace }}
+  name: {{ $proxySvcName }}
+  namespace: {{ .Release.Namespace }}
   labels:
-    app.kubernetes.io/name: {{ .Values.components.proxy.name }}-svc
+    app.kubernetes.io/name: {{ $proxySvcName }}-svc
+    app.kubernetes.io/component: {{ $proxyComponent }}
     {{- include "kasm.defaultLabels" $values | indent 4 }}
+  {{- if or .Values.components.proxy.labels .Values.extraLabels.service .Value.labels }}
+    {{- with .Values.components.proxy.labels }}{{- toYaml . | indent 4 }}{{- end }}
+    {{- with .Values.extraLabels.service }}{{- toYaml . | indent 4 }}{{- end }}
+    {{- with .Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
+  {{- end }}
+  {{- if or .Values.annotations.service .Values.service.annotations }}
+  annotations:
+    {{- toYaml .Values.annotations.service | indent 4 }}
+    {{- toYaml .Values.service.annotations | indent 4 }}
+  {{- end }}
 spec:
+  type: {{ default "ClusterIp" .Values.service.type }}
   selector:
-    app.kubernetes.io/name: {{ .Values.components.proxy.name }}
+    app.kubernetes.io/name: {{ $proxyName }}
   ports:
-    - name: {{ .Values.components.proxy.name }}-svc-8080
+    - name: {{ printf "%s-svc-%s" $proxySvcName $proxyHttpPort }}
       protocol: TCP
-      port: 8080
-    - name: {{ .Values.components.proxy.name }}-svc-8443
+      port: {{ $proxyHttpPort }}
+    - name: {{ printf "%s-svc-%s" $proxySvcName $proxyHttpsPort }}
       protocol: TCP
-      port: 8443
+      port: {{ $proxyHttpsPort }}

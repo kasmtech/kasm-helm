@@ -1,18 +1,29 @@
 {{/*
 Deploy the Manager .Values.components.manager
 */}}
+{{- $managerSvcName := "kasm-manager" -}}
+{{- $managerSvcPort := 8181 -}}
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ .Values.components.manager.name }}
-  namespace: {{ $values.Values.namespace | default $values.Release.Namespace }}
+  name: {{ $managerSvcName }}
+  namespace: {{ Release.Namespace }}
   labels:
-    app.kubernetes.io/name: {{ .Values.components.manager.name }}-svc
+    app.kubernetes.io/name: {{ $managerSvcName }}-svc
+    app.kubernetes.io/component: {{ $managerComponent }}
     {{- include "kasm.defaultLabels" $values | indent 4 }}
+  {{- if or .Values.components.manager.labels .Values.extraLabels.service .Value.labels }}
+    {{- with .Values.components.manager.labels }}{{- toYaml . | indent 4 }}{{- end }}
+    {{- with .Values.extraLabels.service }}{{- toYaml . | indent 4 }}{{- end }}
+    {{- with .Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
+  {{- end }}
+  {{- with .Values.annotations.service }}
+  annotations: {{ toYaml . | indent 4 }}
+  {{- end }}
 spec:
   selector:
-    app.kubernetes.io/name: {{ .Values.components.manager.name }}
+    app.kubernetes.io/name: {{ $managerName }}
   ports:
-    - name: {{ .Values.components.manager.name }}-svc-8181
+    - name: {{ printf "%s-svc-%s" $managerSvcName $managerSvcPort }}
       protocol: TCP
-      port: 8181
+      port: {{ $managerSvcPort }}

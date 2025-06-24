@@ -1,53 +1,59 @@
-{{- if .Values.ingress.enabled }}
+{{/*
+Deploy the Kasm ingress if .Values.ingress.enabled set to true
+*/}}
+{{- if eq .Values.ingress.enabled true }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: kasm-ingress
-  namespace: {{ .Values.global.namespace | default .Release.Namespace }}
+  name: {{ $.Release.Name }}-ingress
+  namespace: {{ $.Release.Namespace }}
   labels:
-    app.kubernetes.io/name: kasm-ingress
-{{- include "kasm.defaultLabels" . | indent 4 }}
-  {{- if .Values.ingress.annotations }}
-  annotations: {{- toYaml .Values.ingress.annotations | nindent 4 }}
+    app.kubernetes.io/name: {{ $.Release.Name }}-ingress
+    {{- include "kasm.defaultLabels" . | indent 4 }}
+  {{- if or $.Values.ingress.labels $.Values.extraLabels.ingress $.Value.labels }}
+    {{- with $.Values.ingress.labels }}{{- toYaml . | indent 4 }}{{- end }}
+    {{- with $.Values.extraLabels.ingress }}{{- toYaml . | indent 4 }}{{- end }}
+    {{- with $.Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
+  {{- end }}
+  {{- with $.Values.annotations.ingress }}
+  annotations: {{ toYaml . | indent 4 }}
   {{- end }}
 spec:
-{{- if .Values.ingress.className }}
-  ingressClassName: {{ .Values.ingress.className }}
+{{- if $.Values.ingress.ingressClassName }}
+  ingressClassName: {{ $.Values.ingress.ingressClassName }}
 {{- end }}
   tls:
   - hosts:
-      - {{ .Values.hostname | quote }}
-      {{- if gt (len .Values.altHostnames) 0 }}
-        {{- range .Values.altHostnames }}
-      - {{ . | quote }}
+      - {{ $.Values.publicAddr | quote }}
+      {{- if eq $.Values.cert-manager.addWildCard true }}
+      - {{ printf "*.%s" $.Values.publicAddr | quote }}
       {{- end }}
-      {{- end }}
-    secretName: {{ .Values.ingress.tls.secretName }}
+    secretName: {{ $.Values.certificate.secretName }}
   rules:
-  - host: {{ .Values.hostname | quote }}
+  - host: {{ $.Values.publicAddr | quote }}
     http:
       paths:
       - path: /
         pathType: Prefix
         backend:
           service:
-            name: kasm-proxy
+            name: {{ $proxySvcName }}
             port:
-              number: 8080
+              number: {{ $proxyHttpPort }}
       - path: /api/
         pathType: Prefix
         backend:
           service:
-            name: kasm-api
+            name: {{ $apiSvcName }}
             port:
-              number: 8080
-{{- if .Values.components.share.deploy }}
+              number: {{ $apiSvcPort }}
+{{- if eq $.Values.components.share.deploy true }}
       - path: /api/share/
         pathType: Prefix
         backend:
           service:
-            name: kasm-share
+            name: {{ $shareSvcName }}
             port:
-              number: 8182
+              number: {{ $shareSvcPort }}
 {{- end }}
 {{- end }}

@@ -1,23 +1,35 @@
 {{/*
-Deploy the Redis if .Values.components.rdpGateway.enabled set to true
+Deploy the RDP Gateway if .Values.components.rdpGateway.enabled set to true
 */}}
-{{- if .Values.components.rdpGateway.enabled }}
+{{- $rdpGatewaySvcName  := "kasm-rdp-gateway" -}}
+{{- $rdpGatewaySvcPort := 5555 -}}
+{{- $rdpPort := 3389 -}}
+{{- if eq .Values.components.rdpGateway.enabled true }}
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ .Values.components.rdpGateway.name }}
-  namespace: {{ $values.Values.namespace | default $values.Release.Namespace }}
+  name: {{ $rdpGatewaySvcName }}
+  namespace: {{ $.Release.Namespace }}
   labels:
-    app.kubernetes.io/name: {{ .Values.components.rdpGateway.name }}-svc
+    app.kubernetes.io/name: {{ $rdpGatewaySvcName }}-svc
+    app.kubernetes.io/component: {{ $rdpGatewayComponent }}
     {{- include "kasm.defaultLabels" $values | indent 4 }}
+  {{- if or $.Values.components.rdpGateway.labels $.Values.extraLabels.service $.Value.labels }}
+    {{- with $.Values.components.rdpGateway.labels }}{{- toYaml . | indent 4 }}{{- end }}
+    {{- with $.Values.extraLabels.service }}{{- toYaml . | indent 4 }}{{- end }}
+    {{- with $.Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
+  {{- end }}
+  {{- with $.Values.annotations.service }}
+  annotations: {{ toYaml . | indent 4 }}
+  {{- end }}
 spec:
   selector:
-    app.kubernetes.io/name: {{ .Values.components.rdpGateway.name }}
+    app.kubernetes.io/name: {{ $rdpGatewayName }}
   ports:
-    - name: {{ .Values.components.rdpGateway.name }}-svc-5555
+    - name: {{ printf "%s-svc-%s" $rdpGatewaySvcName $rdpGatewaySvcPort }}
       protocol: TCP
-      port: 5555
-    - name: {{ .Values.components.rdpGateway.name }}-svc-3389
+      port: {{ $rdpGatewaySvcPort }}
+    - name: {{ printf "%s-svc-%s" $rdpGatewaySvcName $rdpPort }}
       protocol: TCP
-      port: 3389
+      port: {{ $rdpPort }}
 {{- end }}

@@ -1,14 +1,35 @@
+{{/*
+Deploy the Certificates with cert-manager
+*/}}
+{{- if eq .Values.certificate.cert-manager.enabled true }}
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: teleport-public-cert
-  namespace: teleport-cluster
+  name: {{ .Release.Name }}-cert
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Release.Name }}-cert
+    app.kubernetes.io/component: certificate
+    {{- include "kasm.defaultLabels" $values | indent 4 }}
 spec:
-  commonName: teleport.secops.kasmweb.io
+  {{- if or .Values.annotations.certSecret .Values.extraLabels.certSecret }}
+  secretTemplate:
+  {{- with .Values.annotations.certSecret }}
+    annotations: {{ toYaml . | indent 6 }}
+  {{- end }}
+  {{- with .Values.extraLabels.certSecret }}
+    labels: {{ toYaml . | indent 6 }}
+  {{- end }}
+  {{- end }}
+  secretName: {{ .Values.certificate.secretName }}
+  commonName: {{ quote .Values.publicAddr }}
   dnsNames:
-    - teleport.secops.kasmweb.io
-    - "*.teleport.secops.kasmweb.io"
+    - {{ quote .Values.publicAddr }}
+    {{- if .Values.certificate.cert-manager.addWildCard }}
+    - {{ printf "*.%s" .Values.publicAddr }}
+    {{- end }}
   issuerRef:
-    name: letsencrypt-prod
-    kind: ClusterIssuer
-  secretName: teleport-tls-certs
+    name: {{ .Values.certificate.cert-manager.issuerName }}
+    kind: {{ .Values.certificate.cert-manager.issuerKind | default "Issuer" }}
+    group: {{ .Values.certificate.cert-manager.issuerGroup | default "cert-manager.io" }}
+{{- end }}

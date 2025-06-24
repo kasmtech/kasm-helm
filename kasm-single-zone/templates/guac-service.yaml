@@ -1,32 +1,37 @@
 {{/*
 Deploy the Guac if .Values.components.guac.enabled set to true
 */}}
-{{- if .Values.components.guac.enabled }}
+{{- $guacSvcName  := "kasm-guac" -}}
+{{- $guacSvcPort := 3000 -}}
+{{- $guacConnectPorts := (list "3001" "3002" "3003" "3004") -}}
+{{- if eq .Values.components.guac.enabled true }}
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ .Values.components.guac.name }}
-  namespace: {{ $values.Values.namespace | default $values.Release.Namespace }}
+  name: {{ $guacSvcName }}
+  namespace: {{ .Release.Namespace }}
   labels:
-    app.kubernetes.io/name: {{ .Values.components.guac.name }}-svc
+    app.kubernetes.io/name: {{ $guacSvcName }}-svc
+    app.kubernetes.io/component: {{ $guacComponent }}
     {{- include "kasm.defaultLabels" $values | indent 4 }}
+  {{- if or .Values.components.guac.labels .Values.extraLabels.service .Value.labels }}
+    {{- with .Values.components.guac.labels }}{{- toYaml . | indent 4 }}{{- end }}
+    {{- with .Values.extraLabels.service }}{{- toYaml . | indent 4 }}{{- end }}
+    {{- with .Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
+  {{- end }}
+  {{- with .Values.annotations.service }}
+  annotations: {{ toYaml . | indent 4 }}
+  {{- end }}
 spec:
   selector:
-    app.kubernetes.io/name: {{ .Values.components.guac.name }}
+    app.kubernetes.io/name: {{ $guacName }}
   ports:
-    - name: {{ .Values.components.guac.name }}-svc-3000
+    - name: {{ printf "%s-svc-%s" $guacSvcName $guacSvcPort }}
       protocol: TCP
-      port: 3000
-    - name: {{ .Values.components.guac.name }}-svc-3001
+      port: {{ $guacSvcPort }}
+    {{- range $guacConnectPorts }}
+    - name: {{ printf "%s-svc-%s" $guacSvcName . }}
       protocol: TCP
-      port: 3001
-    - name: {{ .Values.components.guac.name }}-svc-3002
-      protocol: TCP
-      port: 3002
-    - name: {{ .Values.components.guac.name }}-svc-3003
-      protocol: TCP
-      port: 3003
-    - name: {{ .Values.components.guac.name }}-svc-3004
-      protocol: TCP
-      port: 3004
+      port: {{ . }}
+    {{- end }}
 {{- end }}

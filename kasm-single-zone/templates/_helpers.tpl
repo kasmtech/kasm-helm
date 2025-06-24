@@ -122,22 +122,39 @@ successThreshold: 1
 {{- end }}
 
 {{/*
-Add image pull block to deployment if Docker credentials required
+Pod security configurations for DB and DB init containers
 */}}
-{{- define "image.pullSecrets" }}
-imagePullSecrets:
-  - name: {{ .Values.global.image.pullSecrets }}
+{{- define "db.podSecurity" }}
+securityContext:
+  runAsUser: 70
+  runAsGroup: 70
+  fsGroup: 70
+  fsGroupChangePolicy: Always
+{{- end }}
+
+{{- define "db.containerSecurity" }}
+securityContext:
+  runAsUser: 70
+  runAsGroup: 70
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  capabilities:
+    drop:
+      - ALL
+  seccompProfile:
+    type: RuntimeDefault
 {{- end }}
 
 {{/*
 Init container used to wait for upstream services before attempting to start the primary pod container
 Example:
-  {{ include "kasm.initContainer" (dict "serviceName" "kasm-service-name" "servicePort" "kasm-service-port" "path" "healthcheck-path" "schema" "http") }}
+  {{ include "kasm.initContainer" (dict "serviceName" "kasm-service-name" "servicePort" "kasm-service-port" "path" "healthcheck-path" "schema" "http" "image" "alpine/curl") }}
 */}}
 {{- define "kasm.initContainer" }}
-  {{- if and (hasKey . "serviceName") (hasKey . "servicePort") ( hasKey . "path" ) (hasKey . "schema")}}
+  {{- if and (hasKey . "serviceName") (hasKey . "servicePort") ( hasKey . "path" ) (hasKey . "schema") (hasKey . "image")}}
 - name: {{ .serviceName }}-is-ready
-  image: alpine/curl:8.8.0
+  image: {{ .image }}
   imagePullPolicy: IfNotPresent
   command:
   - /bin/sh

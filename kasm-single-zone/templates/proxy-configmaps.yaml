@@ -1,17 +1,29 @@
+{{/*
+Deploy Kasm Proxy Service .Values.components.api service definition
+*/}}
+{{- $serviceKeepalive  := 16 -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.name }}-base-configmap
-  namespace: {{ .Values.global.namespace | default .Release.Namespace }}
+  name: {{ $proxyName }}-base-configmap
+  namespace: {{ .Release.Namespace }}
   labels:
-    kasm_app: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.name }}
-{{- include "kasm.defaultLabels" . | indent 4 }}
+    app.kubernetes.io/name: {{ $proxyName }}-base-configmap
+    app.kubernetes.io/component: {{ $proxyComponent }}
+    {{- include "kasm.defaultLabels" $values | indent 4 }}
+    {{- if or .Values.extraLabels.configMap .Value.labels }}
+      {{- with .Values.extraLabels.configMap }}{{- toYaml . | indent 4 }}{{- end }}
+      {{- with .Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
+    {{- end }}
   annotations:
     helm.sh/hook: pre-install,pre-upgrade,post-delete
+    {{- if .Values.annotations.configMap }}
+      {{- with .Values.annotations.configMap }}{{- toYaml . | indent 4 }}{{- end }}
+    {{- end }}
 data:
   nginx.conf: |
     user  nginx;
-    worker_processes {{ include "resources.preset" (dict "node" "proxy-processes" "size" .Values.kasmApp.deploymentSize) }};
+    worker_processes {{ include "resources.preset" (dict "node" "proxy-processes" "size" .Values.deploymentSize) }};
 
     error_log  /var/log/nginx/error.log notice;
     pid        /var/run/nginx.pid;
@@ -41,13 +53,21 @@ data:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.name }}-settings-configmap
-  namespace: {{ .Values.global.namespace | default .Release.Namespace }}
+  name: {{ $proxyName }}-settings-configmap
+  namespace: {{ .Release.Namespace }}
   labels:
-    kasm_app: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.name }}
-    {{- include "kasm.defaultLabels" . | indent 4 }}
+    app.kubernetes.io/name: {{ $proxyName }}-settings-configmap
+    app.kubernetes.io/component: {{ $proxyComponent }}
+    {{- include "kasm.defaultLabels" $values | indent 4 }}
+    {{- if or .Values.extraLabels.configMap .Value.labels }}
+      {{- with .Values.extraLabels.configMap }}{{- toYaml . | indent 4 }}{{- end }}
+      {{- with .Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
+    {{- end }}
   annotations:
     helm.sh/hook: pre-install,pre-upgrade,post-delete
+    {{- if .Values.annotations.configMap }}
+      {{- with .Values.annotations.configMap }}{{- toYaml . | indent 4 }}{{- end }}
+    {{- end }}
 data:
   compress.conf: |
     gzip on;
@@ -122,7 +142,7 @@ data:
       ""      $request_port;
     }
     server {
-      listen 8443 ssl;
+      listen {{ $proxyyHttpsPort }} ssl;
       server_name ubuntu-base;
 
       ssl_certificate /etc/ssl/certs/kasm_nginx.crt;
@@ -177,7 +197,7 @@ data:
     }
 
     server {
-      listen 8080;
+      listen {{ $proxyHttpPort }};
       server_name ubuntu-base;
 
       include /etc/nginx/conf.d/services.d/*.conf;
@@ -196,36 +216,41 @@ data:
     }
   
   upstream_api.conf: |
-    upstream kasm-api {
-      server kasm-api:8080;
-      keepalive {{ .Values.kasmApp.servicesToDeploy.kasmProxy.serviceKeepalive }};
+    upstream {{ $apiSvcName }} {
+      server {{ printf "%s:%s" $apiSvcName $apiSvcPort }};
+      keepalive {{ $serviceKeepalive }};
     }
   
   upstream_manager.conf: |
-    upstream kasm-manager {
-      server kasm-manager:8181;
-      keepalive {{ .Values.kasmApp.servicesToDeploy.kasmProxy.serviceKeepalive }};
+    upstream {{ $managerSvcName }} {
+      server {{ printf "%s:%s" $managerSvcName $managerSvcPort }};
+      keepalive {{ $serviceKeepalive }};
     }
 
 {{/*
 Add nginx proxy service configs based on values
 */}}
-{{- $keepalive := .Values.kasmApp.servicesToDeploy.kasmProxy.serviceKeepalive }}
-{{- range $key, $value := .Values.kasmApp.servicesToDeploy }}
-  {{- $upstream := kebabcase $key -}}
+{{- range $key, $value := .Values.components }}
+  {{- $upstream := "" -}}
+  {{- $server := "" -}}
   {{- $ports := list -}}
-  {{- if eq $key "kasmGuac" }}
-    {{- $upstream = printf "%s%s" (kebabcase $key) "-backend" -}}
-  {{- end }}
-  {{- if eq $value.deploy true }}
-    {{- if eq $key "kasmGuac" }}
-      {{- $ports = (list "3001" "3002" "3003" "3004") -}}
+  {{- if eq $value.enabled true }}
+    {{- if eq $key "guac" }}
+      {{- $ports = $guacConnectPorts -}}
+      {{- $upstream = printf "%s-backend" $guacSvcName -}}
+      {{- $server = (kebabcase $guacSvcName) -}}
     {{- else if eq $key "rdpGateway" }}
-      {{- $ports = (list "5555") -}}
+      {{- $ports = (list $rdpGatewayPort) -}}
+      {{- $upstream = $rdpGatewayName -}}
+      {{- $server = (kebabcase $rdpGatewaySvcName) -}}
     {{- else if eq $key "rdpHttpsGateway" }}
-      {{- $ports = (list "9443") -}}
-    {{- else if eq $key "kasmShare" }}
-      {{- $ports = (list "8182") -}}
+      {{- $ports = (list $rdpHttpsGatewayPort) -}}
+      {{- $upstream = $rdpHttpsGatewayName -}}
+      {{- $server = (kebabcase $rdpHttpsGatewaySvcName) -}}
+    {{- else if eq $key "share" }}
+      {{- $ports = (list $sharePort) -}}
+      {{- $upstream = $shareName -}}
+      {{- $server = (kebabcase $shareSvcName) -}}
     {{- end -}}
   {{- end -}}
   {{- if $ports }}
@@ -233,7 +258,7 @@ Add nginx proxy service configs based on values
     {{- printf "\n    upstream %s {\n" $upstream -}}
     {{- printf "      keepalive %.0f;\n" $keepalive -}}
     {{- range $port := $ports }}
-      {{- printf "      %s %s:%s;\n" "server" (kebabcase $key) $port -}}
+      {{- printf "      %s %s:%s;\n" "server" $server $port -}}
     {{- end }}
     {{- printf "    }\n" -}}
   {{- end }}
@@ -243,13 +268,21 @@ Add nginx proxy service configs based on values
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.name }}-services-configmap
-  namespace: {{ .Values.global.namespace | default .Release.Namespace }}
+  name: {{ $proxyName }}-services-configmap
+  namespace: {{ .Release.Namespace }}
   labels:
-    kasm_app: {{ .Values.kasmApp.servicesToDeploy.kasmProxy.name }}
-    {{- include "kasm.defaultLabels" . | indent 4 }}
+    app.kubernetes.io/name: {{ $proxyName }}-svc
+    app.kubernetes.io/component: {{ $proxyComponent }}
+    {{- include "kasm.defaultLabels" $values | indent 4 }}
+    {{- if or .Values.extraLabels.configMap .Value.labels }}
+      {{- with .Values.extraLabels.configMap }}{{- toYaml . | indent 4 }}{{- end }}
+      {{- with .Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
+    {{- end }}
   annotations:
     helm.sh/hook: pre-install,pre-upgrade,post-delete
+    {{- if .Values.annotations.configMap }}
+      {{- with .Values.annotations.configMap }}{{- toYaml . | indent 4 }}{{- end }}
+    {{- end }}
 data:
   closest.conf: |
     location /checkvalid {
@@ -257,6 +290,7 @@ data:
     add_header Access-Control-Allow-Origin *;
     add_header Content-Type text/plain;
     }
+
   admin_api.conf: |
     location /api/admin/ {
       proxy_http_version	1.1;
@@ -270,7 +304,7 @@ data:
   
       add_header Strict-Transport-Security "max-age=63072000" always;
 
-      proxy_pass	http://kasm-api;
+      proxy_pass	{{ printf "http://%s" $apiSvcName }};
     }
 
   client_api.conf: |
@@ -287,7 +321,7 @@ data:
 
       add_header Strict-Transport-Security "max-age=63072000" always;
 
-      proxy_pass	http://kasm-api;
+      proxy_pass	{{ printf "http://%s" $apiSvcName }};
     }
 
   manager_api.conf: |
@@ -300,7 +334,7 @@ data:
       proxy_set_header	X-Forwarded-For $proxy_add_x_forwarded_for;
       proxy_set_header	X-Forwarded-Proto $scheme;
 
-      proxy_pass	http://kasm-manager/;
+      proxy_pass	{{ printf "http://%s" $managerSvcName }}/;
     }
 
   subscription_api.conf: |
@@ -323,13 +357,13 @@ data:
       proxy_set_header	X-Forwarded-Proto $scheme;
 
       add_header          Strict-Transport-Security "max-age=63072000" always;
-      proxy_pass	http://kasm-api;
+      proxy_pass	{{ printf "http://%s" $apiSvcName }};
     }
 
   upstream_proxy.conf: |
     location /kasm_connect {
       internal;
-      proxy_pass http://kasm-api/api/kasm_connect/;
+      proxy_pass {{ printf "http://%s/api/kasm_connect/" $apiSvcName }};
       proxy_pass_request_body off;
       proxy_set_header        Content-Length '';
       proxy_set_header        X-Original-URI $request_uri;
@@ -408,7 +442,7 @@ data:
       proxy_set_header        Authorization "Bearer ${connect_auth}";
       proxy_set_header        Cookie "username=$cookie_username; session_token=$cookie_session_token; kasm_client_key=$cookie_kasm_client_key";
 
-      proxy_pass              http://127.0.0.1:8080/guac_connect/$service$new_path;
+      proxy_pass              {{ printf "http://127.0.0.1:%s/guac_connect/$service$new_path" $proxyHttpPort }};
       proxy_read_timeout      1800s;
       proxy_send_timeout      1800s;
       proxy_connect_timeout   1800s;
@@ -436,7 +470,7 @@ data:
       proxy_set_header        X-Kasm-ID "${kasm_id}";
       proxy_set_header        Cookie "username=$cookie_username; session_token=$cookie_session_token; kasm_client_key=$cookie_kasm_client_key";
 
-      proxy_pass              http://kasm-guac-backend/vnc.htmlguaclite$is_args$args;
+      proxy_pass              {{ printf "http://%s-backend/vnc.htmlguaclite$is_args$args" $guacSvcName }};
       proxy_read_timeout      1800s;
       proxy_send_timeout      1800s;
       proxy_connect_timeout   1800s;
@@ -485,7 +519,7 @@ data:
       
       root /srv/www;
     }
-{{- if eq .Values.kasmApp.servicesToDeploy.kasmGuac.deploy true }}
+{{- if eq .Values.components.guac.enabled true }}
   kasmguac.conf: |
     location /guac_connect/vnc/ {
       proxy_http_version      1.1;
@@ -496,7 +530,7 @@ data:
       proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
       proxy_set_header        X-Forwarded-Proto $scheme;
 
-      proxy_pass              http://kasm-guac:3000/;
+      proxy_pass              {{ printf "http://%s:%s/" $guacSvcName $guacSvcPort }};
       proxy_read_timeout      1800s;
       proxy_send_timeout      1800s;
       proxy_connect_timeout   1800s;
@@ -517,7 +551,7 @@ data:
       proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
       proxy_set_header        X-Forwarded-Proto $scheme;
 
-      proxy_pass              http://kasm-guac-backend/vnc.htmlguaclite$is_args$args;
+      proxy_pass              {{ printf "http://%s-backend/vnc.htmlguaclite$is_args$args" $guacSvcName }};
       proxy_read_timeout      1800s;
       proxy_send_timeout      1800s;
       proxy_connect_timeout   1800s;
@@ -532,7 +566,7 @@ data:
 
     location /vm_connect {
       internal;
-      proxy_pass http://kasm-guac:3000/vm_connect;
+      proxy_pass {{ printf "http://%s:%s/vm_connect" $guacSvcName $guacSvcPort }};
       proxy_pass_request_body off;
       proxy_set_header        Content-Length '';
       proxy_set_header        X-Original-URI $request_uri;
@@ -629,18 +663,18 @@ data:
     }
 
     location /guac_login {
-      proxy_pass http://kasm-guac:3000/guac_login;
+      proxy_pass {{ printf "http://%s:%s/guac_login" $guacSvcName $guacSvcPort }};
     }
 
     location /guac/__healthcheck {
-      proxy_pass http://kasm-guac:3000/__healthcheck;
+      proxy_pass {{ printf "http://%s:%s/__healthcheck" $guacSvcName $guacSvcPort }};
     }
 
     location /guac/vm_disconnect {
-      proxy_pass http://kasm-guac:3000/vm_disconnect;
+      proxy_pass {{ printf "http://%s:%s/vm_disconnect" $guacSvcName $guacSvcPort }};
     }
 {{- end }}
-{{- if eq .Values.kasmApp.servicesToDeploy.rdpGateway.deploy true }}
+{{- if eq .Values.components.rdpGateway.enabled true }}
   rdp_gateway.conf: |
     location /rdp-gateway/ {
       proxy_http_version	1.1;
@@ -651,10 +685,10 @@ data:
       proxy_set_header	X-Forwarded-For $proxy_add_x_forwarded_for;
       proxy_set_header	X-Forwarded-Proto $scheme;
 
-      proxy_pass	http://rdp-gateway/;
+      proxy_pass	{{ printf "http://%s" $rdpGatewaySvcName }}/;
     }
 {{- end }}
-{{- if eq .Values.kasmApp.servicesToDeploy.kasmShare.deploy true }}
+{{- if eq .Values.components.share.enabled true }}
   share_api.conf: |
     location /api/share/ {
       proxy_http_version	1.1;
@@ -667,10 +701,10 @@ data:
 
       add_header  Strict-Transport-Security "max-age=63072000" always;
 
-      proxy_pass	http://kasm-share;
+      proxy_pass	{{ printf "http://%s" $shareName }};
     }
 {{- end }}
-{{- if eq .Values.kasmApp.servicesToDeploy.rdpHttpsGateway.deploy true }}
+{{- if eq .Values.rdpHttpsGateway.enabled true }}
   rdp_https_gateway.conf: |
     location /rdp-https-gateway/ {
                 proxy_http_version      1.1;
@@ -681,7 +715,7 @@ data:
                 proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
                 proxy_set_header        X-Forwarded-Proto $scheme;
 
-                proxy_pass      https://rdp-https-gateway;
+                proxy_pass      {{ printf  "https://%s" $rdpHttpsGatewaySvcName }};
     }
 
     location /remoteDesktopGateway {
@@ -690,7 +724,7 @@ data:
       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
       proxy_set_header Host $host;
       proxy_set_header Upgrade $http_upgrade;
-      proxy_pass https://rdp-https-gateway;
+      proxy_pass {{ printf  "https://%s" $rdpHttpsGatewaySvcName }};
     }
 
     # Route for MS RDP Gateway
@@ -699,7 +733,7 @@ data:
       proxy_buffer_size 128k;
       proxy_busy_buffers_size 256k;
 
-      proxy_pass https://rdp-https-gateway;
+      proxy_pass {{ printf  "https://%s" $rdpHttpsGatewaySvcName }};
       proxy_set_header Host $http_host;
       proxy_set_header X-Real-IP $remote_addr;
       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

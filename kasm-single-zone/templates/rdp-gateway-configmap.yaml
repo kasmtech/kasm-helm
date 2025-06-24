@@ -1,13 +1,25 @@
+{{/*
+Deploy the RDP Gateway Configmap if .Values.components.rdpGateway.enabled set to true
+*/}}
+{{- if eq .Values.components.rdpGateway.enabled true }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ .Values.kasmApp.servicesToDeploy.rdpGateway.name }}-configmap
-  namespace: {{ .Values.global.namespace | default .Release.Namespace }}
+  name: {{ $rdpGatewayName }}-configmap
+  namespace: {{ $.Release.Namespace }}
   labels:
-    kasm_app: {{ .Values.kasmApp.servicesToDeploy.rdpGateway.name }}
-  {{- include "kasm.defaultLabels" . | indent 4 }}
-annotations:
-  helm.sh/hook: pre-install,pre-upgrade,post-delete
+    app.kubernetes.io/name: {{ $rdpGatewaySvcName }}-svc
+    app.kubernetes.io/component: {{ $rdpGatewayComponent }}
+    {{- include "kasm.defaultLabels" $values | indent 4 }}
+    {{- if or $.Values.extraLabels.configMap $.Value.labels }}
+      {{- with $.Values.extraLabels.configMap }}{{- toYaml . | indent 4 }}{{- end }}
+      {{- with $.Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
+    {{- end }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade,post-delete
+    {{- if $.Values.annotations.configMap }}
+      {{- with $.Values.annotations.configMap }}{{- toYaml . | indent 4 }}{{- end }}
+    {{- end }}
 data:
   passthrough.app.config.yaml: |
     rdp-gateway:
@@ -72,3 +84,4 @@ data:
           tornado:
             level: INFO
         version: 1
+{{- end }}
