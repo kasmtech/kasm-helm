@@ -1,7 +1,7 @@
 # deploymentSize -- Define the estimated size of the Kasm deployment in expected session load.
-#      small  = Up to 10-15 sessions
-#      medium = Up to 25-30 sessions
-#      large  = Up to 50+ sessions
+#  small  = Up to 10-15 sessions
+#  medium = Up to 25-30 sessions
+#  large  = Up to 50+ sessions
 deploymentSize: "small"
 
 # publicAddr-- Set the access URL to be used for the Kasm deployment.

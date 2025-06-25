@@ -97,7 +97,7 @@ $ helm install kasm-helm kasm/kasm-single-zone --namespace kasm-namespace
 | database.storage.retentionPolicy.whenDeleted | string | `"Delete"` |  |
 | database.storage.retentionPolicy.whenScaled | string | `"Retain"` |  |
 | database.storage.storageClassName | string | `""` |  |
-| deploymentSize | string | `"small"` | Define the estimated size of the Kasm deployment in expected session load.      small  = Up to 10-15 sessions      medium = Up to 25-30 sessions      large  = Up to 50+ sessions |
+| deploymentSize | string | `"small"` | Define the estimated size of the Kasm deployment in expected session load.  small  = Up to 10-15 sessions  medium = Up to 25-30 sessions  large  = Up to 50+ sessions |
 | extraLabels.certSecret | object | `{}` | Additional statefulSet labels to apply to resources created by this chart |
 | extraLabels.configMap | object | `{}` | Additional configMap labels to apply to resources created by this chart |
 | extraLabels.deployment | object | `{}` | Additional deployment labels to apply to resources created by this chart |
