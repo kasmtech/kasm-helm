@@ -1,19 +1,18 @@
 {{/*
 Deploy the Redis if .Values.components.share.enabled set to true
 */}}
-{{- $redisSvcName  := "kasm-redis" -}}
-{{- $redisSvcPort := 6379 -}}
+{{- $values := (include "kasm.constants" . | fromYaml) -}}
 {{- if eq .Values.components.share.enabled true }}
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ $redisSvcName }}
+  name: {{ $values.redis.svc }}
   namespace: {{ $.Release.Namespace }}
   labels:
-    app.kubernetes.io/name: {{ $redisSvcName }}-svc
-    app.kubernetes.io/component: {{ $redisComponent }}
-    {{- include "kasm.defaultLabels" $values | indent 4 }}
-  {{- if or $.Values.components.redis.labels $.Values.extraLabels.service $.Value.labels }}
+    app.kubernetes.io/name: {{ $values.redis.svc }}-svc
+    app.kubernetes.io/component: {{ $values.redis.component }}
+    {{- include "kasm.defaultLabels" . | indent 4 }}
+  {{- if or $.Values.components.redis.labels $.Values.extraLabels.service $.Values.labels }}
     {{- with $.Values.components.redis.labels }}{{- toYaml . | indent 4 }}{{- end }}
     {{- with $.Values.extraLabels.service }}{{- toYaml . | indent 4 }}{{- end }}
     {{- with $.Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
@@ -23,9 +22,9 @@ metadata:
   {{- end }}
 spec:
   selector:
-    app.kubernetes.io/name: {{ $redisName }}
+    app.kubernetes.io/name: {{ $values.redis.name }}
   ports:
-    - name: {{ printf "%s-svc-%s" $redisSvcName $redisSvcPort }}
+    - name: {{ printf "%s-svc-%s" $values.redis.svc ($values.redis.port | toString) }}
       protocol: TCP
-      port: {{ $redisSvcPort }}
+      port: {{ $values.redis.port }}
 {{- end }}

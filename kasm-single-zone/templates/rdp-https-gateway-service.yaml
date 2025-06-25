@@ -1,19 +1,18 @@
 {{/*
 Deploy the Redis if .Values.components.rdpHttpsGateway.enabled set to true
 */}}
-{{- $rdpHttpsGatewaySvcName  := "kasm-rdp-https-gateway" -}}
-{{- $rdpHttpsGatewaySvcPort := 9443 -}}
+{{- $values := (include "kasm.constants" . | fromYaml) -}}
 {{- if eq .Values.components.rdpHttpsGateway.enabled true }}
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ $rdpHttpsGatewaySvcName }}
+  name: {{ $values.rdpHttpsGateway.svc }}
   namespace: {{ $.Release.Namespace }}
   labels:
-    app.kubernetes.io/name: {{ $rdpHttpsGatewaySvcName }}-svc
-    app.kubernetes.io/component: {{ $rdpHttpsGatewayComponent }}
-    {{- include "kasm.defaultLabels" $values | indent 4 }}
-  {{- if or $.Values.components.rdpHttpsGateway.labels $.Values.extraLabels.service $.Value.labels }}
+    app.kubernetes.io/name: {{ $values.rdpHttpsGateway.svc }}-svc
+    app.kubernetes.io/component: {{ $values.rdpHttpsGateway.component }}
+    {{- include "kasm.defaultLabels" . | indent 4 }}
+  {{- if or $.Values.components.rdpHttpsGateway.labels $.Values.extraLabels.service $.Values.labels }}
     {{- with $.Values.components.rdpHttpsGateway.labels }}{{- toYaml . | indent 4 }}{{- end }}
     {{- with $.Values.extraLabels.service }}{{- toYaml . | indent 4 }}{{- end }}
     {{- with $.Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
@@ -23,9 +22,9 @@ metadata:
   {{- end }}
 spec:
   selector:
-    app.kubernetes.io/name: {{ $rdpHttpsGatewayName }}
+    app.kubernetes.io/name: {{ $values.rdpHttpsGateway.name }}
   ports:
-    - name: {{ printf "%s-svc-%s" $rdpHttpsGatewaySvcName $rdpHttpsGatewaySvcPort }}
+    - name: {{ printf "%s-svc-%s" $values.rdpHttpsGateway.svc ($values.rdpHttpsGateway.port | toString) }}
       protocol: TCP
-      port: {{ $rdpHttpsGatewaySvcPort }}
+      port: {{ $values.rdpHttpsGateway.port }}
 {{- end }}

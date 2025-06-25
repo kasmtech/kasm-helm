@@ -1,24 +1,22 @@
 {{/*
 Kasm API server Deployment definition
 */}}
-{{- $apiComponent := "api" -}}
-{{- $apiName := (printf "%s-%s" .Release.Name $apiComponent) -}}
-{{- $apiImage := (printf "%s:%s" .Values.components.api.image.repository .Values.components.api.image.tag) -}}
-{{- $apiReplicas := include "replicas.preset" (dict "node" $apiComponent "size" .Values.deploymentSize) -}}
+{{- $values := (include "kasm.constants" . | fromYaml) -}}
+{{- $apiReplicas := include "replicas.preset" (dict "node" ($values.api.component) "size" .Values.deploymentSize) -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ $apiName }}-deployment
+  name: {{ $values.api.name }}-deployment
   namespace: {{ .Release.Namespace }}
   {{- if .Values.components.api.annotations }}
   annotations:
   {{- .Values.components.api.annotations | indent 4 }}
   {{- end }}
   labels:
-    app.kubernetes.io/name: {{ $apiName }}
-    app.kubernetes.io/component: {{ $apiComponent }}
+    app.kubernetes.io/name: {{ $values.api.name }}
+    app.kubernetes.io/component: {{ $values.api.component }}
     {{- include "kasm.defaultLabels" . | indent 4 }}
-  {{- if or .Values.components.api.labels .Values.extraLabels.deployment .Value.labels }}
+  {{- if or .Values.components.api.labels .Values.extraLabels.deployment .Values.labels }}
     {{- with .Values.components.api.labels }}{{- toYaml . | indent 4 }}{{- end }}
     {{- with .Values.extraLabels.deployment }}{{- toYaml . | indent 4 }}{{- end }}
     {{- with .Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
@@ -37,14 +35,14 @@ spec:
       maxSurge: {{ add1 $apiReplicas }}
   selector:
     matchLabels:
-        app.kubernetes.io/name: {{ $apiName }}
+        app.kubernetes.io/name: {{ $values.api.name }}
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: {{ $apiName }}
-        app.kubernetes.io/component: {{ $apiComponent }}
+        app.kubernetes.io/name: {{ $values.api.name }}
+        app.kubernetes.io/component: {{ $values.api.component }}
         {{- include "kasm.defaultLabels" . | indent 8 }}
-      {{- if or .Values.components.api.labels .Values.extraLabels.pod .Value.labels }}
+      {{- if or .Values.components.api.labels .Values.extraLabels.pod .Values.labels }}
         {{- with .Values.components.api.labels }}{{- toYaml . | indent 8 }}{{- end }}
         {{- with .Values.extraLabels.pod }}{{- toYaml . | indent 8 }}{{- end }}
         {{- with .Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
@@ -65,7 +63,7 @@ spec:
       {{- end }}
       initContainers:
         - name: db-is-ready
-          image: {{ $apiImage }}
+          image: {{ $values.api.image }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           env:
             - name: POSTGRES_PASSWORD
@@ -83,8 +81,8 @@ spec:
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}
       containers:
-        - name: {{ $apiName }}-container
-          image: {{ $apiImage }}
+        - name: {{ $values.api.name }}-container
+          image: {{ $values.api.image }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           env:
             - name: START_SERVICES
@@ -97,19 +95,19 @@ spec:
                   name: {{ .Release.Name }}-secrets
                   key: db-password
           ports:
-            - name: {{ $apiName }}-pt
-              containerPort: {{ $apiSvcPort }}
+            - name: {{ $values.api.name }}-pt
+              containerPort: {{ $values.api.port }}
               protocol: TCP
           {{- if .Values.addHealthChecks }}
           livenessProbe:
-            {{- include "health.tcp" (dict "portName" (printf "%s-pt" $apiName) ) | indent 12 }}
+            {{- include "health.tcp" (dict "portName" (printf "%s-pt" $values.api.name) ) | indent 12 }}
           readinessProbe:
-            {{- include "health.http" (dict "path" "/api/__healthcheck" "portName" (printf "%s-pt" $apiName) ) | indent 12 }}
+            {{- include "health.http" (dict "path" "/api/__healthcheck" "portName" (printf "%s-pt" $values.api.name) ) | indent 12 }}
           {{- end }}
           {{- if .Values.components.api.resources }}
           resources: {{- toYaml .Values.components.api.resources | nindent 12 }}
           {{- else }}
-          resources: {{- include "resources.preset" (dict "node" $apiComponent "size" .Values.deploymentSize) | nindent 12 }}
+          resources: {{- include "resources.preset" (dict "node" $values.api.component "size" .Values.deploymentSize) | nindent 12 }}
           {{- end }}
           {{- if .Values.applyPodSecurity }}
             {{- include "kasm.containerSecurity" . | indent 10 }}

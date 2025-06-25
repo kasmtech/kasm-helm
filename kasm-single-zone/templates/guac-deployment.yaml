@@ -1,21 +1,19 @@
 {{/*
 Deploy the Guacamole Web RDP if .Values.components.guac.enabled set to true
 */}}
-{{- $guacComponent := "guac" -}}
-{{- $guacName := (printf "%s-%s" $.Release.Name $guacComponent) -}}
-{{- $guacImage := (printf "%s:%s" $.Values.components.guac.image.repository $.Values.components.guac.image.tag) -}}
-{{- $guacReplicas := include "replicas.preset" (dict "node" $guacComponent "size" $.Values.deploymentSize) -}}
+{{- $values := (include "kasm.constants" . | fromYaml) -}}
+{{- $guacReplicas := include "replicas.preset" (dict "node" ($values.guac.component) "size" .Values.deploymentSize) -}}
 {{- if eq .Values.components.guac.enabled true }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ $guacName }}-deployment
+  name: {{ $values.guac.name }}-deployment
   namespace: {{ $.Release.Namespace }}
   labels:
-    app.kubernetes.io/name: {{ $guacName }}
-    app.kubernetes.io/component: {{ $guacComponent }}
+    app.kubernetes.io/name: {{ $values.guac.name }}
+    app.kubernetes.io/component: {{ $values.guac.component }}
     {{- include "kasm.defaultLabels" . | indent 4 }}
-  {{- if or .Values.components.guac.labels .Values.extraLabels.deployment .Value.labels }}
+  {{- if or .Values.components.guac.labels .Values.extraLabels.deployment .Values.labels }}
     {{- with .Values.components.guac.labels }}{{- toYaml . | indent 4 }}{{- end }}
     {{- with .Values.extraLabels.deployment }}{{- toYaml . | indent 4 }}{{- end }}
     {{- with .Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
@@ -34,14 +32,14 @@ spec:
       maxSurge: {{ add1 $guacReplicas }}
   selector:
     matchLabels:
-      app.kubernetes.io/name: {{ $guacName }}
+      app.kubernetes.io/name: {{ $values.guac.name }}
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: {{ $guacName }}
-        app.kubernetes.io/component: {{ $guacComponent }}
+        app.kubernetes.io/name: {{ $values.guac.name }}
+        app.kubernetes.io/component: {{ $values.guac.component }}
         {{- include "kasm.defaultLabels" . | indent 8 }}
-      {{- if or .Values.components.guac.labels .Values.extraLabels.pod .Value.labels }}
+      {{- if or .Values.components.guac.labels .Values.extraLabels.pod .Values.labels }}
         {{- with .Values.components.guac.labels }}{{- toYaml . | indent 8 }}{{- end }}
         {{- with .Values.extraLabels.pod }}{{- toYaml . | indent 8 }}{{- end }}
         {{- with .Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
@@ -62,8 +60,8 @@ spec:
       {{- end }}
       initContainers:
       {{- if .Values.applyHardening }}
-        - name: {{ $guacName }}-tmp-perms
-          image: {{ $apiImage }}
+        - name: {{ $values.guac.name }}-tmp-perms
+          image: {{ $values.api.image }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           command:
             - /bin/sh
@@ -77,13 +75,13 @@ spec:
             runAsNonRoot: false
             runAsUser: 0
         {{- end }}
-        {{- include "kasm.initContainer" (dict "serviceName" $apiSvcName "servicePort" $apiSvcPort "path" "/api/__healthcheck" "schema" "http") | nindent 8 }}
+        {{- include "kasm.initContainer" (dict "serviceName" ($values.api.svc) "servicePort" ($values.api.port) "path" "/api/__healthcheck" "schema" "http" "image" ($values.api.image)) | nindent 8 }}
         {{- if .Values.applyHardening }}
           {{- include "kasm.containerSecurity" . | indent 10 }}
         {{- end }}
       containers:
-        - name: {{ $guacName }}-container
-          image: {{ $guacImage }}
+        - name: {{ $values.guac.name }}-container
+          image: {{- $values.guac.image -}}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           env:
             - name: CLUSTER_SIZE
@@ -98,45 +96,45 @@ spec:
             - name: KUBERNETES_SERVICE_HOST
               value: "true"
             - name: SERVER_ADDRESS
-              value: {{ $proxySvcName }}
+              value: {{ $values.proxy.svc }}
             - name: SERVER_PORT
-              value: {{ $proxyHttpPort }}
+              value: {{ $values.proxy.http }}
           ports:
-            - name: {{ $guacName }}-pt
-              containerPort: {{ $guacSvcPort }}
+            - name: {{ $values.guac.name }}-pt
+              containerPort: {{ $values.guac.port }}
               protocol: TCP
           {{- if .Values.applyHardening }}
           volumeMounts:
-            - name: {{ $guacName }}-data
+            - name: {{ $values.guac.name }}-data
               mountPath: /tmp
-            - name: {{ $guacName }}-readonly
+            - name: {{ $values.guac.name }}-readonly
               mountPath: /opt/kasm/current/log
               readOnly: true
-            - name: {{ $guacName }}-data
+            - name: {{ $values.guac.name }}-data
               mountPath: /opt/kasm/current/tmp/guac
           {{- end }}
           {{- if .Values.addHealthChecks }}
           livenessProbe:
-            {{- include "health.tcp" (dict "portName" (printf "%s-pt" $guacName) ) | indent 12 }}
+            {{- include "health.tcp" (dict "portName" (printf "%s-pt" ($values.guac.name)) ) | indent 12 }}
           {{- end }}
           {{- if .Values.addHealthChecks }}
           readinessProbe:
-            {{- include "health.http" (dict "path" "/__healthcheck" "portName" (printf "%s-pt" $guacName) ) | indent 12 }}
+            {{- include "health.http" (dict "path" "/__healthcheck" "portName" (printf "%s-pt" ($values.guac.name)) ) | indent 12 }}
           {{- end }}
           {{- if .Values.components.guac.resources }}
           resources: {{- toYaml .Values.components.guac.resources | nindent 12 }}
           {{- else }}
-          resources: {{- include "resources.preset" (dict "node" $guacComponent "size" .Values.deploymentSize) | nindent 12 }}
+          resources: {{- include "resources.preset" (dict "node" ($values.guac.component) "size" .Values.deploymentSize) | nindent 12 }}
           {{- end }}
           {{- if .Values.applyHardening }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}
       {{- if .Values.applyHardening }}
       volumes:
-        - name: {{ $guacName }}-data
+        - name: {{ $values.guac.name }}-data
           emptyDir:
             sizeLimit: 1Gi
-        - name: {{ $guacName }}-readonly
+        - name: {{ $values.guac.name }}-readonly
           emptyDir:
             sizeLimit: 150Mi
       {{- end }}

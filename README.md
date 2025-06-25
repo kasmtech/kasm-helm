@@ -1,3 +1,5 @@
+# Kasm on Kubernetes
+
 # kasm-single-zone
 
 ![Version: 1.17.0](https://img.shields.io/badge/Version-1.17.0-informational?style=flat-square) ![AppVersion: 1.17.0](https://img.shields.io/badge/AppVersion-1.17.0-informational?style=flat-square)
@@ -12,13 +14,21 @@ Kasm is a platform specializing in providing secure browser-based workspaces for
 | ---- | ------ | --- |
 | Kasm Technologies, Inc. |  | <https://github.com/kasmtech/kasm-helm> |
 
+**Non-Release branches are not intended for production**
+
+Kasm has been modified to run inside Kubernetes. The service containers will automatically detect they are running in Kubernetes and they will talk directly to each other rather than assume they are talking through an NGINX server as is the case for a normal Kasm deployment. Additionally, components need to talk to the name of the service defined, not to individual containers. A Kubernetes service has a resolvable DNS name that all containers should be able to talk with. API containers will not talk to an individual rdp gateway or guac container, but rather be load balanced to all existing respective containers. The reverse is also true. The API servers have been modified to only return a single entry when guac or rdp gateways call to get a list of API servers.
+
+## Branches
+
+This project will contain a branch that matches the release version of the corresponding Kasm Workspaces release. For example, Kasm Workspaces 1.16.0 will have a branch `release/1.16.0` within this project. **Non-release branches should not be used for production.** Be sure to checkout the branch on this project that matches the version of Kasm Workspaces you intend to deploy. Use the default `develop` branch to deploy the [developer preview](https://kasmweb.com/docs/latest/developers/builds.html#developer-preview-builds) build of Kasm Workspaces.
+
 ## Installing the Chart
 
-To install the chart with the release name `my-release`:
+To install the chart with the release name `kasm-helm`:
 
 ```console
-$ helm repo add foo-bar http://charts.foo-bar.com
-$ helm install my-release foo-bar/kasm-single-zone
+$ helm repo add kasm https://helm.kasmweb.com
+$ helm install kasm-helm kasm/kasm-single-zone --namespace kasm-namespace
 ```
 
 ## Values
@@ -32,7 +42,7 @@ $ helm install my-release foo-bar/kasm-single-zone
 	</thead>
 	<tbody>
 		<tr>
-			<td id="annotations--certSecret"><a href="./values.yaml#L182">annotations.certSecret</a></td>
+			<td id="annotations--certSecret"><a href="./values.yaml#L219">annotations.certSecret</a></td>
 			<td>
 object
 </td>
@@ -46,7 +56,7 @@ object
 			<td>Additional certSecret annotations to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="annotations--configMap"><a href="./values.yaml#L184">annotations.configMap</a></td>
+			<td id="annotations--configMap"><a href="./values.yaml#L221">annotations.configMap</a></td>
 			<td>
 object
 </td>
@@ -60,7 +70,7 @@ object
 			<td>Additional configMap annotations to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="annotations--deployment"><a href="./values.yaml#L186">annotations.deployment</a></td>
+			<td id="annotations--deployment"><a href="./values.yaml#L223">annotations.deployment</a></td>
 			<td>
 object
 </td>
@@ -74,7 +84,7 @@ object
 			<td>Additional deployment annotations to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="annotations--ingress"><a href="./values.yaml#L194">annotations.ingress</a></td>
+			<td id="annotations--ingress"><a href="./values.yaml#L231">annotations.ingress</a></td>
 			<td>
 object
 </td>
@@ -88,7 +98,7 @@ object
 			<td>Additional ingress annotations to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="annotations--pod"><a href="./values.yaml#L188">annotations.pod</a></td>
+			<td id="annotations--pod"><a href="./values.yaml#L225">annotations.pod</a></td>
 			<td>
 object
 </td>
@@ -102,7 +112,7 @@ object
 			<td>Additional pod annotations to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="annotations--secret"><a href="./values.yaml#L192">annotations.secret</a></td>
+			<td id="annotations--secret"><a href="./values.yaml#L229">annotations.secret</a></td>
 			<td>
 object
 </td>
@@ -116,7 +126,7 @@ object
 			<td>Additional secret annotations to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="annotations--service"><a href="./values.yaml#L190">annotations.service</a></td>
+			<td id="annotations--service"><a href="./values.yaml#L227">annotations.service</a></td>
 			<td>
 object
 </td>
@@ -130,7 +140,7 @@ object
 			<td>Additional service annotations to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="annotations--statefulSet"><a href="./values.yaml#L196">annotations.statefulSet</a></td>
+			<td id="annotations--statefulSet"><a href="./values.yaml#L233">annotations.statefulSet</a></td>
 			<td>
 object
 </td>
@@ -144,7 +154,7 @@ object
 			<td>Additional statefulSet annotations to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="applyHealthChecks"><a href="./values.yaml#L171">applyHealthChecks</a></td>
+			<td id="applyHealthChecks"><a href="./values.yaml#L208">applyHealthChecks</a></td>
 			<td>
 bool
 </td>
@@ -158,7 +168,7 @@ true
 			<td>Add Pod/Container healthchecks settings for Kasm resources</td>
 		</tr>
 		<tr>
-			<td id="applySecurity"><a href="./values.yaml#L168">applySecurity</a></td>
+			<td id="applySecurity"><a href="./values.yaml#L205">applySecurity</a></td>
 			<td>
 bool
 </td>
@@ -172,50 +182,7 @@ true
 			<td>Apply Pod/Container security settings for Kasm resources</td>
 		</tr>
 		<tr>
-			<td id="certificate"><a href="./values.yaml#L29">certificate</a></td>
-			<td>
-object
-</td>
-			<td>
-				<div style="max-width: 300px;">
-<pre lang="json">
-{
-  "certManager": {
-    "addWildCard": true,
-    "enabled": true,
-    "issuerGroup": "",
-    "issuerKind": "",
-    "issuerName": ""
-  },
-  "secretName": ""
-}
-</pre>
-</div>
-			</td>
-			<td>Configure certificate settings. You can create your own certificate and upload it to the `secretName` supplied below, or if you have an existing cert-manager configured and you wish to use that, set the `secretName` and configure the associated cert-manager settings. </td>
-		</tr>
-		<tr>
-			<td id="certificate--certManager"><a href="./values.yaml#L38">certificate.certManager</a></td>
-			<td>
-object
-</td>
-			<td>
-				<div style="max-width: 300px;">
-<pre lang="json">
-{
-  "addWildCard": true,
-  "enabled": true,
-  "issuerGroup": "",
-  "issuerKind": "",
-  "issuerName": ""
-}
-</pre>
-</div>
-			</td>
-			<td>For additional cert-manager configuration/deployment information refer to the online documentation https://cert-manager.io/v1.1-docs/installation/kubernetes/  NOTE: If you do not enable `cert-manager`, you must generate your own certificates and add them to Kubernetes</td>
-		</tr>
-		<tr>
-			<td id="certificate--certManager--addWildCard"><a href="./values.yaml#L42">certificate.certManager.addWildCard</a></td>
+			<td id="certificate--certManager--addWildCard"><a href="./values.yaml#L52">certificate.certManager.addWildCard</a></td>
 			<td>
 bool
 </td>
@@ -229,7 +196,21 @@ true
 			<td>Setting addWildCard to true will automatically add *.<publicAddr> as a hostname served by the Ingress, as well as adding it to the list of domains to generate a certificate for.</td>
 		</tr>
 		<tr>
-			<td id="certificate--certManager--issuerGroup"><a href="./values.yaml#L51">certificate.certManager.issuerGroup</a></td>
+			<td id="certificate--certManager--enabled"><a href="./values.yaml#L49">certificate.certManager.enabled</a></td>
+			<td>
+bool
+</td>
+			<td>
+				<div style="max-width: 300px;">
+<pre lang="json">
+true
+</pre>
+</div>
+			</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td id="certificate--certManager--issuerGroup"><a href="./values.yaml#L61">certificate.certManager.issuerGroup</a></td>
 			<td>
 string
 </td>
@@ -243,7 +224,7 @@ string
 			<td>Provide the group of Issuer that cert-manager should use, defaults to 'cert-manager.io' which is the default Issuer group.</td>
 		</tr>
 		<tr>
-			<td id="certificate--certManager--issuerKind"><a href="./values.yaml#L48">certificate.certManager.issuerKind</a></td>
+			<td id="certificate--certManager--issuerKind"><a href="./values.yaml#L58">certificate.certManager.issuerKind</a></td>
 			<td>
 string
 </td>
@@ -257,21 +238,21 @@ string
 			<td>Provide the kind of certificate to use, defaults to `Issuer` for security to scope the certificate to the Kasm namespace.</td>
 		</tr>
 		<tr>
-			<td id="certificate--certManager--issuerName"><a href="./values.yaml#L45">certificate.certManager.issuerName</a></td>
+			<td id="certificate--certManager--issuerName"><a href="./values.yaml#L55">certificate.certManager.issuerName</a></td>
 			<td>
 string
 </td>
 			<td>
 				<div style="max-width: 300px;">
 <pre lang="json">
-""
+"some-issuer"
 </pre>
 </div>
 			</td>
 			<td>Name of the Issuer/ClusterIssuer to use for certs NOTE: You will always need to create this yourself when `certManager.enabled` is true.</td>
 		</tr>
 		<tr>
-			<td id="certificate--secretName"><a href="./values.yaml#L32">certificate.secretName</a></td>
+			<td id="certificate--secretName"><a href="./values.yaml#L41">certificate.secretName</a></td>
 			<td>
 string
 </td>
@@ -282,10 +263,10 @@ string
 </pre>
 </div>
 			</td>
-			<td>Set the secret name where the certificate is stored This secret name will store a certificate created by `cert-manager` if you set `cert-manager.enabled` to true</td>
+			<td>Set the secret name where the certificate is stored This secret name will store a certificate created by `cert-manager` if you set `cert-manager.enabled` to true </td>
 		</tr>
 		<tr>
-			<td id="clusterDomain"><a href="./values.yaml#L161">clusterDomain</a></td>
+			<td id="clusterDomain"><a href="./values.yaml#L198">clusterDomain</a></td>
 			<td>
 string
 </td>
@@ -299,7 +280,105 @@ string
 			<td>Cluster-wide Kubernetes DNS domain name</td>
 		</tr>
 		<tr>
-			<td id="components--api"><a href="./values.yaml#L87">components.api</a></td>
+			<td id="components--api--annotations"><a href="./values.yaml#L107">components.api.annotations</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 300px;">
+<pre lang="json">
+{}
+</pre>
+</div>
+			</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td id="components--api--image--repository"><a href="./values.yaml#L105">components.api.image.repository</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 300px;">
+<pre lang="json">
+"kasmweb/api"
+</pre>
+</div>
+			</td>
+			<td>Configure the image repository where the image is stored. Use this to point to an private hosted container registry instead of our public DockerHub hosted one.</td>
+		</tr>
+		<tr>
+			<td id="components--api--image--tag"><a href="./values.yaml#L106">components.api.image.tag</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 300px;">
+<pre lang="json">
+"1.17.0"
+</pre>
+</div>
+			</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td id="components--api--labels"><a href="./values.yaml#L109">components.api.labels</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 300px;">
+<pre lang="json">
+{}
+</pre>
+</div>
+			</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td id="components--api--resources"><a href="./values.yaml#L108">components.api.resources</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 300px;">
+<pre lang="json">
+{}
+</pre>
+</div>
+			</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td id="components--guac--annotations"><a href="./values.yaml#L130">components.guac.annotations</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 300px;">
+<pre lang="json">
+{}
+</pre>
+</div>
+			</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td id="components--guac--enabled"><a href="./values.yaml#L129">components.guac.enabled</a></td>
+			<td>
+bool
+</td>
+			<td>
+				<div style="max-width: 300px;">
+<pre lang="json">
+true
+</pre>
+</div>
+			</td>
+			<td>Use this setting to enable/disable deployment of the Kasm Guacamole web RDP service https://kasmweb.com/docs/latest/guide/connection_proxies.html#guacamole-guac</td>
+		</tr>
+		<tr>
+			<td id="components--guac--image"><a href="./values.yaml#L124">components.guac.image</a></td>
 			<td>
 object
 </td>
@@ -307,21 +386,128 @@ object
 				<div style="max-width: 300px;">
 <pre lang="json">
 {
-  "annotations": {},
-  "image": {
-    "repository": "kasmweb/api",
-    "tag": "1.17.0"
-  },
-  "labels": {},
-  "resources": {}
+  "repository": "kasmweb/kasm-guac",
+  "tag": "1.17.0"
 }
 </pre>
 </div>
 			</td>
-			<td>Configuration settings for the Kasm API service</td>
+			<td>Configure the image repository where the image is stored. Use this to point to an private hosted container registry instead of our public DockerHub hosted one.</td>
 		</tr>
 		<tr>
-			<td id="components--guac"><a href="./values.yaml#L103">components.guac</a></td>
+			<td id="components--guac--labels"><a href="./values.yaml#L132">components.guac.labels</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 300px;">
+<pre lang="json">
+{}
+</pre>
+</div>
+			</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td id="components--guac--resources"><a href="./values.yaml#L131">components.guac.resources</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 300px;">
+<pre lang="json">
+{}
+</pre>
+</div>
+			</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td id="components--manager--annotations"><a href="./values.yaml#L117">components.manager.annotations</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 300px;">
+<pre lang="json">
+{}
+</pre>
+</div>
+			</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td id="components--manager--image--repository"><a href="./values.yaml#L115">components.manager.image.repository</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 300px;">
+<pre lang="json">
+"kasmweb/manager"
+</pre>
+</div>
+			</td>
+			<td>Configure the image repository where the image is stored. Use this to point to an private hosted container registry instead of our public DockerHub hosted one.</td>
+		</tr>
+		<tr>
+			<td id="components--manager--image--tag"><a href="./values.yaml#L116">components.manager.image.tag</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 300px;">
+<pre lang="json">
+"1.17.0"
+</pre>
+</div>
+			</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td id="components--manager--labels"><a href="./values.yaml#L119">components.manager.labels</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 300px;">
+<pre lang="json">
+{}
+</pre>
+</div>
+			</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td id="components--manager--resources"><a href="./values.yaml#L118">components.manager.resources</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 300px;">
+<pre lang="json">
+{}
+</pre>
+</div>
+			</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td id="components--proxy--annotations"><a href="./values.yaml#L97">components.proxy.annotations</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 300px;">
+<pre lang="json">
+{}
+</pre>
+</div>
+			</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td id="components--proxy--image"><a href="./values.yaml#L94">components.proxy.image</a></td>
 			<td>
 object
 </td>
@@ -329,22 +515,72 @@ object
 				<div style="max-width: 300px;">
 <pre lang="json">
 {
-  "annotations": {},
-  "enabled": true,
-  "image": {
-    "repository": "kasmweb/kasm-guac",
-    "tag": "1.17.0"
-  },
-  "labels": {},
-  "resources": {}
+  "repository": "kasmweb/proxy",
+  "tag": "1.17.0"
 }
 </pre>
 </div>
 			</td>
-			<td>Configuration settings for the Kasm Guac RDP service</td>
+			<td>Configure the image repository where the image is stored. Use this to point to an private hosted container registry instead of our public DockerHub hosted one.</td>
 		</tr>
 		<tr>
-			<td id="components--manager"><a href="./values.yaml#L95">components.manager</a></td>
+			<td id="components--proxy--labels"><a href="./values.yaml#L99">components.proxy.labels</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 300px;">
+<pre lang="json">
+{}
+</pre>
+</div>
+			</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td id="components--proxy--resources"><a href="./values.yaml#L98">components.proxy.resources</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 300px;">
+<pre lang="json">
+{}
+</pre>
+</div>
+			</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td id="components--rdpGateway--annotations"><a href="./values.yaml#L143">components.rdpGateway.annotations</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 300px;">
+<pre lang="json">
+{}
+</pre>
+</div>
+			</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td id="components--rdpGateway--enabled"><a href="./values.yaml#L142">components.rdpGateway.enabled</a></td>
+			<td>
+bool
+</td>
+			<td>
+				<div style="max-width: 300px;">
+<pre lang="json">
+true
+</pre>
+</div>
+			</td>
+			<td>Use this setting to enable/disable deployment of the Kasm RDP Gateway service https://kasmweb.com/docs/latest/guide/connection_proxies.html#rdp-gateway</td>
+		</tr>
+		<tr>
+			<td id="components--rdpGateway--image"><a href="./values.yaml#L137">components.rdpGateway.image</a></td>
 			<td>
 object
 </td>
@@ -352,21 +588,72 @@ object
 				<div style="max-width: 300px;">
 <pre lang="json">
 {
-  "annotations": {},
-  "image": {
-    "repository": "kasmweb/manager",
-    "tag": "1.17.0"
-  },
-  "labels": {},
-  "resources": {}
+  "repository": "kasmweb/rdp-gateway",
+  "tag": "1.17.0"
 }
 </pre>
 </div>
 			</td>
-			<td>Configuration settings for the Kasm Manager service</td>
+			<td>Configure the image repository where the image is stored. Use this to point to an private hosted container registry instead of our public DockerHub hosted one.</td>
 		</tr>
 		<tr>
-			<td id="components--proxy"><a href="./values.yaml#L79">components.proxy</a></td>
+			<td id="components--rdpGateway--labels"><a href="./values.yaml#L145">components.rdpGateway.labels</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 300px;">
+<pre lang="json">
+{}
+</pre>
+</div>
+			</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td id="components--rdpGateway--resources"><a href="./values.yaml#L144">components.rdpGateway.resources</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 300px;">
+<pre lang="json">
+{}
+</pre>
+</div>
+			</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td id="components--rdpHttpsGateway--annotations"><a href="./values.yaml#L157">components.rdpHttpsGateway.annotations</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 300px;">
+<pre lang="json">
+{}
+</pre>
+</div>
+			</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td id="components--rdpHttpsGateway--enabled"><a href="./values.yaml#L156">components.rdpHttpsGateway.enabled</a></td>
+			<td>
+bool
+</td>
+			<td>
+				<div style="max-width: 300px;">
+<pre lang="json">
+true
+</pre>
+</div>
+			</td>
+			<td>Use this setting to enable/disable deployment of the Kasm RDP HTTPS Gateway service. This service allows users to use native RDP clients via HTTPS connections rather than exposing 3389. https://kasmweb.com/docs/latest/guide/connection_proxies.html#rdp-https-gateway</td>
+		</tr>
+		<tr>
+			<td id="components--rdpHttpsGateway--image"><a href="./values.yaml#L150">components.rdpHttpsGateway.image</a></td>
 			<td>
 object
 </td>
@@ -374,21 +661,58 @@ object
 				<div style="max-width: 300px;">
 <pre lang="json">
 {
-  "annotations": {},
-  "image": {
-    "repository": "kasmweb/proxy",
-    "tag": "1.17.0"
-  },
-  "labels": {},
-  "resources": {}
+  "repository": "kasmweb/rdp-https-gateway",
+  "tag": "1.17.0"
 }
 </pre>
 </div>
 			</td>
-			<td>Configuration settings for the Kasm Nginx Proxy service</td>
+			<td>Configure the image repository where the image is stored. Use this to point to an private hosted container registry instead of our public DockerHub hosted one.</td>
 		</tr>
 		<tr>
-			<td id="components--rdpGateway"><a href="./values.yaml#L112">components.rdpGateway</a></td>
+			<td id="components--rdpHttpsGateway--labels"><a href="./values.yaml#L159">components.rdpHttpsGateway.labels</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 300px;">
+<pre lang="json">
+{}
+</pre>
+</div>
+			</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td id="components--rdpHttpsGateway--resources"><a href="./values.yaml#L158">components.rdpHttpsGateway.resources</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 300px;">
+<pre lang="json">
+{}
+</pre>
+</div>
+			</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td id="components--redis--annotations"><a href="./values.yaml#L180">components.redis.annotations</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 300px;">
+<pre lang="json">
+{}
+</pre>
+</div>
+			</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td id="components--redis--image"><a href="./values.yaml#L177">components.redis.image</a></td>
 			<td>
 object
 </td>
@@ -396,22 +720,72 @@ object
 				<div style="max-width: 300px;">
 <pre lang="json">
 {
-  "annotations": {},
-  "enabled": true,
-  "image": {
-    "repository": "kasmweb/rdp-gateway",
-    "tag": "1.17.0"
-  },
-  "labels": {},
-  "resources": {}
+  "repository": "redis",
+  "tag": "5-alpine"
 }
 </pre>
 </div>
 			</td>
-			<td>Configuration settings for the Kasm RDP Gateway service</td>
+			<td>Configure the image repository where the image is stored. Use this to point to an private hosted container registry instead of our public DockerHub hosted one.</td>
 		</tr>
 		<tr>
-			<td id="components--rdpHttpsGateway"><a href="./values.yaml#L121">components.rdpHttpsGateway</a></td>
+			<td id="components--redis--labels"><a href="./values.yaml#L182">components.redis.labels</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 300px;">
+<pre lang="json">
+{}
+</pre>
+</div>
+			</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td id="components--redis--resources"><a href="./values.yaml#L181">components.redis.resources</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 300px;">
+<pre lang="json">
+{}
+</pre>
+</div>
+			</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td id="components--share--annotations"><a href="./values.yaml#L170">components.share.annotations</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 300px;">
+<pre lang="json">
+{}
+</pre>
+</div>
+			</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td id="components--share--enabled"><a href="./values.yaml#L169">components.share.enabled</a></td>
+			<td>
+bool
+</td>
+			<td>
+				<div style="max-width: 300px;">
+<pre lang="json">
+true
+</pre>
+</div>
+			</td>
+			<td>Use this setting to enable/disable deployment of the Kasm Share and associated Redis services https://kasmweb.com/docs/latest/guide/session_sharing.html</td>
+		</tr>
+		<tr>
+			<td id="components--share--image"><a href="./values.yaml#L164">components.share.image</a></td>
 			<td>
 object
 </td>
@@ -419,22 +793,58 @@ object
 				<div style="max-width: 300px;">
 <pre lang="json">
 {
-  "annotations": {},
-  "enabled": true,
-  "image": {
-    "repository": "kasmweb/rdp-https-gateway",
-    "tag": "1.17.0"
-  },
-  "labels": {},
-  "resources": {}
+  "repository": "kasmweb/share",
+  "tag": "1.17.0"
 }
 </pre>
 </div>
 			</td>
-			<td>Configuration settings for the Kasm RDP HTTPS Gateway service</td>
+			<td>Configure the image repository where the image is stored. Use this to point to an private hosted container registry instead of our public DockerHub hosted one.</td>
 		</tr>
 		<tr>
-			<td id="components--redis"><a href="./values.yaml#L139">components.redis</a></td>
+			<td id="components--share--labels"><a href="./values.yaml#L172">components.share.labels</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 300px;">
+<pre lang="json">
+{}
+</pre>
+</div>
+			</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td id="components--share--resources"><a href="./values.yaml#L171">components.share.resources</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 300px;">
+<pre lang="json">
+{}
+</pre>
+</div>
+			</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td id="database--annotations"><a href="./values.yaml#L83">database.annotations</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 300px;">
+<pre lang="json">
+{}
+</pre>
+</div>
+			</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td id="database--image"><a href="./values.yaml#L72">database.image</a></td>
 			<td>
 object
 </td>
@@ -442,74 +852,16 @@ object
 				<div style="max-width: 300px;">
 <pre lang="json">
 {
-  "annotations": {},
-  "image": {
-    "repository": "redis",
-    "tag": "5-alpine"
-  },
-  "labels": {},
-  "resources": {}
+  "repository": "kasmweb/postgres",
+  "tag": "1.17.0"
 }
 </pre>
 </div>
 			</td>
-			<td>Configuration settings for the Kasm Share Redis backend service</td>
+			<td>Configure the image repository where the image is stored. Use this to point to an private hosted container registry instead of our public DockerHub hosted one.</td>
 		</tr>
 		<tr>
-			<td id="components--share"><a href="./values.yaml#L130">components.share</a></td>
-			<td>
-object
-</td>
-			<td>
-				<div style="max-width: 300px;">
-<pre lang="json">
-{
-  "annotations": {},
-  "enabled": true,
-  "image": {
-    "repository": "kasmweb/share",
-    "tag": "1.17.0"
-  },
-  "labels": {},
-  "resources": {}
-}
-</pre>
-</div>
-			</td>
-			<td>Configuration settings for the Kasm Share service</td>
-		</tr>
-		<tr>
-			<td id="database"><a href="./values.yaml#L55">database</a></td>
-			<td>
-object
-</td>
-			<td>
-				<div style="max-width: 300px;">
-<pre lang="json">
-{
-  "annotations": {},
-  "image": {
-    "repository": "kasmweb/postgres",
-    "tag": "1.17.0"
-  },
-  "initialize_db": true,
-  "labels": {},
-  "resources": {},
-  "storage": {
-    "retentionPolicy": {
-      "whenDeleted": "Delete",
-      "whenScaled": "Retain"
-    },
-    "storageClassName": ""
-  }
-}
-</pre>
-</div>
-			</td>
-			<td>Kasm DB settings and configuration options </td>
-		</tr>
-		<tr>
-			<td id="database--initialize_db"><a href="./values.yaml#L59">database.initialize_db</a></td>
+			<td id="database--initialize_db"><a href="./values.yaml#L69">database.initialize_db</a></td>
 			<td>
 bool
 </td>
@@ -523,7 +875,35 @@ true
 			<td>Setting `initialize_db` to true assumes you want a newly initialized Kasm deployment. Setting this to false is useful for deployment testing where you don't want to wait for DB initialization before using Kasm, or if running Kasm upgrades.</td>
 		</tr>
 		<tr>
-			<td id="database--storage--retentionPolicy"><a href="./values.yaml#L68">database.storage.retentionPolicy</a></td>
+			<td id="database--labels"><a href="./values.yaml#L85">database.labels</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 300px;">
+<pre lang="json">
+{}
+</pre>
+</div>
+			</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td id="database--resources"><a href="./values.yaml#L84">database.resources</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 300px;">
+<pre lang="json">
+{}
+</pre>
+</div>
+			</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td id="database--storage--retentionPolicy"><a href="./values.yaml#L80">database.storage.retentionPolicy</a></td>
 			<td>
 object
 </td>
@@ -540,7 +920,7 @@ object
 			<td>Configure how the DB volume should be retained or deleted throughout the DB's lifecycle</td>
 		</tr>
 		<tr>
-			<td id="database--storage--storageClassName"><a href="./values.yaml#L66">database.storage.storageClassName</a></td>
+			<td id="database--storage--storageClassName"><a href="./values.yaml#L78">database.storage.storageClassName</a></td>
 			<td>
 string
 </td>
@@ -568,7 +948,7 @@ string
 			<td>Define the estimated size of the Kasm deployment in expected session load.      small  = Up to 10-15 sessions      medium = Up to 25-30 sessions      large  = Up to 50+ sessions</td>
 		</tr>
 		<tr>
-			<td id="extraLabels--certSecret"><a href="./values.yaml#L203">extraLabels.certSecret</a></td>
+			<td id="extraLabels--certSecret"><a href="./values.yaml#L240">extraLabels.certSecret</a></td>
 			<td>
 object
 </td>
@@ -582,7 +962,7 @@ object
 			<td>Additional statefulSet labels to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraLabels--configMap"><a href="./values.yaml#L205">extraLabels.configMap</a></td>
+			<td id="extraLabels--configMap"><a href="./values.yaml#L242">extraLabels.configMap</a></td>
 			<td>
 object
 </td>
@@ -596,7 +976,7 @@ object
 			<td>Additional configMap labels to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraLabels--deployment"><a href="./values.yaml#L207">extraLabels.deployment</a></td>
+			<td id="extraLabels--deployment"><a href="./values.yaml#L244">extraLabels.deployment</a></td>
 			<td>
 object
 </td>
@@ -610,7 +990,7 @@ object
 			<td>Additional deployment labels to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraLabels--ingress"><a href="./values.yaml#L215">extraLabels.ingress</a></td>
+			<td id="extraLabels--ingress"><a href="./values.yaml#L252">extraLabels.ingress</a></td>
 			<td>
 object
 </td>
@@ -624,7 +1004,7 @@ object
 			<td>Additional ingress labels to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraLabels--job"><a href="./values.yaml#L217">extraLabels.job</a></td>
+			<td id="extraLabels--job"><a href="./values.yaml#L254">extraLabels.job</a></td>
 			<td>
 object
 </td>
@@ -638,7 +1018,7 @@ object
 			<td>Additional job labels to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraLabels--jobPod"><a href="./values.yaml#L219">extraLabels.jobPod</a></td>
+			<td id="extraLabels--jobPod"><a href="./values.yaml#L256">extraLabels.jobPod</a></td>
 			<td>
 object
 </td>
@@ -652,7 +1032,7 @@ object
 			<td>Additional jobPod labels to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraLabels--pod"><a href="./values.yaml#L209">extraLabels.pod</a></td>
+			<td id="extraLabels--pod"><a href="./values.yaml#L246">extraLabels.pod</a></td>
 			<td>
 object
 </td>
@@ -666,7 +1046,7 @@ object
 			<td>Additional pod labels to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraLabels--secret"><a href="./values.yaml#L211">extraLabels.secret</a></td>
+			<td id="extraLabels--secret"><a href="./values.yaml#L248">extraLabels.secret</a></td>
 			<td>
 object
 </td>
@@ -680,7 +1060,7 @@ object
 			<td>Additional secret labels to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraLabels--service"><a href="./values.yaml#L213">extraLabels.service</a></td>
+			<td id="extraLabels--service"><a href="./values.yaml#L250">extraLabels.service</a></td>
 			<td>
 object
 </td>
@@ -694,7 +1074,7 @@ object
 			<td>Additional service labels to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraLabels--statefulSet"><a href="./values.yaml#L221">extraLabels.statefulSet</a></td>
+			<td id="extraLabels--statefulSet"><a href="./values.yaml#L258">extraLabels.statefulSet</a></td>
 			<td>
 object
 </td>
@@ -708,7 +1088,7 @@ object
 			<td>Additional statefulSet labels to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="imageCredentials"><a href="./values.yaml#L158">imageCredentials</a></td>
+			<td id="imagePullCredentials"><a href="./values.yaml#L195">imagePullCredentials</a></td>
 			<td>
 object
 </td>
@@ -722,21 +1102,21 @@ object
 			<td>Create a dockerconfigjson secret as an image pull credential. Useful for offline or self-hosted repos, or dev builds.</td>
 		</tr>
 		<tr>
-			<td id="imagePullPolicy"><a href="./values.yaml#L152">imagePullPolicy</a></td>
+			<td id="imagePullPolicy"><a href="./values.yaml#L189">imagePullPolicy</a></td>
 			<td>
 string
 </td>
 			<td>
 				<div style="max-width: 300px;">
 <pre lang="json">
-"IfNotExists"
+"IfNotPresent"
 </pre>
 </div>
 			</td>
 			<td>Configure global image pull policy</td>
 		</tr>
 		<tr>
-			<td id="imagePullSecrets"><a href="./values.yaml#L155">imagePullSecrets</a></td>
+			<td id="imagePullSecrets"><a href="./values.yaml#L192">imagePullSecrets</a></td>
 			<td>
 string
 </td>
@@ -750,63 +1130,26 @@ string
 			<td>Use credentials for custom images or image repositories. Useful for offline or self-hosted repos, or dev builds.</td>
 		</tr>
 		<tr>
-			<td id="ingress--annotations"><a href="./values.yaml#L16">ingress.annotations</a></td>
+			<td id="ingress"><a href="./values.yaml#L14">ingress</a></td>
 			<td>
 object
 </td>
 			<td>
 				<div style="max-width: 300px;">
 <pre lang="json">
-{}
+{
+  "annotations": {},
+  "enabled": true,
+  "ingressClassName": "",
+  "labels": {}
+}
 </pre>
 </div>
 			</td>
-			<td></td>
+			<td>Configure Ingress for your Kasm deployment.  </td>
 		</tr>
 		<tr>
-			<td id="ingress--enabled"><a href="./values.yaml#L14">ingress.enabled</a></td>
-			<td>
-bool
-</td>
-			<td>
-				<div style="max-width: 300px;">
-<pre lang="json">
-true
-</pre>
-</div>
-			</td>
-			<td></td>
-		</tr>
-		<tr>
-			<td id="ingress--ingressClassName"><a href="./values.yaml#L15">ingress.ingressClassName</a></td>
-			<td>
-string
-</td>
-			<td>
-				<div style="max-width: 300px;">
-<pre lang="json">
-""
-</pre>
-</div>
-			</td>
-			<td></td>
-		</tr>
-		<tr>
-			<td id="ingress--labels"><a href="./values.yaml#L17">ingress.labels</a></td>
-			<td>
-object
-</td>
-			<td>
-				<div style="max-width: 300px;">
-<pre lang="json">
-{}
-</pre>
-</div>
-			</td>
-			<td></td>
-		</tr>
-		<tr>
-			<td id="labels"><a href="./values.yaml#L177">labels</a></td>
+			<td id="labels"><a href="./values.yaml#L214">labels</a></td>
 			<td>
 object
 </td>
@@ -820,7 +1163,7 @@ object
 			<td>Custom labels to apply to all deployed resources</td>
 		</tr>
 		<tr>
-			<td id="nodeSelector"><a href="./values.yaml#L165">nodeSelector</a></td>
+			<td id="nodeSelector"><a href="./values.yaml#L202">nodeSelector</a></td>
 			<td>
 object
 </td>
@@ -848,7 +1191,7 @@ string
 			<td>Set the access URL to be used for the Kasm deployment. This is the value that should be used when generating a certificate and that this chart uses when the `certificate.certManager.enabled` is set to true.</td>
 		</tr>
 		<tr>
-			<td id="restartPolicy"><a href="./values.yaml#L174">restartPolicy</a></td>
+			<td id="restartPolicy"><a href="./values.yaml#L211">restartPolicy</a></td>
 			<td>
 string
 </td>
@@ -862,32 +1205,21 @@ string
 			<td>Configure global Pod restart policy for Kasm resources</td>
 		</tr>
 		<tr>
-			<td id="service--annotations"><a href="./values.yaml#L22">service.annotations</a></td>
+			<td id="service"><a href="./values.yaml#L28">service</a></td>
 			<td>
 object
 </td>
 			<td>
 				<div style="max-width: 300px;">
 <pre lang="json">
-{}
+{
+  "annotations": {},
+  "type": "ClusterIP"
+}
 </pre>
 </div>
 			</td>
-			<td></td>
-		</tr>
-		<tr>
-			<td id="service--type"><a href="./values.yaml#L21">service.type</a></td>
-			<td>
-string
-</td>
-			<td>
-				<div style="max-width: 300px;">
-<pre lang="json">
-"ClusterIP"
-</pre>
-</div>
-			</td>
-			<td></td>
+			<td>Configure the external-facing service type to use. Allowed service types: ClusterIP or LoadBalancer  The service.annotations defined here only apply to the `proxy` service. If you wish to apply annotations to all services, use the annotations.service value at the bottom of this chart.  NOTE: If ingress.enabled set to `true` service.type value MUST be set to `ClusterIP`. </td>
 		</tr>
 	</tbody>
 </table>

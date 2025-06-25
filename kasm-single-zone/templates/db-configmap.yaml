@@ -1,16 +1,17 @@
 {{/*
 Kasm DB configMaps containing pg_hba.conf and postgresql.conf files
 */}}
+{{- $values := (include "kasm.constants" . | fromYaml) -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ $dbName }}-configmap
+  name: {{ $values.db.name }}-configmap
   namespace: {{ .Release.Namespace }}
   labels:
-    app.kubernetes.io/name: {{ $dbName }}-configmap
-    app.kubernetes.io/component: {{ $dbComponent }}
+    app.kubernetes.io/name: {{ $values.db.name }}-configmap
+    app.kubernetes.io/component: {{ $values.db.component }}
     {{- include "kasm.defaultLabels" . | indent 4 }}
-    {{- if or .Values.extraLabels.configMap .Value.labels }}
+    {{- if or .Values.extraLabels.configMap .Values.labels }}
       {{- with .Values.extraLabels.configMap }}{{- toYaml . | indent 4 }}{{- end }}
       {{- with .Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
     {{- end }}

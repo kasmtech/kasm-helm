@@ -1,18 +1,17 @@
 {{/*
 Deploy Kasm API Service .Values.database service definition
 */}}
-{{- $dbSvcName  := "kasm-db" -}}
-{{- $dbSvcPort := 5432 -}}
+{{- $values := (include "kasm.constants" . | fromYaml) -}}
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ $dbSvcName }}
-  namespace: {{ Release.Namespace }}
+  name: {{ $values.db.svc }}
+  namespace: {{ .Release.Namespace }}
   labels:
-    app.kubernetes.io/name: {{ $dbSvcName }}-svc
-    app.kubernetes.io/component: {{ $dbComponent }}
-    {{- include "kasm.defaultLabels" $values | indent 4 }}
-  {{- if or .Values.database.labels .Values.extraLabels.service .Value.labels }}
+    app.kubernetes.io/name: {{ $values.db.svc }}-svc
+    app.kubernetes.io/component: {{ $values.db.component }}
+    {{- include "kasm.defaultLabels" . | indent 4 }}
+  {{- if or .Values.database.labels .Values.extraLabels.service .Values.labels }}
     {{- with .Values.database.labels }}{{- toYaml . | indent 4 }}{{- end }}
     {{- with .Values.extraLabels.service }}{{- toYaml . | indent 4 }}{{- end }}
     {{- with .Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
@@ -22,8 +21,8 @@ metadata:
   {{- end }}
 spec:
   selector:
-    app.kubernetes.io/name: {{ $dbName }}
+    app.kubernetes.io/name: {{ $values.db.svc }}
   ports:
-    - name: {{ printf "%s-svc-%s" $dbSvcName $dbSvcPort }}
+    - name: {{ printf "%s-svc-%s" $values.db.svc ($values.db.port | toString) }}
       protocol: TCP
-      port: {{ $dbSvcPort }}
+      port: {{ $values.db.port }}

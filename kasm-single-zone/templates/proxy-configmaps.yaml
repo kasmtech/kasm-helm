@@ -1,17 +1,18 @@
 {{/*
 Deploy Kasm Proxy Service .Values.components.api service definition
 */}}
-{{- $serviceKeepalive  := 16 -}}
+{{- $values := (include "kasm.constants" . | fromYaml) -}}
+{{- $serviceKeepalive := 16 -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ $proxyName }}-base-configmap
+  name: {{ $values.proxy.name }}-base-configmap
   namespace: {{ .Release.Namespace }}
   labels:
-    app.kubernetes.io/name: {{ $proxyName }}-base-configmap
-    app.kubernetes.io/component: {{ $proxyComponent }}
-    {{- include "kasm.defaultLabels" $values | indent 4 }}
-    {{- if or .Values.extraLabels.configMap .Value.labels }}
+    app.kubernetes.io/name: {{ $values.proxy.name }}-base-configmap
+    app.kubernetes.io/component: {{ $values.proxy.component }}
+    {{- include "kasm.defaultLabels" . | indent 4 }}
+    {{- if or .Values.extraLabels.configMap .Values.labels }}
       {{- with .Values.extraLabels.configMap }}{{- toYaml . | indent 4 }}{{- end }}
       {{- with .Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
     {{- end }}
@@ -53,13 +54,13 @@ data:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ $proxyName }}-settings-configmap
+  name: {{ $values.proxy.name }}-settings-configmap
   namespace: {{ .Release.Namespace }}
   labels:
-    app.kubernetes.io/name: {{ $proxyName }}-settings-configmap
-    app.kubernetes.io/component: {{ $proxyComponent }}
-    {{- include "kasm.defaultLabels" $values | indent 4 }}
-    {{- if or .Values.extraLabels.configMap .Value.labels }}
+    app.kubernetes.io/name: {{ $values.proxy.name }}-settings-configmap
+    app.kubernetes.io/component: {{ $values.proxy.component }}
+    {{- include "kasm.defaultLabels" . | indent 4 }}
+    {{- if or .Values.extraLabels.configMap .Values.labels }}
       {{- with .Values.extraLabels.configMap }}{{- toYaml . | indent 4 }}{{- end }}
       {{- with .Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
     {{- end }}
@@ -142,7 +143,7 @@ data:
       ""      $request_port;
     }
     server {
-      listen {{ $proxyyHttpsPort }} ssl;
+      listen {{ $values.proxy.https }} ssl;
       server_name ubuntu-base;
 
       ssl_certificate /etc/ssl/certs/kasm_nginx.crt;
@@ -197,7 +198,7 @@ data:
     }
 
     server {
-      listen {{ $proxyHttpPort }};
+      listen {{ $values.proxy.http }};
       server_name ubuntu-base;
 
       include /etc/nginx/conf.d/services.d/*.conf;
@@ -216,14 +217,14 @@ data:
     }
   
   upstream_api.conf: |
-    upstream {{ $apiSvcName }} {
-      server {{ printf "%s:%s" $apiSvcName $apiSvcPort }};
+    upstream {{ $values.api.svc }} {
+      server {{ printf "%s:%s" $values.api.svc ($values.api.port | toString) }};
       keepalive {{ $serviceKeepalive }};
     }
   
   upstream_manager.conf: |
-    upstream {{ $managerSvcName }} {
-      server {{ printf "%s:%s" $managerSvcName $managerSvcPort }};
+    upstream {{ $values.manager.svc }} {
+      server {{ printf "%s:%s" $values.manager.svc ($values.manager.port | toString) }};
       keepalive {{ $serviceKeepalive }};
     }
 
@@ -236,29 +237,29 @@ Add nginx proxy service configs based on values
   {{- $ports := list -}}
   {{- if eq $value.enabled true }}
     {{- if eq $key "guac" }}
-      {{- $ports = $guacConnectPorts -}}
-      {{- $upstream = printf "%s-backend" $guacSvcName -}}
-      {{- $server = (kebabcase $guacSvcName) -}}
+      {{- $ports = $values.guac.ports -}}
+      {{- $upstream = printf "%s-backend" $values.guac.svc -}}
+      {{- $server = (kebabcase $values.guac.svc) -}}
     {{- else if eq $key "rdpGateway" }}
-      {{- $ports = (list $rdpGatewayPort) -}}
-      {{- $upstream = $rdpGatewayName -}}
-      {{- $server = (kebabcase $rdpGatewaySvcName) -}}
+      {{- $ports = (list $values.rdpGateway.port) -}}
+      {{- $upstream = $values.rdpGateway.svc -}}
+      {{- $server = (kebabcase $values.rdpGateway.svc) -}}
     {{- else if eq $key "rdpHttpsGateway" }}
-      {{- $ports = (list $rdpHttpsGatewayPort) -}}
-      {{- $upstream = $rdpHttpsGatewayName -}}
-      {{- $server = (kebabcase $rdpHttpsGatewaySvcName) -}}
+      {{- $ports = (list $values.rdpHttpsGateway.port) -}}
+      {{- $upstream = $values.rdpHttpsGateway.svc -}}
+      {{- $server = (kebabcase $values.rdpHttpsGateway.svc) -}}
     {{- else if eq $key "share" }}
-      {{- $ports = (list $sharePort) -}}
-      {{- $upstream = $shareName -}}
-      {{- $server = (kebabcase $shareSvcName) -}}
+      {{- $ports = (list $values.share.port) -}}
+      {{- $upstream = $values.share.svc -}}
+      {{- $server = (kebabcase $values.share.svc) -}}
     {{- end -}}
   {{- end -}}
   {{- if $ports }}
     {{- printf "\n  upstream_%s.conf: |" (snakecase $key) -}}
     {{- printf "\n    upstream %s {\n" $upstream -}}
-    {{- printf "      keepalive %.0f;\n" $keepalive -}}
+    {{- printf "      keepalive %s;\n" ($serviceKeepalive | toString) -}}
     {{- range $port := $ports }}
-      {{- printf "      %s %s:%s;\n" "server" $server $port -}}
+      {{- printf "      %s %s:%s;\n" "server" $server ($port | toString) -}}
     {{- end }}
     {{- printf "    }\n" -}}
   {{- end }}
@@ -268,13 +269,13 @@ Add nginx proxy service configs based on values
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ $proxyName }}-services-configmap
+  name: {{ $values.proxy.name }}-services-configmap
   namespace: {{ .Release.Namespace }}
   labels:
-    app.kubernetes.io/name: {{ $proxyName }}-svc
-    app.kubernetes.io/component: {{ $proxyComponent }}
-    {{- include "kasm.defaultLabels" $values | indent 4 }}
-    {{- if or .Values.extraLabels.configMap .Value.labels }}
+    app.kubernetes.io/name: {{ $values.proxy.name }}-svc
+    app.kubernetes.io/component: {{ $values.proxy.component }}
+    {{- include "kasm.defaultLabels" . | indent 4 }}
+    {{- if or .Values.extraLabels.configMap .Values.labels }}
       {{- with .Values.extraLabels.configMap }}{{- toYaml . | indent 4 }}{{- end }}
       {{- with .Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
     {{- end }}
@@ -304,7 +305,7 @@ data:
   
       add_header Strict-Transport-Security "max-age=63072000" always;
 
-      proxy_pass	{{ printf "http://%s" $apiSvcName }};
+      proxy_pass	{{ printf "http://%s" $values.api.svc }};
     }
 
   client_api.conf: |
@@ -321,7 +322,7 @@ data:
 
       add_header Strict-Transport-Security "max-age=63072000" always;
 
-      proxy_pass	{{ printf "http://%s" $apiSvcName }};
+      proxy_pass	{{ printf "http://%s" $values.api.svc }};
     }
 
   manager_api.conf: |
@@ -334,7 +335,7 @@ data:
       proxy_set_header	X-Forwarded-For $proxy_add_x_forwarded_for;
       proxy_set_header	X-Forwarded-Proto $scheme;
 
-      proxy_pass	{{ printf "http://%s" $managerSvcName }}/;
+      proxy_pass	{{ printf "http://%s" $values.manager.svc }}/;
     }
 
   subscription_api.conf: |
@@ -357,13 +358,13 @@ data:
       proxy_set_header	X-Forwarded-Proto $scheme;
 
       add_header          Strict-Transport-Security "max-age=63072000" always;
-      proxy_pass	{{ printf "http://%s" $apiSvcName }};
+      proxy_pass	{{ printf "http://%s" $values.api.svc }};
     }
 
   upstream_proxy.conf: |
     location /kasm_connect {
       internal;
-      proxy_pass {{ printf "http://%s/api/kasm_connect/" $apiSvcName }};
+      proxy_pass {{ printf "http://%s/api/kasm_connect/" $values.api.svc }};
       proxy_pass_request_body off;
       proxy_set_header        Content-Length '';
       proxy_set_header        X-Original-URI $request_uri;
@@ -442,7 +443,7 @@ data:
       proxy_set_header        Authorization "Bearer ${connect_auth}";
       proxy_set_header        Cookie "username=$cookie_username; session_token=$cookie_session_token; kasm_client_key=$cookie_kasm_client_key";
 
-      proxy_pass              {{ printf "http://127.0.0.1:%s/guac_connect/$service$new_path" $proxyHttpPort }};
+      proxy_pass              {{ printf "http://127.0.0.1:%s/guac_connect/$service$new_path" ($values.proxy.http | toString) }};
       proxy_read_timeout      1800s;
       proxy_send_timeout      1800s;
       proxy_connect_timeout   1800s;
@@ -470,7 +471,7 @@ data:
       proxy_set_header        X-Kasm-ID "${kasm_id}";
       proxy_set_header        Cookie "username=$cookie_username; session_token=$cookie_session_token; kasm_client_key=$cookie_kasm_client_key";
 
-      proxy_pass              {{ printf "http://%s-backend/vnc.htmlguaclite$is_args$args" $guacSvcName }};
+      proxy_pass              {{ printf "http://%s-backend/vnc.htmlguaclite$is_args$args" ($values.guac.svc | toString) }};
       proxy_read_timeout      1800s;
       proxy_send_timeout      1800s;
       proxy_connect_timeout   1800s;
@@ -530,7 +531,7 @@ data:
       proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
       proxy_set_header        X-Forwarded-Proto $scheme;
 
-      proxy_pass              {{ printf "http://%s:%s/" $guacSvcName $guacSvcPort }};
+      proxy_pass              {{ printf "http://%s:%s/" $values.guac.svc ($values.guac.port | toString) }};
       proxy_read_timeout      1800s;
       proxy_send_timeout      1800s;
       proxy_connect_timeout   1800s;
@@ -551,7 +552,7 @@ data:
       proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
       proxy_set_header        X-Forwarded-Proto $scheme;
 
-      proxy_pass              {{ printf "http://%s-backend/vnc.htmlguaclite$is_args$args" $guacSvcName }};
+      proxy_pass              {{ printf "http://%s-backend/vnc.htmlguaclite$is_args$args" $values.guac.svc }};
       proxy_read_timeout      1800s;
       proxy_send_timeout      1800s;
       proxy_connect_timeout   1800s;
@@ -566,7 +567,7 @@ data:
 
     location /vm_connect {
       internal;
-      proxy_pass {{ printf "http://%s:%s/vm_connect" $guacSvcName $guacSvcPort }};
+      proxy_pass {{ printf "http://%s:%s/vm_connect" $values.guac.svc ($values.guac.port | toString) }};
       proxy_pass_request_body off;
       proxy_set_header        Content-Length '';
       proxy_set_header        X-Original-URI $request_uri;
@@ -663,15 +664,15 @@ data:
     }
 
     location /guac_login {
-      proxy_pass {{ printf "http://%s:%s/guac_login" $guacSvcName $guacSvcPort }};
+      proxy_pass {{ printf "http://%s:%s/guac_login" $values.guac.svc ($values.guac.port | toString) }};
     }
 
     location /guac/__healthcheck {
-      proxy_pass {{ printf "http://%s:%s/__healthcheck" $guacSvcName $guacSvcPort }};
+      proxy_pass {{ printf "http://%s:%s/__healthcheck" $values.guac.svc ($values.guac.port | toString) }};
     }
 
     location /guac/vm_disconnect {
-      proxy_pass {{ printf "http://%s:%s/vm_disconnect" $guacSvcName $guacSvcPort }};
+      proxy_pass {{ printf "http://%s:%s/vm_disconnect" $values.guac.svc ($values.guac.port | toString) }};
     }
 {{- end }}
 {{- if eq .Values.components.rdpGateway.enabled true }}
@@ -685,7 +686,7 @@ data:
       proxy_set_header	X-Forwarded-For $proxy_add_x_forwarded_for;
       proxy_set_header	X-Forwarded-Proto $scheme;
 
-      proxy_pass	{{ printf "http://%s" $rdpGatewaySvcName }}/;
+      proxy_pass	{{ printf "http://%s" $values.rdpGateway.svc }}/;
     }
 {{- end }}
 {{- if eq .Values.components.share.enabled true }}
@@ -701,10 +702,10 @@ data:
 
       add_header  Strict-Transport-Security "max-age=63072000" always;
 
-      proxy_pass	{{ printf "http://%s" $shareName }};
+      proxy_pass	{{ printf "http://%s" $values.share.svc }};
     }
 {{- end }}
-{{- if eq .Values.rdpHttpsGateway.enabled true }}
+{{- if eq .Values.components.rdpHttpsGateway.enabled true }}
   rdp_https_gateway.conf: |
     location /rdp-https-gateway/ {
                 proxy_http_version      1.1;
@@ -715,7 +716,7 @@ data:
                 proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
                 proxy_set_header        X-Forwarded-Proto $scheme;
 
-                proxy_pass      {{ printf  "https://%s" $rdpHttpsGatewaySvcName }};
+                proxy_pass      {{ printf  "https://%s" $values.rdpHttpsGateway.svc }};
     }
 
     location /remoteDesktopGateway {
@@ -724,7 +725,7 @@ data:
       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
       proxy_set_header Host $host;
       proxy_set_header Upgrade $http_upgrade;
-      proxy_pass {{ printf  "https://%s" $rdpHttpsGatewaySvcName }};
+      proxy_pass {{ printf  "https://%s" $values.rdpHttpsGateway.svc }};
     }
 
     # Route for MS RDP Gateway
@@ -733,7 +734,7 @@ data:
       proxy_buffer_size 128k;
       proxy_busy_buffers_size 256k;
 
-      proxy_pass {{ printf  "https://%s" $rdpHttpsGatewaySvcName }};
+      proxy_pass {{ printf  "https://%s" $values.rdpHttpsGateway.svc }};
       proxy_set_header Host $http_host;
       proxy_set_header X-Real-IP $remote_addr;
       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

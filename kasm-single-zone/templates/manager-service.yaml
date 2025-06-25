@@ -1,18 +1,17 @@
 {{/*
 Deploy the Manager .Values.components.manager
 */}}
-{{- $managerSvcName := "kasm-manager" -}}
-{{- $managerSvcPort := 8181 -}}
+{{- $values := (include "kasm.constants" . | fromYaml) -}}
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ $managerSvcName }}
-  namespace: {{ Release.Namespace }}
+  name: {{ $values.manager.svc }}
+  namespace: {{ .Release.Namespace }}
   labels:
-    app.kubernetes.io/name: {{ $managerSvcName }}-svc
-    app.kubernetes.io/component: {{ $managerComponent }}
-    {{- include "kasm.defaultLabels" $values | indent 4 }}
-  {{- if or .Values.components.manager.labels .Values.extraLabels.service .Value.labels }}
+    app.kubernetes.io/name: {{ $values.manager.svc }}-svc
+    app.kubernetes.io/component: {{ $values.manager.component }}
+    {{- include "kasm.defaultLabels" . | indent 4 }}
+  {{- if or .Values.components.manager.labels .Values.extraLabels.service .Values.labels }}
     {{- with .Values.components.manager.labels }}{{- toYaml . | indent 4 }}{{- end }}
     {{- with .Values.extraLabels.service }}{{- toYaml . | indent 4 }}{{- end }}
     {{- with .Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
@@ -22,8 +21,8 @@ metadata:
   {{- end }}
 spec:
   selector:
-    app.kubernetes.io/name: {{ $managerName }}
+    app.kubernetes.io/name: {{ $values.manager.name }}
   ports:
-    - name: {{ printf "%s-svc-%s" $managerSvcName $managerSvcPort }}
+    - name: {{ printf "%s-svc-%s" $values.manager.svc ($values.manager.port | toString) }}
       protocol: TCP
-      port: {{ $managerSvcPort }}
+      port: {{ $values.manager.port }}

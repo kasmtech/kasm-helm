@@ -1,24 +1,25 @@
 {{/*
 Deploy the RDP Gateway Configmap if .Values.components.rdpGateway.enabled set to true
 */}}
+{{- $values := (include "kasm.constants" . | fromYaml) -}}
 {{- if eq .Values.components.rdpGateway.enabled true }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ $rdpGatewayName }}-configmap
-  namespace: {{ $.Release.Namespace }}
+  name: {{ $values.rdpGateway.name }}-configmap
+  namespace: {{ .Release.Namespace }}
   labels:
-    app.kubernetes.io/name: {{ $rdpGatewaySvcName }}-svc
-    app.kubernetes.io/component: {{ $rdpGatewayComponent }}
-    {{- include "kasm.defaultLabels" $values | indent 4 }}
-    {{- if or $.Values.extraLabels.configMap $.Value.labels }}
-      {{- with $.Values.extraLabels.configMap }}{{- toYaml . | indent 4 }}{{- end }}
-      {{- with $.Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
+    app.kubernetes.io/name: {{ $values.rdpGateway.name }}-svc
+    app.kubernetes.io/component: {{ $values.rdpGateway.component }}
+    {{- include "kasm.defaultLabels" . | indent 4 }}
+    {{- if or .Values.extraLabels.configMap .Values.labels }}
+      {{- with .Values.extraLabels.configMap }}{{- toYaml . | indent 4 }}{{- end }}
+      {{- with .Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
     {{- end }}
   annotations:
     helm.sh/hook: pre-install,pre-upgrade,post-delete
-    {{- if $.Values.annotations.configMap }}
-      {{- with $.Values.annotations.configMap }}{{- toYaml . | indent 4 }}{{- end }}
+    {{- if .Values.annotations.configMap }}
+      {{- with .Values.annotations.configMap }}{{- toYaml . | indent 4 }}{{- end }}
     {{- end }}
 data:
   passthrough.app.config.yaml: |

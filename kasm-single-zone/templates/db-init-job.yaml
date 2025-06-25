@@ -1,3 +1,7 @@
+{{/*
+Initialize the DB
+*/}}
+{{- $values := (include "kasm.constants" . | fromYaml) -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -21,23 +25,23 @@ spec:
       restartPolicy: OnFailure
       initContainers:
         - name: db-is-ready
-          image: {{ $apiImage }}
+          image: {{ $values.api.image }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           command:
             - "/bin/bash"
             - "-c"
           args:
             - |
-              while ! pg_isready -h db -p 5432 -t 10; do echo "Waiting for DB..."; sleep 5; done
+              while ! pg_isready -h db -p {{ $values.db.port }} -t 10; do echo "Waiting for DB..."; sleep 5; done
       containers:
         - name: {{ .Release.Name }}-db-init-container
-          image: {{ $apiImage }}
+          image: {{ $values.api.image }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           env:
             - name: POST_DB_INIT_EXIT
               value: "true"
             - name: DB_AUTO_INITIALIZE
-              value: {{ .Values.database.initialize_db }}
+              value: {{ .Values.database.initialize_db | quote }}
             - name: DEFAULT_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:

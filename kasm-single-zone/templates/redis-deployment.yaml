@@ -1,21 +1,19 @@
 {{/*
 Deploy the Redis if .Values.kasmApp.servicesToDeploy.share.deploy set to true
 */}}
-{{- $redisComponent := "redis" -}}
-{{- $redisName := (printf "%s-%s" .Release.Name $redisComponent) -}}
-{{- $redisImage := (printf "%s:%s" .Values.components.redis.image.repository .Values.components.redis.image.tag) -}}
-{{- $redisReplicas := include "replicas.preset" (dict "node" $redisComponent "size" .Values.deploymentSize) -}}
-{{- if and (.Values.kasmApp.servicesToDeploy.kasmRedis.deploy) (.Values.kasmApp.servicesToDeploy.kasmShare.deploy) }}
+{{- $values := (include "kasm.constants" . | fromYaml) -}}
+{{- $redisReplicas := include "replicas.preset" (dict "node" $values.redis.component "size" .Values.deploymentSize) -}}
+{{- if eq .Values.components.share.enabled true }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ $redisName }}-deployment
+  name: {{ $values.redis.name }}-deployment
   namespace: {{ $.Release.Namespace }}
   labels:
-    app.kubernetes.io/name: {{ $redisName }}
-    app.kubernetes.io/component: {{ $redisComponent }}
+    app.kubernetes.io/name: {{ $values.redis.name }}
+    app.kubernetes.io/component: {{ $values.redis.component }}
     {{- include "kasm.defaultLabels" . | indent 4 }}
-  {{- if or $.Values.components.redis.labels $.Values.extraLabels.deployment $.Value.labels }}
+  {{- if or $.Values.components.redis.labels $.Values.extraLabels.deployment $.Values.labels }}
     {{- with $.Values.components.redis.labels }}{{- toYaml . | indent 4 }}{{- end }}
     {{- with $.Values.extraLabels.deployment }}{{- toYaml . | indent 4 }}{{- end }}
     {{- with $.Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
@@ -29,16 +27,16 @@ spec:
   replicas: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: {{ $redisName }}
+      app.kubernetes.io/name: {{ $values.redis.name }}
   strategy:
     type: Recreate
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: {{ $redisName }}
-        app.kubernetes.io/component: {{ $redisComponent }}
+        app.kubernetes.io/name: {{ $values.redis.name }}
+        app.kubernetes.io/component: {{ $values.redis.component }}
         {{- include "kasm.defaultLabels" . | indent 8 }}
-      {{- if or $.Values.components.redis.labels $.Values.extraLabels.pod $.Value.labels }}
+      {{- if or $.Values.components.redis.labels $.Values.extraLabels.pod $.Values.labels }}
         {{- with $.Values.components.redis.labels }}{{- toYaml . | indent 8 }}{{- end }}
         {{- with $.Values.extraLabels.pod }}{{- toYaml . | indent 8 }}{{- end }}
         {{- with $.Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
@@ -58,8 +56,8 @@ spec:
         {{- include "kasm.podSecurity" . | indent 6 }}
       {{- end }}
       containers:
-        - name: {{ $redisName }}-container
-          image: {{ $redisImage }}
+        - name: {{ $values.redis.name }}-container
+          image: {{ $values.redis.image }}
           imagePullPolicy: {{ $.Values.imagePullPolicy }}
           env:
             - name: REDIS_PASSWORD
@@ -70,21 +68,21 @@ spec:
           {{- if $.Values.components.redis.resources }}
           resources: {{- toYaml $.Values.components.redis.resources | nindent 12 }}
           {{- else }}
-          resources: {{- include "resources.preset" (dict "node" "redis" "size" $.Values.deploymentSize) | nindent 12 }}
+          resources: {{- include "resources.preset" (dict "node" $values.redis.component "size" $.Values.deploymentSize) | nindent 12 }}
           {{- end }}
           command:
             - redis-server
           args: 
             - --requirepass $(REDIS_PASSWORD)
           ports:
-            - name: {{ $redisName }}-pt
-              containerPort: {{ $redisSvcPort }}
+            - name: {{ $values.redis.name }}-pt
+              containerPort: {{ $values.redis.port }}
               protocol: TCP
           {{- if $.Values.addHealthChecks }}
           livenessProbe:
-            {{- include "health.tcp" (dict "portName" (printf "%s-pt" $redisName) ) | indent 12 }}
+            {{- include "health.tcp" (dict "portName" (printf "%s-pt" $values.redis.name) ) | indent 12 }}
           readinessProbe:
-            {{- include "health.command" (dict "command" (printf "redis-cli -p %s -a $REDIS_PASSWORD ping 2>/dev/null | grep -q PONG" $redisSvcPort)) | indent 12 }}
+            {{- include "health.command" (dict "command" (printf "redis-cli -p %s -a $REDIS_PASSWORD ping 2>/dev/null | grep -q PONG" $values.redis.port)) | indent 12 }}
           {{- end }}
           {{- if $.Values.applySecurity }}
             {{- include "kasm.containerSecurity" . | indent 10 }}

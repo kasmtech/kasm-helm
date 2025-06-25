@@ -1,16 +1,17 @@
 {{/*
-Deploy the Certificates with cert-manager
+Deploy the Certificates with certManager
 */}}
-{{- if eq .Values.certificate.cert-manager.enabled true }}
+{{- $values := (include "kasm.constants" . | fromYaml) -}}
+{{- if eq .Values.certificate.certManager.enabled true }}
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: {{ .Release.Name }}-cert
+  name: {{ $values.proxy.name }}-cert
   namespace: {{ .Release.Namespace }}
   labels:
-    app.kubernetes.io/name: {{ .Release.Name }}-cert
+    app.kubernetes.io/name: {{ $values.proxy.name }}-cert
     app.kubernetes.io/component: certificate
-    {{- include "kasm.defaultLabels" $values | indent 4 }}
+    {{- include "kasm.defaultLabels" . | indent 4 }}
 spec:
   {{- if or .Values.annotations.certSecret .Values.extraLabels.certSecret }}
   secretTemplate:
@@ -22,14 +23,14 @@ spec:
   {{- end }}
   {{- end }}
   secretName: {{ .Values.certificate.secretName }}
-  commonName: {{ quote .Values.publicAddr }}
+  commonName: {{ .Values.publicAddr | quote }}
   dnsNames:
-    - {{ quote .Values.publicAddr }}
-    {{- if .Values.certificate.cert-manager.addWildCard }}
-    - {{ printf "*.%s" .Values.publicAddr }}
+    - {{ .Values.publicAddr | quote }}
+    {{- if .Values.certificate.certManager.addWildCard }}
+    - {{ printf "*.%s" .Values.publicAddr | quote }}
     {{- end }}
   issuerRef:
-    name: {{ .Values.certificate.cert-manager.issuerName }}
-    kind: {{ .Values.certificate.cert-manager.issuerKind | default "Issuer" }}
-    group: {{ .Values.certificate.cert-manager.issuerGroup | default "cert-manager.io" }}
+    name: {{ .Values.certificate.certManager.issuerName }}
+    kind: {{ .Values.certificate.certManager.issuerKind | default "Issuer" }}
+    group: {{ .Values.certificate.certManager.issuerGroup | default "cert-manager.io" }}
 {{- end }}

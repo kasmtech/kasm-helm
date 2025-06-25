@@ -1,21 +1,19 @@
 {{/*
 Deploy the Share if .Values.components.kasmShare.deploy set to true
 */}}
-{{- $shareComponent := "share" -}}
-{{- $shareName := (printf "%s-%s" .Release.Name $shareComponent) -}}
-{{- $shareImage := (printf "%s:%s" .Values.components.share.image.repository .Values.components.share.image.tag) -}}
-{{- $shareReplicas := include "replicas.preset" (dict "node" $shareComponent "size" .Values.deploymentSize) -}}
-{{- if eq .Values.components.kasmShare.enabled true }}
+{{- $values := (include "kasm.constants" . | fromYaml) -}}
+{{- $shareReplicas := include "replicas.preset" (dict "node" $values.share.component "size" .Values.deploymentSize) -}}
+{{- if eq .Values.components.share.enabled true }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ $shareName }}-deployment
+  name: {{ $values.share.name }}-deployment
   namespace: {{ $.Release.Namespace }}
   labels:
-    app.kubernetes.io/name: {{ $shareName }}
-    app.kubernetes.io/component: {{ $shareComponent }}
+    app.kubernetes.io/name: {{ $values.share.name }}
+    app.kubernetes.io/component: {{ $values.share.component }}
     {{- include "kasm.defaultLabels" . | indent 4 }}
-  {{- if or $.Values.components.share.labels $.Values.extraLabels.deployment $.Value.labels }}
+  {{- if or $.Values.components.share.labels $.Values.extraLabels.deployment $.Values.labels }}
     {{- with $.Values.components.share.labels }}{{- toYaml . | indent 4 }}{{- end }}
     {{- with $.Values.extraLabels.deployment }}{{- toYaml . | indent 4 }}{{- end }}
     {{- with $.Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
@@ -34,14 +32,14 @@ spec:
       maxSurge: {{ add1 $shareReplicas }}
   selector:
     matchLabels:
-      app.kubernetes.io/name: {{ $shareName }}
+      app.kubernetes.io/name: {{ $values.share.name }}
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: {{ $shareName }}
-        app.kubernetes.io/component: {{ $shareComponent }}
+        app.kubernetes.io/name: {{ $values.share.name }}
+        app.kubernetes.io/component: {{ $values.share.component }}
         {{- include "kasm.defaultLabels" . | indent 8 }}
-      {{- if or $.Values.components.share.labels $.Values.extraLabels.pod $.Value.labels }}
+      {{- if or $.Values.components.share.labels $.Values.extraLabels.pod $.Values.labels }}
         {{- with $.Values.components.share.labels }}{{- toYaml . | indent 8 }}{{- end }}
         {{- with $.Values.extraLabels.pod }}{{- toYaml . | indent 8 }}{{- end }}
         {{- with $.Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
@@ -61,8 +59,8 @@ spec:
         {{- include "kasm.podSecurity" . | indent 6 }}
       {{- end }}
       initContainers:
-        - name: {{ $redisName }}-is-ready
-          image: {{ $redisImage }}
+        - name: {{ $values.redis.name }}-is-ready
+          image: {{ $values.redis.image }}
           imagePullPolicy: {{ $.Values.imagePullPolicy }}
           env:
             - name: REDIS_PASSWORD
@@ -71,24 +69,24 @@ spec:
                   name: {{ $.Release.Name }}-secrets
                   key: redis-password
             - name: REDIS_HOST
-              value: {{ $redisSvcName }}
+              value: {{ $values.redis.svc }}
           command:
             - /bin/sh
             - -c
           args:
             - |
-              while ! redis-cli -h $(REDIS_HOST) -p 6379 -a $(REDIS_PASSWORD) ping 2>/dev/null | grep -q PONG; do echo "Waiting for Redis to start..."; sleep 5; done
+              while ! redis-cli -h $(REDIS_HOST) -p {{ $values.redis.port }} -a $(REDIS_PASSWORD) ping 2>/dev/null | grep -q PONG; do echo "Waiting for Redis to start..."; sleep 5; done
               echo "Redis online. Connecting!"
           {{- if $.Values.applySecurity }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}
-        {{- include "kasm.initContainer" (dict "serviceName" $apiSvcName "servicePort" $apiSvcPort "path" "/api/__healthcheck" "schema" "http" "image" $apiImage) | nindent 8 }}
+        {{- include "kasm.initContainer" (dict "serviceName" $values.api.svc "servicePort" $values.api.port "path" "/api/__healthcheck" "schema" "http" "image" $values.api.image) | nindent 8 }}
         {{- if $.Values.applySecurity }}
           {{- include "kasm.containerSecurity" . | indent 10 }}
         {{- end }}
       containers:
-        - name: {{ $shareName }}-container
-          image: {{ $shareImage }}
+        - name: {{ $values.share.name }}-container
+          image: {{ $values.share.image }}
           imagePullPolicy: {{ $.Values.imagePullPolicy }}
           env:
             - name: REDIS_PASSWORD
@@ -97,32 +95,32 @@ spec:
                   name: {{ $.Release.Name }}-secrets
                   key: redis-password
             - name: REDIS_HOST
-              value: kasm-redis
+              value: {{ $values.redis.svc }}
             - name: SHARE_ID
               value: auto
             - name: SERVER_HOSTNAME
-              value: {{ $shareSvcName }}
+              value: {{ $values.share.svc }}
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ $.Release.Name }}-secrets
                   key: db-password
           ports:
-            - name: {{ $shareName }}-pt
-              containerPort: {{ $shareSvcPort }}
+            - name: {{ $values.share.name }}-pt
+              containerPort: {{ $values.share.port }}
               protocol: TCP
           {{- if $.Values.addHealthChecks }}
           livenessProbe:
-            {{- include "health.tcp" (dict "portName" (printf "%s-pt" $shareName) ) | indent 12 }}
+            {{- include "health.tcp" (dict "portName" (printf "%s-pt" $values.share.name) ) | indent 12 }}
           {{- end }}
           {{- if $.Values.addHealthChecks }}
           readinessProbe:
-            {{- include "health.tcp" (dict "portName" (printf "%s-pt" $shareName) ) | indent 12 }}
+            {{- include "health.tcp" (dict "portName" (printf "%s-pt" $values.share.name) ) | indent 12 }}
           {{- end }}
-          {{- if $.Values.components.kasmShare.resources }}
-          resources: {{- toYaml $.Values.components.kasmShare.resources | nindent 12 }}
+          {{- if $.Values.components.share.resources }}
+          resources: {{- toYaml $.Values.components.share.resources | nindent 12 }}
           {{- else }}
-          resources: {{- include "resources.preset" (dict "node" "share" "size" $.Values.deploymentSize) | nindent 12 }}
+          resources: {{- include "resources.preset" (dict "node" $values.share.component "size" $.Values.deploymentSize) | nindent 12 }}
           {{- end }}
           {{- if $.Values.applySecurity }}
             {{- include "kasm.containerSecurity" . | indent 10 }}

@@ -1,59 +1,60 @@
 {{/*
 Deploy the Kasm ingress if .Values.ingress.enabled set to true
 */}}
+{{- $values := (include "kasm.constants" . | fromYaml) -}}
 {{- if eq .Values.ingress.enabled true }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ $.Release.Name }}-ingress
-  namespace: {{ $.Release.Namespace }}
+  name: {{ .Release.Name }}-ingress
+  namespace: {{ .Release.Namespace }}
   labels:
-    app.kubernetes.io/name: {{ $.Release.Name }}-ingress
+    app.kubernetes.io/name: {{ .Release.Name }}-ingress
     {{- include "kasm.defaultLabels" . | indent 4 }}
-  {{- if or $.Values.ingress.labels $.Values.extraLabels.ingress $.Value.labels }}
-    {{- with $.Values.ingress.labels }}{{- toYaml . | indent 4 }}{{- end }}
-    {{- with $.Values.extraLabels.ingress }}{{- toYaml . | indent 4 }}{{- end }}
-    {{- with $.Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
+  {{- if or .Values.ingress.labels .Values.extraLabels.ingress .Values.labels }}
+    {{- with .Values.ingress.labels }}{{- toYaml . | indent 4 }}{{- end }}
+    {{- with .Values.extraLabels.ingress }}{{- toYaml . | indent 4 }}{{- end }}
+    {{- with .Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
   {{- end }}
-  {{- with $.Values.annotations.ingress }}
+  {{- with .Values.annotations.ingress }}
   annotations: {{ toYaml . | indent 4 }}
   {{- end }}
 spec:
-{{- if $.Values.ingress.ingressClassName }}
-  ingressClassName: {{ $.Values.ingress.ingressClassName }}
+{{- if .Values.ingress.ingressClassName }}
+  ingressClassName: {{ .Values.ingress.ingressClassName }}
 {{- end }}
   tls:
-  - hosts:
-      - {{ $.Values.publicAddr | quote }}
-      {{- if eq $.Values.cert-manager.addWildCard true }}
-      - {{ printf "*.%s" $.Values.publicAddr | quote }}
-      {{- end }}
-    secretName: {{ $.Values.certificate.secretName }}
+    - hosts:
+        - {{ .Values.publicAddr | quote }}
+        {{- if eq .Values.certificate.certManager.addWildCard true }}
+        - {{ printf "*.%s" $.Values.publicAddr | quote }}
+        {{- end }}
+      secretName: {{ .Values.certificate.secretName }}
   rules:
-  - host: {{ $.Values.publicAddr | quote }}
+  - host: {{ .Values.publicAddr | quote }}
     http:
       paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: {{ $proxySvcName }}
-            port:
-              number: {{ $proxyHttpPort }}
-      - path: /api/
-        pathType: Prefix
-        backend:
-          service:
-            name: {{ $apiSvcName }}
-            port:
-              number: {{ $apiSvcPort }}
-{{- if eq $.Values.components.share.deploy true }}
-      - path: /api/share/
-        pathType: Prefix
-        backend:
-          service:
-            name: {{ $shareSvcName }}
-            port:
-              number: {{ $shareSvcPort }}
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: {{ $values.proxy.svc }}
+              port:
+                number: {{ $values.proxy.http }}
+        - path: /api/
+          pathType: Prefix
+          backend:
+            service:
+              name: {{ $values.api.svc }}
+              port:
+                number: {{ $values.api.port }}
+{{- if eq .Values.components.share.deploy true }}
+        - path: /api/share/
+          pathType: Prefix
+          backend:
+            service:
+              name: {{ $values.share.svc }}
+              port:
+                number: {{ $values.share.port }}
 {{- end }}
 {{- end }}

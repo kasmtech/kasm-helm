@@ -1,21 +1,19 @@
 {{/*
 Deploy the RDP HTTPS Gateway if .Values.kasmApp.servicesToDeploy.rdpHttpsGateway.deploy set to true
 */}}
-{{- $rdpHttpsGatewayComponent := "rdp-https-gateway" -}}
-{{- $rdpHttpsGatewayName := (printf "%s-%s" .Release.Name $rdpHttpsGatewayComponent) -}}
-{{- $rdpHttpsGatewayImage := (printf "%s:%s" .Values.components.rdpHttpsGateway.image.repository .Values.components.rdpHttpsGateway.image.tag) -}}
-{{- $rdpHttpsGatewayReplicas := include "replicas.preset" (dict "node" $rdpHttpsGatewayComponent "size" .Values.deploymentSize) -}}
+{{- $values := (include "kasm.constants" . | fromYaml) -}}
+{{- $rdpHttpsGatewayReplicas := include "replicas.preset" (dict "node" $values.rdpHttpsGateway.component "size" .Values.deploymentSize) -}}
 {{- if eq .Values.components.rdpHttpsGateway.enabled true }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ $rdpHttpsGatewayName }}-deployment
+  name: {{ $values.rdpHttpsGateway.name }}-deployment
   namespace: {{ $.Release.Namespace }}
   labels:
-    app.kubernetes.io/name: {{ $rdpHttpsGatewayName }}
-    app.kubernetes.io/component: {{ $rdpHttpsGatewayComponent }}
+    app.kubernetes.io/name: {{ $values.rdpHttpsGateway.name }}
+    app.kubernetes.io/component: {{ $values.rdpHttpsGateway.component }}
     {{- include "kasm.defaultLabels" . | indent 4 }}
-  {{- if or $.Values.components.rdpHttpsGateway.labels $.Values.extraLabels.deployment $.Value.labels }}
+  {{- if or $.Values.components.rdpHttpsGateway.labels $.Values.extraLabels.deployment $.Values.labels }}
     {{- with $.Values.components.rdpHttpsGateway.labels }}{{- toYaml . | indent 4 }}{{- end }}
     {{- with $.Values.extraLabels.deployment }}{{- toYaml . | indent 4 }}{{- end }}
     {{- with $.Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
@@ -31,17 +29,17 @@ spec:
     type: RollingUpdate
     rollingUpdate:
       maxUnavailable: 1
-      maxSurge: {{ add1 $apiReplicas }}
+      maxSurge: {{ add1 $rdpHttpsGatewayReplicas }}
   selector:
     matchLabels:
-      app.kubernetes.io/name: {{ $rdpHttpsGatewayName }}
+      app.kubernetes.io/name: {{ $values.rdpHttpsGateway.name }}
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: {{ $rdpHttpsGatewayName }}
-        app.kubernetes.io/component: {{ $rdpHttpsGatewayComponent }}
+        app.kubernetes.io/name: {{ $values.rdpHttpsGateway.name }}
+        app.kubernetes.io/component: {{ $values.rdpHttpsGateway.component }}
         {{- include "kasm.defaultLabels" . | indent 8 }}
-      {{- if or $.Values.components.rdpHttpsGateway.labels $.Values.extraLabels.pod $.Value.labels }}
+      {{- if or $.Values.components.rdpHttpsGateway.labels $.Values.extraLabels.pod $.Values.labels }}
         {{- with $.Values.components.rdpHttpsGateway.labels }}{{- toYaml . | indent 8 }}{{- end }}
         {{- with $.Values.extraLabels.pod }}{{- toYaml . | indent 8 }}{{- end }}
         {{- with $.Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
@@ -61,10 +59,10 @@ spec:
         {{- include "kasm.podSecurity" . | indent 6 }}
       {{- end }}
       initContainers:
-        {{- include "kasm.initContainer" (dict "serviceName" $apiSvcName "servicePort" $apiSvcPort "path" "/api/__healthcheck" "schema" "http") | nindent 8 }}
+        {{- include "kasm.initContainer" (dict "serviceName" $values.api.svc "servicePort" $values.api.port "path" "/api/__healthcheck" "schema" "http" "image" $values.api.image) | nindent 8 }}
         {{- if $.Values.applySecurity }}
-        - name: {{ $rdpHttpsGatewayName }}-tmp-perms
-          image: {{ $apiImage }}
+        - name: {{ $values.rdpHttpsGateway.name }}-tmp-perms
+          image: {{ $values.api.image }}
           imagePullPolicy: IfNotPresent
           command:
             - /bin/sh
@@ -76,14 +74,14 @@ spec:
             runAsNonRoot: false
             runAsUser: 0
           volumeMounts:
-            - name: {{ $rdpHttpsGatewayName }}-data
+            - name: {{ $values.rdpHttpsGateway.name }}-data
               mountPath: /opt/kasm/current/log
-            - name: {{ $rdpHttpsGatewayName }}-data
+            - name: {{ $values.rdpHttpsGateway.name }}-data
               mountPath: /tmp
         {{- end }}
       containers:
-        - name: {{ $rdpHttpsGatewayName }}-container
-          image: {{ $rdpHttpsGatewayImage }}
+        - name: {{ $values.rdpHttpsGateway.name }}-container
+          image: {{ $values.rdpHttpsGateway.image }}
           imagePullPolicy: {{ $.Values.imagePullPolicy }}
           env:
             - name: SERVER_ZONE_NAME
@@ -96,41 +94,41 @@ spec:
             - name: KUBERNETES_SERVICE_HOST
               value: "true"
           ports:
-            - name: {{ $rdpHttpsGatewayName }}-pt
-              containerPort: {{ $rdpHttpsGatewaySvcPort }}
+            - name: {{ $values.rdpHttpsGateway.name }}-pt
+              containerPort: {{ $values.rdpHttpsGateway.port }}
               protocol: TCP
           {{- if $.Values.addHealthChecks }}
           livenessProbe:
-            {{- include "health.tcp" (dict "portName" (printf "%s-pt" $rdpHttpsGatewayName) ) | indent 12 }}
+            {{- include "health.tcp" (dict "portName" (printf "%s-pt" $values.rdpHttpsGateway.name) ) | indent 12 }}
           {{- end }}
           {{- if $.Values.addHealthChecks }}
           readinessProbe:
-            {{- include "health.https" (dict "path" "/rdp-https-gateway/__healthcheck" "portName" (printf "%s-pt" $rdpHttpsGatewayName) ) | indent 12 }}
+            {{- include "health.https" (dict "path" "/rdp-https-gateway/__healthcheck" "portName" (printf "%s-pt" $values.rdpHttpsGateway.name) ) | indent 12 }}
           {{- end }}
           {{- if $.Values.components.rdpHttpsGateway.resources }}
           resources: {{- toYaml $.Values.components.rdpHttpsGateway.resources | nindent 12 }}
           {{- else }}
-          resources: {{- include "resources.preset" (dict "node" "rdp" "size" $.Values.deploymentSize) | nindent 12 }}
+          resources: {{- include "resources.preset" (dict "node" $values.rdpHttpsGateway.component "size" $.Values.deploymentSize) | nindent 12 }}
           {{- end }}
           {{- if $.Values.applySecurity }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}
           volumeMounts:
-            - name: {{ $rdpHttpsGatewayName }}-cert
+            - name: {{ $values.rdpHttpsGateway.name }}-cert
               mountPath: /opt/rdpgw/server.pem
               subPath: tls.crt
-            - name: {{ $rdpHttpsGatewayName }}-cert
+            - name: {{ $values.rdpHttpsGateway.name }}-cert
               mountPath: /opt/rdpgw/key.pem
               subPath: tls.key
-            - name: {{ $rdpHttpsGatewayName }}-data
+            - name: {{ $values.rdpHttpsGateway.name }}-data
               mountPath: /opt/kasm/current/log
-            - name: {{ $rdpHttpsGatewayName }}-data
+            - name: {{ $values.rdpHttpsGateway.name }}-data
               mountPath: /tmp
       volumes:
-        - name: {{ $rdpHttpsGatewayName }}-cert
+        - name: {{ $values.rdpHttpsGateway.name }}-cert
           secret:
-            secretName: {{ $.Values.certificate.secretName }}
-        - name: {{ $rdpHttpsGatewayName }}-data
+            secretName: {{ .Values.certificate.secretName }}
+        - name: {{ $values.rdpHttpsGateway.name }}-data
           emptyDir:
             sizeLimit: 150Mi
 {{- end }}
