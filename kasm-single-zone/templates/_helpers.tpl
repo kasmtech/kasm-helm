@@ -4,35 +4,41 @@ Constants to use across chart template files
 {{- define "kasm.constants" }}
 api:
   component: api
+  svc: kasm-api
+  portName: api-pt
   name: {{ printf "%s-api" .Release.Name }}
   image: {{ printf "%s:%s" .Values.components.api.image.repository .Values.components.api.image.tag }}
   port: 8080
-  svc: kasm-api
 manager:
   component: manager
+  svc: kasm-manager
+  portName: manager-pt
   name: {{ printf "%s-manager" .Release.Name }}
   image: {{ printf "%s:%s" .Values.components.manager.image.repository .Values.components.manager.image.tag }}
   port: 8181
-  svc: kasm-manager
 proxy:
   component: proxy
+  svc: kasm-proxy
+  portName: proxy-pt
   name: {{ printf "%s-proxy" .Release.Name }}
   image: {{ printf "%s:%s" .Values.components.proxy.image.repository .Values.components.proxy.image.tag }}
-  svc: kasm-proxy
   http: 8080
   https: 8443
+  extHttps: 443
 db:
   component: db
+  svc: kasm-db
+  portName: db-pt
   name: {{ printf "%s-db" .Release.Name }}
   image: {{ printf "%s:%s" .Values.database.image.repository .Values.database.image.tag }}
   port: 5432
-  svc: kasm-db
 guac:
   component: guac
+  svc: kasm-guac
+  portName: guac-pt
   name: {{ printf "%s-guac" .Release.Name }}
   image: {{ printf "%s:%s" .Values.components.guac.image.repository .Values.components.guac.image.tag }}
   port: 3000
-  svc: kasm-guac
   ports:
     - 3001
     - 3002
@@ -40,28 +46,32 @@ guac:
     - 3004
 share:
   component: share
+  svc: kasm-share
+  portName: share-pt
   name: {{ printf "%s-share" .Release.Name }}
   image: {{ printf "%s:%s" .Values.components.share.image.repository .Values.components.share.image.tag }}
   port: 8182
-  svc: kasm-share
 redis:
   component: redis
+  svc: kasm-redis
+  portName: redis-pt
   name: {{ printf "%s-redis" .Release.Name }}
   image: {{ printf "%s:%s" .Values.components.redis.image.repository .Values.components.redis.image.tag }}
   port: 6379
-  svc: kasm-redis
 rdpGateway:
   component: rdp-gateway
-  name: {{ printf "%s-rdp-gateway" .Release.Name }}
+  svc: kasm-rdp-gateway
+  portName: rdp-gw-pt
+  name: {{ printf "%s-rdp-gw" .Release.Name }}
   image: {{ printf "%s:%s" .Values.components.rdpGateway.image.repository .Values.components.rdpGateway.image.tag }}
   port: 5555
-  svc: kasm-rdp-gateway
 rdpHttpsGateway:
   component: rdp-https-gateway
-  name: {{ printf "%s-rdp-https-gateway" .Release.Name }}
+  svc: kasm-rdp-https-gateway
+  portName: rdp-https-gw-pt
+  name: {{ printf "%s-rdp-https-gw" .Release.Name }}
   image: {{ printf "%s:%s" .Values.components.rdpHttpsGateway.image.repository .Values.components.rdpHttpsGateway.image.tag }}
   port: 9443
-  svc: kasm-rdp-https-gateway
 {{- end }}
 
 {{/*
@@ -218,19 +228,26 @@ Example:
   {{ include "kasm.initContainer" (dict "serviceName" "kasm-service-name" "servicePort" "kasm-service-port" "path" "healthcheck-path" "schema" "http" "image" "alpine/curl") }}
 */}}
 {{- define "kasm.initContainer" }}
-  {{- if and (hasKey . "serviceName") (hasKey . "servicePort") ( hasKey . "path" ) (hasKey . "schema") (hasKey . "image")}}
+  {{- if and (hasKey . "serviceName") (hasKey . "servicePort") ( hasKey . "path" ) (hasKey . "schema") (hasKey . "image") }}
 - name: {{ .serviceName }}-is-ready
   image: {{ .image }}
   imagePullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 32Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
   command:
   - /bin/sh
   - -ec
   args:
   - |
     while ! curl "{{- .schema -}}://{{- .serviceName -}}:{{- .servicePort -}}{{- .path -}}" 2>/dev/null; do echo "Waiting for the {{- .serviceName -}} server to start..."; sleep 5; done
-    echo "{{- .serviceName -}} up. Connecting!"
+    echo "{{- .serviceName }} up. Connecting!"
   {{- else }}
-    {{- printf "ERROR: Invalid or non-existent key. Allowed values are %s" "serviceName, servicePort, path, schema, and image" | fail}}
+    {{- printf "ERROR: Invalid or non-existent key. Allowed values are %s" "serviceName, servicePort, path, schema, and image" | fail }}
   {{- end }}
 {{- end }}
 
@@ -243,8 +260,8 @@ Example usage:
   {{- $presetSizes := dict
     "proxy" (dict
       "small" 1
-      "medium" 4
-      "large" 8
+      "medium" 2
+      "large" 4
     )
     "db" (dict
       "small" 1
@@ -253,13 +270,13 @@ Example usage:
     )
     "api" (dict
       "small" 1
-      "medium" 4
-      "large" 8
+      "medium" 2
+      "large" 3
     )
     "manager" (dict
       "small" 1
-      "medium" 4
-      "large" 8
+      "medium" 2
+      "large" 3
     )
     "guac" (dict
       "small" 1
@@ -370,29 +387,15 @@ Example usage:
     "guac" (dict
       "small" (dict 
         "requests" (dict "cpu" "500m" "memory" "64Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "memory" "512Mi" "ephemeral-storage" "2Gi")
+        "limits" (dict "cpu" "1000m" "memory" "512Mi" "ephemeral-storage" "2Gi")
       )
       "medium" (dict 
         "requests" (dict "cpu" "500m" "memory" "64Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "memory" "512Mi" "ephemeral-storage" "2Gi")
+        "limits" (dict "cpu" "1500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
       )
       "large" (dict 
         "requests" (dict "cpu" "500m" "memory" "64Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "memory" "512Mi" "ephemeral-storage" "2Gi")
-      )
-    )
-    "rdp" (dict
-      "small" (dict 
-        "requests" (dict "cpu" "150m" "memory" "64Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
-      )
-      "medium" (dict 
-        "requests" (dict "cpu" "150m" "memory" "64Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
-      )
-      "large" (dict 
-        "requests" (dict "cpu" "150m" "memory" "64Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
+        "limits" (dict "cpu" "2000m" "memory" "512Mi" "ephemeral-storage" "2Gi")
       )
     )
     "rdp-gateway" (dict
@@ -402,11 +405,11 @@ Example usage:
       )
       "medium" (dict 
         "requests" (dict "cpu" "150m" "memory" "64Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
+        "limits" (dict "cpu" "1000m" "memory" "512Mi" "ephemeral-storage" "2Gi")
       )
       "large" (dict 
         "requests" (dict "cpu" "150m" "memory" "64Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
+        "limits" (dict "cpu" "1500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
       )
     )
     "rdp-https-gateway" (dict
@@ -416,11 +419,11 @@ Example usage:
       )
       "medium" (dict 
         "requests" (dict "cpu" "150m" "memory" "64Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
+        "limits" (dict "cpu" "1000m" "memory" "512Mi" "ephemeral-storage" "2Gi")
       )
       "large" (dict 
         "requests" (dict "cpu" "150m" "memory" "64Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
+        "limits" (dict "cpu" "1500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
       )
     )
     "share" (dict

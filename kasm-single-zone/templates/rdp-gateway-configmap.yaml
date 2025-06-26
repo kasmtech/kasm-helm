@@ -1,16 +1,16 @@
 {{/*
 Deploy the RDP Gateway Configmap if .Values.components.rdpGateway.enabled set to true
 */}}
-{{- $values := (include "kasm.constants" . | fromYaml) -}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- if eq .Values.components.rdpGateway.enabled true }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ $values.rdpGateway.name }}-configmap
+  name: {{ $constants.rdpGateway.name }}-configmap
   namespace: {{ .Release.Namespace }}
   labels:
-    app.kubernetes.io/name: {{ $values.rdpGateway.name }}-svc
-    app.kubernetes.io/component: {{ $values.rdpGateway.component }}
+    app.kubernetes.io/name: {{ $constants.rdpGateway.name }}-svc
+    app.kubernetes.io/component: {{ $constants.rdpGateway.component }}
     {{- include "kasm.defaultLabels" . | indent 4 }}
     {{- if or .Values.extraLabels.configMap .Values.labels }}
       {{- with .Values.extraLabels.configMap }}{{- toYaml . | indent 4 }}{{- end }}

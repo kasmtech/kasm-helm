@@ -1,16 +1,16 @@
 {{/*
 Kasm DB server StatefullSet definition
 */}}
-{{- $values := (include "kasm.constants" . | fromYaml) -}}
-{{- $dbReplicas := include "replicas.preset" (dict "node" $values.db.component "size" .Values.deploymentSize) -}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $dbReplicas := include "replicas.preset" (dict "node" $constants.db.component "size" .Values.deploymentSize) -}}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ $values.db.name }}-statefulset
+  name: {{ $constants.db.name }}-statefulset
   namespace: {{ .Release.Namespace }}
   labels:
-    app.kubernetes.io/name: {{ $values.db.name }}
-    app.kubernetes.io/component: {{ $values.db.component }}
+    app.kubernetes.io/name: {{ $constants.db.name }}
+    app.kubernetes.io/component: {{ $constants.db.component }}
     {{- include "kasm.defaultLabels" . | indent 4 }}
   {{- if or .Values.database.labels .Values.extraLabels.statefulSet .Values.labels }}
     {{- with .Values.database.labels }}{{- toYaml . | indent 4 }}{{- end }}
@@ -24,17 +24,17 @@ metadata:
   {{- end }}
 spec:
   replicas: 1
-  serviceName: {{ $values.db.component }}
+  serviceName: {{ $constants.db.component }}
   updateStrategy:
     type: RollingUpdate
   selector:
     matchLabels:
-      app.kubernetes.io/name: {{ $values.db.name }}
+      app.kubernetes.io/name: {{ $constants.db.name }}
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: {{ $values.db.name }}
-        app.kubernetes.io/component: {{ $values.db.component }}
+        app.kubernetes.io/name: {{ $constants.db.name }}
+        app.kubernetes.io/component: {{ $constants.db.component }}
         {{- include "kasm.defaultLabels" . | indent 8 }}
       {{- if or .Values.database.labels .Values.extraLabels.pod .Values.labels }}
         {{- with .Values.database.labels }}{{- toYaml . | indent 8 }}{{- end }}
@@ -54,7 +54,7 @@ spec:
       {{- end }}
       {{- include "db.podSecurity" . | indent 6 }}
       initContainers:
-        - name: {{ $values.db.name }}-data-perms
+        - name: {{ $constants.db.name }}-data-perms
           image: busybox
           command:
             - /bin/sh
@@ -69,17 +69,17 @@ spec:
             runAsNonRoot: false
             runAsUser: 0
           volumeMounts:
-            - name: {{ $values.db.name }}-data
+            - name: {{ $constants.db.name }}-data
               mountPath: /var/lib/postgresql/data
-            - name: {{ $values.db.name }}-data
+            - name: {{ $constants.db.name }}-data
               mountPath: /tmp
             {{- if .Values.applySecurity }}
-            - name: {{ $values.db.name }}-data
+            - name: {{ $constants.db.name }}-data
               mountPath: /var/run/postgresql
             {{- end }}
       containers:
-        - name: {{ $values.db.name }}-container
-          image: {{ $values.db.image }}
+        - name: {{ $constants.db.name }}-container
+          image: {{ $constants.db.image }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           env:
             - name: POSTGRES_DB
@@ -92,56 +92,56 @@ spec:
             - name: POSTGRES_USER
               value: kasmapp
           ports:
-            - name: {{ $values.db.name }}-pt
-              containerPort: {{ $values.db.port }}
+            - name: {{ $constants.db.name }}-pt
+              containerPort: {{ $constants.db.port }}
               protocol: TCP
-          {{- if .Values.addHealthChecks }}
+          {{- if .Values.applyHealthChecks }}
           livenessProbe:
-            {{- include "health.command" (dict "command" "pg_isready --port=($values.db.port) -t 10") | indent 12 }}
+            {{- include "health.command" (dict "command" (printf "pg_isready --port=%s -t 10" ($constants.db.port | toString))) | indent 12 }}
           {{- end }}
-          {{- if .Values.addHealthChecks }}
+          {{- if .Values.applyHealthChecks }}
           readinessProbe:
             {{- include "health.command" (dict "command" "psql -d kasm -U kasmapp -c 'SELECT 1' || exit 1") | indent 12 }}
           {{- end }}
           {{- if .Values.database.resources }}
           resources: {{- toYaml .Values.database.resources | nindent 12 }}
           {{- else }}
-          resources: {{- include "resources.preset" (dict "node" $values.db.component "size" .Values.deploymentSize) | nindent 12 }}
+          resources: {{- include "resources.preset" (dict "node" $constants.db.component "size" .Values.deploymentSize) | nindent 12 }}
           {{- end }}
           {{- if .Values.applySecurity }}
             {{- include "db.containerSecurity" . | indent 10 }}
           {{- end }}
           volumeMounts:
-          - name: {{ $values.db.name }}-data
+          - name: {{ $constants.db.name }}-data
             mountPath: /var/lib/postgresql/data
             subPath: postgres
-          - name: {{ $values.db.name }}-configs
+          - name: {{ $constants.db.name }}-configs
             mountPath: /docker-entrypoint-initdb.d/data.sql
             subPath: data.sql
-          - name: {{ $values.db.name }}-configs
+          - name: {{ $constants.db.name }}-configs
             mountPath: /var/lib/postgresql/conf/postgresql.conf
             subPath: postgresql.conf
-          - name: {{ $values.db.name }}-configs
+          - name: {{ $constants.db.name }}-configs
             mountPath: /var/lib/postgresql/conf/pg_hba.conf
             subPath: pg_hba.conf
-          - name: {{ $values.db.name }}-cert
+          - name: {{ $constants.db.name }}-cert
             mountPath: /etc/ssl/certs/db_server.crt
             subPath: tls.crt
-          - name: {{ $values.db.name }}-cert
+          - name: {{ $constants.db.name }}-cert
             mountPath: /etc/ssl/certs/db_server.key
             subPath: tls.key
-          - name: {{ $values.db.name }}-data
+          - name: {{ $constants.db.name }}-data
             mountPath: /tmp
           {{- if .Values.applySecurity }}
-          - name: {{ $values.db.name }}-data
+          - name: {{ $constants.db.name }}-data
             mountPath: /var/run/postgresql
           {{- end }}
       volumes:
-        - name: {{ $values.db.name }}-configs
+        - name: {{ $constants.db.name }}-configs
           configMap:
-            name: {{ $values.db.name }}-configmap
+            name: {{ $constants.db.name }}-configmap
             defaultMode: 0o644
-        - name: {{ $values.db.name }}-cert
+        - name: {{ $constants.db.name }}-cert
           secret:
             secretName: {{ .Values.certificate.secretName }}
             defaultMode: 0o600
@@ -154,7 +154,7 @@ spec:
     - apiVersion: v1
       kind: PersistentVolumeClaim
       metadata:
-        name: {{ $values.db.name }}-data
+        name: {{ $constants.db.name }}-data
       spec:
         accessModes:
           - ReadWriteOnce

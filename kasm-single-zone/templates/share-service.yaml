@@ -1,16 +1,16 @@
 {{/*
 Deploy the Share if .Values.components.share.enabled set to true
 */}}
-{{- $values := (include "kasm.constants" . | fromYaml) -}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- if eq .Values.components.share.enabled true }}
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ $values.share.svc }}
+  name: {{ $constants.share.svc }}
   namespace: {{ $.Release.Namespace }}
   labels:
-    app.kubernetes.io/name: {{ $values.share.svc }}-svc
-    app.kubernetes.io/component: {{ $values.share.component }}
+    app.kubernetes.io/name: {{ $constants.share.svc }}-svc
+    app.kubernetes.io/component: {{ $constants.share.component }}
     {{- include "kasm.defaultLabels" . | indent 4 }}
   {{- if or $.Values.components.share.labels $.Values.extraLabels.service $.Values.labels }}
     {{- with $.Values.components.share.labels }}{{- toYaml . | indent 4 }}{{- end }}
@@ -22,9 +22,9 @@ metadata:
   {{- end }}
 spec:
   selector:
-    app.kubernetes.io/name: {{ $values.share.name }}
+    app.kubernetes.io/name: {{ $constants.share.name }}
   ports:
-    - name: {{ printf "%s-svc-%s" $values.share.svc ($values.share.port | toString) }}
+    - name: {{ printf "%s-svc-%s" $constants.share.svc ($constants.share.port | toString) }}
       protocol: TCP
-      port: {{ $values.share.port }}
+      port: {{ $constants.share.port }}
 {{- end }}

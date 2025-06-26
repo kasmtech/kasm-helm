@@ -1,15 +1,15 @@
 {{/*
 Deploy the Certificates with certManager
 */}}
-{{- $values := (include "kasm.constants" . | fromYaml) -}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- if eq .Values.certificate.certManager.enabled true }}
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: {{ $values.proxy.name }}-cert
+  name: {{ $constants.proxy.name }}-cert
   namespace: {{ .Release.Namespace }}
   labels:
-    app.kubernetes.io/name: {{ $values.proxy.name }}-cert
+    app.kubernetes.io/name: {{ $constants.proxy.name }}-cert
     app.kubernetes.io/component: certificate
     {{- include "kasm.defaultLabels" . | indent 4 }}
 spec:

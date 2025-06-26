@@ -1,14 +1,18 @@
 {{/*
 Deploy the Kasm Proxy service
 */}}
+{{- if and .Values.ingress.enabled (eq .Values.service.type "LoadBalancer") -}}
+  {{- fail "The service.type must not be LoadBalancer when using an ingress - any load balancer should be provisioned by your ingress controller. Set service.type=ClusterIP instead" -}}
+{{- end -}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- if eq .Values.service.type "LoadBalancer" -}}
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ $constants.proxy.svc }}
+  name: {{ $constants.proxy.svc }}-ext
   namespace: {{ .Release.Namespace }}
   labels:
-    app.kubernetes.io/name: {{ $constants.proxy.svc }}-svc
+    app.kubernetes.io/name: {{ $constants.proxy.svc }}-ext-svc
     app.kubernetes.io/component: {{ $constants.proxy.component }}
     {{- include "kasm.defaultLabels" . | indent 4 }}
   {{- if or .Values.components.proxy.labels .Values.extraLabels.service .Values.labels }}
@@ -22,13 +26,12 @@ metadata:
     {{- toYaml .Values.service.annotations | indent 4 }}
   {{- end }}
 spec:
-  type: ClusterIP
+  type: {{ .Values.service.type | default "ClusterIp" }}
   selector:
     app.kubernetes.io/name: {{ $constants.proxy.name }}
   ports:
-    - name: {{ printf "%s-svc-%s" $constants.proxy.svc ($constants.proxy.http | toString) }}
+    - name: {{ printf "%s-ext-svc-%s" $constants.proxy.svc ($constants.proxy.extHttps | toString) }}
       protocol: TCP
-      port: {{ $constants.proxy.http }}
-    - name: {{ printf "%s-svc-%s" $constants.proxy.svc ($constants.proxy.https | toString) }}
-      protocol: TCP
-      port: {{ $constants.proxy.https }}
+      port: {{ $constants.proxy.extHttps }}
+      targetPort: {{ $constants.proxy.portName }}-https
+{{- end }}

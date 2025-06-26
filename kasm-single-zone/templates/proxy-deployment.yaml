@@ -1,16 +1,16 @@
 {{/*
 Kasm Proxy server Deployment definition
 */}}
-{{- $values := (include "kasm.constants" . | fromYaml) -}}
-{{- $proxyReplicas := include "replicas.preset" (dict "node" $values.proxy.component "size" .Values.deploymentSize) -}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $proxyReplicas := include "replicas.preset" (dict "node" $constants.proxy.component "size" .Values.deploymentSize) -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ $values.proxy.name }}-deployment
+  name: {{ $constants.proxy.name }}-deployment
   namespace: {{ .Release.Namespace }}
   labels:
-    app.kubernetes.io/name: {{ $values.proxy.name }}
-    app.kubernetes.io/component: {{ $values.proxy.component }}
+    app.kubernetes.io/name: {{ $constants.proxy.name }}
+    app.kubernetes.io/component: {{ $constants.proxy.component }}
     {{- include "kasm.defaultLabels" . | indent 4 }}
   {{- if or .Values.components.proxy.labels .Values.extraLabels.deployment .Values.labels }}
     {{- with .Values.components.proxy.labels }}{{- toYaml . | indent 4 }}{{- end }}
@@ -31,12 +31,12 @@ spec:
       maxSurge: {{ add1 $proxyReplicas }}
   selector:
     matchLabels:
-      app.kubernetes.io/name: {{ $values.proxy.name }}
+      app.kubernetes.io/name: {{ $constants.proxy.name }}
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: {{ $values.proxy.name }}
-        app.kubernetes.io/component: {{ $values.proxy.component }}
+        app.kubernetes.io/name: {{ $constants.proxy.name }}
+        app.kubernetes.io/component: {{ $constants.proxy.component }}
         {{- include "kasm.defaultLabels" . | indent 8 }}
       {{- if or .Values.components.proxy.labels .Values.extraLabels.pod .Values.labels }}
         {{- with .Values.components.proxy.labels }}{{- toYaml . | indent 8 }}{{- end }}
@@ -54,13 +54,13 @@ spec:
       imagePullSecrets:
         - name: {{ .Values.imagePullSecrets }}
       {{- end }}
-      {{- if .Values.applyHardening }}
+      {{- if .Values.applySecurity }}
         {{- include "kasm.podSecurity" . | indent 6 }}
       {{- end }}
       initContainers:
-        {{- if .Values.applyHardening }}
-        - name: {{ $values.proxy.name }}-data-perms
-          image: {{ $values.api.image }}
+        {{- if .Values.applySecurity }}
+        - name: {{ $constants.proxy.name }}-data-perms
+          image: {{ $constants.api.image }}
           imagePullPolicy: IfNotPresent
           command:
             - /bin/sh
@@ -74,100 +74,103 @@ spec:
             runAsNonRoot: false
             runAsUser: 0
           volumeMounts:
-            - name: {{ $values.proxy.name }}-data
+            - name: {{ $constants.proxy.name }}-data
               mountPath: /var/cache/nginx
-            - name: {{ $values.proxy.name }}-data
+            - name: {{ $constants.proxy.name }}-data
               mountPath: /var/log/external/nginx
-            - name: {{ $values.proxy.name }}-data
+            - name: {{ $constants.proxy.name }}-data
               mountPath: /run
         {{- end }}
-        {{- include "kasm.initContainer" (dict "serviceName" $values.api.svc "servicePort" $values.api.port "path" "/api/__healthcheck" "schema" "http" "image" $values.api.image) | nindent 8 }}
-        {{- if .Values.applyHardening }}
+        {{- include "kasm.initContainer" (dict "serviceName" $constants.api.svc "servicePort" $constants.api.port "path" "/api/__healthcheck" "schema" "http" "image" $constants.api.image) | nindent 8 }}
+        {{- if .Values.applySecurity }}
           {{- include "kasm.containerSecurity" . | indent 10 }}
         {{- end }}
-        {{- include "kasm.initContainer" (dict "serviceName" $values.manager.svc "servicePort" $values.manager.port "path" "/__healthcheck" "schema" "http" "image" $values.api.image) | nindent 8 }}
-        {{- if .Values.applyHardening }}
+        {{- include "kasm.initContainer" (dict "serviceName" $constants.manager.svc "servicePort" $constants.manager.port "path" "/__healthcheck" "schema" "http" "image" $constants.api.image) | nindent 8 }}
+        {{- if .Values.applySecurity }}
           {{- include "kasm.containerSecurity" . | indent 10 }}
         {{- end }}
         {{- if .Values.components.share.enabled }}
-          {{- include "kasm.initContainer" (dict "serviceName" $values.share.svc "servicePort" $values.share.port "path" "/__healthcheck" "schema" "http" "image" $values.api.image) | nindent 8 }}
-          {{- if .Values.applyHardening }}
+          {{- include "kasm.initContainer" (dict "serviceName" $constants.share.svc "servicePort" $constants.share.port "path" "/__healthcheck" "schema" "http" "image" $constants.api.image) | nindent 8 }}
+          {{- if .Values.applySecurity }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}
         {{- end }}
         {{- if .Values.components.guac.enabled }}
-          {{- include "kasm.initContainer" (dict "serviceName" $values.guac.svc "servicePort" $values.guac.port "path" "/__healthcheck" "schema" "http" "image" $values.api.image) | nindent 8 }}
-          {{- if .Values.applyHardening }}
+          {{- include "kasm.initContainer" (dict "serviceName" $constants.guac.svc "servicePort" $constants.guac.port "path" "/__healthcheck" "schema" "http" "image" $constants.api.image) | nindent 8 }}
+          {{- if .Values.applySecurity }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}
         {{- end }}
         {{- if .Values.components.rdpGateway.enabled }}
-          {{- include "kasm.initContainer" (dict "serviceName" $values.rdpGateway.svc "servicePort" $values.rdpGateway.port "path" "/__healthcheck" "schema" "http" "image" $values.api.image) | nindent 8 }}
-          {{- if .Values.applyHardening }}
+          {{- include "kasm.initContainer" (dict "serviceName" $constants.rdpGateway.svc "servicePort" $constants.rdpGateway.port "path" "/__healthcheck" "schema" "http" "image" $constants.api.image) | nindent 8 }}
+          {{- if .Values.applySecurity }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}
         {{- end }}
       containers:
-        - name: {{ $values.proxy.name }}-container
-          image: {{ $values.proxy.image }}
+        - name: {{ $constants.proxy.name }}-container
+          image: {{ $constants.proxy.image }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           {{- if .Values.components.proxy.resources }}
           resources: {{- toYaml .Values.components.proxy.resources | nindent 12 }}
           {{- else }}
-          resources: {{- include "resources.preset" (dict "node" $values.proxy.component "size" .Values.deploymentSize) | nindent 12 }}
+          resources: {{- include "resources.preset" (dict "node" $constants.proxy.component "size" .Values.deploymentSize) | nindent 12 }}
           {{- end }}
-          {{- if .Values.applyHardening }}
+          {{- if .Values.applySecurity }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}
           volumeMounts:
-            - name: {{ $values.proxy.name }}-cert
+            - name: {{ $constants.proxy.name }}-cert
               mountPath: /etc/ssl/certs/kasm_nginx.crt
               subPath: tls.crt
-            - name: {{ $values.proxy.name }}-cert
+            - name: {{ $constants.proxy.name }}-cert
               mountPath: /etc/ssl/private/kasm_nginx.key
               subPath: tls.key
-            - name: {{ $values.proxy.name }}-settings-config
+            - name: {{ $constants.proxy.name }}-settings-config
               mountPath: /etc/nginx/conf.d
-            - name: {{ $values.proxy.name }}-services-config
+            - name: {{ $constants.proxy.name }}-services-config
               mountPath: /etc/nginx/conf.d/services.d
-            - name: {{ $values.proxy.name }}-base-config
+            - name: {{ $constants.proxy.name }}-base-config
               mountPath: /etc/nginx/nginx.conf
               subPath: nginx.conf
-            {{- if .Values.applyHardening }}
-            - name: {{ $values.proxy.name }}-data
+            {{- if .Values.applySecurity }}
+            - name: {{ $constants.proxy.name }}-data
               mountPath: /var/cache/nginx
-            - name: {{ $values.proxy.name }}-data
+            - name: {{ $constants.proxy.name }}-data
               mountPath: /var/log/external/nginx
-            - name: {{ $values.proxy.name }}-data
+            - name: {{ $constants.proxy.name }}-data
               mountPath: /run
             {{- end }}
           ports:
-            - name: {{ $values.proxy.name }}-pt
-              containerPort: {{ $values.proxy.http }}
+            - name: {{ $constants.proxy.portName }}-http
+              containerPort: {{ $constants.proxy.http }}
               protocol: TCP
-          {{- if .Values.addHealthChecks }}
+            - name: {{ $constants.proxy.portName }}-https
+              containerPort: {{ $constants.proxy.https }}
+              protocol: TCP
+          {{- if .Values.applyHealthChecks }}
           livenessProbe:
-            {{- include "health.tcp" (dict "portName" (printf "%s-pt" $values.proxy.name) ) | indent 12 }}
+            {{- include "health.tcp" (dict "portName" $constants.proxy.portName ) | indent 12 }}
           {{- end }}
-          {{- if .Values.addHealthChecks }}
+          {{- if .Values.applyHealthChecks }}
           readinessProbe:
             {{- include "health.command" (dict "command" "nginx -t") | indent 12 }}
           {{- end }}
       volumes:
-        - name: {{ $values.proxy.name }}-cert
+        - name: {{ $constants.proxy.name }}-cert
           secret:
             secretName: {{ .Values.certificate.secretName }}-certs
-        - name: {{ $values.proxy.name }}-base-config
+        - name: {{ $constants.proxy.name }}-base-config
           configMap:
-            name: {{ $values.proxy.name }}-base-configmap
-        - name: {{ $values.proxy.name }}-settings-config
+            name: {{ $constants.proxy.name }}-base-configmap
+        - name: {{ $constants.proxy.name }}-settings-config
           configMap:
-            name: {{ $values.proxy.name }}-settings-configmap
-        - name: {{ $values.proxy.name }}-services-config
+            name: {{ $constants.proxy.name }}-settings-configmap
+        - name: {{ $constants.proxy.name }}-services-config
           configMap:
-            name: {{ $values.proxy.name }}-services-configmap
-        {{- if .Values.applyHardening }}
-        - name: {{ $values.proxy.name }}-data
+            name: {{ $constants.proxy.name }}-services-configmap
+        {{- if .Values.applySecurity }}
+        - name: {{ $constants.proxy.name }}-data
           emptyDir:
             sizeLimit: 1Gi
         {{- end }}

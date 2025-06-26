@@ -1,15 +1,15 @@
 {{/*
 Deploy the Manager .Values.components.manager
 */}}
-{{- $values := (include "kasm.constants" . | fromYaml) -}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ $values.manager.svc }}
+  name: {{ $constants.manager.svc }}
   namespace: {{ .Release.Namespace }}
   labels:
-    app.kubernetes.io/name: {{ $values.manager.svc }}-svc
-    app.kubernetes.io/component: {{ $values.manager.component }}
+    app.kubernetes.io/name: {{ $constants.manager.svc }}-svc
+    app.kubernetes.io/component: {{ $constants.manager.component }}
     {{- include "kasm.defaultLabels" . | indent 4 }}
   {{- if or .Values.components.manager.labels .Values.extraLabels.service .Values.labels }}
     {{- with .Values.components.manager.labels }}{{- toYaml . | indent 4 }}{{- end }}
@@ -21,8 +21,8 @@ metadata:
   {{- end }}
 spec:
   selector:
-    app.kubernetes.io/name: {{ $values.manager.name }}
+    app.kubernetes.io/name: {{ $constants.manager.name }}
   ports:
-    - name: {{ printf "%s-svc-%s" $values.manager.svc ($values.manager.port | toString) }}
+    - name: {{ printf "%s-svc-%s" $constants.manager.svc ($constants.manager.port | toString) }}
       protocol: TCP
-      port: {{ $values.manager.port }}
+      port: {{ $constants.manager.port }}

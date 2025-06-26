@@ -1,7 +1,7 @@
 {{/*
 Deploy the Kasm ingress if .Values.ingress.enabled set to true
 */}}
-{{- $values := (include "kasm.constants" . | fromYaml) -}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- if eq .Values.ingress.enabled true }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -38,23 +38,23 @@ spec:
           pathType: Prefix
           backend:
             service:
-              name: {{ $values.proxy.svc }}
+              name: {{ $constants.proxy.svc }}
               port:
-                number: {{ $values.proxy.http }}
+                number: {{ $constants.proxy.http }}
         - path: /api/
           pathType: Prefix
           backend:
             service:
-              name: {{ $values.api.svc }}
+              name: {{ $constants.api.svc }}
               port:
-                number: {{ $values.api.port }}
+                number: {{ $constants.api.port }}
 {{- if eq .Values.components.share.deploy true }}
         - path: /api/share/
           pathType: Prefix
           backend:
             service:
-              name: {{ $values.share.svc }}
+              name: {{ $constants.share.svc }}
               port:
-                number: {{ $values.share.port }}
+                number: {{ $constants.share.port }}
 {{- end }}
 {{- end }}

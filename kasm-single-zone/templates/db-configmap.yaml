@@ -1,15 +1,15 @@
 {{/*
 Kasm DB configMaps containing pg_hba.conf and postgresql.conf files
 */}}
-{{- $values := (include "kasm.constants" . | fromYaml) -}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ $values.db.name }}-configmap
+  name: {{ $constants.db.name }}-configmap
   namespace: {{ .Release.Namespace }}
   labels:
-    app.kubernetes.io/name: {{ $values.db.name }}-configmap
-    app.kubernetes.io/component: {{ $values.db.component }}
+    app.kubernetes.io/name: {{ $constants.db.name }}-configmap
+    app.kubernetes.io/component: {{ $constants.db.component }}
     {{- include "kasm.defaultLabels" . | indent 4 }}
     {{- if or .Values.extraLabels.configMap .Values.labels }}
       {{- with .Values.extraLabels.configMap }}{{- toYaml . | indent 4 }}{{- end }}
@@ -98,6 +98,6 @@ data:
     timezone = 'UTC'
     lc_messages = 'en_US.utf8'
     lc_monetary = 'en_US.utf8'
-    lc_numeric = 'en_US.utf8
+    lc_numeric = 'en_US.utf8'
     lc_time = 'en_US.utf8'
     default_text_search_config = 'pg_catalog.english'

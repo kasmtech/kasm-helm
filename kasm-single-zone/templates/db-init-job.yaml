@@ -1,7 +1,7 @@
 {{/*
 Initialize the DB
 */}}
-{{- $values := (include "kasm.constants" . | fromYaml) -}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -25,17 +25,17 @@ spec:
       restartPolicy: OnFailure
       initContainers:
         - name: db-is-ready
-          image: {{ $values.api.image }}
+          image: {{ $constants.api.image }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           command:
             - "/bin/bash"
             - "-c"
           args:
             - |
-              while ! pg_isready -h db -p {{ $values.db.port }} -t 10; do echo "Waiting for DB..."; sleep 5; done
+              while ! pg_isready -h {{ $constants.db.svc }} -p {{ $constants.db.port }} -t 10; do echo "Waiting for DB..."; sleep 5; done
       containers:
         - name: {{ .Release.Name }}-db-init-container
-          image: {{ $values.api.image }}
+          image: {{ $constants.api.image }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           env:
             - name: POST_DB_INIT_EXIT

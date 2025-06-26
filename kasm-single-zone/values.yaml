@@ -9,11 +9,20 @@ deploymentSize: "small"
 # chart uses when the `certificate.certManager.enabled` is set to true.
 publicAddr: ""
 
-# ingress -- Configure Ingress for your Kasm deployment. 
+# ingress -- Configure an Ingress for your Kasm deployment. 
 # 
 ingress:
-  enabled: true
+  enabled: false
   ingressClassName: ""
+  annotations: {}
+  labels: {}
+
+# ingress -- Configure an OpenShift Route for your Kasm deployment. 
+# 
+route:
+  enabled: true
+  tls:
+    termination: "edge"
   annotations: {}
   labels: {}
 
@@ -26,7 +35,7 @@ ingress:
 # NOTE: If ingress.enabled set to `true` service.type value MUST be set to `ClusterIP`.
 #
 service:
-  type: ClusterIP
+  type: LoadBalancer
   annotations: {}
 
 # Configure certificate settings.
@@ -46,13 +55,13 @@ certificate:
   # Kubernetes
   #
   certManager:
-    enabled: true
+    enabled: false
     # certificate.certManager.addWildCard -- Setting addWildCard to true will automatically add *.<publicAddr> as a hostname served
     # by the Ingress, as well as adding it to the list of domains to generate a certificate for.
     addWildCard: true
     # certificate.certManager.issuerName -- Name of the Issuer/ClusterIssuer to use for certs
     # NOTE: You will always need to create this yourself when `certManager.enabled` is true.
-    issuerName: "some-issuer"
+    issuerName: ""
     # certificate.certManager.issuerKind -- Provide the kind of certificate to use, defaults to `Issuer` for security to scope the certificate to the
     # Kasm namespace.
     issuerKind: ""
@@ -231,6 +240,8 @@ annotations:
   ingress: {}
   # annotations.statefulSet -- Additional statefulSet annotations to apply to resources created by this chart
   statefulSet: {}
+  # annotations.route -- Additional route annotations to apply to resources created by this chart
+  route: {}
 
 # Additional Kubernetes labels to apply to resources created by this chart
 # See https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/ for more information
@@ -256,3 +267,5 @@ extraLabels:
   jobPod: {}
   # extraLabels.statefulSet -- Additional statefulSet labels to apply to resources created by this chart
   statefulSet: {}
+  # extraLabels.route -- Additional route labels to apply to resources created by this chart
+  route: {}

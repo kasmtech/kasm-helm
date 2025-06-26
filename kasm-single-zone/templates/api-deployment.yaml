@@ -1,20 +1,20 @@
 {{/*
 Kasm API server Deployment definition
 */}}
-{{- $values := (include "kasm.constants" . | fromYaml) -}}
-{{- $apiReplicas := include "replicas.preset" (dict "node" ($values.api.component) "size" .Values.deploymentSize) -}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $apiReplicas := include "replicas.preset" (dict "node" ($constants.api.component) "size" .Values.deploymentSize) -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ $values.api.name }}-deployment
+  name: {{ $constants.api.name }}-deployment
   namespace: {{ .Release.Namespace }}
   {{- if .Values.components.api.annotations }}
   annotations:
   {{- .Values.components.api.annotations | indent 4 }}
   {{- end }}
   labels:
-    app.kubernetes.io/name: {{ $values.api.name }}
-    app.kubernetes.io/component: {{ $values.api.component }}
+    app.kubernetes.io/name: {{ $constants.api.name }}
+    app.kubernetes.io/component: {{ $constants.api.component }}
     {{- include "kasm.defaultLabels" . | indent 4 }}
   {{- if or .Values.components.api.labels .Values.extraLabels.deployment .Values.labels }}
     {{- with .Values.components.api.labels }}{{- toYaml . | indent 4 }}{{- end }}
@@ -35,12 +35,12 @@ spec:
       maxSurge: {{ add1 $apiReplicas }}
   selector:
     matchLabels:
-        app.kubernetes.io/name: {{ $values.api.name }}
+        app.kubernetes.io/name: {{ $constants.api.name }}
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: {{ $values.api.name }}
-        app.kubernetes.io/component: {{ $values.api.component }}
+        app.kubernetes.io/name: {{ $constants.api.name }}
+        app.kubernetes.io/component: {{ $constants.api.component }}
         {{- include "kasm.defaultLabels" . | indent 8 }}
       {{- if or .Values.components.api.labels .Values.extraLabels.pod .Values.labels }}
         {{- with .Values.components.api.labels }}{{- toYaml . | indent 8 }}{{- end }}
@@ -63,7 +63,7 @@ spec:
       {{- end }}
       initContainers:
         - name: db-is-ready
-          image: {{ $values.api.image }}
+          image: {{ $constants.api.image }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           env:
             - name: POSTGRES_PASSWORD
@@ -76,13 +76,13 @@ spec:
             - -c
           args:
             - |
-              while [ ! $(PGPASSWORD=$POSTGRES_PASSWORD psql -U kasmapp -d kasm -h db -t -c "select zone_id from zones" 2>/dev/null | wc -l) -ge 2 ]; do echo "Waiting for DB to initialize..."; sleep 5; done
+              while [ ! $(PGPASSWORD=$POSTGRES_PASSWORD psql -U kasmapp -d kasm -h {{ $constants.db.svc }} -t -c "select zone_id from zones" 2>/dev/null | wc -l) -ge 2 ]; do echo "Waiting for DB to initialize..."; sleep 5; done
           {{- if .Values.applySecurity }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}
       containers:
-        - name: {{ $values.api.name }}-container
-          image: {{ $values.api.image }}
+        - name: {{ $constants.api.name }}-container
+          image: {{ $constants.api.image }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           env:
             - name: START_SERVICES
@@ -95,19 +95,19 @@ spec:
                   name: {{ .Release.Name }}-secrets
                   key: db-password
           ports:
-            - name: {{ $values.api.name }}-pt
-              containerPort: {{ $values.api.port }}
+            - name: {{ $constants.api.portName }}
+              containerPort: {{ $constants.api.port }}
               protocol: TCP
-          {{- if .Values.addHealthChecks }}
+          {{- if .Values.applyHealthChecks }}
           livenessProbe:
-            {{- include "health.tcp" (dict "portName" (printf "%s-pt" $values.api.name) ) | indent 12 }}
+            {{- include "health.tcp" (dict "portName" $constants.api.portName ) | indent 12 }}
           readinessProbe:
-            {{- include "health.http" (dict "path" "/api/__healthcheck" "portName" (printf "%s-pt" $values.api.name) ) | indent 12 }}
+            {{- include "health.http" (dict "path" "/api/__healthcheck" "portName" $constants.api.portName ) | indent 12 }}
           {{- end }}
           {{- if .Values.components.api.resources }}
           resources: {{- toYaml .Values.components.api.resources | nindent 12 }}
           {{- else }}
-          resources: {{- include "resources.preset" (dict "node" $values.api.component "size" .Values.deploymentSize) | nindent 12 }}
+          resources: {{- include "resources.preset" (dict "node" $constants.api.component "size" .Values.deploymentSize) | nindent 12 }}
           {{- end }}
           {{- if .Values.applyPodSecurity }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
