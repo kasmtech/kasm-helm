@@ -159,7 +159,7 @@ spec:
       volumes:
         - name: {{ $constants.proxy.name }}-cert
           secret:
-            secretName: {{ .Values.certificate.secretName }}-certs
+            secretName: {{ .Values.certificate.secretName }}
         - name: {{ $constants.proxy.name }}-base-config
           configMap:
             name: {{ $constants.proxy.name }}-base-configmap

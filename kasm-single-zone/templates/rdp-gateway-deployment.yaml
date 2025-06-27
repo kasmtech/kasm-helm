@@ -73,11 +73,11 @@ spec:
             runAsNonRoot: false
             runAsUser: 0
           volumeMounts:
-            - name: {{ $constants.rdpGateway.component }}-data
+            - name: {{ $constants.rdpGateway.name }}-data
               mountPath: /usr/local/etc/rdpproxy/var
-            - name: {{ $constants.rdpGateway.component }}-data
+            - name: {{ $constants.rdpGateway.name }}-data
               mountPath: /opt/kasm/current/log
-            - name: {{ $constants.rdpGateway.component }}-data
+            - name: {{ $constants.rdpGateway.name }}-data
               mountPath: /tmp
         {{- include "kasm.initContainer" (dict "serviceName" $constants.api.svc "servicePort" $constants.api.port "path" "/api/__healthcheck" "schema" "http" "image" $constants.api.image) | indent 8 }}
         {{- if .Values.applySecurity }}
@@ -136,7 +136,7 @@ spec:
       volumes:
         - name: {{ $constants.rdpGateway.name }}-cert
           secret:
-            secretName: {{ .Values.certificate.secretName }}-certs
+            secretName:  {{ .Values.certificate.secretName }}
         - name: {{ $constants.rdpGateway.name }}-data
           emptyDir:
             sizeLimit: 1Gi

@@ -20,7 +20,7 @@ ingress:
 # ingress -- Configure an OpenShift Route for your Kasm deployment. 
 # 
 route:
-  enabled: true
+  enabled: false
   tls:
     termination: "edge"
   annotations: {}
