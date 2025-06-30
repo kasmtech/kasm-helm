@@ -27,27 +27,24 @@ spec:
     weight: 100
   port:
     targetPort: {{ $constants.proxy.https }}
+  wildcardPolicy: {{ .Values.route.wildcardPolicy | default "None" }}
   tls:
-    {{- /* Default to edge termination, configurable by value */}}
-    termination: {{ .Values.route.tls.termination | default "edge" }}
-    {{- with .Values.route.tls.insecureEdgeTerminationPolicy }}
-    insecureEdgeTerminationPolicy: {{ . }}
+    {{- with .Values.route.tls -}}
+    termination: {{ .termination | default "edge" }}
+    {{- with .insecureEdgeTerminationPolicy }}
+    insecureEdgeTerminationPolicy: {{ . | default "Redirect" }}
     {{- end }}
-    {{- with .Values.route.tls.certificate }}
+    {{- with .certificate }}
     certificate: |
       {{- . | nindent 6 }}
     {{- end }}
-    {{- with .Values.route.tls.key }}
+    {{- with .key }}
     key: |
       {{- . | nindent 6 }}
     {{- end }}
-    {{- with .Values.route.tls.caCertificate }}
+    {{- with .caCertificate }}
     caCertificate: |
       {{- . | nindent 6 }}
     {{- end }}
-    {{- with .Values.route.tls.destinationCACertificate }}
-    destinationCACertificate: |
-      {{- . | nindent 6 }}
     {{- end }}
-  wildcardPolicy: {{ .Values.route.wildcardPolicy | default "None" }}
 {{- end }}

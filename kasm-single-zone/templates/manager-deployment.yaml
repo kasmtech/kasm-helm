@@ -53,11 +53,16 @@ spec:
       {{- if .Values.applySecurity }}
         {{- include "kasm.podSecurity" . | indent 6 }}
       {{- end }}
-      initContainers:
-        {{- include "kasm.initContainer" (dict "serviceName" $constants.api.svc "servicePort" $constants.api.port "path" "/api/__healthcheck" "schema" "http" "image" $constants.api.image) | nindent 8 }}
-        {{- if .Values.applySecurity }}
-          {{- include "kasm.containerSecurity" . | indent 10 }}
-        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers: {{- include "kasm.initContainer" (dict "serviceName" $constants.api.svc "servicePort" $constants.api.port "path" "/api/__healthcheck" "schema" "http" "image" $constants.api.image) | indent 8 }}
+      {{- if .Values.applySecurity }}
+        {{- include "kasm.containerSecurity" . | indent 10 }}
+      {{- end }}
       containers:
         - name: {{ $constants.manager.name }}-container
           image: {{ $constants.manager.image }}
