@@ -27,11 +27,9 @@ proxy:
   extHttps: 443
 db:
   component: db
-  svc: db
   portName: db-pt
-  name: db
+  name: {{ printf "%s-db" .Release.Name }}
   image: {{ printf "%s:%s" .Values.database.image.repository .Values.database.image.tag }}
-  port: 5432
 guac:
   component: guac
   svc: kasm-guac
@@ -72,6 +70,13 @@ rdpHttpsGateway:
   name: {{ printf "%s-rdp-https-gw" .Release.Name }}
   image: {{ printf "%s:%s" .Values.components.rdpHttpsGateway.image.repository .Values.components.rdpHttpsGateway.image.tag }}
   port: 9443
+{{- end }}
+
+{{/*
+Database Environment variables
+*/}}
+{{- define "kasm.dbEnvVars" }}
+
 {{- end }}
 
 {{/*
@@ -244,7 +249,7 @@ Example:
   - -ec
   args:
   - |
-    while ! curl "{{- .schema -}}://{{- .serviceName -}}:{{- .servicePort -}}{{- .path -}}" 2>/dev/null; do echo "Waiting for the {{- .serviceName -}} server to start..."; sleep 5; done
+    while ! curl "{{- .schema -}}://{{- .serviceName -}}:{{- .servicePort -}}{{- .path -}}" 2>/dev/null; do echo "Waiting for the {{ .serviceName }} server to start..."; sleep 5; done
     echo "{{- .serviceName }} up. Connecting!"
   {{- else }}
     {{- printf "ERROR: Invalid or non-existent key. Allowed values are %s" "serviceName, servicePort, path, schema, and image" | fail }}

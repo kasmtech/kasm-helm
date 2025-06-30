@@ -13,15 +13,13 @@ metadata:
     app.kubernetes.io/name: {{ $constants.rdpHttpsGateway.name }}
     app.kubernetes.io/component: {{ $constants.rdpHttpsGateway.component }}
     {{- include "kasm.defaultLabels" . | indent 4 }}
-  {{- if or $.Values.components.rdpHttpsGateway.labels $.Values.extraLabels.deployment $.Values.labels }}
-    {{- with $.Values.components.rdpHttpsGateway.labels }}{{- toYaml . | indent 4 }}{{- end }}
-    {{- with $.Values.extraLabels.deployment }}{{- toYaml . | indent 4 }}{{- end }}
-    {{- with $.Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
-  {{- end }}
+    {{- with $.Values.components.rdpHttpsGateway.labels }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with $.Values.extraLabels.deployment }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with $.Values.labels }}{{- toYaml . | nindent 4 }}{{- end }}
   {{- if or $.Values.components.rdpHttpsGateway.annotations .Values.annotations.deployment }}
   annotations:
-    {{- with $.Values.annotations.deployment }}{{- toYaml . | indent 4 }}{{- end }}
-    {{- with $.Values.components.rdpHttpsGateway.annotations }}{{- toYaml . | indent 4 }}{{- end }}
+    {{- with $.Values.annotations.deployment }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with $.Values.components.rdpHttpsGateway.annotations }}{{- toYaml . | nindent 4 }}{{- end }}
   {{- end }}
 spec:
   replicas: {{ $rdpHttpsGatewayReplicas }}
@@ -39,15 +37,13 @@ spec:
         app.kubernetes.io/name: {{ $constants.rdpHttpsGateway.name }}
         app.kubernetes.io/component: {{ $constants.rdpHttpsGateway.component }}
         {{- include "kasm.defaultLabels" . | indent 8 }}
-      {{- if or $.Values.components.rdpHttpsGateway.labels $.Values.extraLabels.pod $.Values.labels }}
-        {{- with $.Values.components.rdpHttpsGateway.labels }}{{- toYaml . | indent 8 }}{{- end }}
-        {{- with $.Values.extraLabels.pod }}{{- toYaml . | indent 8 }}{{- end }}
-        {{- with $.Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
-      {{- end }}
-      {{- if or $.Values.components.rdpHttpsGateway.annotations $.Values.annotations.pod }}
+        {{- with .Values.components.rdpHttpsGateway.labels }}{{ toYaml . | nindent 8 }}{{- end }}
+        {{- with .Values.extraLabels.pod }}{{ toYaml . | nindent 8 }}{{- end }}
+        {{- with .Values.labels }}{{- toYaml . | nindent 8 }}{{- end }}
+      {{- if or .Values.components.rdpHttpsGateway.annotations .Values.annotations.pod }}
       annotations:
-        {{- with $.Values.annotations.pod }}{{- toYaml . | indent 8 }}{{- end }}
-        {{- with $.Values.components.rdpHttpsGateway.annotations }}{{- toYaml . | indent 8 }}{{- end }}
+        {{- with .Values.annotations.pod }}{{ toYaml . | nindent 8 }}{{- end }}
+        {{- with .Values.components.rdpHttpsGateway.annotations }}{{ toYaml . | nindent 8 }}{{- end }}
       {{- end }}
     spec:
       restartPolicy: {{ $.Values.restartPolicy }}

@@ -1,8 +1,8 @@
 {{/*
 Deploy the Kasm Proxy service
 */}}
-{{- if and .Values.ingress.enabled (eq .Values.service.type "LoadBalancer") -}}
-  {{- fail "The service.type must not be LoadBalancer when using an ingress - any load balancer should be provisioned by your ingress controller. Set service.type=ClusterIP instead" -}}
+{{- if and (or .Values.ingress.enabled .Values.route.enabled) (eq .Values.service.type "LoadBalancer") -}}
+  {{- fail "The service.type must not be LoadBalancer when using an ingress or a route - any load balancer or Route should be provisioned using the Ingress/Route settings. Set service.type=ClusterIP instead" -}}
 {{- end -}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- if eq .Values.service.type "LoadBalancer" -}}
@@ -15,18 +15,14 @@ metadata:
     app.kubernetes.io/name: {{ $constants.proxy.svc }}-ext-svc
     app.kubernetes.io/component: {{ $constants.proxy.component }}
     {{- include "kasm.defaultLabels" . | indent 4 }}
-  {{- if or .Values.components.proxy.labels .Values.extraLabels.service .Values.labels }}
-    {{- with .Values.components.proxy.labels }}{{- toYaml . | indent 4 }}{{- end }}
-    {{- with .Values.extraLabels.service }}{{- toYaml . | indent 4 }}{{- end }}
-    {{- with .Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
-  {{- end }}
-  {{- if or .Values.annotations.service .Values.service.annotations }}
-  annotations:
-    {{- toYaml .Values.annotations.service | indent 4 }}
-    {{- toYaml .Values.service.annotations | indent 4 }}
+    {{- with .Values.components.proxy.labels }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with .Values.extraLabels.service }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with .Values.labels }}{{- toYaml . | nindent 4 }}{{- end }}
+  {{- with .Values.service.annotations }}
+  annotations: {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
-  type: {{ .Values.service.type | default "ClusterIp" }}
+  type: {{ .Values.service.type | default "ClusterIP" }}
   selector:
     app.kubernetes.io/name: {{ $constants.proxy.name }}
   ports:

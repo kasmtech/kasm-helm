@@ -13,15 +13,13 @@ metadata:
     app.kubernetes.io/name: {{ $constants.share.name }}
     app.kubernetes.io/component: {{ $constants.share.component }}
     {{- include "kasm.defaultLabels" . | indent 4 }}
-  {{- if or $.Values.components.share.labels $.Values.extraLabels.deployment $.Values.labels }}
-    {{- with $.Values.components.share.labels }}{{- toYaml . | indent 4 }}{{- end }}
-    {{- with $.Values.extraLabels.deployment }}{{- toYaml . | indent 4 }}{{- end }}
-    {{- with $.Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
-  {{- end }}
+    {{- with $.Values.components.share.labels }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with $.Values.extraLabels.deployment }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with $.Values.labels }}{{- toYaml . | nindent 4 }}{{- end }}
   {{- if or $.Values.components.share.annotations $.Values.annotations.deployment }}
   annotations:
-    {{- with $.Values.annotations.deployment }}{{- toYaml . | indent 4 }}{{- end }}
-    {{- with $.Values.components.share.annotations }}{{- toYaml . | indent 4 }}{{- end }}
+    {{- with $.Values.annotations.deployment }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with $.Values.components.share.annotations }}{{- toYaml . | nindent 4 }}{{- end }}
   {{- end }}
 spec:
   replicas: {{ $shareReplicas }}
@@ -39,15 +37,13 @@ spec:
         app.kubernetes.io/name: {{ $constants.share.name }}
         app.kubernetes.io/component: {{ $constants.share.component }}
         {{- include "kasm.defaultLabels" . | indent 8 }}
-      {{- if or $.Values.components.share.labels $.Values.extraLabels.pod $.Values.labels }}
-        {{- with $.Values.components.share.labels }}{{- toYaml . | indent 8 }}{{- end }}
-        {{- with $.Values.extraLabels.pod }}{{- toYaml . | indent 8 }}{{- end }}
-        {{- with $.Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
-      {{- end }}
-      {{- if or $.Values.components.share.annotations $.Values.annotations.pod }}
+        {{- with .Values.components.share.labels }}{{ toYaml . | nindent 8 }}{{- end }}
+        {{- with .Values.extraLabels.pod }}{{ toYaml . | nindent 8 }}{{- end }}
+        {{- with .Values.labels }}{{- toYaml . | nindent 8 }}{{- end }}
+      {{- if or .Values.components.share.annotations .Values.annotations.pod }}
       annotations:
-        {{- with $.Values.annotations.pod }}{{- toYaml . | indent 8 }}{{- end }}
-        {{- with $.Values.components.share.annotations }}{{- toYaml . | indent 8 }}{{- end }}
+        {{- with .Values.annotations.pod }}{{ toYaml . | nindent 8 }}{{- end }}
+        {{- with .Values.components.share.annotations }}{{ toYaml . | nindent 8 }}{{- end }}
       {{- end }}
     spec:
       restartPolicy: {{ $.Values.restartPolicy }}
@@ -100,10 +96,18 @@ spec:
               value: auto
             - name: SERVER_HOSTNAME
               value: {{ $constants.share.svc }}
+            - name: POSTGRES_HOST
+              value: {{ .Values.database.hostname }}
+            - name: POSTGRES_PORT
+              value: {{ .Values.database.port | quote }}
+            - name: POSTGRES_DB
+              value: {{ .Values.database.kasmDbName }}
+            - name: POSTGRES_USER
+              value: {{ .Values.database.kasmDbUser }}
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ $.Release.Name }}-secrets
+                  name: {{ .Release.Name }}-secrets
                   key: db-password
           ports:
             - name: {{ $constants.share.portName }}

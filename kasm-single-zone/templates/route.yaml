@@ -2,7 +2,7 @@
 Deploy the Kasm OpenShift Route if .Values.route.enabled set to true
 */}}
 {{- if and .Values.ingress.enabled .Values.route.enabled -}}
-  {{- fail "The ingress.enabled and route.enabled cannot both be set. Either set ingress.enabled=false or route.enabled=false." -}}
+  {{- fail "The ingress.enabled and route.enabled cannot both be set. Either configure an Ingress or an OpenShift Route, not both." -}}
 {{- end -}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- if eq .Values.route.enabled true }}
@@ -14,13 +14,10 @@ metadata:
   labels:
     app.kubernetes.io/name: {{ .Release.Name }}-route
     {{- include "kasm.defaultLabels" . | indent 4 }}
-  {{- if or .Values.route.labels .Values.extraLabels.route .Values.labels }}
-    {{- with .Values.route.labels }}{{- toYaml . | indent 4 }}{{- end }}
-    {{- with .Values.extraLabels.route }}{{- toYaml . | indent 4 }}{{- end }}
-    {{- with .Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
-  {{- end }}
-  {{- with .Values.annotations.route }}
-  annotations: {{ toYaml . | indent 4 }}
+    {{- with .Values.route.labels }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with .Values.labels }}{{- toYaml . | nindent 4 }}{{- end }}
+  {{- with .Values.route.annotations }}
+  annotations: {{ toYaml . | nindent 4 }}
   {{- end }}
 spec:
   host: {{ .Values.publicAddr | quote }}
@@ -33,24 +30,24 @@ spec:
   tls:
     {{- /* Default to edge termination, configurable by value */}}
     termination: {{ .Values.route.tls.termination | default "edge" }}
-    {{- if .Values.route.tls.insecureEdgeTerminationPolicy }}
-    insecureEdgeTerminationPolicy: {{ .Values.route.tls.insecureEdgeTerminationPolicy }}
+    {{- with .Values.route.tls.insecureEdgeTerminationPolicy }}
+    insecureEdgeTerminationPolicy: {{ . }}
     {{- end }}
-    {{- if .Values.route.tls.certificate }}
+    {{- with .Values.route.tls.certificate }}
     certificate: |
-      {{- .Values.route.tls.certificate | nindent 6 }}
+      {{- . | nindent 6 }}
     {{- end }}
-    {{- if .Values.route.tls.key }}
+    {{- with .Values.route.tls.key }}
     key: |
-      {{- .Values.route.tls.key | nindent 6 }}
+      {{- . | nindent 6 }}
     {{- end }}
-    {{- if .Values.route.tls.caCertificate }}
+    {{- with .Values.route.tls.caCertificate }}
     caCertificate: |
-      {{- .Values.route.tls.caCertificate | nindent 6 }}
+      {{- . | nindent 6 }}
     {{- end }}
-    {{- if .Values.route.tls.destinationCACertificate }}
+    {{- with .Values.route.tls.destinationCACertificate }}
     destinationCACertificate: |
-      {{- .Values.route.tls.destinationCACertificate | nindent 6 }}
+      {{- . | nindent 6 }}
     {{- end }}
   wildcardPolicy: {{ .Values.route.wildcardPolicy | default "None" }}
 {{- end }}

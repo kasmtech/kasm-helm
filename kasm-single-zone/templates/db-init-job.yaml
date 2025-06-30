@@ -10,6 +10,12 @@ metadata:
   labels:
     app.kubernetes.io/name: {{ .Release.Name }}-db-init
     {{- include "kasm.defaultLabels" . | indent 4 }}
+    {{- with .Values.components.api.labels }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with .Values.extraLabels.job }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with .Values.labels }}{{- toYaml . | nindent 4 }}{{- end }}
+  {{- with .Values.components.api.annotations }}
+  annotations: {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   template:
     metadata:
@@ -17,6 +23,14 @@ spec:
         app.kubernetes.io/name: {{ .Release.Name }}-db-init
         app.kubernetes.io/component: db-init
         {{- include "kasm.defaultLabels" . | indent 8 }}
+        {{- with .Values.components.api.labels }}{{ toYaml . | nindent 8 }}{{- end }}
+        {{- with .Values.extraLabels.jobPod }}{{ toYaml . | nindent 8 }}{{- end }}
+        {{- with .Values.labels }}{{- toYaml . | nindent 8 }}{{- end }}
+      {{- if or .Values.components.api.annotations .Values.annotations.pod }}
+      annotations:
+        {{- with .Values.annotations.pod }}{{ toYaml . | nindent 8 }}{{- end }}
+        {{- with .Values.components.api.annotations }}{{ toYaml . | nindent 8 }}{{- end }}
+      {{- end }}
     spec:
       {{- if .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -32,7 +46,7 @@ spec:
             - "-c"
           args:
             - |
-              while ! pg_isready -h {{ $constants.db.svc }} -p {{ $constants.db.port }} -t 10; do echo "Waiting for DB..."; sleep 5; done
+              while ! pg_isready -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -t 10; do echo "Waiting for DB..."; sleep 5; done
       containers:
         - name: {{ .Release.Name }}-db-init-container
           image: {{ $constants.api.image }}
@@ -42,6 +56,19 @@ spec:
               value: "true"
             - name: DB_AUTO_INITIALIZE
               value: {{ .Values.database.initialize_db | quote }}
+            - name: POSTGRES_HOST
+              value: {{ .Values.database.hostname }}
+            - name: POSTGRES_PORT
+              value: {{ .Values.database.port | quote }}
+            - name: POSTGRES_DB
+              value: {{ .Values.database.kasmDbName }}
+            - name: POSTGRES_USER
+              value: {{ .Values.database.kasmDbUser }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-secrets
+                  key: db-password
             - name: DEFAULT_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -67,6 +94,15 @@ spec:
                 secretKeyRef:
                   name: {{ .Release.Name }}-secrets
                   key: db-password
+            {{- if and .Values.database.standalone .Values.database.postgresMasterUser }}
+            - name: DATABASE_MASTER_USER
+              value: {{ .Values.database.postgresMasterUser.username }}
+            - name: DATABASE_MASTER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.postgresMasterUser.secret.name }}
+                  key: {{ .Values.database.postgresMasterUser.secret.key }}
+            {{- end }}
           command:
             - "/bin/bash"
             - "-c"

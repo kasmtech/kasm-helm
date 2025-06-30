@@ -2,6 +2,7 @@
 Deploy Kasm API Service .Values.database service definition
 */}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- if eq .Values.database.standalone true }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -11,18 +12,17 @@ metadata:
     app.kubernetes.io/name: {{ $constants.db.svc }}-svc
     app.kubernetes.io/component: {{ $constants.db.component }}
     {{- include "kasm.defaultLabels" . | indent 4 }}
-  {{- if or .Values.database.labels .Values.extraLabels.service .Values.labels }}
-    {{- with .Values.database.labels }}{{- toYaml . | indent 4 }}{{- end }}
-    {{- with .Values.extraLabels.service }}{{- toYaml . | indent 4 }}{{- end }}
-    {{- with .Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
-  {{- end }}
+    {{- with .Values.database.labels }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with .Values.extraLabels.service }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with .Values.labels }}{{- toYaml . | nindent 4 }}{{- end }}
   {{- with .Values.annotations.service }}
-  annotations: {{ toYaml . | indent 4 }}
+  annotations: {{ toYaml . | nindent 4 }}
   {{- end }}
 spec:
   selector:
     app.kubernetes.io/name: {{ $constants.db.name }}
   ports:
-    - name: {{ printf "%s-svc-%s" $constants.db.svc ($constants.db.port | toString) }}
+    - name: {{ printf "%s-svc-%s" .Values.database.hostname (.Values.database.port | toString) }}
       protocol: TCP
-      port: {{ $constants.db.port }}
+      port: {{ $constants.db.portName }}
+{{- end }}

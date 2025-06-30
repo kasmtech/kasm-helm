@@ -3,6 +3,7 @@ Kasm DB server StatefullSet definition
 */}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- $dbReplicas := include "replicas.preset" (dict "node" $constants.db.component "size" .Values.deploymentSize) -}}
+{{- if eq .Values.database.standalone false }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -12,15 +13,13 @@ metadata:
     app.kubernetes.io/name: {{ $constants.db.name }}
     app.kubernetes.io/component: {{ $constants.db.component }}
     {{- include "kasm.defaultLabels" . | indent 4 }}
-  {{- if or .Values.database.labels .Values.extraLabels.statefulSet .Values.labels }}
-    {{- with .Values.database.labels }}{{- toYaml . | indent 4 }}{{- end }}
-    {{- with .Values.extraLabels.statefulSet }}{{- toYaml . | indent 4 }}{{- end }}
-    {{- with .Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
-  {{- end }}
+    {{- with .Values.database.labels }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with .Values.extraLabels.statefulSet }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with .Values.labels }}{{- toYaml . | nindent 4 }}{{- end }}
   {{- if or .Values.database.annotations .Values.annotations.statefulSet }}
   annotations:
-    {{- with .Values.annotations.statefulSet }}{{- toYaml . | indent 4 }}{{- end }}
-    {{- with .Values.database.annotations }}{{- toYaml . | indent 4 }}{{- end }}
+    {{- with .Values.annotations.statefulSet }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with .Values.database.annotations }}{{- toYaml . | nindent 4 }}{{- end }}
   {{- end }}
 spec:
   replicas: 1
@@ -36,15 +35,13 @@ spec:
         app.kubernetes.io/name: {{ $constants.db.name }}
         app.kubernetes.io/component: {{ $constants.db.component }}
         {{- include "kasm.defaultLabels" . | indent 8 }}
-      {{- if or .Values.database.labels .Values.extraLabels.pod .Values.labels }}
-        {{- with .Values.database.labels }}{{- toYaml . | indent 8 }}{{- end }}
-        {{- with .Values.extraLabels.pod }}{{- toYaml . | indent 8 }}{{- end }}
-        {{- with .Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
-      {{- end }}
+        {{- with .Values.database.labels }}{{- toYaml . | nindent 8 }}{{- end }}
+        {{- with .Values.extraLabels.pod }}{{- toYaml . | nindent 8 }}{{- end }}
+        {{- with .Values.labels }}{{- toYaml . | nindent 8 }}{{- end }}
       {{- if or .Values.database.annotations .Values.annotations.pod }}
       annotations:
-        {{- with .Values.annotations.pod }}{{- toYaml . | indent 8 }}{{- end }}
-        {{- with .Values.database.annotations }}{{- toYaml . | indent 8 }}{{- end }}
+        {{- with .Values.annotations.pod }}{{- toYaml . | nindent 8 }}{{- end }}
+        {{- with .Values.database.annotations }}{{- toYaml . | nindent 8 }}{{- end }}
       {{- end }}
     spec:
       restartPolicy: {{ .Values.restartPolicy }}
@@ -83,25 +80,25 @@ spec:
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           env:
             - name: POSTGRES_DB
-              value: kasm
+              value: {{ .Values.database.kasmDbName }}
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ .Release.Name }}-secrets
                   key: db-password
             - name: POSTGRES_USER
-              value: kasmapp
+              value: {{ .Values.database.kasmDbUser }}
           ports:
-            - name: {{ $constants.db.name }}-pt
-              containerPort: {{ $constants.db.port }}
+            - name: {{ $constants.db.portName }}
+              containerPort: {{ .Values.database.port }}
               protocol: TCP
           {{- if .Values.applyHealthChecks }}
           livenessProbe:
-            {{- include "health.command" (dict "command" (printf "pg_isready --port=%s -t 10" ($constants.db.port | toString))) | indent 12 }}
+            {{- include "health.command" (dict "command" (printf "pg_isready --port=%s -t 10" (.Values.database.port | toString))) | indent 12 }}
           {{- end }}
           {{- if .Values.applyHealthChecks }}
           readinessProbe:
-            {{- include "health.command" (dict "command" "psql -d kasm -U kasmapp -c 'SELECT 1' || exit 1") | indent 12 }}
+            {{- include "health.command" (dict "command" (printf "psql -d %s -U %s -c 'SELECT 1' || exit 1" .Values.database.kasmDbName .Values.database.kasmDbUser)) | indent 12 }}
           {{- end }}
           {{- if .Values.database.resources }}
           resources: {{- toYaml .Values.database.resources | nindent 12 }}
@@ -164,3 +161,4 @@ spec:
         resources:
           requests:
             storage: 8Gi
+{{- end }}

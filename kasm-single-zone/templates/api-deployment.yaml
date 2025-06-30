@@ -8,23 +8,17 @@ kind: Deployment
 metadata:
   name: {{ $constants.api.name }}-deployment
   namespace: {{ .Release.Namespace }}
-  {{- if .Values.components.api.annotations }}
-  annotations:
-  {{- .Values.components.api.annotations | indent 4 }}
-  {{- end }}
   labels:
     app.kubernetes.io/name: {{ $constants.api.name }}
     app.kubernetes.io/component: {{ $constants.api.component }}
     {{- include "kasm.defaultLabels" . | indent 4 }}
-  {{- if or .Values.components.api.labels .Values.extraLabels.deployment .Values.labels }}
-    {{- with .Values.components.api.labels }}{{- toYaml . | indent 4 }}{{- end }}
-    {{- with .Values.extraLabels.deployment }}{{- toYaml . | indent 4 }}{{- end }}
-    {{- with .Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
-  {{- end }}
+    {{- with .Values.components.api.labels }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with .Values.extraLabels.deployment }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with .Values.labels }}{{- toYaml . | nindent 4 }}{{- end }}
   {{- if or .Values.components.api.annotations .Values.annotations.deployment }}
   annotations:
-    {{- with .Values.annotations.deployment }}{{- toYaml . | indent 4 }}{{- end }}
-    {{- with .Values.components.api.annotations }}{{- toYaml . | indent 4 }}{{- end }}
+    {{- with .Values.annotations.deployment }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with .Values.components.api.annotations }}{{- toYaml . | nindent 4 }}{{- end }}
   {{- end }}
 spec:
   replicas: {{ $apiReplicas }}
@@ -42,15 +36,13 @@ spec:
         app.kubernetes.io/name: {{ $constants.api.name }}
         app.kubernetes.io/component: {{ $constants.api.component }}
         {{- include "kasm.defaultLabels" . | indent 8 }}
-      {{- if or .Values.components.api.labels .Values.extraLabels.pod .Values.labels }}
-        {{- with .Values.components.api.labels }}{{- toYaml . | indent 8 }}{{- end }}
-        {{- with .Values.extraLabels.pod }}{{- toYaml . | indent 8 }}{{- end }}
-        {{- with .Values.labels }}{{- toYaml . | indent 4 }}{{- end }}
-      {{- end }}
+        {{- with .Values.components.api.labels }}{{ toYaml . | nindent 8 }}{{- end }}
+        {{- with .Values.extraLabels.pod }}{{ toYaml . | nindent 8 }}{{- end }}
+        {{- with .Values.labels }}{{- toYaml . | nindent 8 }}{{- end }}
       {{- if or .Values.components.api.annotations .Values.annotations.pod }}
       annotations:
-        {{- with .Values.annotations.pod }}{{- toYaml . | indent 8 }}{{- end }}
-        {{- with .Values.components.api.annotations }}{{- toYaml . | indent 8 }}{{- end }}
+        {{- with .Values.annotations.pod }}{{ toYaml . | nindent 8 }}{{- end }}
+        {{- with .Values.components.api.annotations }}{{ toYaml . | nindent 8 }}{{- end }}
       {{- end }}
     spec:
       restartPolicy: {{ .Values.restartPolicy }}
@@ -61,11 +53,25 @@ spec:
       {{- if .Values.applySecurity }}
         {{- include "kasm.podSecurity" . | indent 6 }}
       {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+      {{- end }}
       initContainers:
         - name: db-is-ready
           image: {{ $constants.api.image }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           env:
+            - name: POSTGRES_HOST
+              value: {{ .Values.database.hostname }}
+            - name: POSTGRES_PORT
+              value: {{ .Values.database.port | quote }}
+            - name: POSTGRES_DB
+              value: {{ .Values.database.kasmDbName }}
+            - name: POSTGRES_USER
+              value: {{ .Values.database.kasmDbUser }}
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -76,7 +82,7 @@ spec:
             - -c
           args:
             - |
-              while [ ! $(PGPASSWORD=$POSTGRES_PASSWORD psql -U kasmapp -d kasm -h {{ $constants.db.svc }} -t -c "select zone_id from zones" 2>/dev/null | wc -l) -ge 2 ]; do echo "Waiting for DB to initialize..."; sleep 5; done
+              while [ ! $(PGPASSWORD=$POSTGRES_PASSWORD psql -U $POSTGRES_USER -d $POSTGRES_DB -p $POSTGRES_PORT -h $POSTGRES_HOST -t -c "select zone_id from zones" 2>/dev/null | wc -l) -ge 2 ]; do echo "Waiting for DB to initialize..."; sleep 5; done
           {{- if .Values.applySecurity }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}
@@ -89,6 +95,14 @@ spec:
               value: "true"
             - name: KUBERNETES_SERVICE_HOST
               value: "true"
+            - name: POSTGRES_HOST
+              value: {{ .Values.database.hostname }}
+            - name: POSTGRES_PORT
+              value: {{ .Values.database.port | quote }}
+            - name: POSTGRES_DB
+              value: {{ .Values.database.kasmDbName }}
+            - name: POSTGRES_USER
+              value: {{ .Values.database.kasmDbUser }}
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
