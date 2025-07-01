@@ -47,6 +47,11 @@ spec:
         - name: db-is-ready
           image: {{ $constants.api.image }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
+          env:
+            - name: POSTGRES_HOST
+              value: {{ .Values.database.hostname }}
+            - name: POSTGRES_PORT
+              value: {{ .Values.database.port | quote }}
           command:
             - "/bin/bash"
             - "-c"

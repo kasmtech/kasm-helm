@@ -12,6 +12,8 @@ metadata:
     app.kubernetes.io/name: {{ $constants.proxy.name }}-cert
     app.kubernetes.io/component: certificate
     {{- include "kasm.defaultLabels" . | indent 4 }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade,post-delete
 spec:
   secretTemplate:
     labels:

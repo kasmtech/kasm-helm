@@ -58,7 +58,7 @@ spec:
       {{- include "db.podSecurity" . | indent 6 }}
       initContainers:
         - name: {{ $constants.db.name }}-data-perms
-          image: busybox
+          image: {{ $constants.api.image }}
           command:
             - /bin/sh
             - -ec
@@ -143,7 +143,6 @@ spec:
         - name: {{ $constants.db.name }}-configs
           configMap:
             name: {{ $constants.db.name }}-configmap
-            defaultMode: 0o644
         - name: {{ $constants.db.name }}-cert
           secret:
             secretName: {{ .Values.certificate.secretName }}

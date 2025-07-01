@@ -5,7 +5,7 @@ Deploy Kasm API Service .Values.components.api service definition
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ $constants.api.name }}
+  name: {{ $constants.api.svc }}
   namespace: {{ .Release.Namespace }}
   labels:
     app.kubernetes.io/name: {{ $constants.api.name }}-svc
