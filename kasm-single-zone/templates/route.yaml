@@ -29,7 +29,7 @@ spec:
     targetPort: {{ $constants.proxy.https }}
   wildcardPolicy: {{ .Values.route.wildcardPolicy | default "None" }}
   tls:
-    {{- with .Values.route.tls -}}
+    {{- with .Values.route.tls }}
     termination: {{ .termination | default "edge" }}
     {{- with .insecureEdgeTerminationPolicy }}
     insecureEdgeTerminationPolicy: {{ . | default "Redirect" }}

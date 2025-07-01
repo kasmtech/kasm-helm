@@ -19,6 +19,7 @@ metadata:
   annotations: {{ toYaml . | nindent 4 }}
   {{- end }}
 spec:
+  type: ClusterIP
   selector:
     app.kubernetes.io/name: {{ $constants.redis.name }}
   ports:

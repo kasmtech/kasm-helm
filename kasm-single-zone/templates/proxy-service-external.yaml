@@ -1,7 +1,7 @@
 {{/*
 Deploy the Kasm Proxy service
 */}}
-{{- if and (or .Values.ingress.enabled .Values.route.enabled) (eq .Values.service.type "LoadBalancer") -}}
+{{- if and (or .Values.ingress.enabled .Values.route.enabled) (eq .Values.proxyService.type "LoadBalancer") -}}
   {{- fail "The service.type must not be LoadBalancer when using an ingress or a route - any load balancer or Route should be provisioned using the Ingress/Route settings. Set service.type=ClusterIP instead" -}}
 {{- end -}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}

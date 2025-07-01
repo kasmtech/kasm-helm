@@ -38,20 +38,4 @@ spec:
               name: {{ $constants.proxy.svc }}
               port:
                 number: {{ $constants.proxy.http }}
-        - path: /api/
-          pathType: Prefix
-          backend:
-            service:
-              name: {{ $constants.api.svc }}
-              port:
-                number: {{ $constants.api.port }}
-{{- if eq .Values.components.share.deploy true }}
-        - path: /api/share/
-          pathType: Prefix
-          backend:
-            service:
-              name: {{ $constants.share.svc }}
-              port:
-                number: {{ $constants.share.port }}
-{{- end }}
 {{- end }}

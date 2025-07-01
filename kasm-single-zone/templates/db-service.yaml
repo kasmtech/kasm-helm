@@ -19,6 +19,7 @@ metadata:
   annotations: {{ toYaml . | nindent 4 }}
   {{- end }}
 spec:
+  clusterIP: None
   selector:
     app.kubernetes.io/name: {{ $constants.db.name }}
   ports:
