@@ -71,9 +71,9 @@ spec:
             - name: LOG_LEVEL
               value: INFO
             - name: POSTGRES_HOST
-              value: {{ .Values.database.hostname }}
+              value: {{ $constants.db.svc }}
             - name: POSTGRES_PORT
-              value: {{ .Values.database.port | quote }}
+              value: {{ $constants.db.port | quote }}
             - name: POSTGRES_DB
               value: {{ .Values.database.kasmDbName }}
             - name: POSTGRES_USER

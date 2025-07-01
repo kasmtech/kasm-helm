@@ -27,9 +27,11 @@ proxy:
   extHttps: 443
 db:
   component: db
+  svc: {{ .Values.database.hostname }}
   portName: db-pt
   name: {{ printf "%s-db" .Release.Name }}
   image: {{ printf "%s:%s" .Values.database.image.repository .Values.database.image.tag }}
+  port: {{ .Values.database.port }}
 guac:
   component: guac
   svc: kasm-guac

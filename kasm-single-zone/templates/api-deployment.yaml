@@ -65,9 +65,9 @@ spec:
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           env:
             - name: POSTGRES_HOST
-              value: {{ .Values.database.hostname }}
+              value: {{ $constants.db.svc }}
             - name: POSTGRES_PORT
-              value: {{ .Values.database.port | quote }}
+              value: {{ $constants.db.port | quote }}
             - name: POSTGRES_DB
               value: {{ .Values.database.kasmDbName }}
             - name: POSTGRES_USER
@@ -96,9 +96,9 @@ spec:
             - name: KUBERNETES_SERVICE_HOST
               value: "true"
             - name: POSTGRES_HOST
-              value: {{ .Values.database.hostname }}
+              value: {{ $constants.db.svc }}
             - name: POSTGRES_PORT
-              value: {{ .Values.database.port | quote }}
+              value: {{ $constants.db.port | quote }}
             - name: POSTGRES_DB
               value: {{ .Values.database.kasmDbName }}
             - name: POSTGRES_USER

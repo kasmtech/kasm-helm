@@ -48,15 +48,15 @@ route:
   annotations: {}
   labels: {}
 
-# service -- Configure the external-facing service type to use.
-# Allowed service types: ClusterIP or LoadBalancer
+# proxyService -- Configure the external-facing service type to use. 
+# Allowed service types: ClusterIP or LoadBalancer. 
 #
-# The service.annotations defined here only apply to the `proxy` service. If you wish to apply annotations
-# to all services, use the annotations.service value at the bottom of this chart.
+# The service.annotations defined here only apply to the `proxy` service (`proxy-service-external.yaml` file).
+# If you wish to apply annotations to all services, use the annotations.service value at the bottom of this chart.
 #
 # NOTE: If ingress.enabled or route.enabled set to `true` service.type MUST be set to `ClusterIP`.
 #
-service:
+proxyService:
   type: LoadBalancer
   annotations: {}
   labels: {}
@@ -243,6 +243,7 @@ components:
     # components.rdpHttpsGateway.enabled -- Use this setting to enable/disable deployment of the Kasm RDP HTTPS Gateway service.
     # This service allows users to use native RDP clients via HTTPS connections rather than exposing 3389 - 
     # [Kasm RDP HTTPS Gateway](https://kasmweb.com/docs/latest/guide/connection_proxies.html#rdp-https-gateway).
+    #
     enabled: true
     # components.rdpHttpsGateway.annotations -- Custom annotations to add to the Kasm RDP HTTPS Gateway Deployment
     annotations: {}
@@ -259,8 +260,9 @@ components:
     image:
       repository: kasmweb/share
       tag: 1.17.0
-    # -- Use this setting to enable/disable deployment of the Kasm Share and associated Redis services - 
+    # components.share.enabled -- Use this setting to enable/disable deployment of the Kasm Share and associated Redis services - 
     # [Kasm Share Service](https://kasmweb.com/docs/latest/guide/session_sharing.html).
+    #
     enabled: true
     # components.share.annotations -- Custom annotations to add to the Kasm Share Deployment
     annotations: {}
@@ -347,7 +349,7 @@ annotations:
   # annotations.pod -- Additional pod annotations to apply to resources created by this chart
   pod: {}
   # annotations.service -- Additional service annotations to apply to resources created by this chart
-  service:
+  service: {}
   # annotations.secret -- Additional secret annotations to apply to resources created by this chart
   secret: {}
   # annotations.statefulSet -- Additional statefulSet annotations to apply to resources created by this chart
