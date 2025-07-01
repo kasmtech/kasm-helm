@@ -1,0 +1,181 @@
+deploymentSize: "small"
+publicAddr: "kasm.contoso.com"
+
+ingress:
+  enabled: false
+  ingressClassName: ""
+  annotations: {}
+  labels: {}
+
+route:
+  enabled: false
+  tls: {}
+  annotations: {}
+  labels: {}
+
+# proxyService -- Configure the external-facing service type to use.
+# Allowed service types: ClusterIP or LoadBalancer
+#
+# The service.annotations defined here only apply to the `proxy` service. If you wish to apply annotations
+# to all services, use the annotations.service value at the bottom of this chart.
+#
+# NOTE: If ingress.enabled or route.enabled set to `true` service.type MUST be set to `ClusterIP`.
+#
+proxyService:
+  type: LoadBalancer
+  annotations:
+    oci.oraclecloud.com/load-balancer-type: "lb"
+    external-dns.alpha.kubernetes.io/hostname: "kasm.contoso.com"
+    service.beta.kubernetes.io/oci-load-balancer-shape: "flexible"
+    service.beta.kubernetes.io/oci-load-balancer-shape-flex-min: "10"
+    service.beta.kubernetes.io/oci-load-balancer-shape-flex-max: "1000"
+    service.beta.kubernetes.io/oci-load-balancer-ssl-ports: "443"
+    service.beta.kubernetes.io/oci-load-balancer-tls-secret: "cert-secret-name"
+    service.beta.kubernetes.io/oci-load-balancer-backend-protocol: "HTTP"
+    service.beta.kubernetes.io/oci-load-balancer-tls-backendset-secret: "backendset-cert-secret-name"
+    service.beta.kubernetes.io/oci-load-balancer-subnet1: "ocid1.subnet.oc1.iad.aaaaaaaa..."
+    oci.oraclecloud.com/oci-network-security-groups: "ocid1.networksecuritygroup.oc1.iad.aaaaaaaa..."
+    oci.oraclecloud.com/oci-load-balancer-backendset-ssl-config: '{"CipherSuiteName":"oci-default-http2-tls-12-13-ssl-cipher-suite-v1", "Protocols":["TLSv1.2","TLSv1.3"]}'
+    oci.oraclecloud.com/oci-load-balancer-listener-ssl-config: '{"CipherSuiteName":"oci-default-http2-tls-12-13-ssl-cipher-suite-v1", "Protocols":["TLSv1.2","TLSv1.3"]}'
+  labels: {}
+
+certificate:
+  # certificate.secretName -- Set the secret name where the certificate is stored.
+  # This secret name will store a certificate created by `cert-manager` if you set `cert-manager.enabled` to true
+  #
+  secretName: cert-secret-name
+  # certificate.certManager -- For additional cert-manager configuration/deployment information refer to the online documentation
+  # [Cert Manager Docs](https://cert-manager.io/v1.1-docs/installation/kubernetes/). 
+  # 
+  # NOTE: If you do not enable `cert-manager`, you must generate your own certificates and add them as a Kubernetes secret.
+  # Refer to [Kubernetes Secrets](https://kubernetes.io/docs/concepts/configuration/secret/), and 
+  # [Kubernetes TLS Secret](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_create/kubectl_create_secret_tls/)
+  # for more information.
+  #
+  certManager:
+    enabled: true
+    addWildCard: true
+    issuerName: cert-issuer-name
+    issuerKind: cert-issuer-kind
+    issuerGroup: ""
+
+database:
+  standalone: false
+  hostname: kasm-db
+  port: 5432
+  kasmDbName: kasm
+  kasmDbUser: kasmapp
+  postgresMasterUser: {}
+  initialize_db: true
+  image:
+    repository: kasmweb/postgres
+    tag: 1.17.0
+  storage:
+    # database.storage.storageClassName -- Select a storage class here suitable to your deployment requierments. Something
+    # shared across your workers, such as an NFS backend would be useful to allow the DB to migrate to handle Node maintenance
+    #
+    storageClassName: storage-class-name
+    retentionPolicy:
+      whenDeleted: Delete
+      whenScaled: Retain
+  annotations: {}
+  resources: {}
+  labels: {}
+
+components:
+  proxy:
+    image:
+      repository: kasmweb/proxy
+      tag: 1.17.0
+    annotations: {}
+    resources: {}
+    labels: {}
+  api:
+    image:
+      repository: kasmweb/api
+      tag: 1.17.0
+    annotations: {}
+    resources: {}
+    labels: {}
+  manager:
+    image:
+      repository: kasmweb/manager
+      tag: 1.17.0
+    annotations: {}
+    resources: {}
+    labels: {}
+  guac:
+    image:
+      repository: kasmweb/kasm-guac
+      tag: 1.17.0
+    enabled: true
+    annotations: {}
+    resources: {}
+    labels: {}
+  rdpGateway:
+    image:
+      repository: kasmweb/rdp-gateway
+      tag: 1.17.0
+    enabled: true
+    annotations: {}
+    resources: {}
+    labels: {}
+  rdpHttpsGateway:
+    image:
+      repository: kasmweb/rdp-https-gateway
+      tag: 1.17.0
+    enabled: true
+    annotations: {}
+    resources: {}
+    labels: {}
+  share:
+    image:
+      repository: kasmweb/share
+      tag: 1.17.0
+    enabled: true
+    annotations: {}
+    resources: {}
+    labels: {}
+  redis:
+    image:
+      repository: redis
+      tag: 5-alpine
+    annotations: {}
+    resources: {}
+    labels: {}
+
+imagePullPolicy: "IfNotPresent"
+imagePullSecrets: ""
+imagePullCredentials: {}
+clusterDomain: "cluster.local"
+affinity: {}
+applySecurity: true
+applyHealthChecks: true
+restartPolicy: "Always"
+labels: {}
+
+# nodeSelector -- Configure node selector settings for your Kasm pods - 
+# [Kubernetes Node Selector](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector).
+#
+nodeSelector:
+  node-selector: prod
+
+annotations:
+  certSecret: {}
+  configMap: {}
+  deployment: {}
+  pod: {}
+  service: {}
+  secret: {}
+  statefulSet: {}
+
+extraLabels:
+  certSecret: {}
+  configMap: {}
+  deployment: {}
+  pod: {}
+  secret: {}
+  service: {}
+  job: {}
+  jobPod: {}
+  statefulSet: {}
