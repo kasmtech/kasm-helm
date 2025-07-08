@@ -1,10 +1,42 @@
 deploymentSize: "small"
 publicAddr: "kasm.contoso.com"
 
+# Below are example settings for the Ingress configuration in OCI using the `oci-native-ingress` controller.
+# Refer to the [Setting up the OCI Native Ingress Controller on OKE](https://docs.oracle.com/en-us/iaas/Content/ContEng/Tasks/contengsettingupnativeingresscontroller.htm)
+# for more information.
 ingress:
-  enabled: false
-  ingressClassName: ""
-  annotations: {}
+  # ingress.enabled -- Set ingress.enabled = true to tell OKE to use the Ingress controller to route traffic to Kasm.
+  #
+  enabled: true
+  # ingress.ingressClassName -- Use this value to reference the pre-defined Kubernetes `ingresssClass`. To use the OCI native Ingress Class in OKE
+  # you must manually create `IngressClassParameters` and an `IngressClass` in your OKE cluster. Refer to the
+  # [Creating IngressClassParameters, IngressClass, and Ingress Resources](https://docs.oracle.com/en-us/iaas/Content/ContEng/Tasks/contengsettingupnativeingresscontroller-createresources.htm)
+  # for more information. Also, check otu the `example-oci-ingress-class.yaml` file in this folder for example configuraitons.
+  # 
+  ingressClassName: oke-ingress-class
+  # ingress.annotations -- The annotations below are used to configure backend and healthcheck settings for the Kasm
+  # proxy service. The settings below are example settings you can use to help get started using the `Ingress` with OKE.
+  # The `annotation.oci-native-ingress.oraclecloud.com/certificate-ocid` value should only be used if you manage certificates
+  # independently of your OKE cluster and the certificate already exists in the OCI Certificate Management service.
+  #
+  annotations:
+    oci-native-ingress.oraclecloud.com/backend-tls-enabled: "true"
+    oci-native-ingress.oraclecloud.com/http-listener-port: "80"
+    oci-native-ingress.oraclecloud.com/https-listener-port: "443"
+    oci-native-ingress.oraclecloud.com/healthcheck-protocol: "HTTP"
+    oci-native-ingress.oraclecloud.com/healthcheck-port: "8443"
+    # Below are optional
+    oci-native-ingress.oraclecloud.com/healthcheck-path: "/api/__healthcheck"
+    oci-native-ingress.oraclecloud.com/healthcheck-interval-milliseconds: "30000"
+    oci-native-ingress.oraclecloud.com/healthcheck-timeout-milliseconds: "3000"
+    oci-native-ingress.oraclecloud.com/healthcheck-retries: "3"
+    oci-native-ingress.oraclecloud.com/healthcheck-return-code: "200"
+    oci-native-ingress.oraclecloud.com/healthcheck-response-regex: "{\"ok\": true}"
+    # ONLY configure certificate-ocid if certificate.secretName = ""
+    # Delete the line below if you want to allow `cert-manager` to manage Kasm certificates as Kubernetes secrets and not
+    # have certificates managed in the OCI Certificate Management service.
+    #
+    oci-native-ingress.oraclecloud.com/certificate-ocid: "ocid1.certificate.oc1.<region>.amaaaaaa..."
   labels: {}
 
 route:
@@ -13,44 +45,20 @@ route:
   annotations: {}
   labels: {}
 
-# proxyService -- Configure the external-facing service type to use.
-# Allowed service types: ClusterIP or LoadBalancer
-#
-# The service.annotations defined here only apply to the `proxy` service. If you wish to apply annotations
-# to all services, use the annotations.service value at the bottom of this chart.
-#
-# NOTE: If ingress.enabled or route.enabled set to `true` service.type MUST be set to `ClusterIP`.
-#
 proxyService:
-  type: LoadBalancer
-  annotations:
-    oci.oraclecloud.com/load-balancer-type: "lb"
-    external-dns.alpha.kubernetes.io/hostname: "kasm.contoso.com"
-    service.beta.kubernetes.io/oci-load-balancer-shape: "flexible"
-    service.beta.kubernetes.io/oci-load-balancer-shape-flex-min: "10"
-    service.beta.kubernetes.io/oci-load-balancer-shape-flex-max: "1000"
-    service.beta.kubernetes.io/oci-load-balancer-ssl-ports: "443"
-    service.beta.kubernetes.io/oci-load-balancer-tls-secret: "cert-secret-name"
-    service.beta.kubernetes.io/oci-load-balancer-backend-protocol: "HTTP"
-    service.beta.kubernetes.io/oci-load-balancer-tls-backendset-secret: "backendset-cert-secret-name"
-    service.beta.kubernetes.io/oci-load-balancer-subnet1: "ocid1.subnet.oc1.iad.aaaaaaaa..."
-    oci.oraclecloud.com/oci-network-security-groups: "ocid1.networksecuritygroup.oc1.iad.aaaaaaaa..."
-    oci.oraclecloud.com/oci-load-balancer-backendset-ssl-config: '{"CipherSuiteName":"oci-default-http2-tls-12-13-ssl-cipher-suite-v1", "Protocols":["TLSv1.2","TLSv1.3"]}'
-    oci.oraclecloud.com/oci-load-balancer-listener-ssl-config: '{"CipherSuiteName":"oci-default-http2-tls-12-13-ssl-cipher-suite-v1", "Protocols":["TLSv1.2","TLSv1.3"]}'
+  # proxyService.type -- Make sure the `proxyService` type = ClusterIP to tell the Helm chart to create an Ingress.
+  #
+  type: ClusterIP
+  annotations: {}
   labels: {}
 
 certificate:
-  # certificate.secretName -- Set the secret name where the certificate is stored.
-  # This secret name will store a certificate created by `cert-manager` if you set `cert-manager.enabled` to true
+  # certificate.secretName -- ONLY use this value if the ingress.annotations.oci-native-ingress.oraclecloud.com/certificate-ocid = "".
+  # If both values are set it will cause problems in the configuration.
   #
   secretName: cert-secret-name
-  # certificate.certManager -- For additional cert-manager configuration/deployment information refer to the online documentation
-  # [Cert Manager Docs](https://cert-manager.io/v1.1-docs/installation/kubernetes/). 
-  # 
-  # NOTE: If you do not enable `cert-manager`, you must generate your own certificates and add them as a Kubernetes secret.
-  # Refer to [Kubernetes Secrets](https://kubernetes.io/docs/concepts/configuration/secret/), and 
-  # [Kubernetes TLS Secret](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_create/kubectl_create_secret_tls/)
-  # for more information.
+  # certificate.certManager -- ONLY use this value if the ingress.annotations.oci-native-ingress.oraclecloud.com/certificate-ocid = "".
+  # If both values are set it will cause problems in the configuration.
   #
   certManager:
     enabled: true
@@ -71,8 +79,7 @@ database:
     repository: kasmweb/postgres
     tag: 1.17.0
   storage:
-    # database.storage.storageClassName -- Select a storage class here suitable to your deployment requierments. Something
-    # shared across your workers, such as an NFS backend would be useful to allow the DB to migrate to handle Node maintenance
+    # database.storage.storageClassName -- Set storageClassName for DB backend storage - if you are using the built-in Kasm DB StatefulSet.
     #
     storageClassName: storage-class-name
     retentionPolicy:
@@ -153,12 +160,7 @@ applySecurity: true
 applyHealthChecks: true
 restartPolicy: "Always"
 labels: {}
-
-# nodeSelector -- Configure node selector settings for your Kasm pods - 
-# [Kubernetes Node Selector](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector).
-#
-nodeSelector:
-  node-selector: prod
+nodeSelector: {}
 
 annotations:
   certSecret: {}

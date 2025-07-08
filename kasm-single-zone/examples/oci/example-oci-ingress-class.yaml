@@ -1,0 +1,41 @@
+# Create a namespace for your IngressClassParameters
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: oke-ingress-ns
+---
+# Create the IngressClassParameters to use with the IngressClass
+apiVersion: "ingress.oraclecloud.com/v1beta1"
+kind: IngressClassParameters
+metadata:
+  name: oke-ingress-class-parameters
+  namespace: oke-ingress-ns
+spec:
+  loadBalancerName: ingress-load-balancer-name
+  isPrivate: false
+  maxBandwidthMbps: 1000
+  minBandwidthMbps: 100
+  # Optional
+  compartmentId: ocid1.compartment.oc1.<region>.aaaaaaaa...
+  subnetId: ocid1.subnet.oc1.<region>.aaaaaaaa...
+  reservedPublicAddressId: ocid1.publicip.oc1.<region>.amaaaaaa...
+---
+# Create the IngressClass to use with OKE Ingresses
+apiVersion: networking.k8s.io/v1
+kind: IngressClass
+metadata:
+  name: oke-ingress-class
+  # All annotations below are OPTIONAL
+  annotations:
+    ingressclass.kubernetes.io/is-default-class: "true"
+    oci-native-ingress.oraclecloud.com/delete-protection-enabled: "true"
+    oci-native-ingress.oraclecloud.com/network-security-group-ids: "ocid1.networksecuritygroup.oc1.<region>.aaaaaaaa..."
+    oci-native-ingress.oraclecloud.com/waf-policy-ocid: "ocid1.webappfirewallpolicy.oc1.<region>.amaaaaaa..."
+spec:
+  controller: oci.oraclecloud.com/native-ingress-controller
+  parameters:
+    scope: Namespace
+    namespace: oke-ingress-ns
+    apiGroup: ingress.oraclecloud.com
+    kind: ingressclassparameters
+    name: oke-ingress-class-parameters

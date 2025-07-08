@@ -2,9 +2,28 @@ deploymentSize: "small"
 publicAddr: "kasm.contoso.com"
 
 ingress:
-  enabled: false
-  ingressClassName: ""
-  annotations: {}
+  enabled: true
+  ingressClassName: eks-ingress-class
+  annotations:
+    alb.ingress.kubernetes.io/load-balancer-name: kasm-ingress-lb
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    ## Below are optional
+    alb.ingress.kubernetes.io/ssl-redirect: true
+    alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS13-1-2-Res-2021-06
+    alb.ingress.kubernetes.io/subnets: '["subnet-01234567890abcdef", "subnet-109876543210fedcba"]'
+    alb.ingress.kubernetes.io/certificate-arn: "arn:aws:acm:<region>:<account-id>:certificate/<certificate-id>"
+    alb.ingress.kubernetes.io/wafv2-acl-arn: "arn:aws:wafv2:<region>:<account-id>:<regional|global>/webacl/<acl-name>/<waf-id>"
+    alb.ingress.kubernetes.io/backend-protocol: HTTPS
+    alb.ingress.kubernetes.io/healthcheck-protocol: HTTPS
+    alb.ingress.kubernetes.io/healthcheck-port: 8443
+    alb.ingress.kubernetes.io/healthcheck-path: "/api/__healthcheck"
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: 30
+    alb.ingress.kubernetes.io/healthcheck-timeout-seconds: 3
+    alb.ingress.kubernetes.io/healthy-threshold-count: 2
+    alb.ingress.kubernetes.io/unhealthy-threshold-count: 3
+    alb.ingress.kubernetes.io/success-codes: 200
   labels: {}
 
 route:
@@ -22,21 +41,8 @@ route:
 # NOTE: If ingress.enabled or route.enabled set to `true` service.type MUST be set to `ClusterIP`.
 #
 proxyService:
-  type: LoadBalancer
-  annotations:
-    oci.oraclecloud.com/load-balancer-type: "lb"
-    external-dns.alpha.kubernetes.io/hostname: "kasm.contoso.com"
-    service.beta.kubernetes.io/oci-load-balancer-shape: "flexible"
-    service.beta.kubernetes.io/oci-load-balancer-shape-flex-min: "10"
-    service.beta.kubernetes.io/oci-load-balancer-shape-flex-max: "1000"
-    service.beta.kubernetes.io/oci-load-balancer-ssl-ports: "443"
-    service.beta.kubernetes.io/oci-load-balancer-tls-secret: "cert-secret-name"
-    service.beta.kubernetes.io/oci-load-balancer-backend-protocol: "HTTP"
-    service.beta.kubernetes.io/oci-load-balancer-tls-backendset-secret: "backendset-cert-secret-name"
-    service.beta.kubernetes.io/oci-load-balancer-subnet1: "ocid1.subnet.oc1.iad.aaaaaaaa..."
-    oci.oraclecloud.com/oci-network-security-groups: "ocid1.networksecuritygroup.oc1.iad.aaaaaaaa..."
-    oci.oraclecloud.com/oci-load-balancer-backendset-ssl-config: '{"CipherSuiteName":"oci-default-http2-tls-12-13-ssl-cipher-suite-v1", "Protocols":["TLSv1.2","TLSv1.3"]}'
-    oci.oraclecloud.com/oci-load-balancer-listener-ssl-config: '{"CipherSuiteName":"oci-default-http2-tls-12-13-ssl-cipher-suite-v1", "Protocols":["TLSv1.2","TLSv1.3"]}'
+  type: ClusterIP
+  annotations: {}
   labels: {}
 
 certificate:
@@ -153,12 +159,7 @@ applySecurity: true
 applyHealthChecks: true
 restartPolicy: "Always"
 labels: {}
-
-# nodeSelector -- Configure node selector settings for your Kasm pods - 
-# [Kubernetes Node Selector](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector).
-#
-nodeSelector:
-  node-selector: prod
+nodeSelector: {}
 
 annotations:
   certSecret: {}

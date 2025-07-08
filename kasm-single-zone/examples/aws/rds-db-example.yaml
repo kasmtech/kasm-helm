@@ -13,67 +13,65 @@ route:
   annotations: {}
   labels: {}
 
-# proxyService -- Configure the external-facing service type to use.
-# Allowed service types: ClusterIP or LoadBalancer
-#
-# The service.annotations defined here only apply to the `proxy` service. If you wish to apply annotations
-# to all services, use the annotations.service value at the bottom of this chart.
-#
-# NOTE: If ingress.enabled or route.enabled set to `true` service.type MUST be set to `ClusterIP`.
-#
 proxyService:
   type: LoadBalancer
   annotations:
     service.beta.kubernetes.io/aws-load-balancer-name: kasm-ingress-lb
     service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
-    service.beta.kubernetes.io/aws-load-balancer-ssl-cert: "arn:aws:acm:<region>:<account-id>:certificate/<certificate-id>"
     service.beta.kubernetes.io/aws-load-balancer-ssl-ports: 443
     service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
-    ## Below are optional
+    service.beta.kubernetes.io/aws-load-balancer-ssl-cert: "arn:aws:acm:<region>:<account-id>:certificate/<certificate-id>"
     service.beta.kubernetes.io/aws-load-balancer-subnets: '["subnet-01234567890abcdef", "subnet-109876543210fedcba"]'
     service.beta.kubernetes.io/aws-load-balancer-healthcheck-port: 8443
     service.beta.kubernetes.io/aws-load-balancer-healthcheck-protocol: HTTP
     service.beta.kubernetes.io/aws-load-balancer-healthcheck-path: "/api/__healthcheck"
     service.beta.kubernetes.io/aws-load-balancer-ssl-negotiation-policy: ELBSecurityPolicy-TLS13-1-2-Res-2021-06
-
   labels: {}
 
 certificate:
-  # certificate.secretName -- Set the secret name where the certificate is stored.
-  # This secret name will store a certificate created by `cert-manager` if you set `cert-manager.enabled` to true
-  #
-  secretName: cert-secret-name
-  # certificate.certManager -- For additional cert-manager configuration/deployment information refer to the online documentation
-  # [Cert Manager Docs](https://cert-manager.io/v1.1-docs/installation/kubernetes/). 
-  # 
-  # NOTE: If you do not enable `cert-manager`, you must generate your own certificates and add them as a Kubernetes secret.
-  # Refer to [Kubernetes Secrets](https://kubernetes.io/docs/concepts/configuration/secret/), and 
-  # [Kubernetes TLS Secret](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_create/kubectl_create_secret_tls/)
-  # for more information.
-  #
+  secretName: ""
   certManager:
-    enabled: true
+    enabled: false
     addWildCard: true
-    issuerName: cert-issuer-name
-    issuerKind: cert-issuer-kind
+    issuerName: ""
+    issuerKind: ""
     issuerGroup: ""
 
 database:
-  standalone: false
-  hostname: kasm-db
+  # database.standalone -- To use RDS, set the database.standalone = true, then configure settings below for DB connection
+  #
+  standalone: true
+  # database.hostname -- Set this to the Write URL or IP of the RDS instance that the Kasm pods will use to access the DB.
+  #
+  hostname: <instance name>.<unique rds id>.<region>.rds.amazonaws.com
+  # database.port -- Set to the PostgreSQL port used to access the RDS instance.
+  #
   port: 5432
+  # database.kasmDbName -- The Kasm application database name to use for this deployment instance.
+  #
   kasmDbName: kasm
+  # database.kasmDbUser -- The Kasm application database user to use for DB access and management by Kasm services
+  #
   kasmDbUser: kasmapp
-  postgresMasterUser: {}
+  # database.postgresMasterUser -- This object defines the master user credentials to be used by the db-init-job to create
+  # and initialize the Kasm database on the RDS instance. This can be left if you created your RDS instance either with
+  # the `kasmapp` user as the master user and the `kasm` as the default DB.
+  #
+  postgresMasterUser:
+    username: postgres
+    secret:
+      name: k8s-postgres-secret
+      key: rds-db-password
+  # database.initialize_db -- Set to true to ensure the db-init-job handles initializing the `kasm` database
+  #
   initialize_db: true
+  ## The below database settings will be ignored since database.standalone = true.
+  ##
   image:
     repository: kasmweb/postgres
     tag: 1.17.0
   storage:
-    # database.storage.storageClassName -- Select a storage class here suitable to your deployment requierments. Something
-    # shared across your workers, such as an NFS backend would be useful to allow the DB to migrate to handle Node maintenance
-    #
-    storageClassName: storage-class-name
+    storageClassName: ""
     retentionPolicy:
       whenDeleted: Delete
       whenScaled: Retain
