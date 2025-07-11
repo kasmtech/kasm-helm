@@ -2,9 +2,11 @@ deploymentSize: "small"
 publicAddr: "kasm.contoso.com"
 
 ingress:
-  enabled: false
+  enabled: true
   ingressClassName: ""
-  annotations: {}
+  annotations:
+    kubernetes.io/ingress.class: "gce"
+    kubernetes.io/ingress.allow-http: "false"
   labels: {}
 
 route:
@@ -22,22 +24,9 @@ route:
 # NOTE: If ingress.enabled or route.enabled set to `true` service.type MUST be set to `ClusterIP`.
 #
 proxyService:
-  type: LoadBalancer
+  type: ClusterIP
   annotations:
-    oci.oraclecloud.com/load-balancer-type: "lb"
-    external-dns.alpha.kubernetes.io/hostname: "kasm.contoso.com"
-    service.beta.kubernetes.io/oci-load-balancer-shape: "flexible"
-    service.beta.kubernetes.io/oci-load-balancer-shape-flex-min: "10"
-    service.beta.kubernetes.io/oci-load-balancer-shape-flex-max: "1000"
-    service.beta.kubernetes.io/oci-load-balancer-ssl-ports: "443"
-    service.beta.kubernetes.io/oci-load-balancer-tls-secret: "cert-secret-name"
-    service.beta.kubernetes.io/oci-load-balancer-backend-protocol: "HTTP"
-    service.beta.kubernetes.io/oci-load-balancer-tls-backendset-secret: "backendset-cert-secret-name"
-    # Below are optional
-    service.beta.kubernetes.io/oci-load-balancer-subnet1: "ocid1.subnet.oc1.iad.aaaaaaaa..."
-    oci.oraclecloud.com/oci-network-security-groups: "ocid1.networksecuritygroup.oc1.iad.aaaaaaaa..."
-    oci.oraclecloud.com/oci-load-balancer-backendset-ssl-config: '{"CipherSuiteName":"oci-default-http2-tls-12-13-ssl-cipher-suite-v1", "Protocols":["TLSv1.2","TLSv1.3"]}'
-    oci.oraclecloud.com/oci-load-balancer-listener-ssl-config: '{"CipherSuiteName":"oci-default-http2-tls-12-13-ssl-cipher-suite-v1", "Protocols":["TLSv1.2","TLSv1.3"]}'
+    cloud.google.com/backend-config: '{"default": "kasm-proxy-backend-config"}'
   labels: {}
 
 certificate:
@@ -48,7 +37,9 @@ certificate:
   # certificate.certManager -- For additional cert-manager configuration/deployment information refer to the online documentation
   # [Cert Manager Docs](https://cert-manager.io/v1.1-docs/installation/kubernetes/). 
   # 
-  # NOTE: If you do not enable `cert-manager`, you must generate your own certificates and add them as a Kubernetes secret.
+  # NOTE: If you do not enable `cert-manager`, you must generate your own certificates and add them as a Kubernetes secret, or
+  # present cloud-managed certificates.
+  #
   # Refer to [Kubernetes Secrets](https://kubernetes.io/docs/concepts/configuration/secret/), and 
   # [Kubernetes TLS Secret](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_create/kubectl_create_secret_tls/)
   # for more information.
@@ -154,7 +145,12 @@ applySecurity: true
 applyHealthChecks: true
 restartPolicy: "Always"
 labels: {}
-nodeSelector: {}
+
+# nodeSelector -- Configure node selector settings for your Kasm pods - 
+# [Kubernetes Node Selector](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector).
+#
+nodeSelector:
+  node-selector: prod
 
 annotations:
   certSecret: {}
@@ -176,4 +172,15 @@ extraLabels:
   jobPod: {}
   statefulSet: {}
 
-extraObjects: []
+# extraObjects -- Deploy additional Kubernetes manifests
+# This field is expected to be either a multi-line string, a list of strings, or a list of objects.
+#
+extraObjects:
+  - apiVersion: cloud.google.com/v1
+    kind: BackendConfig
+    metadata:
+      name: kasm-proxy-backend-config
+    spec:
+      timeoutSec: 28800
+      connectionDraining:
+        drainingTimeoutSec: 60

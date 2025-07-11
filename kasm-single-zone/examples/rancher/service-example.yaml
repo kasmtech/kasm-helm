@@ -33,6 +33,7 @@ proxyService:
     service.beta.kubernetes.io/oci-load-balancer-tls-secret: "cert-secret-name"
     service.beta.kubernetes.io/oci-load-balancer-backend-protocol: "HTTP"
     service.beta.kubernetes.io/oci-load-balancer-tls-backendset-secret: "backendset-cert-secret-name"
+    # Below are optional
     service.beta.kubernetes.io/oci-load-balancer-subnet1: "ocid1.subnet.oc1.iad.aaaaaaaa..."
     oci.oraclecloud.com/oci-network-security-groups: "ocid1.networksecuritygroup.oc1.iad.aaaaaaaa..."
     oci.oraclecloud.com/oci-load-balancer-backendset-ssl-config: '{"CipherSuiteName":"oci-default-http2-tls-12-13-ssl-cipher-suite-v1", "Protocols":["TLSv1.2","TLSv1.3"]}'
@@ -153,12 +154,7 @@ applySecurity: true
 applyHealthChecks: true
 restartPolicy: "Always"
 labels: {}
-
-# nodeSelector -- Configure node selector settings for your Kasm pods - 
-# [Kubernetes Node Selector](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector).
-#
-nodeSelector:
-  node-selector: prod
+nodeSelector: {}
 
 annotations:
   certSecret: {}
@@ -179,3 +175,5 @@ extraLabels:
   job: {}
   jobPod: {}
   statefulSet: {}
+
+extraObjects: []

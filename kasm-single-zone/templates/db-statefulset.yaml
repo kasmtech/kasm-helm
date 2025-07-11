@@ -92,8 +92,12 @@ spec:
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
+                {{- if .Values.database.kasmDbSecret -}}
+                {{ .Values.database.kasmDbSecret | toYaml | nindent 18 }}
+                {{- else }}
                   name: {{ .Release.Name }}-secrets
-                  key: db-password
+                  key: "db-secret"
+                {{- end }}
           ports:
             - name: {{ $constants.db.portName }}
               containerPort: {{ $constants.db.port }}

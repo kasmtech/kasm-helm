@@ -98,9 +98,9 @@ spec:
             - name: KUBERNETES_SERVICE_HOST
               value: "true"
             - name: SERVER_ADDRESS
-              value: {{ $constants.proxy.svc }}
+              value: {{ $constants.guac.svc }}
             - name: SERVER_PORT
-              value: {{ $constants.proxy.http | quote }}
+              value: {{ $constants.guac.port | quote }}
           ports:
             - name: {{ $constants.guac.portName }}
               containerPort: {{ $constants.guac.port }}
