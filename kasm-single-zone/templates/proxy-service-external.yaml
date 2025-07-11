@@ -22,7 +22,6 @@ metadata:
   annotations:
     {{- with .Values.proxyService.annotations }}{{ toYaml . | nindent 4 }}{{- end }}
     {{- with .Values.annotations.service }}{{ toYaml . | nindent 4 }}{{- end }}
-  {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
   type: {{ .Values.proxyService.type }}
