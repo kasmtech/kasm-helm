@@ -9,14 +9,15 @@ metadata:
   name: {{ $constants.rdpGateway.name }}-configmap
   namespace: {{ .Release.Namespace }}
   labels:
-    app.kubernetes.io/name: {{ $constants.rdpGateway.name }}-svc
+    app.kubernetes.io/name: {{ $constants.rdpGateway.name }}-configmap
     app.kubernetes.io/component: {{ $constants.rdpGateway.component }}
     {{- include "kasm.defaultLabels" . | indent 4 }}
     {{- with .Values.extraLabels.configMap }}{{- toYaml . | nindent 4 }}{{- end }}
     {{- with .Values.labels }}{{- toYaml . | nindent 4 }}{{- end }}
+  {{- with .Values.annotations.configMap }}
   annotations:
-    helm.sh/hook: pre-install,pre-upgrade,post-delete
-    {{- with .Values.annotations.configMap }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 data:
   passthrough.app.config.yaml: |
     rdp-gateway:

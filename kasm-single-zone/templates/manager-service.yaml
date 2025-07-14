@@ -19,7 +19,7 @@ metadata:
   {{- end }}
 spec:
   selector:
-    app.kubernetes.io/name: {{ $constants.manager.name }}
+    app.kubernetes.io/component: {{ $constants.manager.component }}
   ports:
     - name: {{ printf "%s-svc-%s" $constants.manager.svc ($constants.manager.port | toString) }}
       protocol: TCP

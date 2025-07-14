@@ -9,7 +9,10 @@ deploymentSize: "small"
 # This is the value that should be used when generating a certificate and that this
 # chart uses when the `certificate.certManager.enabled` is set to true.
 #
-publicAddr: ""
+publicAddr: "kasm.secops.kasmweb.io"
+
+kasmConfig:
+  zones: []
 
 # Configure an Ingress for your Kasm deployment. 
 # 
@@ -70,8 +73,23 @@ route:
 # NOTE: If ingress.enabled or route.enabled set to `true` service.type MUST be set to `ClusterIP`.
 #
 proxyService:
-  type: ClusterIP
-  annotations: {}
+  type: LoadBalancer
+  annotations:
+    oci.oraclecloud.com/load-balancer-type: "lb"
+    service.beta.kubernetes.io/oci-load-balancer-shape: "flexible"
+    service.beta.kubernetes.io/oci-load-balancer-shape-flex-min: "10"
+    service.beta.kubernetes.io/oci-load-balancer-shape-flex-max: "2000"
+    service.beta.kubernetes.io/oci-load-balancer-ssl-ports: "443"
+    service.beta.kubernetes.io/oci-load-balancer-tls-secret: "kasm-test-cert-secret"
+    service.beta.kubernetes.io/oci-load-balancer-backend-protocol: "HTTP"
+    service.beta.kubernetes.io/oci-load-balancer-tls-backendset-secret: "kasm-test-self-signed-cert-secret"
+    oci.oraclecloud.com/oci-load-balancer-backendset-ssl-config: '{"CipherSuiteName":"oci-default-http2-tls-12-13-ssl-cipher-suite-v1", "Protocols":["TLSv1.2","TLSv1.3"]}'
+    service.beta.kubernetes.io/oci-load-balancer-subnet1: "ocid1.subnet.oc1.iad.aaaaaaaaq7xum6u6bo3az4g4utzdqn6tumz55zaqu6uwc4w6adytlxbbtoiq"
+    oci.oraclecloud.com/node-label-selector: "node-role=infrastructure"
+    oci.oraclecloud.com/oci-network-security-groups: "ocid1.networksecuritygroup.oc1.iad.aaaaaaaavdgjowc7obqpjeyp2naelvltujwpmbvlafq7elg4pogpixfewfra"
+    oci.oraclecloud.com/oci-load-balancer-listener-ssl-config: '{"CipherSuiteName":"oci-default-http2-tls-12-13-ssl-cipher-suite-v1", "Protocols":["TLSv1.2","TLSv1.3"]}'
+    oci.oraclecloud.com/initial-defined-tags-override: '{"customer_tags": {"Customer_name": "Kasm Technologies"}}'
+    external-dns.alpha.kubernetes.io/hostname: "kasm.secops.kasmweb.io"
   labels: {}
 
 # Configure certificate settings.
@@ -83,7 +101,7 @@ certificate:
   # certificate.secretName -- Set the secret name where the certificate is stored.
   # This secret name will store a certificate created by `cert-manager` if you set `cert-manager.enabled` to true
   #
-  secretName: ""
+  secretName: kasm-test-cert-secret
   # certificate.certManager -- For additional cert-manager configuration/deployment information refer to the online documentation
   # [Cert Manager Docs](https://cert-manager.io/v1.1-docs/installation/kubernetes/). 
   # 
@@ -97,9 +115,11 @@ certificate:
   certManager:
     enabled: true
     addWildCard: true
-    issuerName: ""
-    issuerKind: ""
+    issuerName: letsencrypt-stage
+    issuerKind: ClusterIssuer
     issuerGroup: ""
+    annotations: {}
+    labels: {}
 
 # Kasm DB settings and configuration options
 #
@@ -160,7 +180,7 @@ database:
     # database.storage.storageClassName -- Set the storage class to attach to the DB for storage.
     # NOTE: Leaving this blank will use the cluster-default storage class
     #
-    storageClassName: ""
+    storageClassName: oci-high
     # database.storage.retentionPolicy -- Configure how the DB volume should be retained or deleted throughout the DB's lifecycle
     #
     retentionPolicy:
@@ -337,7 +357,8 @@ clusterDomain: "cluster.local"
 # nodeSelector -- Configure node selector settings for your Kasm pods - 
 # [Kubernetes Node Selector](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector).
 #
-nodeSelector: {}
+nodeSelector:
+  node-role: infrastructure
 
 # affinity -- Configure node affinity settings for Kasm pods - 
 # [Kubernetes Affinity](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/).
@@ -410,4 +431,50 @@ extraLabels:
 # extraObjects -- Deploy additional Kubernetes manifests.
 # This field is expected to be either a multi-line string, a list of strings, or a list of objects.
 #
-extraObjects: []
+extraObjects:
+  - apiVersion: cert-manager.io/v1
+    kind: ClusterIssuer
+    metadata:
+      name: letsencrypt-stage
+      namespace: cert-manager
+    spec:
+      acme:
+        email: support+engineering.stage@kasmweb.com
+        server: https://acme-staging-v02.api.letsencrypt.org/directory
+        privateKeySecretRef:
+          name: stage-issuer-account-key
+        solvers:
+          - dns01:
+              webhook:
+                groupName: secops.kasmweb.io
+                solverName: oci
+                config:
+                  ociRegion: us-ashburn-1
+  - apiVersion: cert-manager.io/v1
+    kind: Issuer
+    metadata:
+      name: kasm-self-signed-issuer
+      namespace: kasm-ns
+    spec:
+      selfSigned: {}
+  - apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata:
+      name: kasm-self-signed-ca
+      namespace: kasm-ns
+    spec:
+      isCA: true
+      commonName: kasm-self-signed-ca
+      subject:
+        organizations:
+          - Kasm Technologies
+        organizationalUnits:
+          - Engineering
+      secretName: kasm-test-self-signed-cert-secret
+      privateKey:
+        algorithm: ECDSA
+        size: 256
+      issuerRef:
+        name: kasm-self-signed-issuer
+        kind: Issuer
+        group: cert-manager.io

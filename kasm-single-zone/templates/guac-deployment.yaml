@@ -94,7 +94,13 @@ spec:
                   name: {{ .Release.Name }}-secrets
                   key: service-token
             - name: ZONE
-              value: default
+            {{- if .Values.kasmConfig.zones }}
+              {{- with (index .Values.kasmConfig.zones 0) }}
+              value: {{ .name }}
+              {{- end }}
+            {{- else }}
+              value: "default"
+            {{- end }}
             - name: KUBERNETES_SERVICE_HOST
               value: "true"
             - name: SERVER_ADDRESS

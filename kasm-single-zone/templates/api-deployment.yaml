@@ -79,7 +79,7 @@ spec:
                 {{ .Values.database.kasmDbSecret | toYaml | nindent 18 }}
                 {{- else }}
                   name: {{ .Release.Name }}-secrets
-                  key: "db-secret"
+                  key: "db-password"
                 {{- end }}
           command:
             - /bin/bash

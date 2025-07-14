@@ -91,7 +91,13 @@ spec:
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           env:
             - name: SERVER_ZONE_NAME
+            {{- if .Values.kasmConfig.zones }}
+              {{- with (index .Values.kasmConfig.zones 0) }}
+              value: {{ .name }}
+              {{- end }}
+            {{- else }}
               value: "default"
+            {{- end }}
             - name: REGISTRATION_TOKEN
               valueFrom:
                 secretKeyRef:

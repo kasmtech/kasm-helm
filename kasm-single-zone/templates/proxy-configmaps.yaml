@@ -16,9 +16,10 @@ metadata:
       {{- with .Values.extraLabels.configMap }}{{- toYaml . | nindent 4 }}{{- end }}
       {{- with .Values.labels }}{{- toYaml . | nindent 4 }}{{- end }}
     {{- end }}
+  {{- with .Values.annotations.configMap }}
   annotations:
-    helm.sh/hook: pre-install,pre-upgrade,post-delete
-    {{- with .Values.annotations.configMap }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 data:
   nginx.conf: |
     user  nginx;
@@ -273,9 +274,10 @@ metadata:
     {{- include "kasm.defaultLabels" . | indent 4 }}
     {{- with .Values.extraLabels.configMap }}{{- toYaml . | nindent 4 }}{{- end }}
     {{- with .Values.labels }}{{- toYaml . | nindent 4 }}{{- end }}
+  {{- with .Values.annotations.configMap }}
   annotations:
-    helm.sh/hook: pre-install,pre-upgrade,post-delete
-    {{- with .Values.annotations.configMap }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 data:
   closest.conf: |
     location /checkvalid {
