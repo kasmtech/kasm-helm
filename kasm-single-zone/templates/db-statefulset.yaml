@@ -3,7 +3,7 @@ Kasm DB server StatefullSet definition
 */}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- $dbReplicas := include "replicas.preset" (dict "node" $constants.db.component "size" .Values.deploymentSize) -}}
-{{- if eq .Values.database.standalone false }}
+{{- if not .Values.database.standalone }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -72,12 +72,12 @@ spec:
             runAsNonRoot: false
             runAsUser: 0
           volumeMounts:
-            - name: {{ $constants.db.name }}-data
+            - name: {{ printf "%s-%s-data" $constants.db.name .Chart.AppVersion | replace "." "-" }}
               mountPath: /var/lib/postgresql/data
-            - name: {{ $constants.db.name }}-data
+            - name: {{ printf "%s-%s-data" $constants.db.name .Chart.AppVersion | replace "." "-" }}
               mountPath: /tmp
             {{- if .Values.applySecurity }}
-            - name: {{ $constants.db.name }}-data
+            - name: {{ printf "%s-%s-data" $constants.db.name .Chart.AppVersion | replace "." "-" }}
               mountPath: /var/run/postgresql
             {{- end }}
       containers:
@@ -119,7 +119,7 @@ spec:
             {{- include "db.containerSecurity" . | indent 10 }}
           {{- end }}
           volumeMounts:
-          - name: {{ $constants.db.name }}-data
+          - name: {{ printf "%s-%s-data" $constants.db.name .Chart.AppVersion | replace "." "-" }}
             mountPath: /var/lib/postgresql/data
             subPath: postgres
           - name: {{ $constants.db.name }}-configs
@@ -137,10 +137,10 @@ spec:
           - name: {{ $constants.db.name }}-cert
             mountPath: /etc/ssl/certs/db_server.key
             subPath: tls.key
-          - name: {{ $constants.db.name }}-data
+          - name: {{ printf "%s-%s-data" $constants.db.name .Chart.AppVersion | replace "." "-" }}
             mountPath: /tmp
           {{- if .Values.applySecurity }}
-          - name: {{ $constants.db.name }}-data
+          - name: {{ printf "%s-%s-data" $constants.db.name .Chart.AppVersion | replace "." "-" }}
             mountPath: /var/run/postgresql
           {{- end }}
       volumes:
@@ -160,14 +160,14 @@ spec:
     - apiVersion: v1
       kind: PersistentVolumeClaim
       metadata:
-        name: {{ $constants.db.name }}-data
+        name: {{ printf "%s-%s-data" $constants.db.name .Chart.AppVersion | replace "." "-" }}
       spec:
         accessModes:
           - ReadWriteOnce
-        {{- if ne .Values.database.storage.storageClassName "" }}
-        storageClassName: {{ .Values.database.storage.storageClassName }}
+        {{- with .Values.database.storage.storageClassName }}
+        storageClassName: {{ . }}
         {{- end }}
         resources:
           requests:
-            storage: 8Gi
+            storage: {{ printf "%sGi" ((.Values.database.storage.pvcSize | default 8) | toString) }}
 {{- end }}

@@ -3,7 +3,7 @@ Deploy the RDP Gateway if .Values.components.rdpGateway.enabled set to true
 */}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- $rdpPort := 3389 -}}
-{{- if eq .Values.components.rdpGateway.enabled true }}
+{{- if .Values.components.rdpGateway.enabled }}
 apiVersion: v1
 kind: Service
 metadata:

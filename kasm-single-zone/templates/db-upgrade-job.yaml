@@ -1,30 +1,32 @@
 {{/*
-Initialize the DB
+Upgrade the DB
 */}}
+{{- if and .Values.dbManagement.initialize .Values.dbManagement.upgrade.enable -}}
+  {{- fail "You cannot enable both initialize and upgrade for the DB. If you have an existing Kasm deployment you wish to upgrade, refer to our upgrade procedures - https://some.upgrade.url. Otherwise, select initialize for a new deployment." -}}
+{{- end -}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
-{{- if .Values.dbManagement.initialize }}
+{{- if .Values.dbManagement.upgrade.enable }}
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ .Release.Name }}-db-init-job
+  name: {{ .Release.Name }}-db-upgrade-job
   namespace: {{ .Release.Namespace }}
   labels:
-    app.kubernetes.io/name: {{ .Release.Name }}-db-init
+    app.kubernetes.io/name: {{ .Release.Name }}-db-upgrade
     {{- include "kasm.defaultLabels" . | indent 4 }}
     {{- with .Values.components.api.labels }}{{- toYaml . | nindent 4 }}{{- end }}
     {{- with .Values.extraLabels.job }}{{- toYaml . | nindent 4 }}{{- end }}
     {{- with .Values.labels }}{{- toYaml . | nindent 4 }}{{- end }}
   {{- with .Values.components.api.annotations }}
   annotations: {{- toYaml . | nindent 4 }}
-    helm.sh/hook: pre-install
   {{- end }}
 spec:
   ttlSecondsAfterFinished: 100
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: {{ .Release.Name }}-db-init
-        app.kubernetes.io/component: db-init
+        app.kubernetes.io/name: {{ .Release.Name }}-db-upgrade
+        app.kubernetes.io/component: db-upgrade
         {{- include "kasm.defaultLabels" . | indent 8 }}
         {{- with .Values.components.api.labels }}{{ toYaml . | nindent 8 }}{{- end }}
         {{- with .Values.extraLabels.jobPod }}{{ toYaml . | nindent 8 }}{{- end }}
@@ -46,9 +48,6 @@ spec:
       affinity: {{ toYaml . | nindent 8 }}
       {{- end }}
       restartPolicy: OnFailure
-      {{- if .Values.applySecurity }}
-        {{- include "kasm.podSecurity" . | indent 6 }}
-      {{- end }}
       initContainers:
         - name: db-is-ready
           image: {{ $constants.api.image }}
@@ -69,10 +68,10 @@ spec:
           image: {{ $constants.api.image }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           env:
-            - name: POST_DB_INIT_EXIT
+            - name: START_SERVICES
               value: "true"
-            - name: DB_AUTO_INITIALIZE
-              value: {{ .Values.dbManagement.initialize | quote }}
+            - name: KUBERNETES_SERVICE_HOST
+              value: "true"
             - name: POSTGRES_HOST
               value: {{ $constants.db.svc }}
             - name: POSTGRES_PORT
@@ -90,39 +89,12 @@ spec:
                   name: {{ .Release.Name }}-secrets
                   key: "db-password"
                 {{- end }}
-            - name: DEFAULT_ADMIN_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Release.Name }}-secrets
-                  key: admin-password
-            - name: DEFAULT_MANAGER_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Release.Name }}-secrets
-                  key: manager-token
-            - name: DEFAULT_REGISTRATION_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Release.Name }}-secrets
-                  key: service-token
-            - name: DEFAULT_USER_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Release.Name }}-secrets
-                  key: user-password
-            {{- if and .Values.database.standalone .Values.database.postgresMasterUser }}
-            - name: DATABASE_MASTER_USER
-              value: {{ .Values.database.postgresMasterUser.username }}
-            - name: DATABASE_MASTER_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.database.postgresMasterUser.secret.name }}
-                  key: {{ .Values.database.postgresMasterUser.secret.key }}
-            {{- end }}
           command:
             - "/bin/bash"
             - "-c"
           args:
             - |
-              if [[ "$DB_AUTO_INITIALIZE" == "true" ]]; then /usr/bin/startup.sh; else echo "DB already initialized."; fi
+              python3 /src/api_server/server.pyc --upgrade-database --cfg /opt/kasm/current/conf/app/api/api.app.config.yaml
+              PGPASSWORD=$POSTGRES_PASSWORD psql -U $POSTGRES_USER -d $POSTGRES_DB -p $POSTGRES_PORT -h $POSTGRES_HOST -t -c "select * from alembic_version"
 {{- end }}
+

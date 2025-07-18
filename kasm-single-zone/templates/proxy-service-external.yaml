@@ -2,7 +2,10 @@
 Deploy the Kasm Proxy service
 */}}
 {{- if and (or .Values.ingress.enabled .Values.route.enabled) (eq .Values.proxyService.type "LoadBalancer") -}}
-  {{- fail "The service.type must not be LoadBalancer when using an ingress or a route - any load balancer or Route should be provisioned using the Ingress/Route settings. Set service.type=ClusterIP instead" -}}
+  {{- fail "The service.type must not be LoadBalancer when using an ingress or a route - any load balancer or Route should be provisioned using the Ingress/Route settings. Set service.type=ClusterIP or mark ingress.enabled or route.enabled to disabled." -}}
+{{- end -}}
+{{- if and (eq .Values.proxyService.type "LoadBalancer") .Values.kasmZones -}}
+  {{- fail "The service.type must not be LoadBalancer when using a Multi-Zone Kasm deployment - any load balancer or Route should be provisioned using the Ingress/Route settings. Set service.type=ClusterIP or remove your kasmZones settings." -}}
 {{- end -}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- if eq .Values.proxyService.type "LoadBalancer" -}}

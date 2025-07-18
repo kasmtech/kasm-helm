@@ -2,7 +2,7 @@
 Deploy the RDP Gateway Configmap if .Values.components.rdpGateway.enabled set to true
 */}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
-{{- if eq .Values.components.rdpGateway.enabled true }}
+{{- if .Values.components.rdpGateway.enabled }}
 apiVersion: v1
 kind: ConfigMap
 metadata:

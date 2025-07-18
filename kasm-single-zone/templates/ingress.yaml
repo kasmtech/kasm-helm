@@ -27,6 +27,11 @@ spec:
         {{- if eq .Values.certificate.certManager.addWildCard true }}
         - {{ printf "*.%s" $.Values.publicAddr | quote }}
         {{- end }}
+        {{- with .Values.kasmZones }}
+        {{- range $idx, $zone := . }}
+        - {{ $zone.upstream_auth_addr | quote }}
+        {{- end }}
+        {{- end }}
       secretName: {{ .Values.certificate.secretName }}
   {{-  end }}
   rules:
@@ -37,7 +42,27 @@ spec:
           pathType: Prefix
           backend:
             service:
-              name: {{ $constants.proxy.svc }}
+            {{- if .Values.kasmZones }}
+              {{- with index .Values.kasmZones 0 }}
+              name: {{ printf "%s-%s" $constants.proxy.svc (regexReplaceAll "[^a-zA-Z0-9]+" .name "-" | lower) -}}
+              {{- end }}
+            {{- else }}
+              name: {{ printf "%s-default" $constants.proxy.svc -}}
+            {{- end }}
               port:
-                number: {{- if eq .Values.ingress.backendProtocol "https" }}{{ $constants.proxy.https }}{{- else }}{{ $constants.proxy.http }}{{- end }}
+                number: {{ if eq .Values.ingress.backendProtocol "https" }}{{ $constants.proxy.https }}{{ else }}{{ $constants.proxy.http }}{{ end }}
+  {{- with .Values.kasmZones }}
+  {{- range $idx, $zone := . }}
+  - host: {{ $zone.upstream_auth_addr | quote }}
+    http:
+      paths:
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: {{ printf "%s-%s" $constants.proxy.svc (regexReplaceAll "[^a-zA-Z0-9]+" $zone.name "-" | lower) }}
+              port:
+                number: {{ if eq $.Values.ingress.backendProtocol "https" }}{{ $constants.proxy.https }}{{ else }}{{ $constants.proxy.http }}{{ end }}
+  {{- end }}
+  {{- end }}
 {{- end }}

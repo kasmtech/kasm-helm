@@ -3,6 +3,7 @@ Deploy Kasm Proxy Service .Values.components.api service definition
 */}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- $serviceKeepalive := 16 -}}
+{{- $defaultLabels := include "kasm.defaultLabels" . }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -11,7 +12,7 @@ metadata:
   labels:
     app.kubernetes.io/name: {{ $constants.proxy.name }}-base-configmap
     app.kubernetes.io/component: {{ $constants.proxy.component }}
-    {{- include "kasm.defaultLabels" . | indent 4 }}
+    {{- $defaultLabels | indent 4 }}
     {{- if or .Values.extraLabels.configMap .Values.labels }}
       {{- with .Values.extraLabels.configMap }}{{- toYaml . | nindent 4 }}{{- end }}
       {{- with .Values.labels }}{{- toYaml . | nindent 4 }}{{- end }}
@@ -23,7 +24,7 @@ metadata:
 data:
   nginx.conf: |
     user  nginx;
-    worker_processes {{ include "resources.preset" (dict "node" "proxy-processes" "size" .Values.deploymentSize) }};
+    worker_processes {{ include "resources.preset" (dict "node" "proxy-processes" "size" $.Values.deploymentSize) }};
 
     error_log  /var/log/nginx/error.log notice;
     pid        /var/run/nginx.pid;
@@ -49,23 +50,24 @@ data:
       include /etc/nginx/conf.d/*.conf;
     }
 
+{{- range $idx, $zone := (.Values.kasmZones | default (list (dict "name" "default"))) }}
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ $constants.proxy.name }}-settings-configmap
-  namespace: {{ .Release.Namespace }}
+  name: {{ printf "%s-%s-settings-configmap" $constants.proxy.name (regexReplaceAll "[^a-zA-Z0-9]+" $zone.name "-" | lower) }}
+  namespace: {{ $.Release.Namespace }}
   labels:
-    app.kubernetes.io/name: {{ $constants.proxy.name }}-settings-configmap
+    app.kubernetes.io/name: {{ printf "%s-%s-settings-configmap" $constants.proxy.name (regexReplaceAll "[^a-zA-Z0-9]+" $zone.name "-" | lower) }}
     app.kubernetes.io/component: {{ $constants.proxy.component }}
-    {{- include "kasm.defaultLabels" . | indent 4 }}
-    {{- if or .Values.extraLabels.configMap .Values.labels }}
-      {{- with .Values.extraLabels.configMap }}{{- toYaml . | nindent 4 }}{{- end }}
-      {{- with .Values.labels }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- $defaultLabels | indent 4 }}
+    {{- if or $.Values.extraLabels.configMap $.Values.labels }}
+      {{- with $.Values.extraLabels.configMap }}{{- toYaml . | nindent 4 }}{{- end }}
+      {{- with $.Values.labels }}{{- toYaml . | nindent 4 }}{{- end }}
     {{- end }}
-  annotations:
-    helm.sh/hook: pre-install,pre-upgrade,post-delete
-    {{- with .Values.annotations.configMap }}{{- toYaml . | nindent 4 }}{{- end }}
+  {{- with $.Values.annotations.configMap }}
+  annotations: {{- toYaml . | nindent 4 }}
+  {{- end }}
 data:
   compress.conf: |
     gzip on;
@@ -218,17 +220,17 @@ data:
       server {{ printf "%s:%s" $constants.api.svc ($constants.api.port | toString) }};
       keepalive {{ $serviceKeepalive }};
     }
-  
+
   upstream_manager.conf: |
-    upstream {{ $constants.manager.svc }} {
-      server {{ printf "%s:%s" $constants.manager.svc ($constants.manager.port | toString) }};
+    upstream {{ printf $constants.manager.svc }} {
+      server {{ printf "%s:%s" (printf "%s-%s" $constants.manager.svc $zone.name | lower) ((add $constants.manager.port (mul 10 $idx)) | toString) }};
       keepalive {{ $serviceKeepalive }};
     }
 
 {{/*
 Add nginx proxy service configs based on values
 */}}
-{{- range $key, $value := .Values.components }}
+{{- range $key, $value := $.Values.components }}
   {{- $upstream := "" -}}
   {{- $server := "" -}}
   {{- $ports := list -}}
@@ -262,19 +264,23 @@ Add nginx proxy service configs based on values
   {{- end }}
 {{- end }}
 
+{{- end }}
+
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ $constants.proxy.name }}-services-configmap
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ $.Release.Namespace }}
   labels:
-    app.kubernetes.io/name: {{ $constants.proxy.name }}-svc
+    app.kubernetes.io/name: {{ $constants.proxy.name }}-services-configmap
     app.kubernetes.io/component: {{ $constants.proxy.component }}
-    {{- include "kasm.defaultLabels" . | indent 4 }}
-    {{- with .Values.extraLabels.configMap }}{{- toYaml . | nindent 4 }}{{- end }}
-    {{- with .Values.labels }}{{- toYaml . | nindent 4 }}{{- end }}
-  {{- with .Values.annotations.configMap }}
+    {{- $defaultLabels | indent 4 }}
+    {{- if or $.Values.extraLabels.configMap $.Values.labels }}
+      {{- with $.Values.extraLabels.configMap }}{{- toYaml . | nindent 4 }}{{- end }}
+      {{- with $.Values.labels }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- end }}
+  {{- with $.Values.annotations.configMap }}
   annotations:
     {{- toYaml . | nindent 4 }}
   {{- end }}
@@ -296,7 +302,6 @@ data:
       proxy_set_header	X-Forwarded-For $proxy_add_x_forwarded_for;
       proxy_set_header	X-Forwarded-Proto $x_forwarded_proto;
       proxy_set_header	X-Forwarded-Port $x_forwarded_port;
-  
       add_header Strict-Transport-Security "max-age=63072000" always;
 
       proxy_pass	{{ printf "http://%s" $constants.api.svc }};
@@ -312,8 +317,6 @@ data:
       proxy_set_header	X-Forwarded-For $proxy_add_x_forwarded_for;
       proxy_set_header	X-Forwarded-Proto $x_forwarded_proto;
       proxy_set_header	X-Forwarded-Port $x_forwarded_port;
-
-
       add_header Strict-Transport-Security "max-age=63072000" always;
 
       proxy_pass	{{ printf "http://%s" $constants.api.svc }};
@@ -514,7 +517,7 @@ data:
       
       root /srv/www;
     }
-{{- if eq .Values.components.guac.enabled true }}
+{{- if $.Values.components.guac.enabled }}
   kasmguac.conf: |
     location /guac_connect/vnc/ {
       proxy_http_version      1.1;
@@ -669,7 +672,7 @@ data:
       proxy_pass {{ printf "http://%s:%s/vm_disconnect" $constants.guac.svc ($constants.guac.port | toString) }};
     }
 {{- end }}
-{{- if eq .Values.components.rdpGateway.enabled true }}
+{{- if $.Values.components.rdpGateway.enabled }}
   rdp_gateway.conf: |
     location /rdp-gateway/ {
       proxy_http_version	1.1;
@@ -683,7 +686,7 @@ data:
       proxy_pass	{{ printf "http://%s" $constants.rdpGateway.svc }}/;
     }
 {{- end }}
-{{- if eq .Values.components.share.enabled true }}
+{{- if $.Values.components.share.enabled }}
   share_api.conf: |
     location /api/share/ {
       proxy_http_version	1.1;
@@ -699,7 +702,7 @@ data:
       proxy_pass	{{ printf "http://%s" $constants.share.svc }};
     }
 {{- end }}
-{{- if eq .Values.components.rdpHttpsGateway.enabled true }}
+{{- if $.Values.components.rdpHttpsGateway.enabled }}
   rdp_https_gateway.conf: |
     location /rdp-https-gateway/ {
                 proxy_http_version      1.1;

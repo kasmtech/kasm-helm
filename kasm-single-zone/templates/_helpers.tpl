@@ -472,22 +472,3 @@ Example usage:
     {{- printf "ERROR: Preset key '%s' invalid. Allowed values are %s" .node (join "," (keys $presetSizes)) | fail }}
   {{- end }}
 {{- end }}
-
-
-{{- define "kasm.config" }}
-{{- range $idx, $zone := (.Values.kasmConfig.zones | default (list (dict "name" "default"))) }}
-- allow_origin_domain: {{ ($zone.allow_origin_domain | quote) | default "$request_host$" }}
-  load_strategy: {{ ($zone.load_strategy | quote) | default "most_sessions" }}
-  primary_manager_id: null
-  prioritize_static_agents: {{ $zone.prioritize_static_agents | default true }}
-  proxy_connections: {{ $zone.proxy_connections | default true }}
-  proxy_rdp_client_connections: {{ $zone.proxy_rdp_client_connections | default true }}
-  proxy_hostname: {{ ($zone.proxy_hostname | quote) | default "$request_host$" }}
-  proxy_path: {{ ($zone.proxy_path | quote) | default "desktop" }}
-  proxy_port: {{ $zone.proxy_port | default 443 }}
-  search_alternate_zones: {{ $zone.search_alternate_zones | default true }}
-  upstream_auth_address: {{ ($zone.upstream_auth_address | quote) | default "$request_host$" }}
-  zone_id: "${uuid:zone_id:{{ add $idx 1 }}}"
-  zone_name: {{ $zone.name }}
-{{- end }}
-{{- end }}

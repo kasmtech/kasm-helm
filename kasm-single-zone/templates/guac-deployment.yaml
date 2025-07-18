@@ -3,7 +3,7 @@ Deploy the Guacamole Web RDP if .Values.components.guac.enabled set to true
 */}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- $guacReplicas := include "replicas.preset" (dict "node" ($constants.guac.component) "size" .Values.deploymentSize) -}}
-{{- if eq .Values.components.guac.enabled true }}
+{{- if .Values.components.guac.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -94,8 +94,8 @@ spec:
                   name: {{ .Release.Name }}-secrets
                   key: service-token
             - name: ZONE
-            {{- if .Values.kasmConfig.zones }}
-              {{- with (index .Values.kasmConfig.zones 0) }}
+            {{- if .Values.kasmZones }}
+              {{- with index .Values.kasmZones 0 }}
               value: {{ .name }}
               {{- end }}
             {{- else }}

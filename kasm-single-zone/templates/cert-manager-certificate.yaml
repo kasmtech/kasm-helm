@@ -2,7 +2,7 @@
 Deploy the Certificates with certManager
 */}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
-{{- if eq .Values.certificate.certManager.enabled true }}
+{{- if .Values.certificate.certManager.enabled }}
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:

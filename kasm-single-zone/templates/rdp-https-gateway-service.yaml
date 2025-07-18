@@ -2,7 +2,7 @@
 Deploy the Redis if .Values.components.rdpHttpsGateway.enabled set to true
 */}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
-{{- if eq .Values.components.rdpHttpsGateway.enabled true }}
+{{- if .Values.components.rdpHttpsGateway.enabled }}
 apiVersion: v1
 kind: Service
 metadata:

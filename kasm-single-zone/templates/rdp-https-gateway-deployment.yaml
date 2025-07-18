@@ -3,7 +3,7 @@ Deploy the RDP HTTPS Gateway if .Values.kasmApp.servicesToDeploy.rdpHttpsGateway
 */}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- $rdpHttpsGatewayReplicas := include "replicas.preset" (dict "node" $constants.rdpHttpsGateway.component "size" .Values.deploymentSize) -}}
-{{- if eq .Values.components.rdpHttpsGateway.enabled true }}
+{{- if .Values.components.rdpHttpsGateway.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -87,8 +87,8 @@ spec:
           imagePullPolicy: {{ $.Values.imagePullPolicy }}
           env:
             - name: SERVER_ZONE_NAME
-            {{- if .Values.kasmConfig.zones }}
-              {{- with (index .Values.kasmConfig.zones 0) }}
+            {{- if .Values.kasmZones }}
+              {{- with index .Values.kasmZones 0 }}
               value: {{ .name }}
               {{- end }}
             {{- else }}

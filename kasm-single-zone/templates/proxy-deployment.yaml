@@ -3,22 +3,26 @@ Kasm Proxy server Deployment definition
 */}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- $proxyReplicas := include "replicas.preset" (dict "node" $constants.proxy.component "size" .Values.deploymentSize) -}}
+{{- $defaultLabels := include "kasm.defaultLabels" . }}
+{{- $values := .Values }}
+{{- range $idx, $zone := (.Values.kasmZones | default (list (dict "name" "default"))) }}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ $constants.proxy.name }}-deployment
-  namespace: {{ .Release.Namespace }}
+  name: {{ printf "%s-%s-deployment" $constants.proxy.name (regexReplaceAll "[^a-zA-Z0-9]+" $zone.name "-" | lower) }}
+  namespace: {{ $.Release.Namespace }}
   labels:
-    app.kubernetes.io/name: {{ $constants.proxy.name }}
+    app.kubernetes.io/name: {{ printf "%s-%s" $constants.proxy.name (regexReplaceAll "[^a-zA-Z0-9]+" $zone.name "-" | lower) }}
     app.kubernetes.io/component: {{ $constants.proxy.component }}
-    {{- include "kasm.defaultLabels" . | indent 4 }}
-    {{- with .Values.components.proxy.labels }}{{- toYaml . | nindent 4 }}{{- end }}
-    {{- with .Values.extraLabels.deployment }}{{- toYaml . | nindent 4 }}{{- end }}
-    {{- with .Values.labels }}{{- toYaml . | nindent 4 }}{{- end }}
-  {{- if or .Values.components.proxy.annotations .Values.annotations.deployment }}
+    {{- $defaultLabels | indent 4 }}
+    {{- with $values.components.proxy.labels }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with $values.extraLabels.deployment }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with $values.labels }}{{- toYaml . | nindent 4 }}{{- end }}
+  {{- if or $values.components.proxy.annotations $values.annotations.deployment }}
   annotations:
-    {{- with .Values.annotations.deployment }}{{- toYaml . | nindent 4 }}{{- end }}
-    {{- with .Values.components.proxy.annotations }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with $values.annotations.deployment }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with $values.components.proxy.annotations }}{{- toYaml . | nindent 4 }}{{- end }}
   {{- end }}
 spec:
   replicas: {{ $proxyReplicas }}
@@ -29,40 +33,40 @@ spec:
       maxSurge: {{ add1 $proxyReplicas }}
   selector:
     matchLabels:
-      app.kubernetes.io/name: {{ $constants.proxy.name }}
+      app.kubernetes.io/name: {{ printf "%s-%s" $constants.proxy.name (regexReplaceAll "[^a-zA-Z0-9]+" $zone.name "-" | lower) }}
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: {{ $constants.proxy.name }}
+        app.kubernetes.io/name: {{ printf "%s-%s" $constants.proxy.name (regexReplaceAll "[^a-zA-Z0-9]+" $zone.name "-" | lower) }}
         app.kubernetes.io/component: {{ $constants.proxy.component }}
-        {{- include "kasm.defaultLabels" . | indent 8 }}
-        {{- if or .Values.components.proxy.labels .Values.extraLabels.pod .Values.labels }}
-          {{- with .Values.components.proxy.labels }}{{ toYaml . | nindent 8 }}{{- end }}
-          {{- with .Values.extraLabels.pod }}{{ toYaml . | nindent 8 }}{{- end }}
-          {{- with .Values.labels }}{{- toYaml . | nindent 8 }}{{- end }}
+        {{- $defaultLabels | indent 8 }}
+        {{- if or $values.components.proxy.labels $values.extraLabels.pod $values.labels }}
+          {{- with $values.components.proxy.labels }}{{ toYaml . | nindent 8 }}{{- end }}
+          {{- with $values.extraLabels.pod }}{{ toYaml . | nindent 8 }}{{- end }}
+          {{- with $values.labels }}{{- toYaml . | nindent 8 }}{{- end }}
         {{- end }}
-      {{- if or .Values.components.proxy.annotations .Values.annotations.pod }}
+      {{- if or $values.components.proxy.annotations $values.annotations.pod }}
       annotations:
-        {{- with .Values.annotations.pod }}{{ toYaml . | nindent 8 }}{{- end }}
-        {{- with .Values.components.proxy.annotations }}{{ toYaml . | nindent 8 }}{{- end }}
+        {{- with $values.annotations.pod }}{{ toYaml . | nindent 8 }}{{- end }}
+        {{- with $values.components.proxy.annotations }}{{ toYaml . | nindent 8 }}{{- end }}
       {{- end }}
     spec:
-      restartPolicy: {{ .Values.restartPolicy }}
-      {{- if .Values.imagePullSecrets }}
+      restartPolicy: {{ $values.restartPolicy }}
+      {{- if $values.imagePullSecrets }}
       imagePullSecrets:
-        - name: {{ .Values.imagePullSecrets }}
+        - name: {{ $values.imagePullSecrets }}
       {{- end }}
-      {{- with .Values.nodeSelector }}
+      {{- with $values.nodeSelector }}
       nodeSelector: {{ toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.affinity }}
+      {{- with $values.affinity }}
       affinity: {{ toYaml . | nindent 8 }}
       {{- end }}
-      {{- if .Values.applySecurity }}
+      {{- if $values.applySecurity }}
         {{- include "kasm.podSecurity" . | indent 6 }}
       {{- end }}
       initContainers:
-        {{- if .Values.applySecurity }}
+        {{- if $values.applySecurity }}
         - name: {{ $constants.proxy.name }}-data-perms
           image: {{ $constants.api.image }}
           imagePullPolicy: IfNotPresent
@@ -86,41 +90,41 @@ spec:
               mountPath: /run
         {{- end }}
         {{- include "kasm.initContainer" (dict "serviceName" $constants.api.svc "servicePort" $constants.api.port "path" "/api/__healthcheck" "schema" "http" "image" $constants.api.image) | indent 8 }}
-        {{- if .Values.applySecurity }}
+        {{- if $values.applySecurity }}
           {{- include "kasm.containerSecurity" . | indent 10 }}
         {{- end }}
-        {{- include "kasm.initContainer" (dict "serviceName" $constants.manager.svc "servicePort" $constants.manager.port "path" "/__healthcheck" "schema" "http" "image" $constants.api.image) | indent 8 }}
-        {{- if .Values.applySecurity }}
+        {{- include "kasm.initContainer" (dict "serviceName" (printf "%s-%s" $constants.manager.svc (regexReplaceAll "[^a-zA-Z0-9]+" $zone.name "-" | lower)) "servicePort" $constants.manager.port "path" "/__healthcheck" "schema" "http" "image" $constants.api.image) | indent 8 }}
+        {{- if $values.applySecurity }}
           {{- include "kasm.containerSecurity" . | indent 10 }}
         {{- end }}
-        {{- if .Values.components.share.enabled }}
+        {{- if $values.components.share.enabled }}
           {{- include "kasm.initContainer" (dict "serviceName" $constants.share.svc "servicePort" $constants.share.port "path" "/__healthcheck" "schema" "http" "image" $constants.api.image) | indent 8 }}
-          {{- if .Values.applySecurity }}
+          {{- if $values.applySecurity }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}
         {{- end }}
-        {{- if .Values.components.guac.enabled }}
+        {{- if $values.components.guac.enabled }}
           {{- include "kasm.initContainer" (dict "serviceName" $constants.guac.svc "servicePort" $constants.guac.port "path" "/__healthcheck" "schema" "http" "image" $constants.api.image) | indent 8 }}
-          {{- if .Values.applySecurity }}
+          {{- if $values.applySecurity }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}
         {{- end }}
-        {{- if .Values.components.rdpGateway.enabled }}
+        {{- if $values.components.rdpGateway.enabled }}
           {{- include "kasm.initContainer" (dict "serviceName" $constants.rdpGateway.svc "servicePort" $constants.rdpGateway.port "path" "/__healthcheck" "schema" "http" "image" $constants.api.image) | indent 8 }}
-          {{- if .Values.applySecurity }}
+          {{- if $values.applySecurity }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}
         {{- end }}
       containers:
         - name: {{ $constants.proxy.name }}-container
           image: {{ $constants.proxy.image }}
-          imagePullPolicy: {{ .Values.imagePullPolicy }}
-          {{- if .Values.components.proxy.resources }}
-          resources: {{- toYaml .Values.components.proxy.resources | nindent 12 }}
+          imagePullPolicy: {{ $values.imagePullPolicy }}
+          {{- if $values.components.proxy.resources }}
+          resources: {{- toYaml $values.components.proxy.resources | nindent 12 }}
           {{- else }}
-          resources: {{- include "resources.preset" (dict "node" $constants.proxy.component "size" .Values.deploymentSize) | nindent 12 }}
+          resources: {{- include "resources.preset" (dict "node" $constants.proxy.component "size" $values.deploymentSize) | nindent 12 }}
           {{- end }}
-          {{- if .Values.applySecurity }}
+          {{- if $values.applySecurity }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}
           volumeMounts:
@@ -137,7 +141,7 @@ spec:
             - name: {{ $constants.proxy.name }}-base-config
               mountPath: /etc/nginx/nginx.conf
               subPath: nginx.conf
-            {{- if .Values.applySecurity }}
+            {{- if $values.applySecurity }}
             - name: {{ $constants.proxy.name }}-data
               mountPath: /var/cache/nginx
             - name: {{ $constants.proxy.name }}-data
@@ -152,29 +156,30 @@ spec:
             - name: {{ $constants.proxy.portName }}-https
               containerPort: {{ $constants.proxy.https }}
               protocol: TCP
-          {{- if .Values.applyHealthChecks }}
+          {{- if $values.applyHealthChecks }}
           livenessProbe:
             {{- include "health.tcp" (dict "portName" $constants.proxy.portName ) | indent 12 }}
           {{- end }}
-          {{- if .Values.applyHealthChecks }}
+          {{- if $values.applyHealthChecks }}
           readinessProbe:
             {{- include "health.command" (dict "command" "nginx -t") | indent 12 }}
           {{- end }}
       volumes:
         - name: {{ $constants.proxy.name }}-cert
           secret:
-            secretName: {{ .Values.certificate.secretName }}
+            secretName: {{ $values.certificate.secretName }}
         - name: {{ $constants.proxy.name }}-base-config
           configMap:
             name: {{ $constants.proxy.name }}-base-configmap
         - name: {{ $constants.proxy.name }}-settings-config
           configMap:
-            name: {{ $constants.proxy.name }}-settings-configmap
+            name: {{ printf "%s-%s-settings-configmap" $constants.proxy.name (regexReplaceAll "[^a-zA-Z0-9]+" $zone.name "-" | lower) }}
         - name: {{ $constants.proxy.name }}-services-config
           configMap:
             name: {{ $constants.proxy.name }}-services-configmap
-        {{- if .Values.applySecurity }}
+        {{- if $values.applySecurity }}
         - name: {{ $constants.proxy.name }}-data
           emptyDir:
             sizeLimit: 1Gi
         {{- end }}
+{{- end }}

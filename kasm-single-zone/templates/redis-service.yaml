@@ -2,7 +2,7 @@
 Deploy the Redis if .Values.components.share.enabled set to true
 */}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
-{{- if eq .Values.components.share.enabled true }}
+{{- if .Values.components.share.enabled }}
 apiVersion: v1
 kind: Service
 metadata:

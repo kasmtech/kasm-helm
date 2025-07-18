@@ -3,7 +3,7 @@ Deploy the Redis if .Values.kasmApp.servicesToDeploy.share.deploy set to true
 */}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- $redisReplicas := include "replicas.preset" (dict "node" $constants.redis.component "size" .Values.deploymentSize) -}}
-{{- if eq .Values.components.share.enabled true }}
+{{- if .Values.components.share.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:

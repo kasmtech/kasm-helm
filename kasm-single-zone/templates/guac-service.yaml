@@ -2,7 +2,7 @@
 Deploy the Guac if .Values.components.guac.enabled set to true
 */}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
-{{- if eq .Values.components.guac.enabled true }}
+{{- if .Values.components.guac.enabled }}
 apiVersion: v1
 kind: Service
 metadata:
