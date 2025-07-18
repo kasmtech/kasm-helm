@@ -4,7 +4,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: test
-  namespace: kasm-ns
+  namespace: kasm-test
 spec:
   ttlSecondsAfterFinished: 100
   template:
@@ -21,7 +21,7 @@ spec:
           imagePullPolicy: IfNotPresent
           env:
             - name: POSTGRES_HOST
-              value: kasm-db
+              value: db
             - name: POSTGRES_PORT
               value: "5432"
           command:
@@ -53,7 +53,7 @@ spec:
           imagePullPolicy: IfNotPresent
           env:
             - name: POSTGRES_HOST
-              value: kasm-db
+              value: db
             - name: POSTGRES_PORT
               value: "5432"
             - name: POSTGRES_DB
@@ -64,7 +64,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   key: db-password
-                  name: kasm-test-secrets
+                  name: kasm-secrets
           command:
             - "/bin/bash"
             - "-c"
@@ -98,11 +98,10 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: kasm-db-dump-pvc
-  namespace: kasm-ns
+  namespace: kasm-test
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: oci-high
   resources:
     requests:
       storage: 5Gi

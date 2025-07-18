@@ -80,6 +80,8 @@ spec:
               value: {{ .Values.database.kasmDbName }}
             - name: POSTGRES_USER
               value: {{ .Values.database.kasmDbUser }}
+            - name: OLD_DB_BACKUP_FILENAME
+              value: {{ .Values.dbManagement.upgrade.oldDbBackupFileName }}
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -94,7 +96,17 @@ spec:
             - "-c"
           args:
             - |
-              python3 /src/api_server/server.pyc --upgrade-database --cfg /opt/kasm/current/conf/app/api/api.app.config.yaml
-              PGPASSWORD=$POSTGRES_PASSWORD psql -U $POSTGRES_USER -d $POSTGRES_DB -p $POSTGRES_PORT -h $POSTGRES_HOST -t -c "select * from alembic_version"
+              export PGPASSWORD=$POSTGRES_PASSWORD;
+              pg_restore -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -d $POSTGRES_DB /data/kasm-db-dump/$OLD_DB_BACKUP_FILENAME;
+              python3 /src/api_server/server.pyc --upgrade-database --cfg /opt/kasm/current/conf/app/api/api.app.config.yaml;
+              PGPASSWORD=$POSTGRES_PASSWORD psql -U $POSTGRES_USER -d $POSTGRES_DB -p $POSTGRES_PORT -h $POSTGRES_HOST -t -c "select * from alembic_version";
+          volumeMounts:
+            - name: kasm-db-dump
+              mountPath: /data/kasm-db-dump
+              readOnly: false
+      volumes:
+        - name: kasm-db-dump
+          persistentVolumeClaim:
+            claimName: {{ .Values.dbManagement.upgrade.oldDbBackupPvc }}
 {{- end }}
 
