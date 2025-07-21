@@ -29,7 +29,7 @@ metadata:
 spec:
   type: {{ .Values.proxyService.type }}
   selector:
-    app.kubernetes.io/name: {{ $constants.proxy.name }}
+    app.kubernetes.io/name: {{ $constants.proxy.name }}-default
   ports:
     - name: {{ printf "%s-ext-svc-%s" $constants.proxy.svc ($constants.proxy.extHttps | toString) }}
       protocol: TCP
