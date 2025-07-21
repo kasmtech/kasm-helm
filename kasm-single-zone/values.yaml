@@ -55,7 +55,7 @@ ingress:
   # ingress.backendProtocol -- The backend protocol to for the Ingress to communicate with the Kasm proxy service.
   # Valid values: http or https
   #
-  backendProtocol: "https"
+  backendProtocol: http
   # ingress.ingressClassName -- Define the ingress Class to use for your Kasm ingress
   #
   ingressClassName: ""
@@ -103,7 +103,7 @@ certificate:
   # certificate.secretName -- Set the secret name where the certificate is stored.
   # This secret name will store a certificate created by `cert-manager` if you set `cert-manager.enabled` to true
   #
-  secretName: kasm-test-cert-secret
+  secretName: ""
   # certificate.certManager -- For additional cert-manager configuration/deployment information refer to the online documentation
   # [Cert Manager Docs](https://cert-manager.io/v1.1-docs/installation/kubernetes/). 
   # 
@@ -115,7 +115,7 @@ certificate:
   # for more information.
   #
   certManager:
-    enabled: true
+    enabled: false
     addWildCard: true
     issuerName: ""
     issuerKind: ""
@@ -211,9 +211,6 @@ dbManagement:
     #
     enable: false
     # dbManagement.upgrade.oldDbSecretsName -- The name of the Kubernetes secret where Kasm and DB passwords are stored.
-
-
-
     #
     oldDbSecretsName: "kasm-secrets"
     # dbManagement.upgrade.oldDbBackupPvc --
