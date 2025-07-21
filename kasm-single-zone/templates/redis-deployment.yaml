@@ -44,9 +44,9 @@ spec:
       {{- end }}
     spec:
       restartPolicy: {{ $.Values.restartPolicy }}
-      {{- if $.Values.imagePullSecrets }}
+      {{- if .Values.imagePullSecrets.enabled }}
       imagePullSecrets:
-        - name: {{ $.Values.imagePullSecrets }}
+        - name: {{ .Values.imagePullSecrets.name | default (printf "%s-image-pull-secret" .Release.Name) }}
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector: {{ toYaml . | nindent 8 }}

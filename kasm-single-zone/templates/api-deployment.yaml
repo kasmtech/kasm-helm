@@ -46,9 +46,9 @@ spec:
       {{- end }}
     spec:
       restartPolicy: {{ .Values.restartPolicy }}
-      {{- if .Values.imagePullSecrets }}
+      {{- if .Values.imagePullSecrets.enabled }}
       imagePullSecrets:
-        - name: {{ .Values.imagePullSecrets }}
+        - name: {{ .Values.imagePullSecrets.name | default (printf "%s-image-pull-secret" .Release.Name) }}
       {{- end }}
       {{- if .Values.applySecurity }}
         {{- include "kasm.podSecurity" . | indent 6 }}

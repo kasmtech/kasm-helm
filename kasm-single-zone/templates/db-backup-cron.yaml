@@ -40,10 +40,10 @@ spec:
           {{- with .Values.nodeSelector }}
           nodeSelector: {{ toYaml . | nindent 12 }}
           {{- end }}
-          {{- if .Values.imagePullSecrets }}
-          imagePullSecrets:
-            - name: {{ .Values.imagePullSecrets }}
-          {{- end }}
+      {{- if .Values.imagePullSecrets.enabled }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets.name | default (printf "%s-image-pull-secret" .Release.Name) }}
+      {{- end }}
           {{- with .Values.affinity }}
           affinity: {{ toYaml . | nindent 10 }}
           {{- end }}

@@ -50,9 +50,9 @@ spec:
       {{- end }}
     spec:
       restartPolicy: {{ $values.restartPolicy }}
-      {{- if $values.imagePullSecrets }}
+      {{- if $values.imagePullSecrets.enabled }}
       imagePullSecrets:
-        - name: {{ $values.imagePullSecrets }}
+        - name: {{ $values.imagePullSecrets.name | default (printf "%s-image-pull-secret" $.Release.Name) }}
       {{- end }}
       {{- if $values.applySecurity }}
         {{- include "kasm.podSecurity" . | indent 6 }}
