@@ -26,7 +26,7 @@ metadata:
     {{- end }}
   {{- end }}
 spec:
-  type: {{ $values.proxyService.type }}
+  type: ClusterIP
   selector:
     app.kubernetes.io/name: {{ printf "%s-%s" $constants.proxy.name (regexReplaceAll "[^a-zA-Z0-9]+" $zone.name "-" | lower) }}
   ports:
