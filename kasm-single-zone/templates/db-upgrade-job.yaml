@@ -97,7 +97,7 @@ spec:
           args:
             - |
               export PGPASSWORD=$POSTGRES_PASSWORD;
-              if psql -v ON_ERROR_STOP=on -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -d $POSTGRES_DB -c "SELECT COUNT(*) FROM settings;" 2>&1 > /dev/null; then echo "Database exists, running upgrade now..."; else; pg_restore -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -d $POSTGRES_DB /data/kasm-db-dump/$OLD_DB_BACKUP_FILENAME; fi
+              if psql -v ON_ERROR_STOP=on -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -d $POSTGRES_DB -c "SELECT COUNT(*) FROM settings;" 2>&1 > /dev/null; then echo "Database exists, running upgrade now..."; else pg_restore -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -d $POSTGRES_DB /data/kasm-db-dump/$OLD_DB_BACKUP_FILENAME; fi
               python3 /src/api_server/server.pyc --upgrade-database --cfg /opt/kasm/current/conf/app/api/api.app.config.yaml;
               PGPASSWORD=$POSTGRES_PASSWORD psql -U $POSTGRES_USER -d $POSTGRES_DB -p $POSTGRES_PORT -h $POSTGRES_HOST -t -c "select * from alembic_version";
           volumeMounts:
