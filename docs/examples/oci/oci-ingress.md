@@ -1,9 +1,8 @@
 ---
-
 title: OCI Native Ingress
 description: Deploy Kasm in OCI using the OCI Native Ingress Controller
 author: Kasm Technologies
--------------------------
+---
 
 # OCI Native Ingress
 
