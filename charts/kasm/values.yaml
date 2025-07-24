@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=values.schema.json
 # deploymentSize -- Define the estimated size of the Kasm deployment in expected session load.
 #  small  = Up to 10-15 sessions
 #  medium = Up to 25-30 sessions
@@ -5,11 +6,15 @@
 #
 deploymentSize: "small"
 
-# publicAddr -- Set the access URL to be used for the Kasm deployment.
-# This is the value that should be used when generating a certificate and that this
-# chart uses when the `certificate.certManager.enabled` is set to true.
+# publicAddr -- Set the access URL to be used for the Kasm deployment. This is the URL you will use to access
+# your Kasm deployment. This URL can be a private address, it just needs to be resolvable by systems you use
+# to interface with Kasm.
+# 
+# If you create a self-signed or custom certificate, this is the value you should assign as the Common Name
+# associated with the certificate. If `certificate.certManager.enabled` is set to true, this is the
+# name used to generate the certificate.
 #
-publicAddr: "kasm.contoso.com"
+publicAddr: ""
 
 # kasmZones -- This is a list of objects defining different Kasm Zone configurations for your deployment. This
 # configuration is typically used for multi-region, large, or custom deployments where the customer requires a
@@ -21,12 +26,11 @@ publicAddr: "kasm.contoso.com"
 # information on Kasm Zones.
 #
 kasmZones: []
-  # Example Kasm Zone configuration
-  #   kasmZones:
-  #     - name: Zone-A
-  #       upstream_auth_addr: zone-a.kasm.contoso.com
-  #     - name: Zone-B
-  #       upstream_auth_addr: zone-b.kasm.contoso.com
+# Example Kasm Zone configuration:
+#   - name: Zone-A
+#     upstream_auth_addr: zone-a.kasm.contoso.com
+#   - name: Zone-B
+#     upstream_auth_addr: zone-b.kasm.contoso.com
     
 # proxyService -- Configure the external-facing service type to use. 
 # Allowed service types: ClusterIP or LoadBalancer. 
@@ -75,21 +79,20 @@ route:
   #
   tls: {}
   # Example TLS configuration
-  #   tls:
-  #     termination: edge
-  #     insecureEdgeTerminationPolicy: Redirect
-  #     key: |-
-  #       -----BEGIN PRIVATE KEY-----
-  #       [...]
-  #       -----END PRIVATE KEY-----
-  #     certificate: |-
-  #       -----BEGIN CERTIFICATE-----
-  #       [...]
-  #       -----END CERTIFICATE-----
-  #     caCertificate: |-
-  #       -----BEGIN CERTIFICATE-----
-  #       [...]
-  #       -----END CERTIFICATE-----
+  #   termination: edge
+  #   insecureEdgeTerminationPolicy: Redirect
+  #   key: |-
+  #     -----BEGIN PRIVATE KEY-----
+  #     [...]
+  #     -----END PRIVATE KEY-----
+  #   certificate: |-
+  #     -----BEGIN CERTIFICATE-----
+  #     [...]
+  #     -----END CERTIFICATE-----
+  #   caCertificate: |-
+  #     -----BEGIN CERTIFICATE-----
+  #     [...]
+  #     -----END CERTIFICATE-----
   #
   annotations: {}
   labels: {}
@@ -152,33 +155,33 @@ database:
   #
   kasmDbSecret: {}
   # Example Custom DB Secret configuration
-  #   kasmDbSecret:
-  #     name: kasm-db-secret
-  #     key: kasm-db-secret-key
-  #
+  #   name: kasm-db-secret
+  #   key: kasm-db-secret-key
+
   # database.postgresMasterUser -- An object defining the PostgreSQL DB Master user and the Kubernetes secret and key values for
   # the Master DB password. These credentials are only used by the `db-init-job` to create the `kasmDbName` database, the `kasmDbUser`
   # user account, set permissions for the user account, and initialize and pre-seed the Kasm Database.
   #
   postgresMasterUser: {}
   # Example DB Master User configuration
-  #   postgresMasterUser:
-  #     username: postgres
-  #     secret:
-  #       name: postgres-secret
-  #       key: db-password
-  #
+  #   username: postgres
+  #   secret:
+  #     name: postgres-secret
+  #     key: db-password
+
   # database.image -- Configure the image repository where the image is stored. Use this to point to an private hosted
   # container registry instead of our public DockerHub hosted one.
   #
   image:
     repository: kasmweb/postgres
     tag: 1.17.0
+  # Configure the Storage for the Kasm DB StatefulSet
+  #
   storage:
     # database.storage.storageClassName -- Set the storage class to attach to the DB for storage.
-    # NOTE: Leaving this blank will use the cluster-default storage class
+    # NOTE: Leaving this blank will use the cluster-default storage class.
     #
-    storageClassName: oci-high
+    storageClassName: ""
     # database.storage.pvcSize -- Set the size of the PVC to attach to your Kubernetes-hosted Database server. The default
     # size is 8Gi. Just supply the integer value of the PVC size in GB you wish to use.
     #
@@ -212,13 +215,13 @@ dbManagement:
     enable: false
     # dbManagement.upgrade.oldDbSecretsName -- The name of the Kubernetes secret where Kasm and DB passwords are stored.
     #
-    oldDbSecretsName: "kasm-secrets"
-    # dbManagement.upgrade.oldDbBackupPvc --
+    oldDbSecretsName: kasm-secrets
+    # dbManagement.upgrade.oldDbBackupPvc -- The PVC to connect to the Upgrade job that contains the DB backup tarball.
     #
-    oldDbBackupPvc: "kasm-db-dump-pvc"
-    # dbManagement.upgrade.oldDbBackupFileName --
+    oldDbBackupPvc: kasm-db-dump-pvc
+    # dbManagement.upgrade.oldDbBackupFileName -- The file name of the database backup to restore and upgrade.
     #
-    oldDbBackupFileName: "kasm_dump.tar"
+    oldDbBackupFileName: kasm_dump.tar
   # Enable and configure a Kubernetes-based DB Backup cron job to run at specified intervals to automatically handle DB backups
   # to a specified PVC. You can use an NFS or other shared or external PVC specified by `storageClass` to keep this backup tarball.
   #
@@ -406,25 +409,18 @@ imagePullSecrets:
   # name of the Image Pull Secret you created, making sure to leave all other values below empty.
   #
   name: ""
-  
   # imagePullSecrets.type -- Type of image pull credential to create. Valid types are "dockerconfigjson", "dockercfg", or "basic"
   type: ""
-
   # imagePullSecrets.server -- The Registry server to use when pulling images (required for dockerconfigjson and dockercfg)
   server: ""
-
   # imagePullSecrets.username -- The username used to authenticate agaisnt your Registry server.
   username: ""
-
   # imagePullSecrets.password -- The password used to authenticate agaisnt your Registry server.
   password: ""
-  
   # imagePullSecrets.email -- The email address used to authenticate (optional, used for dockerconfigjson and dockercfg)
   email: ""
-  
   # imagePullSecrets.labels -- Additional labels for this secret
   labels: {}
-  
   # imagePullSecrets.annotations -- Additional annotations for this secret
   annotations: {}
 
@@ -520,4 +516,4 @@ extraLabels:
 # extraObjects -- Deploy additional Kubernetes manifests.
 # This field is expected to be either a multi-line string, a list of strings, or a list of objects.
 #
-extraObjects: {}
+extraObjects: []

@@ -294,80 +294,75 @@ data:
 
   admin_api.conf: |
     location /api/admin/ {
-      proxy_http_version	1.1;
-      proxy_set_header	Host $host;
-      proxy_set_header	Upgrade $http_upgrade;
-      proxy_set_header	Connection "upgrade";
-      proxy_set_header	X-Real-IP $remote_addr;
-      proxy_set_header	X-Forwarded-For $proxy_add_x_forwarded_for;
-      proxy_set_header	X-Forwarded-Proto $x_forwarded_proto;
-      proxy_set_header	X-Forwarded-Port $x_forwarded_port;
-      add_header Strict-Transport-Security "max-age=63072000" always;
-
-      proxy_pass	{{ printf "http://%s" $constants.api.svc }};
+      proxy_http_version	    1.1;
+      proxy_set_header	      Host $host;
+      proxy_set_header	      Upgrade $http_upgrade;
+      proxy_set_header	      Connection "upgrade";
+      proxy_set_header	      X-Real-IP $remote_addr;
+      proxy_set_header	      X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header	      X-Forwarded-Proto $x_forwarded_proto;
+      proxy_set_header	      X-Forwarded-Port $x_forwarded_port;
+      add_header              Strict-Transport-Security "max-age=63072000" always;
+      proxy_pass	            {{ printf "http://%s" $constants.api.svc }};
     }
 
   client_api.conf: |
     location /api/ {
-      proxy_http_version	1.1;
-      proxy_set_header	Host $host;
-      proxy_set_header	Upgrade $http_upgrade;
-      proxy_set_header	Connection "upgrade";
-      proxy_set_header	X-Real-IP $remote_addr;
-      proxy_set_header	X-Forwarded-For $proxy_add_x_forwarded_for;
-      proxy_set_header	X-Forwarded-Proto $x_forwarded_proto;
-      proxy_set_header	X-Forwarded-Port $x_forwarded_port;
-      add_header Strict-Transport-Security "max-age=63072000" always;
-
-      proxy_pass	{{ printf "http://%s" $constants.api.svc }};
+      proxy_http_version	    1.1;
+      proxy_set_header	      Host $host;
+      proxy_set_header	      Upgrade $http_upgrade;
+      proxy_set_header	      Connection "upgrade";
+      proxy_set_header	      X-Real-IP $remote_addr;
+      proxy_set_header	      X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header	      X-Forwarded-Proto $x_forwarded_proto;
+      proxy_set_header	      X-Forwarded-Port $x_forwarded_port;
+      add_header              Strict-Transport-Security "max-age=63072000" always;
+      proxy_pass	            {{ printf "http://%s" $constants.api.svc }};
     }
 
   manager_api.conf: |
     location /manager_api/ {
-      proxy_http_version	1.1;
-      proxy_set_header	Host $host;
-      proxy_set_header	Upgrade $http_upgrade;
-      proxy_set_header	Connection "upgrade";
-      proxy_set_header	X-Real-IP $remote_addr;
-      proxy_set_header	X-Forwarded-For $proxy_add_x_forwarded_for;
-      proxy_set_header	X-Forwarded-Proto $scheme;
-
-      proxy_pass	{{ printf "http://%s" $constants.manager.svc }}/;
+      proxy_http_version	    1.1;
+      proxy_set_header	      Host $host;
+      proxy_set_header	      Upgrade $http_upgrade;
+      proxy_set_header	      Connection "upgrade";
+      proxy_set_header	      X-Real-IP $remote_addr;
+      proxy_set_header	      X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header	      X-Forwarded-Proto $scheme;
+      proxy_pass	            {{ printf "http://%s" $constants.manager.svc }}/;
     }
 
   subscription_api.conf: |
     location /api/subscriptions/ {
-      add_header 'Access-Control-Allow-Origin' 'https://www.kasmweb.com' always;
-      add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS';
-      add_header 'Access-Control-Allow-Headers' 'Authorization,Content-Type,Accept,Origin,User-Agent,DNT,Cache-Control,X-Mx-ReqToken,Keep-Alive,X-Requested-With,If-Modified-Since';
-      add_header 'Access-Control-Allow-Credentials' 'true';
+      add_header              'Access-Control-Allow-Origin' 'https://www.kasmweb.com' always;
+      add_header              'Access-Control-Allow-Methods' 'GET, POST, OPTIONS';
+      add_header              'Access-Control-Allow-Headers' 'Authorization,Content-Type,Accept,Origin,User-Agent,DNT,Cache-Control,X-Mx-ReqToken,Keep-Alive,X-Requested-With,If-Modified-Since';
+      add_header              'Access-Control-Allow-Credentials' 'true';
 
       if ($request_method = 'OPTIONS') {
           return 204;
       }
 
-      proxy_http_version	1.1;
-      proxy_set_header	Host $host;
-      proxy_set_header	Upgrade $http_upgrade;
-      proxy_set_header	Connection "upgrade";
-      proxy_set_header	X-Real-IP $remote_addr;
-      proxy_set_header	X-Forwarded-For $proxy_add_x_forwarded_for;
-      proxy_set_header	X-Forwarded-Proto $scheme;
-
-      add_header          Strict-Transport-Security "max-age=63072000" always;
-      proxy_pass	{{ printf "http://%s" $constants.api.svc }};
+      proxy_http_version	    1.1;
+      proxy_set_header	      Host $host;
+      proxy_set_header	      Upgrade $http_upgrade;
+      proxy_set_header	      Connection "upgrade";
+      proxy_set_header	      X-Real-IP $remote_addr;
+      proxy_set_header	      X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header	      X-Forwarded-Proto $scheme;
+      add_header              Strict-Transport-Security "max-age=63072000" always;
+      proxy_pass	            {{ printf "http://%s" $constants.api.svc }};
     }
 
   upstream_proxy.conf: |
     location /kasm_connect {
       internal;
-      proxy_pass {{ printf "http://%s/api/kasm_connect/" $constants.api.svc }};
+      proxy_pass              {{ printf "http://%s/api/kasm_connect/" $constants.api.svc }};
       proxy_pass_request_body off;
       proxy_set_header        Content-Length '';
       proxy_set_header        X-Original-URI $request_uri;
       proxy_set_header        Cookie "username=$cookie_username; session_token=$cookie_session_token; kasm_client_key=$cookie_kasm_client_key";
-
-      proxy_http_version       1.1;
+      proxy_http_version      1.1;
       proxy_set_header        Connection "";
     }
 
@@ -383,7 +378,6 @@ data:
       auth_request_set        $connect_auth         $upstream_http_connect_auth;
       auth_request_set        $connect_kasm_id      $upstream_http_connect_kasm_id;
       auth_request_set        $connect_schema       $upstream_http_connect_schema;
-
       proxy_http_version      1.1;
       proxy_set_header        Host $host;
       proxy_set_header        Upgrade $http_upgrade;
@@ -394,29 +388,27 @@ data:
       proxy_set_header        Authorization "${connect_auth}";
       proxy_set_header        X-Kasm-ID "${connect_kasm_id}";
       proxy_set_header        Cookie "username=$cookie_username; session_token=$cookie_session_token; kasm_client_key=$cookie_kasm_client_key";
-
-      rewrite ^/desktop/(.*) /$1 break;
+      rewrite                 ^/desktop/(.*) /$1 break;
       proxy_pass              $connect_schema://$connect_hostname:$connect_port/$connect_path;
       proxy_read_timeout      1800s;
       proxy_send_timeout      1800s;
       proxy_connect_timeout   1800s;
       proxy_buffering         off;
-      client_max_body_size 1G;
+      client_max_body_size    1G;
       expires                 4h;
       add_header              Cache-Control "private";
-
-      proxy_hide_header   'Access-Control-Allow-Credentials';
-      proxy_hide_header   'Access-Control-Allow-Origin';
-      proxy_hide_header   'Access-Control-Allow-Methods';
-      proxy_hide_header   'Access-Control-Allow-Headers';
-      proxy_hide_header   'Strict-Transport-Security';
-      proxy_hide_header   'X-Content-Type-Options';
-      add_header 'Access-Control-Allow-Origin' $http_origin 'always';
-      add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS' 'always';
-      add_header 'Access-Control-Allow-Headers' 'DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range' 'always';
-      add_header 'Access-Control-Allow-Credentials' 'true' 'always';
-      add_header 'Strict-Transport-Security' "max-age=63072000" always;
-      add_header 'X-Content-Type-Options' 'nosniff';
+      proxy_hide_header       'Access-Control-Allow-Credentials';
+      proxy_hide_header       'Access-Control-Allow-Origin';
+      proxy_hide_header       'Access-Control-Allow-Methods';
+      proxy_hide_header       'Access-Control-Allow-Headers';
+      proxy_hide_header       'Strict-Transport-Security';
+      proxy_hide_header       'X-Content-Type-Options';
+      add_header              'Access-Control-Allow-Origin' $http_origin 'always';
+      add_header              'Access-Control-Allow-Methods' 'GET, POST, OPTIONS' 'always';
+      add_header              'Access-Control-Allow-Headers' 'DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range' 'always';
+      add_header              'Access-Control-Allow-Credentials' 'true' 'always';
+      add_header              'Strict-Transport-Security' "max-age=63072000" always;
+      add_header              'X-Content-Type-Options' 'nosniff';
 
     }
 
@@ -428,7 +420,6 @@ data:
       set $kasm_id  $1;
       set $service  $2;
       set $new_path $3;
-
       proxy_http_version      1.1;
       proxy_set_header        Host $host;
       proxy_set_header        Upgrade $http_upgrade;
@@ -439,15 +430,13 @@ data:
       proxy_set_header        X-Kasm-ID "${kasm_id}";
       proxy_set_header        Authorization "Bearer ${connect_auth}";
       proxy_set_header        Cookie "username=$cookie_username; session_token=$cookie_session_token; kasm_client_key=$cookie_kasm_client_key";
-
       proxy_pass              {{ printf "http://127.0.0.1:%s/guac_connect/$service$new_path" $constants.proxy.http }};
       proxy_read_timeout      1800s;
       proxy_send_timeout      1800s;
       proxy_connect_timeout   1800s;
       proxy_buffering         off;
-      client_max_body_size 1G;
+      client_max_body_size    1G;
       expires                 4h;
-
       add_header              Cache-Control "private";
       add_header              Strict-Transport-Security "max-age=63072000" always;
     }
@@ -458,7 +447,6 @@ data:
       }
 
       set $kasm_id $1;
-
       proxy_http_version      1.1;
       proxy_set_header        Host $host;
       proxy_set_header        Upgrade $http_upgrade;
@@ -467,61 +455,58 @@ data:
       proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
       proxy_set_header        X-Kasm-ID "${kasm_id}";
       proxy_set_header        Cookie "username=$cookie_username; session_token=$cookie_session_token; kasm_client_key=$cookie_kasm_client_key";
-
       proxy_pass              {{ printf "http://%s-backend/vnc.htmlguaclite$is_args$args" ($constants.guac.svc | toString) }};
       proxy_read_timeout      1800s;
       proxy_send_timeout      1800s;
       proxy_connect_timeout   1800s;
       proxy_buffering         off;
-      client_max_body_size 1G;
+      client_max_body_size    1G;
       expires                 4h;
       add_header              Cache-Control "private";
-
-      proxy_hide_header   'Access-Control-Allow-Credentials';
-      proxy_hide_header   'Access-Control-Allow-Origin';
-      proxy_hide_header   'Access-Control-Allow-Methods';
-      proxy_hide_header   'Access-Control-Allow-Headers';
-      proxy_hide_header   'Strict-Transport-Security';
-      proxy_hide_header   'X-Content-Type-Options';
-      add_header 'Access-Control-Allow-Origin' $http_origin 'always';
-      add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS' 'always';
-      add_header 'Access-Control-Allow-Headers' 'DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range' 'always';
-      add_header 'Access-Control-Allow-Credentials' 'true' 'always';
-      add_header 'Strict-Transport-Security' "max-age=63072000" always;
-      add_header 'X-Content-Type-Options' 'nosniff';
+      proxy_hide_header       'Access-Control-Allow-Credentials';
+      proxy_hide_header       'Access-Control-Allow-Origin';
+      proxy_hide_header       'Access-Control-Allow-Methods';
+      proxy_hide_header       'Access-Control-Allow-Headers';
+      proxy_hide_header       'Strict-Transport-Security';
+      proxy_hide_header       'X-Content-Type-Options';
+      add_header              'Access-Control-Allow-Origin' $http_origin 'always';
+      add_header              'Access-Control-Allow-Methods' 'GET, POST, OPTIONS' 'always';
+      add_header              'Access-Control-Allow-Headers' 'DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range' 'always';
+      add_header              'Access-Control-Allow-Credentials' 'true' 'always';
+      add_header              'Strict-Transport-Security' "max-age=63072000" always;
+      add_header              'X-Content-Type-Options' 'nosniff';
     }
 
     location /_options_response {
-      add_header 'Access-Control-Allow-Origin' $http_origin 'always';
-      add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS' 'always';
-      add_header 'Access-Control-Allow-Headers' 'DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range' 'always';
-      add_header 'Access-Control-Allow-Credentials' 'true' 'always';
-      add_header 'Strict-Transport-Security' "max-age=63072000" always;
-      add_header 'X-Content-Type-Options' 'nosniff';
-      add_header Content-Type text/plain;
-      add_header Content-Length 0;
+      add_header          'Access-Control-Allow-Origin' $http_origin 'always';
+      add_header          'Access-Control-Allow-Methods' 'GET, POST, OPTIONS' 'always';
+      add_header          'Access-Control-Allow-Headers' 'DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range' 'always';
+      add_header          'Access-Control-Allow-Credentials' 'true' 'always';
+      add_header          'Strict-Transport-Security' "max-age=63072000" always;
+      add_header          'X-Content-Type-Options' 'nosniff';
+      add_header          Content-Type text/plain;
+      add_header          Content-Length 0;
       return 204;
     }
 
   website.conf: |
     location / {
-        rewrite    ^/workspace/(.+)/(.+)/(.+)/(.+)/(.+)/(.+)$ /$2/$3/$4/$5/$6 last; # dynamic manifest
-        rewrite    ^/workspace/(.+)/(.+)/(.+)/(.+)$ /$2/$3/$4 last; # admin api /
-        rewrite    ^/workspace/(.+)/(.+)/(.+)$ /$2/$3 last; # client api / images
-        rewrite    ^/workspace/(.+)/(.*)$ /$2 break; # UI
-        expires         4h;
-        add_header      Cache-Control "private";
-        add_header      X-Robots-Tag "noindex, nofollow, nosnippet, noarchive";
-        add_header      'Access-Control-Allow-Origin' $http_origin always;
-        add_header      'Access-Control-Allow-Methods' 'GET, POST, OPTIONS';
-        add_header      'Access-Control-Allow-Headers' 'DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range';
-        add_header      'Access-Control-Allow-Credentials' 'true';
-        add_header      'Strict-Transport-Security' "max-age=63072000" always;
-        add_header      'X-Content-Type-Options' 'nosniff';
-
+        rewrite               ^/workspace/(.+)/(.+)/(.+)/(.+)/(.+)/(.+)$ /$2/$3/$4/$5/$6 last; # dynamic manifest
+        rewrite               ^/workspace/(.+)/(.+)/(.+)/(.+)$ /$2/$3/$4 last; # admin api /
+        rewrite               ^/workspace/(.+)/(.+)/(.+)$ /$2/$3 last; # client api / images
+        rewrite               ^/workspace/(.+)/(.*)$ /$2 break; # UI
+        expires               4h;
+        add_header            Cache-Control "private";
+        add_header            X-Robots-Tag "noindex, nofollow, nosnippet, noarchive";
+        add_header            'Access-Control-Allow-Origin' $http_origin always;
+        add_header            'Access-Control-Allow-Methods' 'GET, POST, OPTIONS';
+        add_header            'Access-Control-Allow-Headers' 'DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range';
+        add_header            'Access-Control-Allow-Credentials' 'true';
+        add_header            'Strict-Transport-Security' "max-age=63072000" always;
+        add_header            'X-Content-Type-Options' 'nosniff';
         # Optional, non-default, security headers
-        #add_header      'Cross-Origin-Embedder-Policy' 'require-corp';
-        #add_header      'Content-Security-Policy' "default-src 'unsafe-inline' 'unsafe-eval' 'self' blob: data:;";
+        #add_header           'Cross-Origin-Embedder-Policy' 'require-corp';
+        #add_header           'Content-Security-Policy' "default-src 'unsafe-inline' 'unsafe-eval' 'self' blob: data:;";
 
         root /srv/www;
     }
@@ -535,15 +520,13 @@ data:
       proxy_set_header        X-Real-IP $remote_addr;
       proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
       proxy_set_header        X-Forwarded-Proto $scheme;
-
       proxy_pass              {{ printf "http://%s:%s/" $constants.guac.svc ($constants.guac.port | toString) }};
       proxy_read_timeout      1800s;
       proxy_send_timeout      1800s;
       proxy_connect_timeout   1800s;
       proxy_buffering         off;
-      client_max_body_size 1G;
+      client_max_body_size    1G;
       expires                 4h;
-
       add_header              Strict-Transport-Security "max-age=63072000" always;
       add_header              Cache-Control "private";
     }
@@ -556,15 +539,13 @@ data:
       proxy_set_header        X-Real-IP $remote_addr;
       proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
       proxy_set_header        X-Forwarded-Proto $scheme;
-
       proxy_pass              {{ printf "http://%s-backend/vnc.htmlguaclite$is_args$args" $constants.guac.svc }};
       proxy_read_timeout      1800s;
       proxy_send_timeout      1800s;
       proxy_connect_timeout   1800s;
       proxy_buffering         off;
-      client_max_body_size 1G;
+      client_max_body_size    1G;
       expires                 4h;
-
       add_header              Cache-Control "private";
       add_header              Strict-Transport-Security "max-age=63072000" always;
       add_header              X-Content-Type-Options 'nosniff';
@@ -572,12 +553,11 @@ data:
 
     location /vm_connect {
       internal;
-      proxy_pass {{ printf "http://%s:%s/vm_connect" $constants.guac.svc ($constants.guac.port | toString) }};
+      proxy_pass              {{ printf "http://%s:%s/vm_connect" $constants.guac.svc ($constants.guac.port | toString) }};
       proxy_pass_request_body off;
       proxy_set_header        Content-Length '';
       proxy_set_header        X-Original-URI $request_uri;
-
-      proxy_http_version       1.1;
+      proxy_http_version      1.1;
       proxy_set_header        Connection "";
     }
 
@@ -587,7 +567,6 @@ data:
       auth_request_set        $connect_port         $upstream_http_connect_port;
       auth_request_set        $connect_path         $upstream_http_connect_path;
       auth_request_set        $connect_auth         $upstream_http_connect_auth;
-
       proxy_http_version      1.1;
       proxy_set_header        Host $host;
       proxy_set_header        Upgrade $http_upgrade;
@@ -596,16 +575,14 @@ data:
       proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
       proxy_set_header        X-Forwarded-Proto $scheme;
       proxy_set_header        Authorization "Bearer ${connect_auth}";
-
-      rewrite ^/guac_connect/uploads/(.*) /$1 break;
+      rewrite                 ^/guac_connect/uploads/(.*) /$1 break;
       proxy_pass              https://$connect_hostname:$connect_port;
       proxy_read_timeout      1800s;
       proxy_send_timeout      1800s;
       proxy_connect_timeout   1800s;
       proxy_buffering         off;
-      client_max_body_size 1G;
+      client_max_body_size    1G;
       expires                 4h;
-
       add_header              Cache-Control "private";
       add_header              Strict-Transport-Security "max-age=63072000" always;
     }
@@ -616,7 +593,6 @@ data:
       auth_request_set        $connect_port         $upstream_http_connect_port;
       auth_request_set        $connect_path         $upstream_http_connect_path;
       auth_request_set        $connect_auth         $upstream_http_connect_auth;
-
       proxy_http_version      1.1;
       proxy_set_header        Host $host;
       proxy_set_header        Upgrade $http_upgrade;
@@ -625,16 +601,14 @@ data:
       proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
       proxy_set_header        X-Forwarded-Proto $scheme;
       proxy_set_header        Authorization "Bearer ${connect_auth}";
-
-      rewrite ^/guac_connect/downloads/(.*) /$1 break;
+      rewrite                 ^/guac_connect/downloads/(.*) /$1 break;
       proxy_pass              https://$connect_hostname:$connect_port;
       proxy_read_timeout      1800s;
       proxy_send_timeout      1800s;
       proxy_connect_timeout   1800s;
       proxy_buffering         off;
-      client_max_body_size 1G;
+      client_max_body_size    1G;
       expires                 4h;
-
       add_header              Strict-Transport-Security "max-age=63072000" always;
       add_header              Cache-Control "private";
     }
@@ -645,7 +619,6 @@ data:
       auth_request_set        $connect_port         $upstream_http_connect_port;
       auth_request_set        $connect_path         $upstream_http_connect_path;
       auth_request_set        $connect_auth         $upstream_http_connect_auth;
-
       proxy_http_version      1.1;
       proxy_set_header        Host $host;
       proxy_set_header        Upgrade $http_upgrade;
@@ -654,16 +627,14 @@ data:
       proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
       proxy_set_header        X-Forwarded-Proto $scheme;
       proxy_set_header        Authorization "Bearer ${connect_auth}";
-
-      rewrite ^/guac_connect/api/(.*) /$1 break;
+      rewrite                 ^/guac_connect/api/(.*) /$1 break;
       proxy_pass              https://$connect_hostname:$connect_port;
       proxy_read_timeout      1800s;
       proxy_send_timeout      1800s;
       proxy_connect_timeout   1800s;
       proxy_buffering         off;
-      client_max_body_size 1G;
+      client_max_body_size    1G;
       expires                 4h;
-
       add_header              Strict-Transport-Security "max-age=63072000" always;
       add_header              Cache-Control "private";
     }
@@ -683,75 +654,66 @@ data:
 {{- if $.Values.components.rdpGateway.enabled }}
   rdp_gateway.conf: |
     location /rdp-gateway/ {
-      proxy_http_version	1.1;
-      proxy_set_header	Host $host;
-      proxy_set_header	Upgrade $http_upgrade;
-      proxy_set_header	Connection "upgrade";
-      proxy_set_header	X-Real-IP $remote_addr;
-      proxy_set_header	X-Forwarded-For $proxy_add_x_forwarded_for;
-      proxy_set_header	X-Forwarded-Proto $scheme;
-
-      proxy_pass	{{ printf "http://%s" $constants.rdpGateway.svc }}/;
+      proxy_http_version	    1.1;
+      proxy_set_header	      Host $host;
+      proxy_set_header	      Upgrade $http_upgrade;
+      proxy_set_header	      Connection "upgrade";
+      proxy_set_header	      X-Real-IP $remote_addr;
+      proxy_set_header	      X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header	      X-Forwarded-Proto $scheme;
+      proxy_pass	            {{ printf "http://%s" $constants.rdpGateway.svc }}/;
     }
 {{- end }}
 {{- if $.Values.components.share.enabled }}
   share_api.conf: |
     location /api/share/ {
-      proxy_http_version	1.1;
-      proxy_set_header	Host $host;
-      proxy_set_header	Upgrade $http_upgrade;
-      proxy_set_header	Connection "upgrade";
-      proxy_set_header	X-Real-IP $remote_addr;
-      proxy_set_header	X-Forwarded-For $proxy_add_x_forwarded_for;
-      proxy_set_header	X-Forwarded-Proto $scheme;
-
-      add_header  Strict-Transport-Security "max-age=63072000" always;
-
-      proxy_pass	{{ printf "http://%s" $constants.share.svc }};
+      proxy_http_version	    1.1;
+      proxy_set_header	      Host $host;
+      proxy_set_header	      Upgrade $http_upgrade;
+      proxy_set_header	      Connection "upgrade";
+      proxy_set_header	      X-Real-IP $remote_addr;
+      proxy_set_header	      X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header	      X-Forwarded-Proto $scheme;
+      add_header              Strict-Transport-Security "max-age=63072000" always;
+      proxy_pass	            {{ printf "http://%s" $constants.share.svc }};
     }
 {{- end }}
 {{- if $.Values.components.rdpHttpsGateway.enabled }}
   rdp_https_gateway.conf: |
     location /rdp-https-gateway/ {
-                proxy_http_version      1.1;
-                proxy_set_header        Host $host;
-                proxy_set_header        Upgrade $http_upgrade;
-                proxy_set_header        Connection "upgrade";
-                proxy_set_header        X-Real-IP $remote_addr;
-                proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
-                proxy_set_header        X-Forwarded-Proto $scheme;
-
-                proxy_pass      {{ printf  "https://%s" $constants.rdpHttpsGateway.svc }};
+      proxy_http_version      1.1;
+      proxy_set_header        Host $host;
+      proxy_set_header        Upgrade $http_upgrade;
+      proxy_set_header        Connection "upgrade";
+      proxy_set_header        X-Real-IP $remote_addr;
+      proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header        X-Forwarded-Proto $scheme;
+      proxy_pass              {{ printf  "https://%s" $constants.rdpHttpsGateway.svc }};
     }
 
     location /remoteDesktopGateway {
-      proxy_http_version 1.1;
-      proxy_set_header Connection "upgrade";
-      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-      proxy_set_header Host $host;
-      proxy_set_header Upgrade $http_upgrade;
-      proxy_pass {{ printf  "https://%s" $constants.rdpHttpsGateway.svc }};
+      proxy_http_version      1.1;
+      proxy_set_header        Connection "upgrade";
+      proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header        Host $host;
+      proxy_set_header        Upgrade $http_upgrade;
+      proxy_pass              {{ printf  "https://%s" $constants.rdpHttpsGateway.svc }};
     }
 
     # Route for MS RDP Gateway
     location /rpc {
-      proxy_buffers 4 256k;
-      proxy_buffer_size 128k;
+      proxy_buffers           4 256k;
+      proxy_buffer_size       128k;
       proxy_busy_buffers_size 256k;
-
-      proxy_pass {{ printf  "https://%s" $constants.rdpHttpsGateway.svc }};
-      proxy_set_header Host $http_host;
-      proxy_set_header X-Real-IP $remote_addr;
-      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-      proxy_set_header X-Forwarded-Proto $scheme;
-
-      # WebSocket support
-      proxy_http_version 1.1;
-      proxy_set_header Upgrade $http_upgrade;
-      proxy_set_header Connection "upgrade";
-
-      # Timeout settings
-      proxy_read_timeout 3600s;
-      proxy_send_timeout 3600s;
+      proxy_pass              {{ printf  "https://%s" $constants.rdpHttpsGateway.svc }};
+      proxy_set_header Host   $http_host;
+      proxy_set_header        X-Real-IP $remote_addr;
+      proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header        X-Forwarded-Proto $scheme;
+      proxy_http_version      1.1;
+      proxy_set_header        Upgrade $http_upgrade;
+      proxy_set_header        Connection "upgrade";
+      proxy_read_timeout      3600s;
+      proxy_send_timeout      3600s;
     }
 {{- end }}

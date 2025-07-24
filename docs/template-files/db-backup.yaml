@@ -4,7 +4,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: backup
-  namespace: kasm-ns
+  namespace: kasm-namespace
 spec:
   ttlSecondsAfterFinished: 100
   template:
@@ -71,6 +71,7 @@ spec:
           args:
             - |
               export PGPASSWORD=$POSTGRES_PASSWORD;
+              echo "Creating DB Backup..."
               pg_dump -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -d $POSTGRES_DB -Ft > /data/kasm-db-dump/kasm_dump.tar;
               ls -lah /data/kasm-db-dump/kasm_dump.tar;
           volumeMounts:
@@ -91,16 +92,15 @@ spec:
         - name: kasm-db-dump
           persistentVolumeClaim:
             claimName: kasm-db-dump-pvc
-
 ---
 # PVC definition
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: kasm-db-dump-pvc
-  namespace: kasm-ns
+  namespace: kasm-namespace
 spec:
-  storageClassName: oci-high
+  # storageClassName: ""
   accessModes:
     - ReadWriteOnce
   resources:

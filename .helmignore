@@ -22,3 +22,6 @@ CHANGELOG.md
 .project
 .idea/
 *.tmproj
+
+# Ignore readme template
+README.md.*

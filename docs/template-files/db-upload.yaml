@@ -3,8 +3,8 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: backup
-  namespace: kasm-ns
+  name: upload
+  namespace: kasm-namespace
 spec:
   ttlSecondsAfterFinished: 100
   template:
@@ -16,21 +16,7 @@ spec:
         fsGroupChangePolicy: Always
       restartPolicy: OnFailure
       initContainers:
-        - name: db-is-ready
-          image: kasmweb/api:1.17.0
-          imagePullPolicy: IfNotPresent
-          env:
-            - name: POSTGRES_HOST
-              value: db
-            - name: POSTGRES_PORT
-              value: "5432"
-          command:
-            - "/bin/bash"
-            - "-c"
-          args:
-            - |
-              while ! pg_isready -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -t 10; do echo "Waiting for DB..."; sleep 5; done
-        - name: kasm-old-db-backup-set-perms
+        - name: kasm-old-db-upload-set-perms
           image: kasmweb/api:1.17.0
           imagePullPolicy: IfNotPresent
           command:
@@ -48,31 +34,16 @@ spec:
             - name: kasm-db-dump
               mountPath: /data/kasm-db-dump
       containers:
-        - name: kasm-old-db-backup-container
+        - name: kasm-old-db-upload-container
           image: kasmweb/api:1.17.0
           imagePullPolicy: IfNotPresent
-          env:
-            - name: POSTGRES_HOST
-              value: db
-            - name: POSTGRES_PORT
-              value: "5432"
-            - name: POSTGRES_DB
-              value: kasm
-            - name: POSTGRES_USER
-              value: kasmapp
-            - name: POSTGRES_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  key: db-password
-                  name: kasm-secrets
           command:
             - "/bin/bash"
             - "-c"
           args:
             - |
-              export PGPASSWORD=$POSTGRES_PASSWORD;
-              pg_dump -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -d $POSTGRES_DB -Ft > /data/kasm-db-dump/kasm_dump.tar;
-              ls -lah /data/kasm-db-dump/kasm_dump.tar;
+              while [[ ! -f /data/kasm-db-dump/kasm_dump.tar ]]; do sleep 5; echo "Waiting for DB file upload..."; done
+              echo "File uploaded!"
           volumeMounts:
             - name: kasm-db-dump
               mountPath: /data/kasm-db-dump
@@ -91,16 +62,15 @@ spec:
         - name: kasm-db-dump
           persistentVolumeClaim:
             claimName: kasm-db-dump-pvc
-
 ---
 # PVC definition
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: kasm-db-dump-pvc
-  namespace: kasm-ns
+  namespace: kasm-namespace
 spec:
-  storageClassName: oci-high
+  # storageClassName: ""
   accessModes:
     - ReadWriteOnce
   resources:

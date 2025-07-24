@@ -5,7 +5,6 @@ ingress:
   enabled: true
   ingressClassName: ""
   annotations:
-    networking.gke.io/managed-certificates: "kasm-managed-cert"
     kubernetes.io/ingress.class: "gce"
     kubernetes.io/ingress.allow-http: "false"
   labels: {}
@@ -31,9 +30,22 @@ proxyService:
   labels: {}
 
 certificate:
-  secretName: ""
+  # certificate.secretName -- Set the secret name where the certificate is stored.
+  # This secret name will store a certificate created by `cert-manager` if you set `cert-manager.enabled` to true
+  #
+  secretName: cert-secret-name
+  # certificate.certManager -- For additional cert-manager configuration/deployment information refer to the online documentation
+  # [Cert Manager Docs](https://cert-manager.io/v1.1-docs/installation/kubernetes/). 
+  # 
+  # NOTE: If you do not enable `cert-manager`, you must generate your own certificates and add them as a Kubernetes secret, or
+  # present cloud-managed certificates.
+  #
+  # Refer to [Kubernetes Secrets](https://kubernetes.io/docs/concepts/configuration/secret/), and 
+  # [Kubernetes TLS Secret](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_create/kubectl_create_secret_tls/)
+  # for more information.
+  #
   certManager:
-    enabled: false
+    enabled: true
     addWildCard: true
     issuerName: cert-issuer-name
     issuerKind: cert-issuer-kind
@@ -133,12 +145,7 @@ applySecurity: true
 applyHealthChecks: true
 restartPolicy: "Always"
 labels: {}
-
-# nodeSelector -- Configure node selector settings for your Kasm pods - 
-# [Kubernetes Node Selector](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector).
-#
-nodeSelector:
-  node-selector: prod
+nodeSelector: {}
 
 annotations:
   certSecret: {}
@@ -161,6 +168,8 @@ extraLabels:
   statefulSet: {}
 
 # extraObjects -- Deploy additional Kubernetes manifests
+# This field is expected to be either a multi-line string, a list of strings, or a list of objects.
+#
 extraObjects:
   - apiVersion: cloud.google.com/v1
     kind: BackendConfig
@@ -170,25 +179,3 @@ extraObjects:
       timeoutSec: 28800
       connectionDraining:
         drainingTimeoutSec: 60
-      healthCheck:
-        checkIntervalSec: 15
-        healthyThreshold: 2
-        unhealthThreshold: 3
-        timeoutSec: 10
-        port: 8443
-        type: HTTPS
-        requestPath: /api/__healthcheck
-  - apiVersion: networking.gke.io/v1beta1
-    kind: FrontendConfig
-    metadata:
-      name: kasm-frontend-config
-    spec:
-      redirectToHttps:
-        enabled: true
-  - apiVersion: networking.gke.io/v1
-    kind: ManagedCertificate
-    metadata:
-      name: kasm-managed-cert
-    spec:
-      domains:
-        - kasm.contoso.com

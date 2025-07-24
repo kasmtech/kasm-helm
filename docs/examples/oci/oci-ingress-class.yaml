@@ -15,12 +15,12 @@ spec:
   isPrivate: false
   maxBandwidthMbps: 1000
   minBandwidthMbps: 100
-  # Optional
+  # All settings below are OPTIONAL
   compartmentId: ocid1.compartment.oc1.<region>.aaaaaaaa...
   subnetId: ocid1.subnet.oc1.<region>.aaaaaaaa...
   reservedPublicAddressId: ocid1.publicip.oc1.<region>.amaaaaaa...
 ---
-# Create the IngressClass to use with OKE Ingresses
+# Create the IngressClass to use with OKE Ingress
 apiVersion: networking.k8s.io/v1
 kind: IngressClass
 metadata:
