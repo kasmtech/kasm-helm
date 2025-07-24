@@ -23,7 +23,7 @@ This guide provides practical examples and configuration pointers for deploying 
 
 ## Provided Cloud Examples
 
-### AWS (Amazon Web Services)
+### AWS (Amazon Web Services) - ***Incomplete***
 
 * [AWS with Load Balancer Ingress](./aws/aws-ingress.md)
 * [AWS with Load Balancer Service](./aws/aws-service.md)
@@ -34,7 +34,7 @@ This guide provides practical examples and configuration pointers for deploying 
 * [OCI with Load Balancer Ingress](./oci/oci-ingress.md)
 * [OCI with Load Balancer Service](./oci/oci-service.md)
 
-### Google Cloud Platform (GCP)
+### Google Cloud Platform (GCP) - ***Incomplete***
 
 * [GCP with Load Balancer Ingress](./gcp/gcp-ingress.md)
 * [GCP with Cloud SQL (Postgres)](./gcp/gcp-cloud-sql.md)

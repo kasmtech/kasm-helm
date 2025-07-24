@@ -82,7 +82,7 @@ database:
     repository: kasmweb/postgres
     tag: 1.17.0
   storage:
-    storageClassName: oci-high
+    storageClassName: oci-storage-class
     pvcSize: 0
     retentionPolicy:
       whenDeleted: Delete

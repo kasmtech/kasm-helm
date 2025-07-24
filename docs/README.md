@@ -19,7 +19,7 @@ Use this guide as your starting point for deploying Kasm into your Kubernetes en
 | [Upgrading Kasm on Kubernetes](kasm-upgrade.md) | Step-by-step guide to upgrade your Kubernetes-based Kasm deployment |
 | [Upload Certs to K8S](upload-certs-to-k8s.md) | How to create and add TLS secrets to your Kubernetes cluster for Kasm. |
 
-### Examples > Aws
+### Examples > Aws - ***Incomplete***
 
 | Title | Description |
 |---|---|
@@ -27,19 +27,19 @@ Use this guide as your starting point for deploying Kasm into your Kubernetes en
 | [AWS RDS DB Example](examples/aws/aws-rds.md) | Deploy Kasm in AWS using an AWS RDS Database |
 | [AWS Service Example](examples/aws/aws-service.md) | Deploy Kasm in AWS using an AWS LB without Ingress (i.e. connected directly to an exposed Kubernetes service). |
 
-### Examples > Gcp
+### Examples > Gcp - ***Incomplete***
 
 | Title | Description |
 |---|---|
-| [Gcp Cloud Managed Cert](examples/gcp/gcp-cloud-managed-cert.md) | (No description) |
-| [Gcp Cloud Sql](examples/gcp/gcp-cloud-sql.md) | (No description) |
-| [Gcp Ingress](examples/gcp/gcp-ingress.md) | (No description) |
+| [GCP Cloud SQL](examples/gcp/gcp-cloud-sql.md) | Deploy Kasm in GCP using a Cloud SQL PostgreSQL DB instance |
+| [GCP Cloud-Managed Certificates](examples/gcp/gcp-cloud-managed-cert.md) | Deploy Kasm in GCP using an LB ingress and cloud-managed certificates |
+| [GCP Ingress](examples/gcp/gcp-ingress.md) | Deploy Kasm in GCP using an LB ingress |
 
 ### Examples > Oci
 
 | Title | Description |
 |---|---|
-| [Oci Ingress](examples/oci/oci-ingress.md) | (No description) |
-| [Oci Service](examples/oci/oci-service.md) | (No description) |
+| [OCI Ingress](examples/oci/oci-ingress.md) | Deploy Kasm in OCI using the OCI Native Ingress Controller |
+| [OCI Service](examples/oci/oci-service.md) | Deploy Kasm in OCI using a Kubernetes service with an OCI LB |
 
 <!-- END TOC -->
