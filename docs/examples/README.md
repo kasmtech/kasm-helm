@@ -38,7 +38,8 @@ This guide provides practical examples and configuration pointers for deploying 
 
 * [GCP with Load Balancer Ingress](./gcp/gcp-ingress.md)
 * [GCP with Cloud SQL (Postgres)](./gcp/gcp-cloud-sql.md)
-* [GCP with Cloud Managed Certificates](./gcp/gcp-cloud-managed-cert.md)
+* [GCP with Cloud Managed Certificates](./gcp/gcp-ingress-google-managed-cert.md)
+* [GCP with Kubernetes Service](./gcp/gcp-service.md)
 
 ---
 
