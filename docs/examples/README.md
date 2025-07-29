@@ -34,7 +34,7 @@ This guide provides practical examples and configuration pointers for deploying 
 * [OCI with Load Balancer Ingress](./oci/oci-ingress.md)
 * [OCI with Load Balancer Service](./oci/oci-service.md)
 
-### Google Cloud Platform (GCP) - ***Incomplete***
+### Google Cloud Platform (GCP)
 
 * [GCP with Load Balancer Ingress](./gcp/gcp-ingress.md)
 * [GCP with Cloud SQL (Postgres)](./gcp/gcp-cloud-sql.md)
