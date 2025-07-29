@@ -32,14 +32,32 @@ This guide walks you through safely **migrating your Kubernetes-based Kasm DB** 
 
 ---
 
-### 2. Download and Configure New Helm Chart
+### 2. Updating StatefulSet PVC Retention Policy
+
+```bash
+helm upgrade kasm kasm-single-zone -n kasm-namespace --reuse-values --set kasmApp.servicesToDeploy.db.persistentVolumeClaimRetentionPolicy.enabled=true --set kasmApp.servicesToDeploy.db.persistentVolumeClaimRetentionPolicy.whenDeleted=Retain
+```
+
+### 3. Delete Old Kasm Helm Release
+
+> ⚠️ **Warning:**\
+> Because of the earlier step (2. Updating the StatefulSet PVC Retention Policy), this action removes your Kasm deployment but retains your database and persistent volumes.
+
+
+```bash
+helm delete kasm -n kasm-namespace
+```
+
+---
+
+### 4. Download and Configure New Helm Chart
 
 - Download the latest chart and follow [main README instructions](../README.md) to get the correct release branch.
 - Refer to the [Detailed docs](../charts/kasm/README.md) for available configuration settings.
 
 ---
 
-### 3. Update Helm Chart Values for Upgrade (even if you are not upgrading, the process is the same)
+### 5. Update Helm Chart Values for Upgrade (even if you are not upgrading, the process is the same)
 
 Edit `charts/kasm/values.yaml` in the new chart directory:
 
@@ -54,7 +72,7 @@ dbManagement:
 
 ---
 
-### 4. Install the New Release
+### 6. Install the New Release
 
 ```bash
 cd /path/to/kasm-helm-new/charts
@@ -63,7 +81,7 @@ helm install kasm ./kasm -n kasm-namespace
 
 ---
 
-### 5. Verify and Log In
+### 7. Verify and Log In
 
 - Wait several minutes for all services to come online.
 - Access your Kasm environment using the `publicAddr` value you set.

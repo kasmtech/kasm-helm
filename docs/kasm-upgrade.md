@@ -61,10 +61,17 @@ This guide walks you through safely **upgrading your Kasm deployment on Kubernet
 
 ---
 
-### 2. Delete Old Kasm Helm Release
+### 2. Updating StatefulSet PVC Retention Policy
+
+```bash
+helm upgrade kasm kasm-single-zone -n kasm-namespace --reuse-values --set kasmApp.servicesToDeploy.db.persistentVolumeClaimRetentionPolicy.enabled=true --set kasmApp.servicesToDeploy.db.persistentVolumeClaimRetentionPolicy.whenDeleted=Retain
+```
+
+### 3. Delete Old Kasm Helm Release
 
 > ⚠️ **Warning:**\
-> This deletes your Kasm deployment but **does not delete** your database or persistent volumes.
+> Because of the earlier step (2. Updating the StatefulSet PVC Retention Policy), this action removes your Kasm deployment but retains your database and persistent volumes.
+
 
 ```bash
 helm delete kasm -n kasm-namespace
@@ -72,14 +79,14 @@ helm delete kasm -n kasm-namespace
 
 ---
 
-### 3. Download and Configure New Helm Chart
+### 4. Download and Configure New Helm Chart
 
 - Download the latest chart and follow [main README instructions](../README.md) to get the correct release branch.
 - Refer to the [Detailed docs](../charts/kasm/README.md) for available configuration settings.
 
 ---
 
-### 4. Update Helm Chart Values for Upgrade
+### 5. Update Helm Chart Values for Upgrade
 
 Edit `charts/kasm/values.yaml` in the new chart directory:
 
@@ -94,7 +101,7 @@ dbManagement:
 
 ---
 
-### 5. Install the New Release
+### 6. Install the New Release
 
 ```bash
 cd /path/to/kasm-helm-new/charts
@@ -103,7 +110,7 @@ helm install kasm ./kasm -n kasm-namespace
 
 ---
 
-### 6. Verify and Log In
+### 7. Verify and Log In
 
 - Wait several minutes for all services to come online.
 - Access your Kasm environment using the `publicAddr` value you set.
@@ -199,6 +206,6 @@ There are **two primary methods** to migrate your Kasm database from a VM deploy
 ## Troubleshooting
 
 - **Backup job fails:** Check logs and DB credentials; ensure network access between K8s and DB server.
-- **Pods not coming up after upgrade:** See [troubleshooting docs](https://kasmweb.com/docs/latest/troubleshooting/).
+- **Pods not coming up after upgrade:** See [troubleshooting docs](https://kasmweb.com/docs/latest/guide/troubleshooting.html).
 - **Custom PVC or backup names:** If you changed file/PVC names, update `values.yaml` accordingly.
 
