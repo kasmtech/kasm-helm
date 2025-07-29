@@ -21,9 +21,9 @@ Get up and running in just a few steps!
     ```
 
 2. **Select the Kasm Workspaces Release (Optional):**  
-   (Skip if you want the latest develop build)
+   (Skip if you want the latest release build)
     ```bash
-    git checkout release/<kasm-version>   # e.g., release/1.17.0
+    git checkout develop
     ```
 
 3. **Prepare TLS Certificate Secret:**  
