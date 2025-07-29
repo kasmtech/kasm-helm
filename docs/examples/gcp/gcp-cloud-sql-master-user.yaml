@@ -3,33 +3,16 @@ publicAddr: "kasm.contoso.com"
 kasmZones: []
 
 proxyService:
-  type: ClusterIP
-  annotations:
-    cloud.google.com/backend-config: '{"default": "kasm-proxy-backend-config"}'
+  type: LoadBalancer
+  annotations: {}
   labels: {}
 
-# Below are example settings for the Ingress configuration in GKE.
 ingress:
-  # ingress.enabled -- Set the enabled value to `true` to use a pre-defined Ingress service to expose Kasm
-  #
-  enabled: true
-  # ingress.tls -- Set tls value to `true` to eanble TLS configuration for the hostname defined at `publicAddr` parameter
-  # Set to `false` to use GCP Managed Certificate instead.
-  #
-  tls: false
-  # ingress.backendProtocol -- The backend protocol to for the Ingress to communicate with the Kasm proxy service.
-  # The GKE ingress currently only working with http backend protocol with this helm chart.
-  #
+  enabled: false
+  tls: true
   backendProtocol: http
   ingressClassName: ""
-  # ingress.annotations -- for a list of all GKE ingress annotation options see GCP Documentation
-  # https://cloud.google.com/kubernetes-engine/docs/how-to/load-balance-ingress#summary_of_external_ingress_annotations
-  #
-  annotations:
-    kubernetes.io/ingress.class: 'gce'
-    kubernetes.io/ingress.allow-http: 'false'
-    kubernetes.io/ingress.global-static-ip-name: 'kasm-test'
-    networking.gke.io/managed-certificates: "google-managed-cert"
+  annotations: {}
   labels: {}
 
 route:
@@ -52,7 +35,7 @@ certificate:
   #
   secretName: cert-secret-name
   certManager:
-    enabled: true
+    enabled: false
     addWildCard: true
     issuerName: cert-issuer-name
     issuerKind: Issuer
@@ -60,14 +43,43 @@ certificate:
     annotations: {}
     labels: {}
 
+# Kasm DB settings and configuration options
+#
 database:
-  standalone: false
-  hostname: kasm-db
+  # database.standalone -- Setting standalone to true will prevent the deployment of the Kasm DB StatefulSet and requires
+  # the user to have a self-hosted PostgreSQL Database v14 server already setup and awaiting connections. Use the below
+  # database configuration values to connect to your external DB.
+  #
+  standalone: true
+  # database.hostname -- The hostname used to connect to the database server. If you use the Kasm DB StatefulSet this will be
+  # the name of the DB service, if you use an external DB, you need to replace this value with the hostname or IP or your DB server.
+  #
+  hostname: YOUR_DB_HOSTNAME
+  # database.port -- The port Kasm will use to connect to the PostgreSQL DB server
+  #
   port: 5432
+  # database.kasmDbName -- The name of the database where Kasm is to be initialized and that Kasm services are to connect
+  #
   kasmDbName: kasm
+  # database.kasmDbUser -- The name of the Kasm database User with READ/WRITE permission to the Kasm database
+  #
   kasmDbUser: kasmapp
+  # database.kasmDbSecretName -- The name of the Kasm database password secret to use for a user-created, custom Database password
+  # secret value.
+  #
+  # NOTE: Leave this empty to use the password created by this Helm chart. If you create a custom DB secret, define the `kasmDbSecret`
+  # object below in the example format.
+  #
   kasmDbSecret: {}
-  postgresMasterUser: {}
+  # database.postgresMasterUser -- An object defining the PostgreSQL DB Master user and the Kubernetes secret and key values for
+  # the Master DB password. These credentials are only used by the `db-init-job` to create the `kasmDbName` database, the `kasmDbUser`
+  # user account, set permissions for the user account, and initialize and pre-seed the Kasm Database.
+  #
+  postgresMasterUser:
+     username: postgres
+     secret:
+       name: postgres-secret
+       key: db-password
   image:
     repository: kasmweb/postgres
     tag: 1.17.0
@@ -85,9 +97,9 @@ dbManagement:
   initialize: true
   upgrade:
     enable: false
-    oldDbSecretsName: "kasm-secrets"
-    oldDbBackupPvc: "kasm-db-dump-pvc"
-    oldDbBackupFileName: "kasm_dump.tar"
+    oldDbSecretsName: kasm-secrets
+    oldDbBackupPvc: kasm-db-dump-pvc
+    oldDbBackupFileName: kasm_dump.tar
   backupCron:
     enabled: false
     pvcName: ""
@@ -204,19 +216,4 @@ extraLabels:
   pvc: {}
   statefulSet: {}
 
-extraObjects:
-  - apiVersion: cloud.google.com/v1
-    kind: BackendConfig
-    metadata:
-      name: kasm-proxy-backend-config
-    spec:
-      timeoutSec: 28800
-      connectionDraining:
-        drainingTimeoutSec: 60
-  - apiVersion: networking.gke.io/v1
-    kind: ManagedCertificate
-    metadata:
-      name: google-managed-cert
-    spec:
-      domains:
-        - kasm.contoso.com
+extraObjects: []

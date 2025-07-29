@@ -2,34 +2,29 @@ deploymentSize: "small"
 publicAddr: "kasm.contoso.com"
 kasmZones: []
 
+# proxyService -- Configure the external-facing service type to use.
+# Allowed service types: ClusterIP or LoadBalancer
+#
+# The service.annotations defined here only apply to the `proxy` service. If you wish to apply annotations
+# to all services, use the annotations.service value at the bottom of this chart.
+#
+# NOTE: If ingress.enabled or route.enabled set to `true` service.type MUST be set to `ClusterIP`.
+#
 proxyService:
-  type: ClusterIP
+  type: LoadBalancer
   annotations:
+    cloud.google.com/app-protocols: '{"":"HTTPS"}'
+    cloud.google.com/l4-rbs: "enabled"
     cloud.google.com/backend-config: '{"default": "kasm-proxy-backend-config"}'
+    networking.gke.io/load-balancer-ip-addresses: 'eu-west2-test'
   labels: {}
 
-# Below are example settings for the Ingress configuration in GKE.
 ingress:
-  # ingress.enabled -- Set the enabled value to `true` to use a pre-defined Ingress service to expose Kasm
-  #
-  enabled: true
-  # ingress.tls -- Set tls value to `true` to eanble TLS configuration for the hostname defined at `publicAddr` parameter
-  # Set to `false` to use GCP Managed Certificate instead.
-  #
-  tls: false
-  # ingress.backendProtocol -- The backend protocol to for the Ingress to communicate with the Kasm proxy service.
-  # The GKE ingress currently only working with http backend protocol with this helm chart.
-  #
+  enabled: false
+  tls: true
   backendProtocol: http
   ingressClassName: ""
-  # ingress.annotations -- for a list of all GKE ingress annotation options see GCP Documentation
-  # https://cloud.google.com/kubernetes-engine/docs/how-to/load-balance-ingress#summary_of_external_ingress_annotations
-  #
-  annotations:
-    kubernetes.io/ingress.class: 'gce'
-    kubernetes.io/ingress.allow-http: 'false'
-    kubernetes.io/ingress.global-static-ip-name: 'kasm-test'
-    networking.gke.io/managed-certificates: "google-managed-cert"
+  annotations: {}
   labels: {}
 
 route:
@@ -52,7 +47,7 @@ certificate:
   #
   secretName: cert-secret-name
   certManager:
-    enabled: true
+    enabled: false
     addWildCard: true
     issuerName: cert-issuer-name
     issuerKind: Issuer
@@ -85,9 +80,9 @@ dbManagement:
   initialize: true
   upgrade:
     enable: false
-    oldDbSecretsName: "kasm-secrets"
-    oldDbBackupPvc: "kasm-db-dump-pvc"
-    oldDbBackupFileName: "kasm_dump.tar"
+    oldDbSecretsName: kasm-secrets
+    oldDbBackupPvc: kasm-db-dump-pvc
+    oldDbBackupFileName: kasm_dump.tar
   backupCron:
     enabled: false
     pvcName: ""
@@ -213,10 +208,3 @@ extraObjects:
       timeoutSec: 28800
       connectionDraining:
         drainingTimeoutSec: 60
-  - apiVersion: networking.gke.io/v1
-    kind: ManagedCertificate
-    metadata:
-      name: google-managed-cert
-    spec:
-      domains:
-        - kasm.contoso.com
