@@ -1,0 +1,173 @@
+{{/*
+Kasm DB server StatefullSet definition
+*/}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $dbReplicas := include "replicas.preset" (dict "node" $constants.db.component "size" .Values.deploymentSize) -}}
+{{- if not .Values.database.standalone }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $constants.db.name }}-statefulset
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ $constants.db.name }}
+    app.kubernetes.io/component: {{ $constants.db.component }}
+    {{- include "kasm.defaultLabels" . | indent 4 }}
+    {{- with .Values.database.labels }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with .Values.extraLabels.statefulSet }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with .Values.labels }}{{- toYaml . | nindent 4 }}{{- end }}
+  {{- if or .Values.database.annotations .Values.annotations.statefulSet }}
+  annotations:
+    {{- with .Values.annotations.statefulSet }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with .Values.database.annotations }}{{- toYaml . | nindent 4 }}{{- end }}
+  {{- end }}
+spec:
+  replicas: 1
+  serviceName: {{ $constants.db.svc }}
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $constants.db.name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ $constants.db.name }}
+        app.kubernetes.io/component: {{ $constants.db.component }}
+        {{- include "kasm.defaultLabels" . | indent 8 }}
+        {{- with .Values.database.labels }}{{- toYaml . | nindent 8 }}{{- end }}
+        {{- with .Values.extraLabels.pod }}{{- toYaml . | nindent 8 }}{{- end }}
+        {{- with .Values.labels }}{{- toYaml . | nindent 8 }}{{- end }}
+      {{- if or .Values.database.annotations .Values.annotations.pod }}
+      annotations:
+        {{- with .Values.annotations.pod }}{{- toYaml . | nindent 8 }}{{- end }}
+        {{- with .Values.database.annotations }}{{- toYaml . | nindent 8 }}{{- end }}
+      {{- end }}
+    spec:
+      restartPolicy: {{ .Values.restartPolicy }}
+      {{- if .Values.imagePullSecrets.enabled }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets.name | default (printf "%s-image-pull-secret" .Release.Name) }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- include "db.podSecurity" . | indent 6 }}
+      initContainers:
+        - name: {{ $constants.db.name }}-data-perms
+          image: {{ $constants.api.image }}
+          command:
+            - /bin/sh
+            - -ec
+          args:
+            - |
+              echo "Setting permissions and ownership on /var/lib/postgresql/data..." && mkdir -p /var/lib/postgresql/data/postgres && chown -R 70:70 /var/lib/postgresql/data && chmod -R 0700 /var/lib/postgresql/data
+              echo "Setting permissions and ownership on /var/run/postgresql..." && chown -R 70:70 /var/run/postgresql && chmod -R 0700 /var/run/postgresql
+              echo "Setting permissions and ownership on /tmp..." && mkdir -p /tmp/postgres && chmod -R 0700 /tmp/postgres && chmod -R 777 /tmp
+              echo "Done"
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+          volumeMounts:
+            - name: {{ printf "%s-%s-data" $constants.db.name .Chart.AppVersion | replace "." "-" }}
+              mountPath: /var/lib/postgresql/data
+            - name: {{ printf "%s-%s-data" $constants.db.name .Chart.AppVersion | replace "." "-" }}
+              mountPath: /tmp
+            {{- if .Values.applySecurity }}
+            - name: {{ printf "%s-%s-data" $constants.db.name .Chart.AppVersion | replace "." "-" }}
+              mountPath: /var/run/postgresql
+            {{- end }}
+      containers:
+        - name: {{ $constants.db.name }}-container
+          image: {{ $constants.db.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          env:
+            - name: POSTGRES_DB
+              value: {{ .Values.database.kasmDbName }}
+            - name: POSTGRES_USER
+              value: {{ .Values.database.kasmDbUser }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                {{- if .Values.database.kasmDbSecret -}}
+                {{ .Values.database.kasmDbSecret | toYaml | nindent 18 }}
+                {{- else }}
+                  name: {{ .Release.Name }}-secrets
+                  key: "db-password"
+                {{- end }}
+          ports:
+            - name: {{ $constants.db.portName }}
+              containerPort: {{ $constants.db.port }}
+              protocol: TCP
+          {{- if .Values.applyHealthChecks }}
+          livenessProbe:
+            {{- include "health.command" (dict "command" (printf "pg_isready --port=%s -t 10" ($constants.db.port | toString))) | indent 12 }}
+          {{- end }}
+          {{- if .Values.applyHealthChecks }}
+          readinessProbe:
+            {{- include "health.command" (dict "command" "psql -d ${POSTGRES_DB} -U ${POSTGRES_USER} -c 'SELECT 1' || exit 1") | indent 12 }}
+          {{- end }}
+          {{- if .Values.database.resources }}
+          resources: {{- toYaml .Values.database.resources | nindent 12 }}
+          {{- else }}
+          resources: {{- include "resources.preset" (dict "node" $constants.db.component "size" .Values.deploymentSize) | nindent 12 }}
+          {{- end }}
+          {{- if .Values.applySecurity }}
+            {{- include "db.containerSecurity" . | indent 10 }}
+          {{- end }}
+          volumeMounts:
+          - name: {{ printf "%s-%s-data" $constants.db.name .Chart.AppVersion | replace "." "-" }}
+            mountPath: /var/lib/postgresql/data
+            subPath: postgres
+          - name: {{ $constants.db.name }}-configs
+            mountPath: /docker-entrypoint-initdb.d/data.sql
+            subPath: data.sql
+          - name: {{ $constants.db.name }}-configs
+            mountPath: /var/lib/postgresql/conf/postgresql.conf
+            subPath: postgresql.conf
+          - name: {{ $constants.db.name }}-configs
+            mountPath: /var/lib/postgresql/conf/pg_hba.conf
+            subPath: pg_hba.conf
+          - name: {{ $constants.db.name }}-cert
+            mountPath: /etc/ssl/certs/db_server.crt
+            subPath: tls.crt
+          - name: {{ $constants.db.name }}-cert
+            mountPath: /etc/ssl/certs/db_server.key
+            subPath: tls.key
+          - name: {{ printf "%s-%s-data" $constants.db.name .Chart.AppVersion | replace "." "-" }}
+            mountPath: /tmp
+          {{- if .Values.applySecurity }}
+          - name: {{ printf "%s-%s-data" $constants.db.name .Chart.AppVersion | replace "." "-" }}
+            mountPath: /var/run/postgresql
+          {{- end }}
+      volumes:
+        - name: {{ $constants.db.name }}-configs
+          configMap:
+            name: {{ $constants.db.name }}-configmap
+        - name: {{ $constants.db.name }}-cert
+          secret:
+            secretName: {{ .Values.certificate.secretName }}
+            defaultMode: 0o600
+  {{- if .Values.database.storage.retentionPolicy }}
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: {{ .Values.database.storage.retentionPolicy.whenDeleted }}
+    whenScaled: {{ .Values.database.storage.retentionPolicy.whenScaled }}
+  {{- end }}
+  volumeClaimTemplates:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: {{ printf "%s-%s-data" $constants.db.name .Chart.AppVersion | replace "." "-" }}
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        {{- with .Values.database.storage.storageClassName }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ printf "%sGi" ((.Values.database.storage.pvcSize | default 8) | toString) }}
+{{- end }}

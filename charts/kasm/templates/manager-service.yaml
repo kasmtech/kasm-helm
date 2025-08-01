@@ -1,0 +1,31 @@
+{{/*
+Deploy the Manager .Values.components.manager
+*/}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $defaultLabels := include "kasm.defaultLabels" . -}}
+{{- $values := .Values }}
+{{- range $idx, $zone := (.Values.kasmZones | default (list (dict "name" "default"))) }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ printf "%s-%s" $constants.manager.svc (regexReplaceAll "[^a-zA-Z0-9]+" $zone.name "-" | lower) }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ printf "%s-%s-svc" $constants.manager.svc (regexReplaceAll "[^a-zA-Z0-9]+" $zone.name "-" | lower) }}
+    app.kubernetes.io/component: {{ $constants.manager.component }}
+    {{- $defaultLabels | indent 4 }}
+    {{- with $values.components.manager.labels }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with $values.extraLabels.service }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with $values.labels }}{{- toYaml . | nindent 4 }}{{- end }}
+  {{- with $values.annotations.service }}
+  annotations: {{ toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  selector:
+    app.kubernetes.io/name: {{ printf "%s-%s" $constants.manager.name (regexReplaceAll "[^a-zA-Z0-9]+" $zone.name "-" | lower) }}
+  ports:
+    - name: {{ printf "%s-svc-%s" $constants.manager.svc ($constants.manager.port | toString) }}
+      protocol: TCP
+      port: {{ $constants.manager.port | toString }}
+{{- end }}

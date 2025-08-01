@@ -1,0 +1,50 @@
+{{/*
+Deploy the Kasm OpenShift Route if .Values.route.enabled set to true
+*/}}
+{{- if and .Values.ingress.enabled .Values.route.enabled -}}
+  {{- fail "The ingress.enabled and route.enabled cannot both be set. Either configure an Ingress or an OpenShift Route, not both." -}}
+{{- end -}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- if eq .Values.route.enabled true }}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ .Release.Name }}-route
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Release.Name }}-route
+    {{- include "kasm.defaultLabels" . | indent 4 }}
+    {{- with .Values.route.labels }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with .Values.labels }}{{- toYaml . | nindent 4 }}{{- end }}
+  {{- with .Values.route.annotations }}
+  annotations: {{ toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  host: {{ .Values.publicAddr | quote }}
+  to:
+    kind: Service
+    name: {{ $constants.proxy.svc }}
+    weight: 100
+  port:
+    targetPort: {{ $constants.proxy.https }}
+  wildcardPolicy: {{ .Values.route.wildcardPolicy | default "None" }}
+  tls:
+    {{- with .Values.route.tls }}
+    termination: {{ .termination | default "edge" }}
+    {{- with .insecureEdgeTerminationPolicy }}
+    insecureEdgeTerminationPolicy: {{ . | default "Redirect" }}
+    {{- end }}
+    {{- with .certificate }}
+    certificate: |
+      {{- . | nindent 6 }}
+    {{- end }}
+    {{- with .key }}
+    key: |
+      {{- . | nindent 6 }}
+    {{- end }}
+    {{- with .caCertificate }}
+    caCertificate: |
+      {{- . | nindent 6 }}
+    {{- end }}
+    {{- end }}
+{{- end }}

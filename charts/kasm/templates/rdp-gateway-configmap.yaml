@@ -1,0 +1,85 @@
+{{/*
+Deploy the RDP Gateway Configmap if .Values.components.rdpGateway.enabled set to true
+*/}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- if .Values.components.rdpGateway.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $constants.rdpGateway.name }}-configmap
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ $constants.rdpGateway.name }}-configmap
+    app.kubernetes.io/component: {{ $constants.rdpGateway.component }}
+    {{- include "kasm.defaultLabels" . | indent 4 }}
+    {{- with .Values.extraLabels.configMap }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with .Values.labels }}{{- toYaml . | nindent 4 }}{{- end }}
+  {{- with .Values.annotations.configMap }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  passthrough.app.config.yaml: |
+    rdp-gateway:
+      id: 00000000-0000-0000-0000-000000000000
+      server_address: SERVER_ADDRESS
+      server_port: SERVER_PORT
+      proxy_port: 3389
+      zone: ZONE
+      registration_token: REGISTRATION_TOKEN
+      number_of_threads: 10
+      kasm_delete_session_watch_interval: 60
+      forward_logs_to_manager: true
+      keepalive_loop_interval: 30
+    api:
+      auth_token: JWTTOKEN
+      public_jwt_cert: PUBLICCERT
+      hostnames: [ 'APIHOSTNAME' ]
+      port: SERVER_PORT
+      hostname_refresh_interval: 30
+      schema: http
+    logging:
+      rdp-gateway:
+        formatters:
+          pythonjsonlogger:
+            (): pythonjsonlogger.jsonlogger.JsonFormatter
+            fmt: '%(asctime) %(name) %(processName) %(filename)  %(funcName) %(levelname) %(lineno) %(module) %(threadName) %(message)'
+            timestamp: true
+          standard:
+            format: '%(asctime)s [%(levelname)s] %(name)s: %(message)s'
+        handlers:
+          file_handler:
+            backupCount: 5
+            class: logging.handlers.RotatingFileHandler
+            encoding: utf8
+            filename: /opt/kasm/current/log/rdp_gateway.log
+            formatter: standard
+            level: DEBUG
+            maxBytes: 10485760
+          file_handler_json:
+            backupCount: 5
+            class: logging.handlers.RotatingFileHandler
+            encoding: utf8
+            filename: /opt/kasm/current/log/rdp_gateway_json.log
+            formatter: pythonjsonlogger
+            level: DEBUG
+            maxBytes: 10485760
+          stream:
+            class: logging.StreamHandler
+            formatter: standard
+            level: DEBUG
+          syslog:
+            class: logging.handlers.SysLogHandler
+            formatter: pythonjsonlogger
+            level: DEBUG
+        loggers:
+          ? ''
+          : handlers:
+            - stream
+            - syslog
+            level: DEBUG
+            propagate: true
+          tornado:
+            level: INFO
+        version: 1
+{{- end }}

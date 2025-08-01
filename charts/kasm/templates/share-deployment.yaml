@@ -1,0 +1,142 @@
+{{/*
+Deploy the Share if .Values.components.kasmShare.deploy set to true
+*/}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $shareReplicas := include "replicas.preset" (dict "node" $constants.share.component "size" .Values.deploymentSize) -}}
+{{- if eq .Values.components.share.enabled true }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $constants.share.name }}-deployment
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ $constants.share.name }}
+    app.kubernetes.io/component: {{ $constants.share.component }}
+    {{- include "kasm.defaultLabels" . | indent 4 }}
+    {{- with $.Values.components.share.labels }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with $.Values.extraLabels.deployment }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with $.Values.labels }}{{- toYaml . | nindent 4 }}{{- end }}
+  {{- if or $.Values.components.share.annotations $.Values.annotations.deployment }}
+  annotations:
+    {{- with $.Values.annotations.deployment }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with $.Values.components.share.annotations }}{{- toYaml . | nindent 4 }}{{- end }}
+  {{- end }}
+spec:
+  replicas: {{ $shareReplicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: {{ add1 $shareReplicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $constants.share.name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ $constants.share.name }}
+        app.kubernetes.io/component: {{ $constants.share.component }}
+        {{- include "kasm.defaultLabels" . | indent 8 }}
+        {{- with .Values.components.share.labels }}{{ toYaml . | nindent 8 }}{{- end }}
+        {{- with .Values.extraLabels.pod }}{{ toYaml . | nindent 8 }}{{- end }}
+        {{- with .Values.labels }}{{- toYaml . | nindent 8 }}{{- end }}
+      {{- if or .Values.components.share.annotations .Values.annotations.pod }}
+      annotations:
+        {{- with .Values.annotations.pod }}{{ toYaml . | nindent 8 }}{{- end }}
+        {{- with .Values.components.share.annotations }}{{ toYaml . | nindent 8 }}{{- end }}
+      {{- end }}
+    spec:
+      restartPolicy: {{ $.Values.restartPolicy }}
+      {{- if .Values.imagePullSecrets.enabled }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets.name | default (printf "%s-image-pull-secret" .Release.Name) }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if $.Values.applySecurity }}
+        {{- include "kasm.podSecurity" . | indent 6 }}
+      {{- end }}
+      initContainers:
+        - name: {{ $constants.redis.name }}-is-ready
+          image: {{ $constants.redis.image }}
+          imagePullPolicy: {{ $.Values.imagePullPolicy }}
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Release.Name }}-secrets
+                  key: redis-password
+            - name: REDIS_HOST
+              value: {{ $constants.redis.svc }}
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - |
+              while ! redis-cli -h $(REDIS_HOST) -p {{ $constants.redis.port }} -a $(REDIS_PASSWORD) ping 2>/dev/null | grep -q PONG; do echo "Waiting for Redis to start..."; sleep 5; done
+              echo "Redis online. Connecting!"
+          {{- if $.Values.applySecurity }}
+            {{- include "kasm.containerSecurity" . | indent 10 }}
+          {{- end }}
+        {{- include "kasm.initContainer" (dict "serviceName" $constants.api.svc "servicePort" $constants.api.port "path" "/api/__healthcheck" "schema" "http" "image" $constants.api.image) | nindent 8 }}
+        {{- if $.Values.applySecurity }}
+          {{- include "kasm.containerSecurity" . | indent 10 }}
+        {{- end }}
+      containers:
+        - name: {{ $constants.share.name }}-container
+          image: {{ $constants.share.image }}
+          imagePullPolicy: {{ $.Values.imagePullPolicy }}
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Release.Name }}-secrets
+                  key: redis-password
+            - name: REDIS_HOST
+              value: {{ $constants.redis.svc }}
+            - name: SHARE_ID
+              value: auto
+            - name: SERVER_HOSTNAME
+              value: {{ $constants.share.svc }}
+            - name: POSTGRES_HOST
+              value: {{ $constants.db.svc }}
+            - name: POSTGRES_PORT
+              value: {{ $constants.db.port | quote }}
+            - name: POSTGRES_DB
+              value: {{ .Values.database.kasmDbName }}
+            - name: POSTGRES_USER
+              value: {{ .Values.database.kasmDbUser }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                {{- if .Values.database.kasmDbSecret -}}
+                {{ .Values.database.kasmDbSecret | toYaml | nindent 18 }}
+                {{- else }}
+                  name: {{ .Release.Name }}-secrets
+                  key: "db-password"
+                {{- end }}
+          ports:
+            - name: {{ $constants.share.portName }}
+              containerPort: {{ $constants.share.port }}
+              protocol: TCP
+          {{- if $.Values.applyHealthChecks }}
+          livenessProbe:
+            {{- include "health.tcp" (dict "portName" $constants.share.portName ) | indent 12 }}
+          {{- end }}
+          {{- if $.Values.applyHealthChecks }}
+          readinessProbe:
+            {{- include "health.tcp" (dict "portName" $constants.share.portName ) | indent 12 }}
+          {{- end }}
+          {{- if $.Values.components.share.resources }}
+          resources: {{- toYaml $.Values.components.share.resources | nindent 12 }}
+          {{- else }}
+          resources: {{- include "resources.preset" (dict "node" $constants.share.component "size" $.Values.deploymentSize) | nindent 12 }}
+          {{- end }}
+          {{- if $.Values.applySecurity }}
+            {{- include "kasm.containerSecurity" . | indent 10 }}
+          {{- end }}
+{{- end }}

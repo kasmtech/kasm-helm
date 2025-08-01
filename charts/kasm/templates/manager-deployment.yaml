@@ -1,0 +1,123 @@
+{{/*
+Kasm Manager server Deployment definition
+*/}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $managerReplicas := include "replicas.preset" (dict "node" $constants.manager.component "size" .Values.deploymentSize) -}}
+{{- $defaultLabels := include "kasm.defaultLabels" . -}}
+{{- $values := .Values }}
+{{- range $idx, $zone := (.Values.kasmZones | default (list (dict "name" "default"))) }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ printf "%s-%s-deployment" $constants.manager.name (regexReplaceAll "[^a-zA-Z0-9]+" $zone.name "-" | lower) }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ printf "%s-%s" $constants.manager.name (regexReplaceAll "[^a-zA-Z0-9]+" $zone.name "-" | lower) }}
+    app.kubernetes.io/component: {{ $constants.manager.component }}
+    {{- $defaultLabels | indent 4 }}
+    {{- with $values.components.manager.labels }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with $values.extraLabels.deployment }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with $values.labels }}{{- toYaml . | nindent 4 }}{{- end }}
+  {{- if or $values.components.manager.annotations $values.annotations.deployment }}
+  annotations:
+    {{- with $values.annotations.deployment }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with $values.components.manager.annotations }}{{- toYaml . | nindent 4 }}{{- end }}
+  {{- end }}
+spec:
+  replicas: {{ $managerReplicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: {{ add1 $managerReplicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ printf "%s-%s" $constants.manager.name (regexReplaceAll "[^a-zA-Z0-9]+" $zone.name "-" | lower) }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ printf "%s-%s" $constants.manager.name (regexReplaceAll "[^a-zA-Z0-9]+" $zone.name "-" | lower) }}
+        app.kubernetes.io/component: {{ $constants.manager.component }}
+        {{- $defaultLabels | indent 8 }}
+        {{- with $values.components.manager.labels }}{{ toYaml . | nindent 8 }}{{- end }}
+        {{- with $values.extraLabels.pod }}{{ toYaml . | nindent 8 }}{{- end }}
+        {{- with $values.labels }}{{- toYaml . | nindent 8 }}{{- end }}
+      {{- if or $values.components.manager.annotations $values.annotations.pod }}
+      annotations:
+        {{- with $values.annotations.pod }}{{ toYaml . | nindent 8 }}{{- end }}
+        {{- with $values.components.manager.annotations }}{{ toYaml . | nindent 8 }}{{- end }}
+      {{- end }}
+    spec:
+      restartPolicy: {{ $values.restartPolicy }}
+      {{- if $values.imagePullSecrets.enabled }}
+      imagePullSecrets:
+        - name: {{ $values.imagePullSecrets.name | default (printf "%s-image-pull-secret" $.Release.Name) }}
+      {{- end }}
+      {{- if $values.applySecurity }}
+        {{- include "kasm.podSecurity" . | indent 6 }}
+      {{- end }}
+      {{- with $values.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $values.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers: {{- include "kasm.initContainer" (dict "serviceName" $constants.api.svc "servicePort" $constants.api.port "path" "/api/__healthcheck" "schema" "http" "image" $constants.api.image) | indent 8 }}
+      {{- if $values.applySecurity }}
+        {{- include "kasm.containerSecurity" . | indent 10 }}
+      {{- end }}
+      containers:
+        - name: {{ printf "%s-%s-container" $constants.manager.name (regexReplaceAll "[^a-zA-Z0-9]+" $zone.name "-" | lower) }}
+          image: {{ $constants.manager.image }}
+          imagePullPolicy: {{ $values.imagePullPolicy }}
+          env:
+            - name: LOG_LEVEL
+              value: INFO
+            - name: SERVER_ZONE_NAME
+              value: {{ $zone.name }}
+            - name: POSTGRES_HOST
+              value: {{ $constants.db.svc }}
+            - name: POSTGRES_PORT
+              value: {{ $constants.db.port | quote }}
+            - name: POSTGRES_DB
+              value: {{ $values.database.kasmDbName }}
+            - name: POSTGRES_USER
+              value: {{ $values.database.kasmDbUser }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                {{- if $values.database.kasmDbSecret -}}
+                {{ $values.database.kasmDbSecret | toYaml | nindent 18 }}
+                {{- else }}
+                  name: {{ $.Release.Name }}-secrets
+                  key: "db-password"
+                {{- end }}
+          ports:
+            - name: {{ printf "zn%s-%s" ($idx | toString) $constants.manager.portName }}
+              containerPort: {{ $constants.manager.port }}
+              protocol: TCP
+          {{- if $values.applyHealthChecks }}
+          livenessProbe:
+            {{- include "health.tcp" (dict "portName" (printf "zn%s-%s" ($idx | toString) $constants.manager.portName) ) | indent 12 }}
+          {{- end }}
+          {{- if $values.applyHealthChecks }}
+          readinessProbe:
+            {{- include "health.http" (dict "path" "/__healthcheck" "portName" (printf "zn%s-%s" ($idx | toString) $constants.manager.portName) ) | indent 12 }}
+          {{- end }}
+          {{- if $values.components.manager.resources }}
+          resources: {{- toYaml $values.components.manager.resources | nindent 12 }}
+          {{- else }}
+          resources: {{- include "resources.preset" (dict "node" $constants.manager.component "size" $values.deploymentSize) | nindent 12 }}
+          {{- end }}
+          {{- if $values.applySecurity }}
+            {{- include "kasm.containerSecurity" . | indent 10 }}
+          {{- end }}
+          volumeMounts:
+            - name: {{ $constants.manager.name }}-tmp
+              mountPath: /tmp
+      volumes:
+        - name: {{ $constants.manager.name }}-tmp
+          emptyDir:
+            sizeLimit: 1Gi
+{{- end }}

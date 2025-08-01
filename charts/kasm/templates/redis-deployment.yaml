@@ -1,0 +1,92 @@
+{{/*
+Deploy the Redis if .Values.kasmApp.servicesToDeploy.share.deploy set to true
+*/}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $redisReplicas := include "replicas.preset" (dict "node" $constants.redis.component "size" .Values.deploymentSize) -}}
+{{- if .Values.components.share.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $constants.redis.name }}-deployment
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ $constants.redis.name }}
+    app.kubernetes.io/component: {{ $constants.redis.component }}
+    {{- include "kasm.defaultLabels" . | indent 4 }}
+    {{- with $.Values.components.redis.labels }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with $.Values.extraLabels.deployment }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with $.Values.labels }}{{- toYaml . | nindent 4 }}{{- end }}
+  {{- if or $.Values.components.redis.annotations $.Values.annotations.deployment }}
+  annotations:
+    {{- with $.Values.annotations.deployment }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with $.Values.components.redis.annotations }}{{- toYaml . | nindent 4 }}{{- end }}
+  {{- end }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $constants.redis.name }}
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ $constants.redis.name }}
+        app.kubernetes.io/component: {{ $constants.redis.component }}
+        {{- include "kasm.defaultLabels" . | indent 8 }}
+        {{- with .Values.components.redis.labels }}{{ toYaml . | nindent 8 }}{{- end }}
+        {{- with .Values.extraLabels.pod }}{{ toYaml . | nindent 8 }}{{- end }}
+        {{- with .Values.labels }}{{- toYaml . | nindent 8 }}{{- end }}
+      {{- if or .Values.components.redis.annotations .Values.annotations.pod }}
+      annotations:
+        {{- with .Values.annotations.pod }}{{ toYaml . | nindent 8 }}{{- end }}
+        {{- with .Values.components.redis.annotations }}{{ toYaml . | nindent 8 }}{{- end }}
+      {{- end }}
+    spec:
+      restartPolicy: {{ $.Values.restartPolicy }}
+      {{- if .Values.imagePullSecrets.enabled }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets.name | default (printf "%s-image-pull-secret" .Release.Name) }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if $.Values.applySecurity }}
+        {{- include "kasm.podSecurity" . | indent 6 }}
+      {{- end }}
+      containers:
+        - name: {{ $constants.redis.name }}-container
+          image: {{ $constants.redis.image }}
+          imagePullPolicy: {{ $.Values.imagePullPolicy }}
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Release.Name }}-secrets
+                  key: redis-password
+          {{- if $.Values.components.redis.resources }}
+          resources: {{- toYaml $.Values.components.redis.resources | nindent 12 }}
+          {{- else }}
+          resources: {{- include "resources.preset" (dict "node" $constants.redis.component "size" $.Values.deploymentSize) | nindent 12 }}
+          {{- end }}
+          command:
+            - redis-server
+          args: 
+            - --requirepass $(REDIS_PASSWORD)
+          ports:
+            - name: {{ $constants.redis.portName }}
+              containerPort: {{ $constants.redis.port }}
+              protocol: TCP
+          {{- if $.Values.applyHealthChecks }}
+          livenessProbe:
+            {{- include "health.tcp" (dict "portName" $constants.redis.portName ) | indent 12 }}
+          readinessProbe:
+            {{- include "health.command" (dict "command" (printf "redis-cli -p %s -a $REDIS_PASSWORD ping 2>/dev/null | grep -q PONG" ($constants.redis.port | toString))) | indent 12 }}
+          {{- end }}
+          {{- if $.Values.applySecurity }}
+            {{- include "kasm.containerSecurity" . | indent 10 }}
+          {{- end }}
+{{- end }}

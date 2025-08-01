@@ -1,0 +1,519 @@
+# yaml-language-server: $schema=values.schema.json
+# deploymentSize -- Define the estimated size of the Kasm deployment in expected session load.
+#  small  = Up to 10-15 sessions
+#  medium = Up to 25-30 sessions
+#  large  = Up to 50+ sessions
+#
+deploymentSize: "small"
+
+# publicAddr -- Set the access URL to be used for the Kasm deployment. This is the URL you will use to access
+# your Kasm deployment. This URL can be a private address, it just needs to be resolvable by systems you use
+# to interface with Kasm.
+# 
+# If you create a self-signed or custom certificate, this is the value you should assign as the Common Name
+# associated with the certificate. If `certificate.certManager.enabled` is set to true, this is the
+# name used to generate the certificate.
+#
+publicAddr: ""
+
+# kasmZones -- This is a list of objects defining different Kasm Zone configurations for your deployment. This
+# configuration is typically used for multi-region, large, or custom deployments where the customer requires a
+# high degree of configurability and has multiple resources in disparate areas.
+#
+# NOTE: If you configure custom zones below, you MUST use a valid `ingress` configuration due to the increased
+# deployment complexity of a multi-zone Kasm deployment. Refer to the Kasm
+# [Deployment Zones](https://kasmweb.com/docs/latest/guide/zones/deployment_zones.html) documentation for more
+# information on Kasm Zones.
+#
+kasmZones: []
+# Example Kasm Zone configuration:
+#   - name: Zone-A
+#     upstream_auth_addr: zone-a.kasm.contoso.com
+#   - name: Zone-B
+#     upstream_auth_addr: zone-b.kasm.contoso.com
+    
+# proxyService -- Configure the external-facing service type to use. 
+# Allowed service types: ClusterIP or LoadBalancer. 
+#
+# The service.annotations defined here only apply to the `proxy` service (`proxy-service-external.yaml` file).
+# If you wish to apply annotations to all services, use the annotations.service value at the bottom of this chart.
+#
+# NOTE: If ingress.enabled or route.enabled set to `true` service.type MUST be set to `ClusterIP`. Also, if you
+# wish to deploy a multi-zone Kasm (see [Deployment Zones](https://kasmweb.com/docs/latest/guide/zones/deployment_zones.html)
+# documentation for reference), you MUST use either a Route or an Ingress and set the `proxyService.type` to `ClusterIP`.
+#
+proxyService:
+  type: LoadBalancer
+  annotations: {}
+  labels: {}
+
+# Configure an Ingress for your Kasm deployment. 
+# 
+ingress:
+  # ingress.enabled -- Set the enabled value to `true` to use a pre-defined Ingress service to expose Kasm
+  #
+  enabled: false
+  # ingress.tls -- Set tls value to `true` to eanble TLS configuration for the hostname defined at `publicAddr` parameter
+  #
+  tls: true
+  # ingress.backendProtocol -- The backend protocol to for the Ingress to communicate with the Kasm proxy service.
+  # Valid values: http or https
+  #
+  backendProtocol: http
+  # ingress.ingressClassName -- Define the ingress Class to use for your Kasm ingress
+  #
+  ingressClassName: ""
+  # ingress.extraHosts -- A list of additional hostnames to be covered with this ingress record.
+  # Most likely the hostname above will be enough, but in the event more hosts are needed, this is an array
+  #
+  annotations: {}
+  labels: {}
+
+# route -- Configure an OpenShift Route for your Kasm deployment. 
+# 
+route:
+  # route.enabled -- Set the enabled value to `true` to use a pre-defined Route service to expose Kasm
+  enabled: false
+  # route.tls -- Object to define the TLS configuration for your OpenShift Route - 
+  # [Configuring Secure Routes](https://docs.redhat.com/en/documentation/openshift_dedicated/4/html/networking/configuring-routes#configuring-default-certificate).
+  #
+  tls: {}
+  # Example TLS configuration
+  #   termination: edge
+  #   insecureEdgeTerminationPolicy: Redirect
+  #   key: |-
+  #     -----BEGIN PRIVATE KEY-----
+  #     [...]
+  #     -----END PRIVATE KEY-----
+  #   certificate: |-
+  #     -----BEGIN CERTIFICATE-----
+  #     [...]
+  #     -----END CERTIFICATE-----
+  #   caCertificate: |-
+  #     -----BEGIN CERTIFICATE-----
+  #     [...]
+  #     -----END CERTIFICATE-----
+  #
+  annotations: {}
+  labels: {}
+
+# Configure certificate settings.
+# You can create your own certificate and upload it to the `secretName` supplied below, or if you have
+# an existing cert-manager configured and you wish to use that, set the `secretName` and configure the
+# associated cert-manager settings.
+#
+certificate:
+  # certificate.secretName -- Set the secret name where the certificate is stored.
+  # This secret name will store a certificate created by `cert-manager` if you set `cert-manager.enabled` to true
+  #
+  secretName: ""
+  # certificate.certManager -- For additional cert-manager configuration/deployment information refer to the online documentation
+  # [Cert Manager Docs](https://cert-manager.io/v1.1-docs/installation/kubernetes/). 
+  # 
+  # NOTE: If you do not enable `cert-manager`, you must generate your own certificates and add them as a Kubernetes secret, or
+  # present cloud-managed certificates.
+  #
+  # Refer to [Kubernetes Secrets](https://kubernetes.io/docs/concepts/configuration/secret/), and 
+  # [Kubernetes TLS Secret](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_create/kubectl_create_secret_tls/)
+  # for more information.
+  #
+  certManager:
+    enabled: false
+    addWildCard: true
+    issuerName: ""
+    issuerKind: ""
+    issuerGroup: ""
+    annotations: {}
+    labels: {}
+
+# Kasm DB settings and configuration options
+#
+database:
+  # database.standalone -- Setting standalone to true will prevent the deployment of the Kasm DB StatefulSet and requires
+  # the user to have a self-hosted PostgreSQL Database v14 server already setup and awaiting connections. Use the below
+  # database configuration values to connect to your external DB.
+  #
+  standalone: false
+  # database.hostname -- The hostname used to connect to the database server. If you use the Kasm DB StatefulSet this will be
+  # the name of the DB service, if you use an external DB, you need to replace this value with the hostname or IP or your DB server.
+  #
+  hostname: kasm-db
+  # database.port -- The port Kasm will use to connect to the PostgreSQL DB server
+  #
+  port: 5432
+  # database.kasmDbName -- The name of the database where Kasm is to be initialized and that Kasm services are to connect
+  #
+  kasmDbName: kasm
+  # database.kasmDbUser -- The name of the Kasm database User with READ/WRITE permission to the Kasm database
+  #
+  kasmDbUser: kasmapp
+  # database.kasmDbSecretName -- The name of the Kasm database password secret to use for a user-created, custom Database password
+  # secret value.
+  #
+  # NOTE: Leave this empty to use the password created by this Helm chart. If you create a custom DB secret, define the `kasmDbSecret`
+  # object below in the example format.
+  #
+  kasmDbSecret: {}
+  # Example Custom DB Secret configuration
+  #   name: kasm-db-secret
+  #   key: kasm-db-secret-key
+
+  # database.postgresMasterUser -- An object defining the PostgreSQL DB Master user and the Kubernetes secret and key values for
+  # the Master DB password. These credentials are only used by the `db-init-job` to create the `kasmDbName` database, the `kasmDbUser`
+  # user account, set permissions for the user account, and initialize and pre-seed the Kasm Database.
+  #
+  postgresMasterUser: {}
+  # Example DB Master User configuration
+  #   username: postgres
+  #   secret:
+  #     name: postgres-secret
+  #     key: db-password
+
+  # database.image -- Configure the image repository where the image is stored. Use this to point to an private hosted
+  # container registry instead of our public DockerHub hosted one.
+  #
+  image:
+    repository: kasmweb/postgres
+    tag: 1.17.0
+  # Configure the Storage for the Kasm DB StatefulSet
+  #
+  storage:
+    # database.storage.storageClassName -- Set the storage class to attach to the DB for storage.
+    # NOTE: Leaving this blank will use the cluster-default storage class.
+    #
+    storageClassName: ""
+    # database.storage.pvcSize -- Set the size of the PVC to attach to your Kubernetes-hosted Database server. The default
+    # size is 8Gi. Just supply the integer value of the PVC size in GB you wish to use.
+    #
+    pvcSize: 0
+    # database.storage.retentionPolicy -- Configure how the DB volume should be retained or deleted throughout the DB's lifecycle
+    #
+    retentionPolicy:
+      whenDeleted: Delete
+      whenScaled: Retain
+  # database.annotations -- Custom annotations to add to the Kasm DB StatefulSet
+  annotations: {}
+  # database.resources -- Manually configure the Kasm DB StatefulSet resources. This overrides the pre-defined `deploymentSize` values.
+  resources: {}
+  # database.labels -- Custom labels to add to the Kasm DB StatefulSet
+  labels: {}
+
+# Configure the Kasm Database management functions
+#
+dbManagement:
+  # dbManagement.initialize -- Initialize the DB. This is required for an initial deployment of Kasm to configure the DB for Kasm usage
+  #
+  initialize: true
+  # Use this to manage Kasm DB Schema and data upgrade operations
+  #
+  upgrade:
+    # dbManagement.upgrade.enabled -- Enable the DB upgrade job to run.
+    #
+    # NOTE: You cannot set both `dbManagement.initialize` and `dbManagement.upgrade.enabled` to true. You can either initialize the
+    # DB for a new installation, or you can upgrade an existing DB to a new Kasm version, but you cannot do both.
+    #
+    enable: false
+    # dbManagement.upgrade.oldDbSecretsName -- The name of the Kubernetes secret where Kasm and DB passwords are stored.
+    #
+    oldDbSecretsName: kasm-secrets
+    # dbManagement.upgrade.oldDbBackupPvc -- The PVC to connect to the Upgrade job that contains the DB backup tarball.
+    #
+    oldDbBackupPvc: kasm-db-dump-pvc
+    # dbManagement.upgrade.oldDbBackupFileName -- The file name of the database backup to restore and upgrade.
+    #
+    oldDbBackupFileName: kasm_dump.tar
+  # Enable and configure a Kubernetes-based DB Backup cron job to run at specified intervals to automatically handle DB backups
+  # to a specified PVC. You can use an NFS or other shared or external PVC specified by `storageClass` to keep this backup tarball.
+  #
+  backupCron:
+    # dbManagement.backupCron.enabled -- Set to true to enable automatic Kasm DB backups
+    #
+    enabled: false
+    # dbManagement.backupCron.pvcName -- The name of the Persistent Volume Claim to use for DB Backups
+    #
+    pvcName: ""
+    # dbManagement.backupCron.schedule -- Use a cron-style syntax to schedule how often the backup cron job runs. The default value
+    # will run a backup every 24 hours at midnight UTC. Refer to the
+    # [Kubernetes CronJob](https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/) documentation for more information.
+    #
+    schedule: ""
+    # dbManagement.backupCron.timeZone -- The time zone to use for the backup cron job. The default is UTC.
+    #
+    timeZone: ""
+    # dbManagement.backupCron.storageClass -- The `storageClassName` to attach the DB backup job for storage of regular DB backups.
+    # Leave the value empty to use your default Kubernetes storageClass
+    #
+    storageClass: ""
+    # dbManagement.backupCron.pvcSize -- Set the size of the PVC to attach to your Kubernetes-hosted Database backup job. The default
+    # size is 5Gi. Just supply the integer value of the PVC size in GB you wish to use.
+    #
+    pvcSize: 0
+
+# Kasm component resources and associated settings
+#
+components:
+  # Configuration settings for the Kasm Nginx Proxy service
+  #
+  proxy:
+    # components.proxy.image -- Configure the image repository where the image is stored. Use this to point to an private hosted
+    # container registry instead of our public DockerHub hosted one.
+    #
+    image:
+      repository: kasmweb/proxy
+      tag: 1.17.0
+    # components.proxy.annotations -- Custom annotations to add to the Kasm Proxy Deployment
+    annotations: {}
+    # components.proxy.resources -- Manually configure the Kasm Proxy Deployment resources. This overrides the pre-defined `deploymentSize` values.
+    resources: {}
+    # components.proxy.labels -- Custom labels to add to the Kasm Proxy Deployment
+    labels: {}
+  # Configuration settings for the Kasm API service
+  #
+  api:
+    # components.api.image -- Configure the image repository where the image is stored. Use this to point to an private hosted
+    # container registry instead of our public DockerHub hosted one.
+    #
+    image:
+      repository: kasmweb/api
+      tag: 1.17.0
+    # components.api.annotations -- Custom annotations to add to the Kasm api Deployment
+    annotations: {}
+    # components.api.resources -- Manually configure the Kasm api Deployment resources. This overrides the pre-defined `deploymentSize` values.
+    resources: {}
+    # components.api.labels -- Custom labels to add to the Kasm api Deployment
+    labels: {}
+  # Configuration settings for the Kasm Manager service
+  #
+  manager:
+    # components.manager.image -- Configure the image repository where the image is stored. Use this to point to an private hosted
+    # container registry instead of our public DockerHub hosted one.
+    #
+    image:
+      repository: kasmweb/manager
+      tag: 1.17.0
+    # components.manager.annotations -- Custom annotations to add to the Kasm Manager Deployment
+    annotations: {}
+    # components.manager.resources -- Manually configure the Kasm Manager Deployment resources. This overrides the pre-defined `deploymentSize` values.
+    resources: {}
+    # components.manager.labels -- Custom labels to add to the Kasm Manager Deployment
+    labels: {}
+  # Configuration settings for the Kasm Guac RDP service
+  #
+  guac:
+    # components.guac.image -- Configure the image repository where the image is stored. Use this to point to an private hosted
+    # container registry instead of our public DockerHub hosted one.
+    #
+    image:
+      repository: kasmweb/kasm-guac
+      tag: 1.17.0
+    # components.guac.enabled -- Use this setting to enable/disable deployment of the Kasm Guacamole web RDP service - 
+    # [Kasm Guac Service](https://kasmweb.com/docs/latest/guide/connection_proxies.html#guacamole-guac).
+    #
+    enabled: true
+    # components.guac.annotations -- Custom annotations to add to the Kasm Guac Deployment
+    annotations: {}
+    # components.guac.resources -- Manually configure the Kasm Guac Deployment resources. This overrides the pre-defined `deploymentSize` values.
+    resources: {}
+    # components.guac.labels -- Custom labels to add to the Kasm Guac Deployment
+    labels: {}
+  # Configuration settings for the Kasm RDP Gateway service
+  #
+  rdpGateway:
+    # components.rdpGateway.image -- Configure the image repository where the image is stored. Use this to point to an private hosted
+    # container registry instead of our public DockerHub hosted one.
+    #
+    image:
+      repository: kasmweb/rdp-gateway
+      tag: 1.17.0
+    # components.rdpGateway.enabled -- Use this setting to enable/disable deployment of the Kasm RDP Gateway service - 
+    # [Kasm RDP Gateway](https://kasmweb.com/docs/latest/guide/connection_proxies.html#rdp-gateway).
+    #
+    enabled: true
+    # components.rdpGateway.annotations -- Custom annotations to add to the Kasm RDP Gateway Deployment
+    annotations: {}
+    # components.rdpGateway.resources -- Manually configure the Kasm RDP Gateway Deployment resources. This overrides the pre-defined `deploymentSize` values.
+    resources: {}
+    # components.rdpGateway.labels -- Custom labels to add to the Kasm RDP Gateway Deployment
+    labels: {}
+  # Configuration settings for the Kasm RDP HTTPS Gateway service
+  #
+  rdpHttpsGateway:
+    # components.rdpHttpsGateway.image -- Configure the image repository where the image is stored. Use this to point to an private hosted
+    # container registry instead of our public DockerHub hosted one.
+    #
+    image:
+      repository: kasmweb/rdp-https-gateway
+      tag: 1.17.0
+    # components.rdpHttpsGateway.enabled -- Use this setting to enable/disable deployment of the Kasm RDP HTTPS Gateway service.
+    # This service allows users to use native RDP clients via HTTPS connections rather than exposing 3389 - 
+    # [Kasm RDP HTTPS Gateway](https://kasmweb.com/docs/latest/guide/connection_proxies.html#rdp-https-gateway).
+    #
+    enabled: true
+    # components.rdpHttpsGateway.annotations -- Custom annotations to add to the Kasm RDP HTTPS Gateway Deployment
+    annotations: {}
+    # components.rdpHttpsGateway.resources -- Manually configure the Kasm RDP HTTPS Gateway Deployment resources. This overrides the pre-defined `deploymentSize` values.
+    resources: {}
+    # components.rdpHttpsGateway.labels -- Custom labels to add to the Kasm RDP HTTPS Gateway Deployment
+    labels: {}
+  # Configuration settings for the Kasm Share service
+  #
+  share:
+    # components.share.image -- Configure the image repository where the image is stored. Use this to point to an private hosted
+    # container registry instead of our public DockerHub hosted one.
+    #
+    image:
+      repository: kasmweb/share
+      tag: 1.17.0
+    # components.share.enabled -- Use this setting to enable/disable deployment of the Kasm Share and associated Redis services - 
+    # [Kasm Share Service](https://kasmweb.com/docs/latest/guide/session_sharing.html).
+    #
+    enabled: true
+    # components.share.annotations -- Custom annotations to add to the Kasm Share Deployment
+    annotations: {}
+    # components.share.resources -- Manually configure the Kasm Share Deployment resources. This overrides the pre-defined `deploymentSize` values.
+    resources: {}
+    # components.share.labels -- Custom labels to add to the Kasm Share Deployment
+    labels: {}
+  # Configuration settings for the Kasm Share Redis backend service
+  #
+  redis:
+    # components.redis.image -- Configure the image repository where the image is stored. Use this to point to an private hosted
+    # container registry instead of our public DockerHub hosted one.
+    #
+    image:
+      repository: redis
+      tag: 5-alpine
+    # components.redis.annotations -- Custom annotations to add to the Kasm Redis Deployment
+    annotations: {}
+    # components.redis.resources -- Manually configure the Kasm Redis Deployment resources. This overrides the pre-defined `deploymentSize` values.
+    resources: {}
+    # components.redis.labels -- Custom labels to add to the Kasm Redis Deployment
+    labels: {}
+
+####################################
+# Extra Kubernetes config settings #
+####################################
+
+# imagePullPolicy -- Configure global image pull policy
+#
+imagePullPolicy: "IfNotPresent"
+
+# Create an image pull credential. Useful for offline or self-hosted repos, or dev builds.
+#
+imagePullSecrets:
+  # imagePullSecrets.enabled -- Enable/disable image pull secrets
+  enabled: false
+
+  # imagePullSecrets.name -- Secret name to use. If left blank, will be dynamically generated.
+  # To use an existing Image pull secret, or one you manually created, set `imagePullSecrets.enabled`, and provide the
+  # name of the Image Pull Secret you created, making sure to leave all other values below empty.
+  #
+  name: ""
+  # imagePullSecrets.type -- Type of image pull credential to create. Valid types are "dockerconfigjson", "dockercfg", or "basic"
+  type: ""
+  # imagePullSecrets.server -- The Registry server to use when pulling images (required for dockerconfigjson and dockercfg)
+  server: ""
+  # imagePullSecrets.username -- The username used to authenticate agaisnt your Registry server.
+  username: ""
+  # imagePullSecrets.password -- The password used to authenticate agaisnt your Registry server.
+  password: ""
+  # imagePullSecrets.email -- The email address used to authenticate (optional, used for dockerconfigjson and dockercfg)
+  email: ""
+  # imagePullSecrets.labels -- Additional labels for this secret
+  labels: {}
+  # imagePullSecrets.annotations -- Additional annotations for this secret
+  annotations: {}
+
+# clusterDomain -- Cluster-wide Kubernetes DNS domain name
+#
+clusterDomain: "cluster.local"
+
+# nodeSelector -- Configure node selector settings for your Kasm pods - 
+# [Kubernetes Node Selector](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector).
+#
+nodeSelector: {}
+
+# affinity -- Configure node affinity settings for Kasm pods - 
+# [Kubernetes Affinity](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/).
+# Kasm is not guaranteed to work with Affinity settings - use caution if you must configuring these settings.
+# The below, optional object passes in raw Affinity rules for Pods, Nodes, etc. for your environment. Make sure you
+# use the correct values below as this Helm chart will not do any error checking for you.
+#
+affinity: {}
+
+# applySecurity -- Apply Pod/Container security settings for Kasm resources
+#
+applySecurity: true
+
+# applyHealthChecks -- Add Pod/Container healthchecks settings for Kasm resources
+#
+applyHealthChecks: true
+
+# restartPolicy -- Configure global Pod restart policy for Kasm resources
+#
+restartPolicy: "Always"
+
+# labels -- Custom labels to apply to all deployed resources
+#
+labels: {}
+
+# Additional resource annotations to apply to resources created by this chart.
+# See [Kubernetes Annotations](https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/)
+# for more information.
+#
+annotations:
+  # annotations.certSecret -- Additional certSecret annotations to apply to resources created by this chart
+  certSecret: {}
+  # annotations.configMap -- Additional configMap annotations to apply to resources created by this chart
+  configMap: {}
+  # annotations.cron -- Additional cron annotations to apply to resources created by this chart
+  cron: {}
+  # annotations.cron -- Additional cron pod cron labels to apply to resources created by this chart
+  cronPod: {}
+  # annotations.deployment -- Additional deployment annotations to apply to resources created by this chart
+  deployment: {}
+  # annotations.pod -- Additional pod annotations to apply to resources created by this chart
+  pod: {}
+  # annotations.pvc -- Additional PersistentVolumeClaim annotations to apply to resources created by this chart
+  pvc: {}
+  # annotations.service -- Additional service annotations to apply to resources created by this chart
+  service: {}
+  # annotations.secret -- Additional secret annotations to apply to resources created by this chart
+  secret: {}
+  # annotations.statefulSet -- Additional statefulSet annotations to apply to resources created by this chart
+  statefulSet: {}
+
+# Additional Kubernetes labels to apply to resources created by this chart.
+# See [Kubernetes Labels](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/)
+# for more information.
+#
+extraLabels:
+  # extraLabels.certSecret -- Additional statefulSet labels to apply to resources created by this chart
+  certSecret: {}
+  # extraLabels.configMap -- Additional configMap labels to apply to resources created by this chart
+  configMap: {}
+  # extraLabels.deployment -- Additional deployment labels to apply to resources created by this chart
+  deployment: {}
+  # extraLabels.pod -- Additional pod labels to apply to resources created by this chart
+  pod: {}
+  # extraLabels.secret -- Additional secret labels to apply to resources created by this chart
+  secret: {}
+  # extraLabels.service -- Additional service labels to apply to resources created by this chart
+  service: {}
+  # extraLabels.job -- Additional job labels to apply to resources created by this chart
+  job: {}
+  # extraLabels.jobPod -- Additional job Pod labels to apply to resources created by this chart
+  jobPod: {}
+  # extraLabels.cron -- Additional cron labels to apply to resources created by this chart
+  cron: {}
+  # extraLabels.cronPod -- Additional cron Pod labels to apply to resources created by this chart
+  cronPod: {}
+  # extraLabels.pvc -- Additional PersistentVolumeClaim labels to apply to resources created by this chart
+  pvc: {}
+  # extraLabels.statefulSet -- Additional statefulSet labels to apply to resources created by this chart
+  statefulSet: {}
+
+# extraObjects -- Deploy additional Kubernetes manifests.
+# This field is expected to be either a multi-line string, a list of strings, or a list of objects.
+#
+extraObjects: []

@@ -1,0 +1,136 @@
+{{/*
+Kasm API server Deployment definition
+*/}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $apiReplicas := include "replicas.preset" (dict "node" ($constants.api.component) "size" .Values.deploymentSize) -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $constants.api.name }}-deployment
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ $constants.api.name }}
+    app.kubernetes.io/component: {{ $constants.api.component }}
+    {{- include "kasm.defaultLabels" . | indent 4 }}
+    {{- with .Values.components.api.labels }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with .Values.extraLabels.deployment }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with .Values.labels }}{{- toYaml . | nindent 4 }}{{- end }}
+  {{- if or .Values.components.api.annotations .Values.annotations.deployment }}
+  annotations:
+    {{- with .Values.annotations.deployment }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with .Values.components.api.annotations }}{{- toYaml . | nindent 4 }}{{- end }}
+  {{- end }}
+spec:
+  replicas: {{ $apiReplicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: {{ add1 $apiReplicas }}
+  selector:
+    matchLabels:
+        app.kubernetes.io/name: {{ $constants.api.name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ $constants.api.name }}
+        app.kubernetes.io/component: {{ $constants.api.component }}
+        {{- include "kasm.defaultLabels" . | indent 8 }}
+        {{- with .Values.components.api.labels }}{{ toYaml . | nindent 8 }}{{- end }}
+        {{- with .Values.extraLabels.pod }}{{ toYaml . | nindent 8 }}{{- end }}
+        {{- with .Values.labels }}{{- toYaml . | nindent 8 }}{{- end }}
+      {{- if or .Values.components.api.annotations .Values.annotations.pod }}
+      annotations:
+        {{- with .Values.annotations.pod }}{{ toYaml . | nindent 8 }}{{- end }}
+        {{- with .Values.components.api.annotations }}{{ toYaml . | nindent 8 }}{{- end }}
+      {{- end }}
+    spec:
+      restartPolicy: {{ .Values.restartPolicy }}
+      {{- if .Values.imagePullSecrets.enabled }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets.name | default (printf "%s-image-pull-secret" .Release.Name) }}
+      {{- end }}
+      {{- if .Values.applySecurity }}
+        {{- include "kasm.podSecurity" . | indent 6 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        - name: db-is-ready
+          image: {{ $constants.api.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          env:
+            - name: POSTGRES_HOST
+              value: {{ $constants.db.svc }}
+            - name: POSTGRES_PORT
+              value: {{ $constants.db.port | quote }}
+            - name: POSTGRES_DB
+              value: {{ .Values.database.kasmDbName }}
+            - name: POSTGRES_USER
+              value: {{ .Values.database.kasmDbUser }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                {{- if .Values.database.kasmDbSecret -}}
+                {{ .Values.database.kasmDbSecret | toYaml | nindent 18 }}
+                {{- else }}
+                  name: {{ .Release.Name }}-secrets
+                  key: "db-password"
+                {{- end }}
+          command:
+            - /bin/bash
+            - -c
+          args:
+            - |
+              while [ ! $(PGPASSWORD=$POSTGRES_PASSWORD psql -U $POSTGRES_USER -d $POSTGRES_DB -p $POSTGRES_PORT -h $POSTGRES_HOST -t -c "select zone_id from zones" 2>/dev/null | wc -l) -ge 2 ]; do echo "Waiting for DB to initialize..."; sleep 5; done
+          {{- if .Values.applySecurity }}
+            {{- include "kasm.containerSecurity" . | indent 10 }}
+          {{- end }}
+      containers:
+        - name: {{ $constants.api.name }}-container
+          image: {{ $constants.api.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          env:
+            - name: START_SERVICES
+              value: "true"
+            - name: KUBERNETES_SERVICE_HOST
+              value: "true"
+            - name: POSTGRES_HOST
+              value: {{ $constants.db.svc }}
+            - name: POSTGRES_PORT
+              value: {{ $constants.db.port | quote }}
+            - name: POSTGRES_DB
+              value: {{ .Values.database.kasmDbName }}
+            - name: POSTGRES_USER
+              value: {{ .Values.database.kasmDbUser }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                {{- if .Values.database.kasmDbSecret -}}
+                {{ .Values.database.kasmDbSecret | toYaml | nindent 18 }}
+                {{- else }}
+                  name: {{ .Release.Name }}-secrets
+                  key: "db-password"
+                {{- end }}
+          ports:
+            - name: {{ $constants.api.portName }}
+              containerPort: {{ $constants.api.port }}
+              protocol: TCP
+          {{- if .Values.applyHealthChecks }}
+          livenessProbe:
+            {{- include "health.tcp" (dict "portName" $constants.api.portName ) | indent 12 }}
+          readinessProbe:
+            {{- include "health.http" (dict "path" "/api/__healthcheck" "portName" $constants.api.portName ) | indent 12 }}
+          {{- end }}
+          {{- if .Values.components.api.resources }}
+          resources: {{- toYaml .Values.components.api.resources | nindent 12 }}
+          {{- else }}
+          resources: {{- include "resources.preset" (dict "node" $constants.api.component "size" .Values.deploymentSize) | nindent 12 }}
+          {{- end }}
+          {{- if .Values.applyPodSecurity }}
+            {{- include "kasm.containerSecurity" . | indent 10 }}
+          {{- end }}

@@ -1,0 +1,33 @@
+{{/*
+Deploy the Guac if .Values.components.guac.enabled set to true
+*/}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- if .Values.components.guac.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $constants.guac.svc }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ $constants.guac.svc }}-svc
+    app.kubernetes.io/component: {{ $constants.guac.component }}
+    {{- include "kasm.defaultLabels" . | indent 4 }}
+    {{- with .Values.components.guac.labels }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with .Values.extraLabels.service }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with .Values.labels }}{{- toYaml . | nindent 4 }}{{- end }}
+  {{- with .Values.annotations.service }}
+  annotations: {{ toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  selector:
+    app.kubernetes.io/name: {{ $constants.guac.name }}
+  ports:
+    - name: {{ printf "%s-svc-%s" $constants.guac.svc ($constants.guac.port | toString) }}
+      protocol: TCP
+      port: {{ $constants.guac.port }}
+    {{- range $constants.guac.ports }}
+    - name: {{ printf "%s-svc-%s" $constants.guac.svc (. | toString) }}
+      protocol: TCP
+      port: {{ . }}
+    {{- end }}
+{{- end }}

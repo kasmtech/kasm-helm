@@ -1,0 +1,1324 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "affinity": {
+      "additionalProperties": true,
+      "description": "Configure node affinity settings for Kasm pods - [Kubernetes Affinity](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/). Kasm is not guaranteed to work with Affinity settings - use caution if you must configuring these settings. The below, optional object passes in raw Affinity rules for Pods, Nodes, etc. for your environment. Make sure you use the correct values below as this Helm chart will not do any error checking for you.",
+      "title": "affinity",
+      "type": "object"
+    },
+    "annotations": {
+      "additionalProperties": false,
+      "description": "See [Kubernetes Annotations](https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/) for more information.",
+      "properties": {
+        "certSecret": {
+          "additionalProperties": true,
+          "description": "Additional certSecret annotations to apply to resources created by this chart",
+          "title": "certSecret",
+          "type": "object"
+        },
+        "configMap": {
+          "additionalProperties": true,
+          "description": "Additional configMap annotations to apply to resources created by this chart",
+          "title": "configMap",
+          "type": "object"
+        },
+        "cron": {
+          "additionalProperties": true,
+          "description": "Additional cron annotations to apply to resources created by this chart",
+          "title": "cron",
+          "type": "object"
+        },
+        "cronPod": {
+          "additionalProperties": true,
+          "description": "Additional cron pod cron labels to apply to resources created by this chart",
+          "title": "cronPod",
+          "type": "object"
+        },
+        "deployment": {
+          "additionalProperties": true,
+          "description": "Additional deployment annotations to apply to resources created by this chart",
+          "title": "deployment",
+          "type": "object"
+        },
+        "pod": {
+          "additionalProperties": true,
+          "description": "Additional pod annotations to apply to resources created by this chart",
+          "title": "pod",
+          "type": "object"
+        },
+        "pvc": {
+          "additionalProperties": true,
+          "description": "Additional PersistentVolumeClaim annotations to apply to resources created by this chart",
+          "title": "pvc",
+          "type": "object"
+        },
+        "secret": {
+          "additionalProperties": true,
+          "description": "Additional secret annotations to apply to resources created by this chart",
+          "title": "secret",
+          "type": "object"
+        },
+        "service": {
+          "additionalProperties": true,
+          "description": "Additional service annotations to apply to resources created by this chart",
+          "title": "service",
+          "type": "object"
+        },
+        "statefulSet": {
+          "additionalProperties": true,
+          "description": "Additional statefulSet annotations to apply to resources created by this chart",
+          "title": "statefulSet",
+          "type": "object"
+        }
+      },
+      "title": "annotations",
+      "type": "object",
+      "required": [
+        "certSecret",
+        "configMap",
+        "cron",
+        "cronPod",
+        "deployment",
+        "pod",
+        "pvc",
+        "service",
+        "statefulSet"
+      ]
+    },
+    "applyHealthChecks": {
+      "default": true,
+      "description": "Add Pod/Container healthchecks settings for Kasm resources",
+      "title": "applyHealthChecks",
+      "type": "boolean"
+    },
+    "applySecurity": {
+      "default": true,
+      "description": "Apply Pod/Container security settings for Kasm resources",
+      "title": "applySecurity",
+      "type": "boolean"
+    },
+    "certificate": {
+      "additionalProperties": false,
+      "description": "You can create your own certificate and upload it to the `secretName` supplied below, or if you have an existing cert-manager configured and you wish to use that, set the `secretName` and configure the associated cert-manager settings.",
+      "properties": {
+        "certManager": {
+          "additionalProperties": false,
+          "description": "For additional cert-manager configuration/deployment information refer to the online documentation [Cert Manager Docs](https://cert-manager.io/v1.1-docs/installation/kubernetes/). NOTE: If you do not enable `cert-manager`, you must generate your own certificates and add them as a Kubernetes secret, or present cloud-managed certificates. Refer to [Kubernetes Secrets](https://kubernetes.io/docs/concepts/configuration/secret/), and [Kubernetes TLS Secret](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_create/kubectl_create_secret_tls/) for more information.",
+          "properties": {
+            "addWildCard": {
+              "default": true,
+              "title": "addWildCard",
+              "type": "boolean"
+            },
+            "annotations": {
+              "additionalProperties": true,
+              "description": "For additional cert-manager annotations",
+              "title": "annotations",
+              "type": "object"
+            },
+            "enabled": {
+              "default": false,
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "issuerGroup": {
+              "default": "",
+              "title": "issuerGroup",
+              "type": "string"
+            },
+            "issuerKind": {
+              "default": "",
+              "title": "issuerKind",
+              "type": "string"
+            },
+            "issuerName": {
+              "default": "",
+              "title": "issuerName",
+              "type": "string"
+            },
+            "labels": {
+              "additionalProperties": true,
+              "description": "For additional cert-manager labels",
+              "title": "labels",
+              "type": "object"
+            }
+          },
+          "title": "certManager",
+          "type": "object",
+          "required": [
+            "enabled",
+            "addWildCard",
+            "issuerName",
+            "issuerKind",
+            "issuerGroup",
+            "annotations",
+            "labels"
+          ]
+        },
+        "secretName": {
+          "description": "Set the secret name where the certificate is stored. This secret name will store a certificate created by `cert-manager` if you set `cert-manager.enabled` to true",
+          "title": "secretName",
+          "type": "string",
+          "required": [
+            "secretName"
+          ]
+        }
+      },
+      "title": "certificate",
+      "type": "object",
+      "required": [
+        "secretName",
+        "certManager"
+      ]
+    },
+    "clusterDomain": {
+      "default": "cluster.local",
+      "description": "Cluster-wide Kubernetes DNS domain name ",
+      "title": "clusterDomain",
+      "type": "string"
+    },
+    "components": {
+      "additionalProperties": false,
+      "properties": {
+        "api": {
+          "additionalProperties": false,
+          "description": " ",
+          "properties": {
+            "annotations": {
+              "additionalProperties": true,
+              "description": "Custom annotations to add to the Kasm api Deployment",
+              "title": "annotations",
+              "type": "object"
+            },
+            "image": {
+              "additionalProperties": false,
+              "description": "Configure the image repository where the image is stored. Use this to point to an private hosted container registry instead of our public DockerHub hosted one.",
+              "properties": {
+                "repository": {
+                  "default": "kasmweb/api",
+                  "title": "repository",
+                  "type": "string"
+                },
+                "tag": {
+                  "default": "1.17.0",
+                  "title": "tag",
+                  "type": "string"
+                }
+              },
+              "title": "image",
+              "type": "object",
+              "requied": [
+                "repository",
+                "tag"
+              ]
+            },
+            "labels": {
+              "additionalProperties": true,
+              "description": "Custom labels to add to the Kasm api Deployment",
+              "title": "labels",
+              "type": "object"
+            },
+            "resources": {
+              "additionalProperties": true,
+              "description": "Manually configure the Kasm api Deployment resources. This overrides the pre-defined `deploymentSize` values.",
+              "title": "resources",
+              "type": "object"
+            }
+          },
+          "title": "api",
+          "type": "object",
+          "requied": [
+            "enabled",
+            "image",
+            "resources",
+            "annotations",
+            "labels"
+          ]
+        },
+        "guac": {
+          "additionalProperties": false,
+          "description": " ",
+          "properties": {
+            "annotations": {
+              "additionalProperties": true,
+              "description": "Custom annotations to add to the Kasm Guac Deployment",
+              "title": "annotations",
+              "type": "object"
+            },
+            "enabled": {
+              "default": true,
+              "description": "Use this setting to enable/disable deployment of the Kasm Guacamole web RDP service - [Kasm Guac Service](https://kasmweb.com/docs/latest/guide/connection_proxies.html#guacamole-guac).",
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "image": {
+              "additionalProperties": false,
+              "description": "Configure the image repository where the image is stored. Use this to point to an private hosted container registry instead of our public DockerHub hosted one.",
+              "properties": {
+                "repository": {
+                  "default": "kasmweb/kasm-guac",
+                  "title": "repository",
+                  "type": "string"
+                },
+                "tag": {
+                  "default": "1.17.0",
+                  "title": "tag",
+                  "type": "string"
+                }
+              },
+              "title": "image",
+              "type": "object",
+              "requied": [
+                "repository",
+                "tag"
+              ]
+            },
+            "labels": {
+              "additionalProperties": true,
+              "description": "Custom labels to add to the Kasm Guac Deployment",
+              "title": "labels",
+              "type": "object"
+            },
+            "resources": {
+              "additionalProperties": true,
+              "description": "Manually configure the Kasm Guac Deployment resources. This overrides the pre-defined `deploymentSize` values.",
+              "title": "resources",
+              "type": "object"
+            }
+          },
+          "title": "guac",
+          "type": "object",
+          "requied": [
+            "enabled",
+            "image",
+            "resources",
+            "annotations",
+            "labels"
+          ]
+        },
+        "manager": {
+          "additionalProperties": false,
+          "description": " ",
+          "properties": {
+            "annotations": {
+              "additionalProperties": true,
+              "description": "Custom annotations to add to the Kasm Manager Deployment",
+              "title": "annotations",
+              "type": "object"
+            },
+            "image": {
+              "additionalProperties": false,
+              "description": "Configure the image repository where the image is stored. Use this to point to an private hosted container registry instead of our public DockerHub hosted one.",
+              "properties": {
+                "repository": {
+                  "default": "kasmweb/manager",
+                  "title": "repository",
+                  "type": "string"
+                },
+                "tag": {
+                  "default": "1.17.0",
+                  "title": "tag",
+                  "type": "string"
+                }
+              },
+              "title": "image",
+              "type": "object",
+              "requied": [
+                "repository",
+                "tag"
+              ]
+            },
+            "labels": {
+              "additionalProperties": true,
+              "description": "Custom labels to add to the Kasm Manager Deployment",
+              "title": "labels",
+              "type": "object"
+            },
+            "resources": {
+              "additionalProperties": true,
+              "description": "Manually configure the Kasm Manager Deployment resources. This overrides the pre-defined `deploymentSize` values.",
+              "title": "resources",
+              "type": "object"
+            }
+          },
+          "title": "manager",
+          "type": "object",
+          "requied": [
+            "enabled",
+            "image",
+            "resources",
+            "annotations",
+            "labels"
+          ]
+        },
+        "proxy": {
+          "additionalProperties": false,
+          "description": " ",
+          "properties": {
+            "annotations": {
+              "additionalProperties": true,
+              "description": "Custom annotations to add to the Kasm Proxy Deployment",
+              "title": "annotations",
+              "type": "object"
+            },
+            "image": {
+              "additionalProperties": false,
+              "description": "Configure the image repository where the image is stored. Use this to point to an private hosted container registry instead of our public DockerHub hosted one.",
+              "properties": {
+                "repository": {
+                  "default": "kasmweb/proxy",
+                  "title": "repository",
+                  "type": "string"
+                },
+                "tag": {
+                  "default": "1.17.0",
+                  "title": "tag",
+                  "type": "string"
+                }
+              },
+              "title": "image",
+              "type": "object",
+              "requied": [
+                "repository",
+                "tag"
+              ]
+            },
+            "labels": {
+              "additionalProperties": true,
+              "description": "Custom labels to add to the Kasm Proxy Deployment",
+              "title": "labels",
+              "type": "object"
+            },
+            "resources": {
+              "additionalProperties": true,
+              "description": "Manually configure the Kasm Proxy Deployment resources. This overrides the pre-defined `deploymentSize` values.",
+              "title": "resources",
+              "type": "object"
+            }
+          },
+          "title": "proxy",
+          "type": "object",
+          "requied": [
+            "enabled",
+            "image",
+            "resources",
+            "annotations",
+            "labels"
+          ]
+        },
+        "rdpGateway": {
+          "additionalProperties": false,
+          "description": " ",
+          "properties": {
+            "annotations": {
+              "additionalProperties": true,
+              "description": "Custom annotations to add to the Kasm RDP Gateway Deployment",
+              "title": "annotations",
+              "type": "object"
+            },
+            "enabled": {
+              "default": true,
+              "description": "Use this setting to enable/disable deployment of the Kasm RDP Gateway service -  [Kasm RDP Gateway](https://kasmweb.com/docs/latest/guide/connection_proxies.html#rdp-gateway).",
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "image": {
+              "additionalProperties": false,
+              "description": "Configure the image repository where the image is stored. Use this to point to an private hosted container registry instead of our public DockerHub hosted one.",
+              "properties": {
+                "repository": {
+                  "default": "kasmweb/rdp-gateway",
+                  "title": "repository",
+                  "type": "string"
+                },
+                "tag": {
+                  "default": "1.17.0",
+                  "title": "tag",
+                  "type": "string"
+                }
+              },
+              "title": "image",
+              "type": "object",
+              "requied": [
+                "repository",
+                "tag"
+              ]
+            },
+            "labels": {
+              "additionalProperties": true,
+              "description": "Custom labels to add to the Kasm RDP Gateway Deployment",
+              "title": "labels",
+              "type": "object"
+            },
+            "resources": {
+              "additionalProperties": true,
+              "description": "Manually configure the Kasm RDP Gateway Deployment resources. This overrides the pre-defined `deploymentSize` values.",
+              "title": "resources",
+              "type": "object"
+            }
+          },
+          "title": "rdpGateway",
+          "type": "object",
+          "requied": [
+            "enabled",
+            "image",
+            "resources",
+            "annotations",
+            "labels"
+          ]
+        },
+        "rdpHttpsGateway": {
+          "additionalProperties": false,
+          "description": " ",
+          "properties": {
+            "annotations": {
+              "additionalProperties": true,
+              "description": "Custom annotations to add to the Kasm RDP HTTPS Gateway Deployment",
+              "title": "annotations",
+              "type": "object"
+            },
+            "enabled": {
+              "default": true,
+              "description": "Use this setting to enable/disable deployment of the Kasm RDP HTTPS Gateway service. This service allows users to use native RDP clients via HTTPS connections rather than exposing 3389 - [Kasm RDP HTTPS Gateway](https://kasmweb.com/docs/latest/guide/connection_proxies.html#rdp-https-gateway).",
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "image": {
+              "additionalProperties": false,
+              "description": "Configure the image repository where the image is stored. Use this to point to an private hosted container registry instead of our public DockerHub hosted one.",
+              "properties": {
+                "repository": {
+                  "default": "kasmweb/rdp-https-gateway",
+                  "title": "repository",
+                  "type": "string"
+                },
+                "tag": {
+                  "default": "1.17.0",
+                  "title": "tag",
+                  "type": "string"
+                }
+              },
+              "title": "image",
+              "type": "object",
+              "requied": [
+                "repository",
+                "tag"
+              ]
+            },
+            "labels": {
+              "additionalProperties": true,
+              "description": "Custom labels to add to the Kasm RDP HTTPS Gateway Deployment",
+              "title": "labels",
+              "type": "object"
+            },
+            "resources": {
+              "additionalProperties": true,
+              "description": "Manually configure the Kasm RDP HTTPS Gateway Deployment resources. This overrides the pre-defined `deploymentSize` values.",
+              "title": "resources",
+              "type": "object"
+            }
+          },
+          "title": "rdpHttpsGateway",
+          "type": "object",
+          "requied": [
+            "enabled",
+            "image",
+            "resources",
+            "annotations",
+            "labels"
+          ]
+        },
+        "redis": {
+          "additionalProperties": false,
+          "description": " ",
+          "properties": {
+            "annotations": {
+              "additionalProperties": true,
+              "description": "Custom annotations to add to the Kasm Redis Deployment",
+              "title": "annotations",
+              "type": "object"
+            },
+            "image": {
+              "additionalProperties": false,
+              "description": "Configure the image repository where the image is stored. Use this to point to an private hosted container registry instead of our public DockerHub hosted one.",
+              "properties": {
+                "repository": {
+                  "default": "redis",
+                  "title": "repository",
+                  "type": "string"
+                },
+                "tag": {
+                  "default": "5-alpine",
+                  "title": "tag",
+                  "type": "string"
+                }
+              },
+              "title": "image",
+              "type": "object",
+              "requied": [
+                "repository",
+                "tag"
+              ]
+            },
+            "labels": {
+              "additionalProperties": true,
+              "description": "Custom labels to add to the Kasm Redis Deployment",
+              "title": "labels",
+              "type": "object"
+            },
+            "resources": {
+              "additionalProperties": true,
+              "description": "Manually configure the Kasm Redis Deployment resources. This overrides the pre-defined `deploymentSize` values.",
+              "title": "resources",
+              "type": "object"
+            }
+          },
+          "title": "redis",
+          "type": "object",
+          "requied": [
+            "enabled",
+            "image",
+            "resources",
+            "annotations",
+            "labels"
+          ]
+        },
+        "share": {
+          "additionalProperties": false,
+          "description": " ",
+          "properties": {
+            "annotations": {
+              "additionalProperties": true,
+              "description": "Custom annotations to add to the Kasm Share Deployment",
+              "title": "annotations",
+              "type": "object"
+            },
+            "enabled": {
+              "default": true,
+              "description": "Use this setting to enable/disable deployment of the Kasm Share and associated Redis services - [Kasm Share Service](https://kasmweb.com/docs/latest/guide/session_sharing.html).",
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "image": {
+              "additionalProperties": false,
+              "description": "Configure the image repository where the image is stored. Use this to point to an private hosted container registry instead of our public DockerHub hosted one.",
+              "properties": {
+                "repository": {
+                  "default": "kasmweb/share",
+                  "title": "repository",
+                  "type": "string"
+                },
+                "tag": {
+                  "default": "1.17.0",
+                  "title": "tag",
+                  "type": "string"
+                }
+              },
+              "title": "image",
+              "type": "object",
+              "requied": [
+                "repository",
+                "tag"
+              ]
+            },
+            "labels": {
+              "additionalProperties": true,
+              "description": "Custom labels to add to the Kasm Share Deployment",
+              "title": "labels",
+              "type": "object"
+            },
+            "resources": {
+              "additionalProperties": true,
+              "description": "Manually configure the Kasm Share Deployment resources. This overrides the pre-defined `deploymentSize` values.",
+              "title": "resources",
+              "type": "object"
+            }
+          },
+          "title": "share",
+          "type": "object",
+          "requied": [
+            "enabled",
+            "image",
+            "resources",
+            "annotations",
+            "labels"
+          ]
+        }
+      },
+      "title": "components",
+      "type": "object"
+    },
+    "database": {
+      "additionalProperties": false,
+      "description": " ",
+      "properties": {
+        "annotations": {
+          "additionalProperties": true,
+          "description": "Custom annotations to add to the Kasm DB StatefulSet",
+          "title": "annotations",
+          "type": "object"
+        },
+        "hostname": {
+          "default": "kasm-db",
+          "description": "The hostname used to connect to the database server. If you use the Kasm DB StatefulSet this will be the name of the DB service, if you use an external DB, you need to replace this value with the hostname or IP or your DB server.",
+          "title": "hostname",
+          "type": "string"
+        },
+        "image": {
+          "additionalProperties": false,
+          "description": "Configure the image repository where the image is stored. Use this to point to an private hosted container registry instead of our public DockerHub hosted one.",
+          "properties": {
+            "repository": {
+              "default": "kasmweb/postgres",
+              "title": "repository",
+              "type": "string"
+            },
+            "tag": {
+              "default": "1.17.0",
+              "title": "tag",
+              "type": "string"
+            }
+          },
+          "title": "image",
+          "type": "object",
+          "requied": [
+            "repository",
+            "tag"
+          ]
+        },
+        "kasmDbName": {
+          "default": "kasm",
+          "description": "The name of the database where Kasm is to be initialized and that Kasm services are to connect",
+          "title": "kasmDbName",
+          "type": "string"
+        },
+        "kasmDbSecret": {
+          "additionalProperties": false,
+          "description": "The name of the Kasm database password secret to use for a user-created, custom Database password secret value. NOTE: Leave this empty to use the password created by this Helm chart. If you create a custom DB secret, define the `kasmDbSecret` object below in the example format.",
+          "title": "kasmDbSecret",
+          "type": "object",
+          "properties": {
+            "name": {
+              "description": "Custom DB secret name",
+              "title": "name",
+              "type": "string"
+            },
+            "key": {
+              "description": "Custom DB secret key value to map",
+              "title": "key",
+              "type": "string"
+            }
+          }
+        },
+        "kasmDbUser": {
+          "default": "kasmapp",
+          "description": "The name of the Kasm database User with READ/WRITE permission to the Kasm database",
+          "title": "kasmDbUser",
+          "type": "string"
+        },
+        "labels": {
+          "additionalProperties": true,
+          "description": "Custom labels to add to the Kasm DB StatefulSet",
+          "title": "labels",
+          "type": "object"
+        },
+        "port": {
+          "default": 5432,
+          "description": "The port Kasm will use to connect to the PostgreSQL DB server",
+          "title": "port",
+          "type": "integer"
+        },
+        "postgresMasterUser": {
+          "additionalProperties": false,
+          "description": "An object defining the PostgreSQL DB Master user and the Kubernetes secret and key values for the Master DB password. These credentials are only used by the `db-init-job` to create the `kasmDbName` database, the `kasmDbUser` user account, set permissions for the user account, and initialize and pre-seed the Kasm Database.",
+          "title": "postgresMasterUser",
+          "type": "object",
+          "properties": {
+            "username": {
+              "title": "username",
+              "type": "string"
+            },
+            "secret": {
+              "properties": {
+                "name": {
+                  "title": "name",
+                  "type": "string"
+                },
+                "key": {
+                  "title": "key",
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "resources": {
+          "additionalProperties": true,
+          "description": "Manually configure the Kasm DB StatefulSet resources. This overrides the pre-defined `deploymentSize` values.",
+          "title": "resources",
+          "type": "object"
+        },
+        "standalone": {
+          "default": false,
+          "description": "Setting standalone to true will prevent the deployment of the Kasm DB StatefulSet and requires the user to have a self-hosted PostgreSQL Database v14 server already setup and awaiting connections. Use the below database configuration values to connect to your external DB.",
+          "title": "standalone",
+          "type": "boolean"
+        },
+        "storage": {
+          "additionalProperties": false,
+          "description": " ",
+          "properties": {
+            "pvcSize": {
+              "default": 0,
+              "description": "Set the size of the PVC to attach to your Kubernetes-hosted Database server. The default size is 8Gi. Just supply the integer value of the PVC size in GB you wish to use.",
+              "title": "pvcSize",
+              "type": "integer"
+            },
+            "retentionPolicy": {
+              "additionalProperties": false,
+              "description": "Configure how the DB volume should be retained or deleted throughout the DB's lifecycle ",
+              "properties": {
+                "whenDeleted": {
+                  "default": "Delete",
+                  "title": "whenDeleted",
+                  "type": "string"
+                },
+                "whenScaled": {
+                  "default": "Retain",
+                  "title": "whenScaled",
+                  "type": "string"
+                }
+              },
+              "title": "retentionPolicy",
+              "required": [
+                "whenDeleted",
+                "whenScaled"
+              ]
+            },
+            "storageClassName": {
+              "default": "",
+              "description": "Set the storage class to attach to the DB for storage. NOTE: Leaving this blank will use the cluster-default storage class",
+              "title": "storageClassName",
+              "type": "string"
+            }
+          },
+          "title": "storage",
+          "required": [
+            "storageClassName",
+            "pvcSize",
+            "retentionPolicy"
+          ]
+        }
+      },
+      "title": "database",
+      "required": [
+        "standalone",
+        "hostname",
+        "port",
+        "kasmDbName",
+        "kasmDbUser",
+        "kasmDbSecret",
+        "postgresMasterUser",
+        "image",
+        "storage",
+        "annotations",
+        "resources"
+      ]
+    },
+    "dbManagement": {
+      "additionalProperties": false,
+      "description": " ",
+      "properties": {
+        "backupCron": {
+          "additionalProperties": false,
+          "description": " to a specified PVC. You can use an NFS or other shared or external PVC specified by `storageClass` to keep this backup tarball.",
+          "properties": {
+            "enabled": {
+              "default": false,
+              "description": "Set to true to enable automatic Kasm DB backups ",
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "pvcName": {
+              "default": "",
+              "description": "The name of the Persistent Volume Claim to use for DB Backups ",
+              "title": "pvcName",
+              "type": "string"
+            },
+            "pvcSize": {
+              "default": 0,
+              "description": "Set the size of the PVC to attach to your Kubernetes-hosted Database backup job. The default size is 5Gi. Just supply the integer value of the PVC size in GB you wish to use.",
+              "title": "pvcSize",
+              "type": "integer"
+            },
+            "schedule": {
+              "default": "",
+              "description": "Use a cron-style syntax to schedule how often the backup cron job runs. The default value will run a backup every 24 hours at midnight UTC. Refer to the [Kubernetes CronJob](https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/) documentation for more information.",
+              "title": "schedule",
+              "type": "string"
+            },
+            "storageClass": {
+              "default": "",
+              "description": "The `storageClassName` to attach the DB backup job for storage of regular DB backups. Leave the value empty to use your default Kubernetes storageClass",
+              "title": "storageClass",
+              "type": "string"
+            },
+            "timeZone": {
+              "default": "",
+              "description": "The time zone to use for the backup cron job. The default is UTC.",
+              "title": "timeZone",
+              "type": "string"
+            }
+          },
+          "title": "backupCron",
+          "required": [
+            "enabled",
+            "pvcName",
+            "schedule",
+            "timeZone",
+            "storageClass",
+            "pvcSize"
+          ]
+        },
+        "initialize": {
+          "default": true,
+          "description": "Initialize the DB. This is required for an initial deployment of Kasm to configure the DB for Kasm usage",
+          "title": "initialize",
+          "type": "boolean"
+        },
+        "upgrade": {
+          "additionalProperties": false,
+          "description": " ",
+          "properties": {
+            "enable": {
+              "default": false,
+              "description": "Enable the DB upgrade job to run.  NOTE: You cannot set both `dbManagement.initialize` and `dbManagement.upgrade.enabled` to true. You can either initialize the DB for a new installation, or you can upgrade an existing DB to a new Kasm version, but you cannot do both.",
+              "title": "enable",
+              "type": "boolean"
+            },
+            "oldDbBackupFileName": {
+              "default": "kasm_dump.tar",
+              "description": " ",
+              "title": "oldDbBackupFileName",
+              "type": "string"
+            },
+            "oldDbBackupPvc": {
+              "default": "kasm-db-dump-pvc",
+              "description": " ",
+              "title": "oldDbBackupPvc",
+              "type": "string"
+            },
+            "oldDbSecretsName": {
+              "default": "kasm-secrets",
+              "description": "The name of the Kubernetes secret where Kasm and DB passwords are stored.",
+              "title": "oldDbSecretsName",
+              "type": "string"
+            }
+          },
+          "title": "upgrade",
+          "required": [
+            "enable",
+            "oldDbSecretsName",
+            "oldDbBackupPvc",
+            "oldDbBackupFileName"
+          ]
+        }
+      },
+      "title": "dbManagement",
+      "required": [
+        "initialize",
+        "upgrade",
+        "backupCron"
+      ]
+    },
+    "deploymentSize": {
+      "default": "small",
+      "description": "Define the estimated size of the Kasm deployment in expected session load.  small  = Up to 10-15 sessions  medium = Up to 25-30 sessions  large  = Up to 50+ sessions",
+      "title": "deploymentSize",
+      "type": "string",
+      "enum": [
+        "small",
+        "medium",
+        "large"
+      ]
+    },
+    "extraLabels": {
+      "additionalProperties": false,
+      "description": "See [Kubernetes Labels](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/) for more information.",
+      "properties": {
+        "certSecret": {
+          "additionalProperties": true,
+          "description": "Additional statefulSet labels to apply to resources created by this chart",
+          "title": "certSecret",
+          "type": "object"
+        },
+        "configMap": {
+          "additionalProperties": true,
+          "description": "Additional configMap labels to apply to resources created by this chart",
+          "title": "configMap",
+          "type": "object"
+        },
+        "cron": {
+          "additionalProperties": true,
+          "description": "Additional cron labels to apply to resources created by this chart",
+          "title": "cron",
+          "type": "object"
+        },
+        "cronPod": {
+          "additionalProperties": true,
+          "description": "Additional cron Pod labels to apply to resources created by this chart",
+          "title": "cronPod",
+          "type": "object"
+        },
+        "deployment": {
+          "additionalProperties": true,
+          "description": "Additional deployment labels to apply to resources created by this chart",
+          "title": "deployment",
+          "type": "object"
+        },
+        "job": {
+          "additionalProperties": true,
+          "description": "Additional job labels to apply to resources created by this chart",
+          "title": "job",
+          "type": "object"
+        },
+        "jobPod": {
+          "additionalProperties": true,
+          "description": "Additional job Pod labels to apply to resources created by this chart",
+          "title": "jobPod",
+          "type": "object"
+        },
+        "pod": {
+          "additionalProperties": true,
+          "description": "Additional pod labels to apply to resources created by this chart",
+          "title": "pod",
+          "type": "object"
+        },
+        "pvc": {
+          "additionalProperties": true,
+          "description": "Additional PersistentVolumeClaim labels to apply to resources created by this chart",
+          "title": "pvc",
+          "type": "object"
+        },
+        "secret": {
+          "additionalProperties": true,
+          "description": "Additional secret labels to apply to resources created by this chart",
+          "title": "secret",
+          "type": "object"
+        },
+        "service": {
+          "additionalProperties": true,
+          "description": "Additional service labels to apply to resources created by this chart",
+          "title": "service",
+          "type": "object"
+        },
+        "statefulSet": {
+          "additionalProperties": true,
+          "description": "Additional statefulSet labels to apply to resources created by this chart",
+          "title": "statefulSet",
+          "type": "object"
+        }
+      },
+      "title": "extraLabels",
+      "required": [
+        "certSecret",
+        "configMap",
+        "deployment",
+        "pod",
+        "secret",
+        "service",
+        "job",
+        "jobPod",
+        "cron",
+        "cronPod",
+        "pvc",
+        "statefulSet"
+      ]
+    },
+    "extraObjects": {
+      "additionalProperties": true,
+      "description": "Deploy additional Kubernetes manifests. This field is expected to be either a multi-line string, a list of strings, or a list of objects.",
+      "title": "extraObjects",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array"
+        }
+      ]
+    },
+    "imagePullPolicy": {
+      "default": "IfNotPresent",
+      "description": "Configure global image pull policy ",
+      "title": "imagePullPolicy",
+      "type": "string"
+    },
+    "imagePullSecrets": {
+      "additionalProperties": false,
+      "properties": {
+        "annotations": {
+          "additionalProperties": false,
+          "description": "Additional annotations for this secret",
+          "title": "annotations",
+          "type": "object"
+        },
+        "email": {
+          "default": "",
+          "description": "The email address used to authenticate (optional, used for dockerconfigjson and dockercfg)",
+          "title": "email",
+          "type": "string"
+        },
+        "enabled": {
+          "default": "false",
+          "description": "Enable/disable image pull secrets",
+          "title": "enabled",
+          "type": "boolean"
+        },
+        "labels": {
+          "additionalProperties": false,
+          "description": "Additional labels for this secret",
+          "title": "labels",
+          "type": "object"
+        },
+        "name": {
+          "default": "",
+          "description": "Secret name to use. If left blank, will be dynamically generated. To use an existing Image pull secret, or one you manually created, set `imagePullSecrets.enabled`, and provide the name of the Image Pull Secret you created, making sure to leave all other values below empty.",
+          "title": "name",
+          "type": "string"
+        },
+        "password": {
+          "default": "",
+          "description": "The password used to authenticate agaisnt your Registry server.",
+          "title": "password",
+          "type": "string"
+        },
+        "server": {
+          "default": "",
+          "description": "The Registry server to use when pulling images (required for dockerconfigjson and dockercfg)",
+          "title": "server",
+          "type": "string"
+        },
+        "type": {
+          "default": "",
+          "description": "Type of image pull credential to create. Valid types are \"dockerconfigjson\", \"dockercfg\", or \"basic\"",
+          "title": "type",
+          "type": "string"
+        },
+        "username": {
+          "default": "",
+          "description": "The username used to authenticate agaisnt your Registry server.",
+          "title": "username",
+          "type": "string"
+        }
+      },
+      "title": "imagePullSecrets",
+      "type": "object",
+      "required": [
+        "enabled",
+        "name",
+        "type",
+        "server",
+        "username",
+        "password",
+        "email",
+        "labels",
+        "annotations"
+      ]
+    },
+    "ingress": {
+      "additionalProperties": false,
+      "description": "Configure an Ingress for your Kasm deployment.",
+      "properties": {
+        "annotations": {
+          "additionalProperties": true,
+          "description": "A list of additional hostnames to be covered with this ingress record. Most likely the hostname above will be enough, but in the event more hosts are needed, this is an array",
+          "title": "annotations",
+          "type": "object"
+        },
+        "backendProtocol": {
+          "default": "http",
+          "description": "The backend protocol to for the Ingress to communicate with the Kasm proxy service. Valid values: http or https",
+          "title": "backendProtocol",
+          "type": "string"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Set the enabled value to `true` to use a pre-defined Ingress service to expose Kasm",
+          "title": "enabled",
+          "type": "boolean"
+        },
+        "ingressClassName": {
+          "default": "",
+          "description": "Define the ingress Class to use for your Kasm ingress ",
+          "title": "ingressClassName",
+          "type": "string"
+        },
+        "labels": {
+          "additionalProperties": true,
+          "title": "labels",
+          "type": "object"
+        },
+        "tls": {
+          "default": true,
+          "description": "Set tls value to `true` to eanble TLS configuration for the hostname defined at `publicAddr` parameter",
+          "title": "tls",
+          "type": "boolean"
+        }
+      },
+      "title": "ingress",
+      "type": "object",
+      "required": [
+        "enabled",
+        "tls",
+        "backendProtocol",
+        "ingressClassName",
+        "annotations",
+        "labels"
+      ]
+    },
+    "kasmZones": {
+      "description": "This is a list of objects defining different Kasm Zone configurations for your deployment. This configuration is typically used for multi-region, large, or custom deployments where the customer requires a high degree of configurability and has multiple resources in disparate areas.  NOTE: If you configure custom zones below, you MUST use a valid `ingress` configuration due to the increased deployment complexity of a multi-zone Kasm deployment. Refer to the Kasm [Deployment Zones](https://kasmweb.com/docs/latest/guide/zones/deployment_zones.html) documentation for more information on Kasm Zones.",
+      "title": "kasmZones",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "description": "Define the name of the Kasm Zones to deploy management resources for",
+            "title": "name",
+            "type": "string"
+          },
+          "upstream_auth_addr": {
+            "description": "Define the Upstream Auth address of the Kasm Zones to deploy management resources for. Refer to [Deployment Zones](https://kasmweb.com/docs/latest/guide/zones/deployment_zones.html) for more info.",
+            "title": "upstream_auth_addr",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "upstream_auth_addr"
+        ]
+      }
+    },
+    "labels": {
+      "additionalProperties": true,
+      "description": "Custom labels to apply to all deployed resources",
+      "title": "labels",
+      "type": "object"
+    },
+    "nodeSelector": {
+      "additionalProperties": true,
+      "description": "Configure node selector settings for your Kasm pods - [Kubernetes Node Selector](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector).",
+      "title": "nodeSelector",
+      "type": "object"
+    },
+    "proxyService": {
+      "additionalProperties": false,
+      "description": "Configure the external-facing service type to use. Allowed service types: ClusterIP or LoadBalancer. The service.annotations defined here only apply to the `proxy` service (`proxy-service-external.yaml` file). If you wish to apply annotations to all services, use the annotations.service value at the bottom of this chart.  NOTE: If ingress.enabled or route.enabled set to `true` service.type MUST be set to `ClusterIP`. Also, if you wish to deploy a multi-zone Kasm (see [Deployment Zones](https://kasmweb.com/docs/latest/guide/zones/deployment_zones.html) documentation for reference), you MUST use either a Route or an Ingress and set the `proxyService.type` to `ClusterIP`.",
+      "properties": {
+        "annotations": {
+          "additionalProperties": true,
+          "title": "annotations",
+          "type": "object"
+        },
+        "labels": {
+          "additionalProperties": true,
+          "title": "labels",
+          "type": "object"
+        },
+        "type": {
+          "default": "LoadBalancer",
+          "title": "type",
+          "type": "string",
+          "enum": [
+            "ClusterIP",
+            "LoadBalancer"
+          ]
+        }
+      },
+      "title": "proxyService",
+      "type": "object",
+      "required": [
+        "type",
+        "annotations",
+        "labels"
+      ]
+    },
+    "publicAddr": {
+      "description": "Set the access URL to be used for the Kasm deployment. This is the URL you will use to access your Kasm deployment. This URL can be a private address, it just needs to be resolvable by systems you use to interface with Kasm.",
+      "title": "publicAddr",
+      "type": "string",
+      "required": [
+        "publicAddr"
+      ]
+    },
+    "restartPolicy": {
+      "default": "Always",
+      "description": "Configure global Pod restart policy for Kasm resources",
+      "title": "restartPolicy",
+      "type": "string"
+    },
+    "route": {
+      "additionalProperties": false,
+      "description": "Configure an OpenShift Route for your Kasm deployment.",
+      "properties": {
+        "annotations": {
+          "additionalProperties": true,
+          "title": "annotations",
+          "type": "object"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Set the enabled value to `true` to use a pre-defined Route service to expose Kasm",
+          "title": "enabled",
+          "type": "boolean"
+        },
+        "labels": {
+          "additionalProperties": true,
+          "title": "labels",
+          "type": "object"
+        },
+        "tls": {
+          "additionalProperties": true,
+          "description": "Object to define the TLS configuration for your OpenShift Route - [Configuring Secure Routes](https://docs.redhat.com/en/documentation/openshift_dedicated/4/html/networking/configuring-routes#configuring-default-certificate).",
+          "title": "tls",
+          "type": "object",
+          "properties": {
+            "termination": {
+              "title": "termination",
+              "type": "string"
+            },
+            "insecureEdgeTerminationPolicy": {
+              "title": "insecureEdgeTerminationPolicy",
+              "type": "string"
+            },
+            "key": {
+              "title": "key",
+              "type": "string"
+            },
+            "certificate": {
+              "title": "certificate",
+              "type": "string"
+            },
+            "caCertificate": {
+              "title": "caCertificate",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "title": "route",
+      "type": "object",
+      "required": [
+        "enabled",
+        "tls",
+        "annotations",
+        "labels"
+      ]
+    }
+  },
+  "type": "object"
+}

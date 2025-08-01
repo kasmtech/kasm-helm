@@ -1,0 +1,102 @@
+{{/*
+Kasm DB configMaps containing pg_hba.conf and postgresql.conf files
+*/}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- if eq .Values.database.standalone false }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $constants.db.name }}-configmap
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ $constants.db.name }}-configmap
+    app.kubernetes.io/component: {{ $constants.db.component }}
+    {{- include "kasm.defaultLabels" . | indent 4 }}
+    {{- with .Values.extraLabels.configMap }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with .Values.labels }}{{- toYaml . | nindent 4 }}{{- end }}
+  {{- with .Values.annotations.configMap }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  data.sql: |
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA public;
+    COMMENT ON EXTENSION "uuid-ossp" IS 'generate universally unique identifiers (UUIDs)';
+
+  pg_hba.conf: |
+    # ===================================================
+    # PostgreSQL Client Authentication Configuration File
+    # ===================================================
+    #
+    # This file consists of the settings used to configure the Kasm DB StatefulSet.
+    # If you need to change or update any of these values, or cusomize the
+    # PostgreSQL DB configuration in any way besides these, refer to the configuration
+    # reference documentation located at the URL below.
+    #
+    # https://www.postgresql.org/docs/14/auth-pg-hba-conf.html
+    #
+    # MAKE SURE if you use the docs to make adjustments that you refer to
+    # the PostsgreSQL version 14 documentation to ensure compatability.
+    #
+
+    # TYPE  DATABASE        USER            ADDRESS                 METHOD
+    local   replication     all                                     trust
+    host    replication     all             127.0.0.1/32            trust
+    host    replication     all             ::1/128                 trust
+    local   all             all                                     trust
+    host    all             all             127.0.0.1/32            trust
+    host    all             all             ::1/128                 trust
+    hostssl all             all             all                     md5
+
+  postgresql.conf: |
+    # ===================================================
+    # PostgreSQL configuration file
+    # ===================================================
+    #
+    # This file consists of the changes used to configure the Kasm DB StatefulSet.
+    # If you need to change or update any of these values, or customize the
+    # PostgreSQL DB configuration in any way besides these, refer to the configuration
+    # reference documentation located at the URL below.
+    #
+    # https://www.postgresql.org/docs/14/config-setting.html
+    #
+    # MAKE SURE if you use the docs to make adjustments that you refer to
+    # the PostsgreSQL version 14 documentation to ensure compatability.
+    #
+
+    listen_addresses = '*'
+    tcp_keepalives_idle = 7200
+    tcp_keepalives_interval = 75
+    tcp_keepalives_count = 9
+    ssl = on
+    ssl_cert_file = '/etc/ssl/certs/db_server.crt'
+    ssl_key_file = '/etc/ssl/certs/db_server.key'
+    ssl_ciphers = 'TLSv1.2+FIPS:kRSA+FIPS:!eNULL:!aNULL'
+    shared_buffers = 128MB
+    dynamic_shared_memory_type = posix
+    max_wal_size = 1GB
+    min_wal_size = 80MB
+    log_destination = 'stderr,syslog'
+    logging_collector = on
+    log_directory = '/tmp/postgres'
+    log_filename = 'postgresql-%m-%d.log'
+    log_file_mode = 0600
+    log_rotation_age = 1d
+    log_truncate_on_rotation = off
+    syslog_facility = 'LOCAL0'
+    syslog_ident = 'postgres'
+    log_connections = off
+    log_disconnections = off
+    log_hostname = on
+    log_line_prefix = '< %m %a %u %d %r %p %i %e %s %c:>'
+    log_timezone = 'UTC'
+    client_min_messages = error
+    statement_timeout = 0
+    datestyle = 'iso, mdy'
+    timezone = 'UTC'
+    lc_messages = 'en_US.utf8'
+    lc_monetary = 'en_US.utf8'
+    lc_numeric = 'en_US.utf8'
+    lc_time = 'en_US.utf8'
+    default_text_search_config = 'pg_catalog.english'
+{{- end }}

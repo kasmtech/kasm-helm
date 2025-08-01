@@ -1,0 +1,39 @@
+{{/*
+Deploy the Kasm Proxy service
+*/}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $defaultLabels := include "kasm.defaultLabels" . }}
+{{- $values := .Values }}
+{{- range $idx, $zone := (.Values.kasmZones | default (list (dict "name" "default"))) }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ printf "%s-%s" $constants.proxy.svc (regexReplaceAll "[^a-zA-Z0-9]+" $zone.name "-" | lower) }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ printf "%s-%s" $constants.proxy.svc (regexReplaceAll "[^a-zA-Z0-9]+" $zone.name "-" | lower) }}
+    app.kubernetes.io/component: {{ $constants.proxy.component }}
+    {{- $defaultLabels | indent 4 }}
+    {{- with $values.components.proxy.labels }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with $values.extraLabels.service }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with $values.labels }}{{- toYaml . | nindent 4 }}{{- end }}
+  {{- if or $values.annotations.service $values.proxyService.annotations }}
+  annotations:
+    {{- with $values.annotations.service }}{{ toYaml . | nindent 4 }}{{- end }}
+    {{- if eq $values.proxyService.type "ClusterIP" }}
+      {{- with $values.proxyService.annotations }}{{ toYaml . | nindent 4 }}{{- end }}
+    {{- end }}
+  {{- end }}
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: {{ printf "%s-%s" $constants.proxy.name (regexReplaceAll "[^a-zA-Z0-9]+" $zone.name "-" | lower) }}
+  ports:
+    - name: {{ printf "%s-%s-svc-%s" $constants.proxy.svc (regexReplaceAll "[^a-zA-Z0-9]+" $zone.name "-" | lower) ($constants.proxy.http | toString) }}
+      protocol: TCP
+      port: {{ $constants.proxy.http }}
+    - name: {{ printf "%s-%s-svc-%s" $constants.proxy.svc (regexReplaceAll "[^a-zA-Z0-9]+" $zone.name "-" | lower) ($constants.proxy.https | toString) }}
+      protocol: TCP
+      port: {{ $constants.proxy.https }}
+{{- end }}
