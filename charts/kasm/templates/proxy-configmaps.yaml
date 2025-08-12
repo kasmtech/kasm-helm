@@ -430,7 +430,7 @@ data:
       proxy_set_header        X-Kasm-ID "${kasm_id}";
       proxy_set_header        Authorization "Bearer ${connect_auth}";
       proxy_set_header        Cookie "username=$cookie_username; session_token=$cookie_session_token; kasm_client_key=$cookie_kasm_client_key";
-      proxy_pass              {{ printf "http://127.0.0.1:%s/guac_connect/$service$new_path" $constants.proxy.http }};
+      proxy_pass              {{ printf "http://127.0.0.1:%s/guac_connect/$service$new_path" ($constants.proxy.http | toString) }};
       proxy_read_timeout      1800s;
       proxy_send_timeout      1800s;
       proxy_connect_timeout   1800s;
