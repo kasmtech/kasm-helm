@@ -223,7 +223,7 @@ data:
 
   upstream_manager.conf: |
     upstream {{ printf $constants.manager.svc }} {
-      server {{ printf "%s:%s" (printf "%s-%s" $constants.manager.svc $zone.name | lower) ((add $constants.manager.port (mul 10 $idx)) | toString) }};
+      server {{ printf "%s:%s" (printf "%s-%s" $constants.manager.svc $zone.name | lower) $constants.manager.port }};
       keepalive {{ $serviceKeepalive }};
     }
 
