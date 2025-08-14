@@ -97,12 +97,6 @@ spec:
         {{- if $values.applySecurity }}
           {{- include "kasm.containerSecurity" . | indent 10 }}
         {{- end }}
-        {{- if $values.components.share.enabled }}
-          {{- include "kasm.initContainer" (dict "serviceName" $constants.share.svc "servicePort" $constants.share.port "path" "/__healthcheck" "schema" "http" "image" $constants.api.image) | indent 8 }}
-          {{- if $values.applySecurity }}
-            {{- include "kasm.containerSecurity" . | indent 10 }}
-          {{- end }}
-        {{- end }}
         {{- if $values.components.guac.enabled }}
           {{- include "kasm.initContainer" (dict "serviceName" $constants.guac.svc "servicePort" $constants.guac.port "path" "/__healthcheck" "schema" "http" "image" $constants.api.image) | indent 8 }}
           {{- if $values.applySecurity }}

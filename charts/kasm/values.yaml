@@ -174,7 +174,7 @@ database:
   #
   image:
     repository: kasmweb/postgres
-    tag: 1.17.0
+    tag: develop
   # Configure the Storage for the Kasm DB StatefulSet
   #
   storage:
@@ -260,7 +260,7 @@ components:
     #
     image:
       repository: kasmweb/proxy
-      tag: 1.17.0
+      tag: develop
     # components.proxy.annotations -- Custom annotations to add to the Kasm Proxy Deployment
     annotations: {}
     # components.proxy.resources -- Manually configure the Kasm Proxy Deployment resources. This overrides the pre-defined `deploymentSize` values.
@@ -275,7 +275,7 @@ components:
     #
     image:
       repository: kasmweb/api
-      tag: 1.17.0
+      tag: develop
     # components.api.annotations -- Custom annotations to add to the Kasm api Deployment
     annotations: {}
     # components.api.resources -- Manually configure the Kasm api Deployment resources. This overrides the pre-defined `deploymentSize` values.
@@ -290,7 +290,7 @@ components:
     #
     image:
       repository: kasmweb/manager
-      tag: 1.17.0
+      tag: develop
     # components.manager.annotations -- Custom annotations to add to the Kasm Manager Deployment
     annotations: {}
     # components.manager.resources -- Manually configure the Kasm Manager Deployment resources. This overrides the pre-defined `deploymentSize` values.
@@ -305,7 +305,7 @@ components:
     #
     image:
       repository: kasmweb/kasm-guac
-      tag: 1.17.0
+      tag: develop
     # components.guac.enabled -- Use this setting to enable/disable deployment of the Kasm Guacamole web RDP service - 
     # [Kasm Guac Service](https://kasmweb.com/docs/latest/guide/connection_proxies.html#guacamole-guac).
     #
@@ -324,7 +324,7 @@ components:
     #
     image:
       repository: kasmweb/rdp-gateway
-      tag: 1.17.0
+      tag: develop
     # components.rdpGateway.enabled -- Use this setting to enable/disable deployment of the Kasm RDP Gateway service - 
     # [Kasm RDP Gateway](https://kasmweb.com/docs/latest/guide/connection_proxies.html#rdp-gateway).
     #
@@ -343,7 +343,7 @@ components:
     #
     image:
       repository: kasmweb/rdp-https-gateway
-      tag: 1.17.0
+      tag: develop
     # components.rdpHttpsGateway.enabled -- Use this setting to enable/disable deployment of the Kasm RDP HTTPS Gateway service.
     # This service allows users to use native RDP clients via HTTPS connections rather than exposing 3389 - 
     # [Kasm RDP HTTPS Gateway](https://kasmweb.com/docs/latest/guide/connection_proxies.html#rdp-https-gateway).
@@ -354,40 +354,6 @@ components:
     # components.rdpHttpsGateway.resources -- Manually configure the Kasm RDP HTTPS Gateway Deployment resources. This overrides the pre-defined `deploymentSize` values.
     resources: {}
     # components.rdpHttpsGateway.labels -- Custom labels to add to the Kasm RDP HTTPS Gateway Deployment
-    labels: {}
-  # Configuration settings for the Kasm Share service
-  #
-  share:
-    # components.share.image -- Configure the image repository where the image is stored. Use this to point to an private hosted
-    # container registry instead of our public DockerHub hosted one.
-    #
-    image:
-      repository: kasmweb/share
-      tag: 1.17.0
-    # components.share.enabled -- Use this setting to enable/disable deployment of the Kasm Share and associated Redis services - 
-    # [Kasm Share Service](https://kasmweb.com/docs/latest/guide/session_sharing.html).
-    #
-    enabled: true
-    # components.share.annotations -- Custom annotations to add to the Kasm Share Deployment
-    annotations: {}
-    # components.share.resources -- Manually configure the Kasm Share Deployment resources. This overrides the pre-defined `deploymentSize` values.
-    resources: {}
-    # components.share.labels -- Custom labels to add to the Kasm Share Deployment
-    labels: {}
-  # Configuration settings for the Kasm Share Redis backend service
-  #
-  redis:
-    # components.redis.image -- Configure the image repository where the image is stored. Use this to point to an private hosted
-    # container registry instead of our public DockerHub hosted one.
-    #
-    image:
-      repository: redis
-      tag: 5-alpine
-    # components.redis.annotations -- Custom annotations to add to the Kasm Redis Deployment
-    annotations: {}
-    # components.redis.resources -- Manually configure the Kasm Redis Deployment resources. This overrides the pre-defined `deploymentSize` values.
-    resources: {}
-    # components.redis.labels -- Custom labels to add to the Kasm Redis Deployment
     labels: {}
 
 ####################################

@@ -247,10 +247,6 @@ Add nginx proxy service configs based on values
       {{- $ports = (list $constants.rdpHttpsGateway.port) -}}
       {{- $upstream = $constants.rdpHttpsGateway.svc -}}
       {{- $server = (kebabcase $constants.rdpHttpsGateway.svc) -}}
-    {{- else if eq $key "share" }}
-      {{- $ports = (list $constants.share.port) -}}
-      {{- $upstream = $constants.share.svc -}}
-      {{- $server = (kebabcase $constants.share.svc) -}}
     {{- end -}}
   {{- end -}}
   {{- if $ports }}
@@ -662,20 +658,6 @@ data:
       proxy_set_header	      X-Forwarded-For $proxy_add_x_forwarded_for;
       proxy_set_header	      X-Forwarded-Proto $scheme;
       proxy_pass	            {{ printf "http://%s" $constants.rdpGateway.svc }}/;
-    }
-{{- end }}
-{{- if $.Values.components.share.enabled }}
-  share_api.conf: |
-    location /api/share/ {
-      proxy_http_version	    1.1;
-      proxy_set_header	      Host $host;
-      proxy_set_header	      Upgrade $http_upgrade;
-      proxy_set_header	      Connection "upgrade";
-      proxy_set_header	      X-Real-IP $remote_addr;
-      proxy_set_header	      X-Forwarded-For $proxy_add_x_forwarded_for;
-      proxy_set_header	      X-Forwarded-Proto $scheme;
-      add_header              Strict-Transport-Security "max-age=63072000" always;
-      proxy_pass	            {{ printf "http://%s" $constants.share.svc }};
     }
 {{- end }}
 {{- if $.Values.components.rdpHttpsGateway.enabled }}

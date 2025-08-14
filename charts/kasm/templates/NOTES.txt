@@ -33,10 +33,3 @@ kubectl get secret --namespace {{ .Release.Namespace }} {{ .Release.Name }}-secr
 Retrieve Kasm Service Registration Token:
 kubectl get secret --namespace {{ .Release.Namespace }} {{ .Release.Name }}-secrets -o jsonpath="{.data.service-token}" | base64 -d
 
-{{- if eq .Values.components.share.enabled true }}
-
-Retrieve Kasm Redis Password:
-kubectl get secret --namespace {{ .Release.Namespace }} {{ .Release.Name }}-secrets -o jsonpath="{.data.redis-password}" | base64 -d
-
-{{- end }}
-
