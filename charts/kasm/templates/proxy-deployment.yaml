@@ -158,7 +158,7 @@ spec:
               protocol: TCP
           {{- if $values.applyHealthChecks }}
           livenessProbe:
-            {{- include "health.tcp" (dict "portName" $constants.proxy.portName ) | indent 12 }}
+            {{- include "health.tcp" (dict "portName" (print $constants.proxy.portName "-http") ) | indent 12 }}
           {{- end }}
           {{- if $values.applyHealthChecks }}
           readinessProbe:
