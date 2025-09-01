@@ -6,7 +6,7 @@ author: Kasm Technologies
 
 # Migrate Kubernetes DB to Standalone DB
 
-This guide walks you through safely **migrating your Kubernetes-based Kasm DB** to a **Standalone DB with a Kubernetes-hosted Kasm**.
+This guide walks you through safely migrating your Kubernetes-based Kasm DB to a standalone PostgreSQL database while continuing to run Kasm in Kubernetes.
 
 > ⚠️ **Warning:**\
 > To migrate to a standalone database, you must first ensure that you are running the latest version of the Kasm Helm. Refer to [Upgrading Kasm on Kubernetes](./kasm-upgrade.md) for instructions on upgrading Kasm to the latest version.
