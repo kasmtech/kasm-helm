@@ -191,7 +191,7 @@ dbManagement:
 
 ---
 
-### 5. Re-install the Kasm Helm Release
+### 5. Reinstall the Kasm Helm Release
 
 ```bash
 cd /path/to/kasm-helm-new/charts
