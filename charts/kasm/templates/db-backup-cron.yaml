@@ -100,7 +100,7 @@ spec:
                   valueFrom:
                     secretKeyRef:
                     {{- if .Values.database.kasmDbSecret -}}
-                    {{ .Values.database.kasmDbSecret | toYaml | nindent 18 }}
+                    {{ .Values.database.kasmDbSecret | toYaml | nindent 22 }}
                     {{- else }}
                       name: {{ $kasmSecrets }}
                       key: "db-password"
