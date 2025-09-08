@@ -283,7 +283,7 @@ Replace the placeholders:
 2. {namespace}: The namespace where your Kasm deployment is running.
 3. {old-chart-path}: Path to the old chart directory (e.g., `/home/user/kasm-helm/charts/kasm`)
 
-Verify the retention policy has been updated:
+Verify the retention policy has been updated (Ignore this step if using standalone DB):
 ```bash
 kubectl -n {namespace} get statefulset {kasm-db-statefulset-name} -o yaml | grep whenDeleted
 ```
