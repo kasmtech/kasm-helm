@@ -1,6 +1,6 @@
 # Kasm on Kubernetes (Helm Chart)
 
-![Version: 1.1170.0](https://img.shields.io/badge/Version-1.1170.0-informational?style=flat-square) ![AppVersion: 1.17.0](https://img.shields.io/badge/AppVersion-1.17.0-informational?style=flat-square)
+![Version: 1.1180.0](https://img.shields.io/badge/Version-1.1180.0-informational?style=flat-square) ![AppVersion: 1.18.0](https://img.shields.io/badge/AppVersion-1.18.0-informational?style=flat-square)
 
 > ⚠️ **This Helm chart is not intended for production use.**  
 > For advanced configurations, see the [Chart README](./charts/kasm/README.md).
