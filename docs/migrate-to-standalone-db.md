@@ -13,9 +13,7 @@ This guide walks you through safely migrating your Kubernetes-based Kasm DB to a
 > Ensure you have already provisioned a PostgreSQL v14 instance, and that it is fully configured to accept connections.
 > The database must be network-accessible from your target Kubernetes cluster where the Kasm Helm chart will be deployed.
 
-
 ---
-
 
 ### 1. Backup Your Database and Secrets
 
@@ -39,7 +37,6 @@ Note: If a job with the same name already exists from a previous upgrade, delete
   ```bash
   kubectl delete job kasm-db-backup-manual -n {namespace}
   ```
-
 
 - Get the backup file name
   ```bash
@@ -70,7 +67,6 @@ Note: note down the filename `kasm_dump_20250821_13.56.39.tar`.
 
 Replace the placeholder {kasm-secrets} with the kasm secret name, run command `kubectl -n {namespace} get secret | grep secrets` to get the secret name. It should have the value of `{helm-release-name}-secrets`
 
-
 - **Sample output:**
 
   ```bash
@@ -81,7 +77,6 @@ Replace the placeholder {kasm-secrets} with the kasm secret name, run command `k
   service-token: xxx
   user-password: xxx
   ```
-
 
 ---
 
@@ -167,7 +162,6 @@ Ensure the `database` and `dbManagement` sections in your values.yaml is configu
 | `dbManagement.upgrade.oldDbBackupFileName`  | *your value* | The file name of the db dump file from Step 1, e.g., `kasm_dump_20250821_13.56.39.tar`                                                                                      |
 
 
-
 See example below.
 
 ```yaml
@@ -212,3 +206,7 @@ Notes:
   ```bash
   helm get notes kasm -n {namespace}
   ```
+
+## Upgrade Troubleshooting
+
+Click here for [Troubleshooting assistance](./troubleshooting.md)
