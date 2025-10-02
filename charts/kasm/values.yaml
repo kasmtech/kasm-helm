@@ -25,6 +25,9 @@ publicAddr: ""
 # [Deployment Zones](https://kasmweb.com/docs/latest/guide/zones/deployment_zones.html) documentation for more
 # information on Kasm Zones.
 #
+# The first zone in the list is treated as the primary zone.
+# Traffic to the configured `publicAddr` in the ingress rule will be routed to this primary zone.
+#
 kasmZones: []
 # Example Kasm Zone configuration:
 #   - name: Zone-A

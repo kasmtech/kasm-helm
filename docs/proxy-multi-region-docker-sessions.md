@@ -23,15 +23,19 @@ In [values.yaml](../charts/kasm/values.yaml), configure the section `kasmZones` 
 For example:
 
 ```yaml
-publicAddr: kasm.acme.com
+publicAddr: kasm.contoso.com
 kasmZones: 
-   - name: default
-     upstream_auth_addr: kasm.acme.com
+   - name: US
+     upstream_auth_addr: us.kasm.contoso.com
    - name: EU
-     upstream_auth_addr: eu.kasm.acme.com
+     upstream_auth_addr: eu.kasm.contoso.com
 ```
 
 Then, follow the steps in [README](../README.md) to install Kasm Helm chart.
+
+**Note**: 
+1. If your Kubernetes cluster is located in the US, you do not need to deploy an external dedicated proxy for the US zone, since the Helm chart already includes a Kasm dedicated proxy within your cluster. A dedicated proxy is only required for the EU zone to serve EU users.
+2. The first zone in the list is treated as the primary zone. Traffic to the configured `publicAddr` in the ingress rule will be routed to this primary zone.
 
 ---
 
@@ -53,18 +57,18 @@ sudo bash kasm_release/install.sh --role proxy --api-hostname {UPSTREAM_AUTH_ADD
 
 Modify the command as follows:
 1. Replace the `curl` URL to the latest Kasm download release, available [here](https://kasmweb.com/downloads). 
-2. UPSTREAM_AUTH_ADDR: The `upstream_auth_addr` for the zone you configured in `values.yaml`, e.g., `eu.kasm.acme.com`.
+2. UPSTREAM_AUTH_ADDR: The `upstream_auth_addr` for the zone you configured in `values.yaml`, e.g., `eu.kasm.contoso.com`.
 
 Important: Your dedicated proxy should use the same parent domain as the `upstream_auth_addr`. 
 
 For example, if your configuration is:
 ```yaml
-upstream_auth_addr: eu.kasm.acme.com
+upstream_auth_addr: eu.kasm.contoso.com
 ```
 
 then the proxy address should be something like:
 ```text
-proxy-eu.kasm.acme.com
+proxy-eu.kasm.contoso.com
 ```
 
 For more detailed explanation, see [Kasm Dedicated Proxy Documentation](https://kasmweb.com/docs/latest/install/multi_server_install/multi_installation_proxy.html).
@@ -80,6 +84,6 @@ kubectl get secret --namespace {namespace} kasm-secrets \
 ```
 
 - In Kasm Admin UI, go to **Infrastructure** -> **Deployment Zones** -> **Edit**  your desired zone (e.g., EU).
-    1. Upstream Auth Address: Change to `upstream_auth_addr` from your `values.yaml`. For example, `eu.kasm.acme.com`.
-    2. Proxy Hostname: Change to your dedicated proxy address. For example, `proxy-eu.kasm.acme.com`.
+    1. Upstream Auth Address: Change to `upstream_auth_addr` from your `values.yaml`. For example, `eu.kasm.contoso.com`.
+    2. Proxy Hostname: Change to your dedicated proxy address. For example, `proxy-eu.kasm.contoso.com`.
 
