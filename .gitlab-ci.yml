@@ -1,0 +1,24 @@
+variables:
+  DOCKER_HOST: tcp://docker:2375
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: ""
+  SHARED_PATH: /builds/$CI_PROJECT_PATH
+ 
+stages:
+  - config_check
+
+
+config_check:
+  stage: config_check
+  image: ubuntu:24.04
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "trigger"'
+      when: always
+    - when: never
+  tags: ["oci-fixed-amd"]
+  script: 
+    - |
+      echo -e "=== CONFIG FILES THAT CHANGED ===\n"
+      echo "$ENCODED_FILE_LIST" | base64 -d
+      exit 1
+
