@@ -18,6 +18,8 @@ config_check:
   tags: ["oci-fixed-amd"]
   script: 
     - |
+      # ENCODED_FILE_LIST is coming from a trigger in the Kasm_backend job
+      # This job will only run if there were changes to a config in the backend
       echo -e "=== CONFIG FILES THAT CHANGED ===\n"
       echo "$ENCODED_FILE_LIST" | base64 -d
       exit 1
