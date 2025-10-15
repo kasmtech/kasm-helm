@@ -13,7 +13,7 @@ config_check:
   image: ubuntu:24.04
   rules:
     - if: '$CI_PIPELINE_SOURCE == "trigger"'
-      when: always
+    - if: '$CI_PIPELINE_SOURCE == "api"'
     - when: never
   tags: ["oci-fixed-amd"]
   script: 
