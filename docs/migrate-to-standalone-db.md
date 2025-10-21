@@ -6,28 +6,76 @@ author: Kasm Technologies
 
 # Migrate Kubernetes DB to Standalone DB
 
-This guide walks you through safely **migrating your Kubernetes-based Kasm DB** to a **Standalone DB with a Kubernetes-hosted Kasm**.
+This guide walks you through safely migrating your Kubernetes-based Kasm DB to a standalone PostgreSQL database while continuing to run Kasm in Kubernetes.
+
+> ⚠️ **Warning:**\
+> To migrate to a standalone database, you must first ensure that you are running the latest version of the Kasm Helm. Refer to [Upgrading Kasm on Kubernetes](./kasm-upgrade.md) for instructions on upgrading Kasm to the latest version.
+> Ensure you have already provisioned a PostgreSQL v14 instance, and that it is fully configured to accept connections.
+> The database must be network-accessible from your target Kubernetes cluster where the Kasm Helm chart will be deployed.
 
 ---
 
-### 1. Backup Your Database
+### 1. Backup Your Database and Secrets
 
-> ⚠️ **Required:**\
-> Do **not** skip this step. Without a database backup, you risk irreversible data loss.
-
-- Deploy the [DB backup job template](./template-files/db-backup.yaml) to your Kasm namespace:
-
+- Enable DB Backup Cronjob
   ```bash
-  kubectl apply -f ./template-files/db-backup.yaml -n kasm-namespace
-  kubectl logs backup-<job-id> -n kasm-namespace --follow
+  helm upgrade --no-hooks {helm-release-name} {kasm-chart-path} -n {namespace} --reuse-values --set dbManagement.backupCron.enabled=true \
+  --set dbManagement.backupCron.pvcName=kasm-db-dump-pvc \
+  --set dbManagement.initialize=false
+  ```
+Replace the placeholders:
+1. {helm-release-name}: Your Kasm Helm release name. Run `helm list -n {namespace}` if you are unsure.
+2. {namespace}: The namespace where your Kasm deployment is running
+3. {kasm-chart-path}: Path to the Kasm chart directory (e.g., `/home/user/kasm-helm/charts/kasm`)
+
+- Manually trigger DB Backup Cronjob
+  ```bash
+  kubectl create job --from=cronjob/kasm-db-backup-cron kasm-db-backup-manual -n {namespace}
+  ```
+  
+Note: If a job with the same name already exists from a previous upgrade, delete it by running:
+  ```bash
+  kubectl delete job kasm-db-backup-manual -n {namespace}
+  ```
+
+- Get the backup file name
+  ```bash
+  kubectl get pods -n {namespace} | grep kasm-db-backup-manual
+  kubectl logs kasm-db-backup-manual-{id} -n {namespace}
   ```
 
 - **Sample output:**
 
+  ```text
+  Starting backup to /data/kasm-db-dump/kasm_dump_20250821_13.56.39.tar
+  Backup complete
   ```
-  db-is-ready db:5432 - accepting connections
-  kasm-old-db-backup-container Creating DB Backup...
-  -rwxr-xr-x. 1 kasm kasm 1.8M Jul 23 18:26 /data/kasm-db-dump/kasm_dump.tar
+
+Note: note down the filename `kasm_dump_20250821_13.56.39.tar`.
+
+- Cleanup
+
+  ```bash
+  kubectl -n {namespace} delete job kasm-db-backup-manual
+  ```
+
+- Backup secrets and store output securely:
+
+  ```bash
+  kubectl -n {namespace} get secrets/{kasm-secrets} --template='{{ range $key, $value := .data }}{{ printf "%s: %s\n" $key ($value | base64decode) }}{{ end }}'
+  ```
+
+Replace the placeholder {kasm-secrets} with the kasm secret name, run command `kubectl -n {namespace} get secret | grep secrets` to get the secret name. It should have the value of `{helm-release-name}-secrets`
+
+- **Sample output:**
+
+  ```bash
+  admin-password: xxx
+  db-password: xxx
+  manager-token: xxx
+  redis-password: xxx
+  service-token: xxx
+  user-password: xxx
   ```
 
 ---
@@ -35,57 +83,130 @@ This guide walks you through safely **migrating your Kubernetes-based Kasm DB** 
 ### 2. Updating StatefulSet PVC Retention Policy
 
 ```bash
-helm upgrade kasm kasm-single-zone -n kasm-namespace --reuse-values --set kasmApp.servicesToDeploy.db.persistentVolumeClaimRetentionPolicy.enabled=true --set kasmApp.servicesToDeploy.db.persistentVolumeClaimRetentionPolicy.whenDeleted=Retain
+helm upgrade --no-hooks {helm-release-name} {kasm-chart-path} -n {namespace} --reuse-values --set database.storage.retentionPolicy.whenDeleted=Retain --set annotations.pvc."helm\.sh/resource-policy"="keep"
+```
+Replace the placeholders:
+1. {helm-release-name}:  Your Kasm helm release name
+2. {namespace}: The namespace where your Kasm deployment is running
+3. {kasm-chart-path}: Path to the kasm chart directory (e.g., `/home/user/kasm-helm/charts/kasm`)
+
+Verify the retention policy is updated:
+```bash
+kubectl -n {namespace} get statefulset {kasm-db-statefulset-name} -o yaml | grep whenDeleted
+```
+Replace `{kasm-db-statefulset-name}` with the actual db statefulset name, you can get the statefulset name by using the command `kubectl -n {namespace} get statefulset`. It should have the value of {helm-release-name}-db-statefulset.
+
+Expected output:
+```text
+  whenDeleted: Retain
 ```
 
-### 3. Delete Old Kasm Helm Release
+Verify the pvc `kasm-db-dump-pvc` is updated
+```bash
+kubectl -n {namespace} get pvc kasm-db-dump-pvc -o yaml | grep "helm\.sh/resource-policy"
+```
+
+Expected output:
+```text
+  helm.sh/resource-policy: keep
+```
+
+---
+
+### 3. Delete Kasm Helm Release
 
 > ⚠️ **Warning:**\
-> Because of the earlier step (2. Updating the StatefulSet PVC Retention Policy), this action removes your Kasm deployment but retains your database and persistent volumes.
+>  will remove your Kasm deployment. However, because you updated the StatefulSet PVC retention policy in Step 2, your database and persistent volumes will be preserved.
 
 
 ```bash
-helm delete kasm -n kasm-namespace
+helm uninstall kasm -n {namespace} 
 ```
 
 ---
 
-### 4. Download and Configure New Helm Chart
+### 4. Update Helm Chart Values for Migration
 
-- Download the latest chart and follow [main README instructions](../README.md) to get the correct release branch.
-- Refer to the [Detailed docs](../charts/kasm/README.md) for available configuration settings.
+> ⚠️ **Warning:**\
+> Make sure you have already created the database and database user in your postgres instance before continue further.
+> Recommended DB name: `kasm`
+> Recommended DB username: `kasmapp`
 
----
 
-### 5. Update Helm Chart Values for Upgrade (even if you are not upgrading, the process is the same)
+**Step 1: Create the Database Password Secret**
 
-Edit `charts/kasm/values.yaml` in the new chart directory:
+Store the manually created database user's password in a Kubernetes secret:
+
+```bash
+kubectl -n {namespace} create secret generic kasm-db-secret --from-literal=kasm-db-secret-key='YOUR_PASSWORD' 
+```
+
+- Replace `{namespace}` with the Kubernetes namespace used in previous steps.
+- Replace `YOUR_PASSWORD` with the password of the manually created PostgreSQL user.
+
+**Step 2: Configure the values.yaml**
+Ensure the `database` and `dbManagement` sections in your values.yaml is configured correctly for your external PostgreSQL instance.
+
+| Variable                                    | Value        | Description                                                                                                                                                                 |
+|---------------------------------------------|--------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `database.standalone`                       | `true`       | Disable Kasm’s internal DB and use your external PostgreSQL v14 instance.                                                                                                   |
+| `database.hostname`                         | *your value* | The hostname or IP address of your PostgreSQL server.                                                                                                                       |
+| `database.port`                             | *your value* | The port number used to connect to the PostgreSQL server.                                                                                                                   |
+| `database.kasmDbName`                       | *your value* | Name of the Kasm database.                                                                                                                                                  |
+| `database.kasmDbUser`                       | *your value* | Username that Kasm uses to access the database.                                                                                                                             |
+| `database.kasmDbSecret`                     | *your value* | Kubernetes Secret name/key that holds the password for kasmDbUser.                                                                                                          |
+| `database.postgresMasterUser`               | `{}`         | Keep this field empty `{}` for standalone db migration.                                                                                                                     |
+| `dbManagement.initialize`                   | `false`      | Disable the DB initialisation                                                                                                                                               |
+| `dbManagement.upgrade.enable`               | `true`       | Enable the DB upgrade/migration                                                                                                                                             |
+| `dbManagement.upgrade.oldDbSecretsName`     | *your value* | The old kasm secret name, run command `kubectl -n {namespace} get secret \| grep secrets` to get the secret name. It should have the value of `{helm-release-name}-secrets` |
+| `dbManagement.upgrade.oldDbBackupFileName`  | *your value* | The file name of the db dump file from Step 1, e.g., `kasm_dump_20250821_13.56.39.tar`                                                                                      |
+
+
+See example below.
 
 ```yaml
+database:
+  standalone: true
+  hostname: "YOUR_DB_HOSTNAME"
+  port: "YOUR_DB_PORT"
+  kasmDbName: kasm
+  kasmDbUser: kasmapp
+  kasmDbSecret:
+    name: kasm-db-secret
+    key: kasm-db-secret-key
+  postgresMasterUser: {}
 dbManagement:
   initialize: false
   upgrade:
     enable: true
+    oldDbSecretsName: kasm-secrets
+    oldDbBackupFileName: kasm_dump_20250901_14.26.05.tar
 ```
-
-> 🔎 *Leave other **`dbManagement.upgrade`** values as default unless you customized your PVC or DB backup file name.*
 
 ---
 
-### 6. Install the New Release
+### 5. Reinstall the Kasm Helm Release
 
 ```bash
 cd /path/to/kasm-helm-new/charts
-helm install kasm ./kasm -n kasm-namespace
+helm install kasm ./kasm -n {namespace}
 ```
+
+Notes:
+1. The `{namespace}` must be the same namespace where your backup job was deployed.
+2. Ensure you have already updated your values.yaml (see Step 4) before installing.
 
 ---
 
-### 7. Verify and Log In
+### 6. Verify and Log In
 
 - Wait several minutes for all services to come online.
 - Access your Kasm environment using the `publicAddr` value you set.
-- For admin and user credentials, see the output or retrieve secrets via:
+- For admin and user credentials, see the helm note via:
   ```bash
-  kubectl get secret --namespace kasm-namespace kasm-helm-secrets -o jsonpath="{.data.admin-password}" | base64 -d
+  helm get notes kasm -n {namespace}
   ```
+
+## Upgrade Troubleshooting
+
+Click here for [Troubleshooting assistance](./troubleshooting.md)

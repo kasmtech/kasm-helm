@@ -4,7 +4,7 @@ description: Deploy Kasm in GCP using GCP Cloud SQL
 author: Kasm Technologies
 ---
 
-# GKE Native Ingress
+# GCP Cloud SQL
 
 This guide explains how to deploy **Kasm** into **Google Cloud Platform (GCP) GKE** (Google Kubernetes Engine) using the GCP Cloud SQL. 
 

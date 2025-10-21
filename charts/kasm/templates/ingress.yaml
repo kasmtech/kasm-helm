@@ -35,6 +35,20 @@ spec:
       secretName: {{ .Values.certificate.secretName }}
   {{-  end }}
   rules:
+  {{- with .Values.kasmZones }}
+  {{- range $idx, $zone := . }}
+  - host: {{ $zone.upstream_auth_addr | quote }}
+    http:
+      paths:
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: {{ printf "%s-%s" $constants.proxy.svc (regexReplaceAll "[^a-zA-Z0-9]+" $zone.name "-" | lower) }}
+              port:
+                number: {{ if eq $.Values.ingress.backendProtocol "https" }}{{ $constants.proxy.https }}{{ else }}{{ $constants.proxy.http }}{{ end }}
+  {{- end }}
+  {{- end }}
   - host: {{ .Values.publicAddr | quote }}
     http:
       paths:
@@ -51,18 +65,4 @@ spec:
             {{- end }}
               port:
                 number: {{ if eq .Values.ingress.backendProtocol "https" }}{{ $constants.proxy.https }}{{ else }}{{ $constants.proxy.http }}{{ end }}
-  {{- with .Values.kasmZones }}
-  {{- range $idx, $zone := . }}
-  - host: {{ $zone.upstream_auth_addr | quote }}
-    http:
-      paths:
-        - path: /
-          pathType: Prefix
-          backend:
-            service:
-              name: {{ printf "%s-%s" $constants.proxy.svc (regexReplaceAll "[^a-zA-Z0-9]+" $zone.name "-" | lower) }}
-              port:
-                number: {{ if eq $.Values.ingress.backendProtocol "https" }}{{ $constants.proxy.https }}{{ else }}{{ $constants.proxy.http }}{{ end }}
-  {{- end }}
-  {{- end }}
 {{- end }}

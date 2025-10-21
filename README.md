@@ -1,6 +1,6 @@
 # Kasm on Kubernetes (Helm Chart)
 
-![Version: 1.1170.0](https://img.shields.io/badge/Version-1.1170.0-informational?style=flat-square) ![AppVersion: 1.17.0](https://img.shields.io/badge/AppVersion-1.17.0-informational?style=flat-square)
+![Version: 1.1180.0](https://img.shields.io/badge/Version-1.1180.0-informational?style=flat-square) ![AppVersion: 1.18.0](https://img.shields.io/badge/AppVersion-1.18.0-informational?style=flat-square)
 
 > ⚠️ **This Helm chart is not intended for production use.**  
 > For advanced configurations, see the [Chart README](./charts/kasm/README.md).
@@ -35,7 +35,7 @@ Get up and running in just a few steps!
    *(Replace variables in brackets with your own values.)*
     ```bash
     helm install kasm ./charts/kasm \
-      --namespace kasm-namespace \
+      --namespace {namespace} \
       --set publicAddr="kasm.contoso.com" \
       --set certificate.secretName="<some-cert-secret>"
     ```
@@ -57,26 +57,32 @@ After deployment, get your connection details and credentials:
   - Username: `admin@kasm.local`
   - Retrieve password:
     ```bash
-    kubectl get secret --namespace kasm-namespace kasm-helm-secrets \
+    kubectl get secret --namespace {namespace} {secret-name} \
       -o jsonpath="{.data.admin-password}" | base64 -d
+    ```
+
+    Replace `{namespace}` the namespace where the Kasm is running, `{secret-name}` with your actual kasm secret name.
+    You can retrieve secret name by running:
+    ```bash
+    kubectl -n {namespace} get secrets | grep secrets
     ```
 
 - **User Login:**  
   - Username: `user@kasm.local`
   - Retrieve password:
     ```bash
-    kubectl get secret --namespace kasm-namespace kasm-helm-secrets \
+    kubectl get secret --namespace {namespace} {secret-name} \
       -o jsonpath="{.data.user-password}" | base64 -d
     ```
 
+
 ### Other Secrets
 
-| Secret Description         | Command                                                                 |
-|---------------------------|-------------------------------------------------------------------------|
-| Database Password         | `kubectl get secret --namespace kasm-namespace kasm-helm-secrets -o jsonpath="{.data.db-password}" \| base64 -d`         |
-| Manager Token             | `kubectl get secret --namespace kasm-namespace kasm-helm-secrets -o jsonpath="{.data.manager-token}" \| base64 -d`     |
-| Service Registration Token| `kubectl get secret --namespace kasm-namespace kasm-helm-secrets -o jsonpath="{.data.service-token}" \| base64 -d`     |
-| Redis Password            | `kubectl get secret --namespace kasm-namespace kasm-helm-secrets -o jsonpath="{.data.redis-password}" \| base64 -d`    |
+| Secret Description          | Command                                                                                                       |
+|-----------------------------|---------------------------------------------------------------------------------------------------------------|
+| Database Password           | `kubectl get secret --namespace {namespace} {secret-name} -o jsonpath="{.data.db-password}" \| base64 -d`     |
+| Manager Token               | `kubectl get secret --namespace {namespace} {secret-name} -o jsonpath="{.data.manager-token}" \| base64 -d`   |
+| Service Registration Token  | `kubectl get secret --namespace {namespace} {secret-name} -o jsonpath="{.data.service-token}" \| base64 -d`   |
 
 > **Tip:**  
 > Store these secrets in a secure vault. They will be reused for chart upgrades.

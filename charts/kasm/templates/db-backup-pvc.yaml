@@ -17,6 +17,7 @@ metadata:
     {{- with .Values.labels }}{{- toYaml . | nindent 4 }}{{- end }}
   {{- with .Values.annotations.pvc }}
   annotations: {{- toYaml . | nindent 4 }}
+    helm.sh/resource-policy: keep
   {{- end }}
 spec:
   {{- with .Values.dbManagement.backupCron.storageClass }}

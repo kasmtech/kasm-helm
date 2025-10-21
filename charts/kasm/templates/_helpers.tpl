@@ -44,20 +44,6 @@ guac:
     - 3002
     - 3003
     - 3004
-share:
-  component: share
-  svc: kasm-share
-  portName: share-pt
-  name: {{ printf "%s-share" .Release.Name }}
-  image: {{ printf "%s:%s" .Values.components.share.image.repository .Values.components.share.image.tag }}
-  port: 8182
-redis:
-  component: redis
-  svc: kasm-redis
-  portName: redis-pt
-  name: {{ printf "%s-redis" .Release.Name }}
-  image: {{ printf "%s:%s" .Values.components.redis.image.repository .Values.components.redis.image.tag }}
-  port: 6379
 rdpGateway:
   component: rdp-gateway
   svc: kasm-rdp-gateway
@@ -305,16 +291,6 @@ Example usage:
       "medium" 2
       "large" 3
     )
-    "share" (dict
-      "small" 1
-      "medium" 2
-      "large" 3
-    )
-    "redis" (dict
-      "small" 1
-      "medium" 1
-      "large" 1
-    )
   }}
   {{- if hasKey $presetSizes .node }}
     {{- if hasKey (get $presetSizes .node) .size }}
@@ -431,34 +407,6 @@ Example usage:
       "large" (dict 
         "requests" (dict "cpu" "150m" "memory" "64Mi" "ephemeral-storage" "50Mi")
         "limits" (dict "cpu" "1500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
-      )
-    )
-    "share" (dict
-      "small" (dict 
-        "requests" (dict "cpu" "100m" "memory" "64Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
-      )
-      "medium" (dict 
-        "requests" (dict "cpu" "100m" "memory" "64Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
-      )
-      "large" (dict 
-        "requests" (dict "cpu" "100m" "memory" "64Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
-      )
-    )
-    "redis" (dict
-      "small" (dict 
-        "requests" (dict "cpu" "100m" "memory" "64Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
-      )
-      "medium" (dict 
-        "requests" (dict "cpu" "100m" "memory" "64Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
-      )
-      "large" (dict 
-        "requests" (dict "cpu" "100m" "memory" "64Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
       )
     )
   }}
