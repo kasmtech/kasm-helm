@@ -2,8 +2,9 @@
 
 ![Version: 1.1180.0](https://img.shields.io/badge/Version-1.1180.0-informational?style=flat-square) ![AppVersion: 1.18.0](https://img.shields.io/badge/AppVersion-1.18.0-informational?style=flat-square)
 
-> ⚠️ **This Helm chart is not intended for production use.**  
+> ⚠️ **This Helm chart is currently under technical Preview. Potential users should be advised that it is suitable for demo and evaluation purposes.**  
 > For advanced configurations, see the [Chart README](./charts/kasm/README.md).
+
 
 ## Overview
 
