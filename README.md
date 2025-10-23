@@ -104,7 +104,6 @@ After deployment, get your connection details and credentials:
 
 - For detailed chart values and configuration, see the [Chart README](./charts/kasm/README.md).
 - For backup, restore, or upgrade procedures, see this [additional documentation](./docs)
-- For cloud deployments refer to [Example Deployments](./docs/examples/README.md).
 
 ---
 
