@@ -363,7 +363,7 @@ object
 				<div style="max-width: 520px;">
 <pre lang="json">
 repository: kasmweb/postgres
-tag: 1.17.0
+tag: 1.18.0
 </pre>
 </div>
 			</td>
@@ -617,7 +617,7 @@ object
 				<div style="max-width: 520px;">
 <pre lang="json">
 repository: kasmweb/proxy
-tag: 1.17.0
+tag: 1.18.0
 </pre>
 </div>
 			</td>
@@ -674,7 +674,7 @@ object
 				<div style="max-width: 520px;">
 <pre lang="json">
 repository: kasmweb/api
-tag: 1.17.0
+tag: 1.18.0
 </pre>
 </div>
 			</td>
@@ -731,7 +731,7 @@ object
 				<div style="max-width: 520px;">
 <pre lang="json">
 repository: kasmweb/manager
-tag: 1.17.0
+tag: 1.18.0
 </pre>
 </div>
 			</td>
@@ -788,7 +788,7 @@ object
 				<div style="max-width: 520px;">
 <pre lang="json">
 repository: kasmweb/kasm-guac
-tag: 1.17.0
+tag: 1.18.0
 </pre>
 </div>
 			</td>
@@ -859,7 +859,7 @@ object
 				<div style="max-width: 520px;">
 <pre lang="json">
 repository: kasmweb/rdp-gateway
-tag: 1.17.0
+tag: 1.18.0
 </pre>
 </div>
 			</td>
@@ -930,7 +930,7 @@ object
 				<div style="max-width: 520px;">
 <pre lang="json">
 repository: kasmweb/rdp-https-gateway
-tag: 1.17.0
+tag: 1.18.0
 </pre>
 </div>
 			</td>
@@ -1001,7 +1001,7 @@ object
 				<div style="max-width: 520px;">
 <pre lang="json">
 repository: kasmweb/share
-tag: 1.17.0
+tag: 1.18.0
 </pre>
 </div>
 			</td>
