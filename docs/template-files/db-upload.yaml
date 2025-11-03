@@ -15,7 +15,7 @@ spec:
       restartPolicy: OnFailure
       initContainers:
         - name: kasm-old-db-upload-set-perms
-          image: kasmweb/api:1.17.0
+          image: kasmweb/api:1.18.0
           imagePullPolicy: IfNotPresent
           command:
             - /bin/sh
@@ -33,7 +33,7 @@ spec:
               mountPath: /data/kasm-db-dump
       containers:
         - name: kasm-old-db-upload-container
-          image: kasmweb/api:1.17.0
+          image: kasmweb/api:1.18.0
           imagePullPolicy: IfNotPresent
           command:
             - "/bin/bash"
