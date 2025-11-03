@@ -2,7 +2,7 @@
 
 Welcome to the Kasm Helm deployment documentation!
 
-Use this guide as your starting point for deploying Kasm into your Kubernetes environment. You'll find links to key how-tos, upgrade instructions, certificate management, and cloud-specific examples. For deep dives on Kasm features and advanced platform administration, refer to the [official Kasm documentation](https://kasmweb.com/docs/latest/index.html).
+Use this guide as your starting point for deploying Kasm into your Kubernetes environment. You'll find links to key how-tos, upgrade instructions, certificate management, and cloud-specific examples. For deep dives on Kasm features and advanced platform administration, refer to the [official Kasm documentation](https://docs.kasm.com).
 
 ---
 

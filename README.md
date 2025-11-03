@@ -7,7 +7,7 @@
 
 ## Overview
 
-This Helm chart enables you to deploy [Kasm Workspaces](https://kasmweb.com/) in Kubernetes with minimal friction.
+This Helm chart enables you to deploy [Kasm Workspaces](https://kasm.com/) in Kubernetes with minimal friction.
 For more detailed information or procedures for upgrading your Kasm Kubernetes deployment, refer to our **[additional documentation](./docs)**.
 
 ## Quickstart

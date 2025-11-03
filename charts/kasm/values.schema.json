@@ -249,7 +249,7 @@
             },
             "enabled": {
               "default": true,
-              "description": "Use this setting to enable/disable deployment of the Kasm Guacamole web RDP service - [Kasm Guac Service](https://kasmweb.com/docs/latest/guide/connection_proxies.html#guacamole-guac).",
+              "description": "Use this setting to enable/disable deployment of the Kasm Guacamole web RDP service - [Kasm Guac Service](https://docs.kasm.com/docs/guide/connection_proxies#guacamole-guac).",
               "title": "enabled",
               "type": "boolean"
             },
@@ -420,7 +420,7 @@
             },
             "enabled": {
               "default": true,
-              "description": "Use this setting to enable/disable deployment of the Kasm RDP Gateway service -  [Kasm RDP Gateway](https://kasmweb.com/docs/latest/guide/connection_proxies.html#rdp-gateway).",
+              "description": "Use this setting to enable/disable deployment of the Kasm RDP Gateway service -  [Kasm RDP Gateway](https://docs.kasm.com/docs/guide/connection_proxies#rdp-gateway).",
               "title": "enabled",
               "type": "boolean"
             },
@@ -481,7 +481,7 @@
             },
             "enabled": {
               "default": true,
-              "description": "Use this setting to enable/disable deployment of the Kasm RDP HTTPS Gateway service. This service allows users to use native RDP clients via HTTPS connections rather than exposing 3389 - [Kasm RDP HTTPS Gateway](https://kasmweb.com/docs/latest/guide/connection_proxies.html#rdp-https-gateway).",
+              "description": "Use this setting to enable/disable deployment of the Kasm RDP HTTPS Gateway service. This service allows users to use native RDP clients via HTTPS connections rather than exposing 3389 - [Kasm RDP HTTPS Gateway](https://docs.kasm.com/docs/guide/connection_proxies#rdp-https-gateway).",
               "title": "enabled",
               "type": "boolean"
             },
@@ -1064,7 +1064,7 @@
       ]
     },
     "kasmZones": {
-      "description": "This is a list of objects defining different Kasm Zone configurations for your deployment. This configuration is typically used for multi-region, large, or custom deployments where the customer requires a high degree of configurability and has multiple resources in disparate areas.  NOTE: If you configure custom zones below, you MUST use a valid `ingress` configuration due to the increased deployment complexity of a multi-zone Kasm deployment. Refer to the Kasm [Deployment Zones](https://kasmweb.com/docs/latest/guide/zones/deployment_zones.html) documentation for more information on Kasm Zones.",
+      "description": "This is a list of objects defining different Kasm Zone configurations for your deployment. This configuration is typically used for multi-region, large, or custom deployments where the customer requires a high degree of configurability and has multiple resources in disparate areas.  NOTE: If you configure custom zones below, you MUST use a valid `ingress` configuration due to the increased deployment complexity of a multi-zone Kasm deployment. Refer to the Kasm [Deployment Zones](https://docs.kasm.com/docs/guide/deployment_zones) documentation for more information on Kasm Zones.",
       "title": "kasmZones",
       "type": "array",
       "items": {
@@ -1076,7 +1076,7 @@
             "type": "string"
           },
           "upstream_auth_addr": {
-            "description": "Define the Upstream Auth address of the Kasm Zones to deploy management resources for. Refer to [Deployment Zones](https://kasmweb.com/docs/latest/guide/zones/deployment_zones.html) for more info.",
+            "description": "Define the Upstream Auth address of the Kasm Zones to deploy management resources for. Refer to [Deployment Zones](https://docs.kasm.com/docs/guide/deployment_zones) for more info.",
             "title": "upstream_auth_addr",
             "type": "string"
           }
@@ -1101,7 +1101,7 @@
     },
     "proxyService": {
       "additionalProperties": false,
-      "description": "Configure the external-facing service type to use. Allowed service types: ClusterIP or LoadBalancer. The service.annotations defined here only apply to the `proxy` service (`proxy-service-external.yaml` file). If you wish to apply annotations to all services, use the annotations.service value at the bottom of this chart.  NOTE: If ingress.enabled or route.enabled set to `true` service.type MUST be set to `ClusterIP`. Also, if you wish to deploy a multi-zone Kasm (see [Deployment Zones](https://kasmweb.com/docs/latest/guide/zones/deployment_zones.html) documentation for reference), you MUST use either a Route or an Ingress and set the `proxyService.type` to `ClusterIP`.",
+      "description": "Configure the external-facing service type to use. Allowed service types: ClusterIP or LoadBalancer. The service.annotations defined here only apply to the `proxy` service (`proxy-service-external.yaml` file). If you wish to apply annotations to all services, use the annotations.service value at the bottom of this chart.  NOTE: If ingress.enabled or route.enabled set to `true` service.type MUST be set to `ClusterIP`. Also, if you wish to deploy a multi-zone Kasm (see [Deployment Zones](https://docs.kasm.com/docs/guide/deployment_zones) documentation for reference), you MUST use either a Route or an Ingress and set the `proxyService.type` to `ClusterIP`.",
       "properties": {
         "annotations": {
           "additionalProperties": true,
