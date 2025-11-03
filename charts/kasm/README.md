@@ -1,6 +1,6 @@
 # Kasm on Kubernetes
 
-![Version: 1.1170.0](https://img.shields.io/badge/Version-1.1170.0-informational?style=flat-square) ![AppVersion: 1.17.0](https://img.shields.io/badge/AppVersion-1.17.0-informational?style=flat-square)
+![Version: 1.1180.0](https://img.shields.io/badge/Version-1.1180.0-informational?style=flat-square) ![AppVersion: 1.18.0](https://img.shields.io/badge/AppVersion-1.18.0-informational?style=flat-square)
 
 Kasm is a platform specializing in providing secure browser-based workspaces for a wide range of applications and industries. Its main goal is to provide isolated and secure environments that can be accessed via web browsers, ensuring that users can perform tasks without risking the security of their local systems.
 
@@ -1019,7 +1019,7 @@ true
 </pre>
 </div>
 			</td>
-			<td>Use this setting to enable/disable deployment of the Kasm Share and associated Redis services -  [Kasm Share Service](https://docs.kasm.com/docs/guide/session_sharing). </td>
+			<td>Use this setting to enable/disable deployment of the Kasm Share -  [Kasm Share Service](https://docs.kasm.com/docs/guide/session_sharing). </td>
 		</tr>
 		<tr>
 			<td id="components--share--annotations"><a href="./values.yaml#L372">components.share.annotations</a></td>
@@ -1062,63 +1062,6 @@ object
 </div>
 			</td>
 			<td>Custom labels to add to the Kasm Share Deployment</td>
-		</tr>
-		<tr>
-			<td id="components--redis--image"><a href="./values.yaml#L383">components.redis.image</a></td>
-			<td>
-object
-</td>
-			<td>
-				<div style="max-width: 520px;">
-<pre lang="json">
-repository: redis
-tag: 5-alpine
-</pre>
-</div>
-			</td>
-			<td>Configure the image repository where the image is stored. Use this to point to an private hosted container registry instead of our public DockerHub hosted one. </td>
-		</tr>
-		<tr>
-			<td id="components--redis--annotations"><a href="./values.yaml#L387">components.redis.annotations</a></td>
-			<td>
-object
-</td>
-			<td>
-				<div style="max-width: 520px;">
-<pre lang="json">
-{}
-</pre>
-</div>
-			</td>
-			<td>Custom annotations to add to the Kasm Redis Deployment</td>
-		</tr>
-		<tr>
-			<td id="components--redis--resources"><a href="./values.yaml#L389">components.redis.resources</a></td>
-			<td>
-object
-</td>
-			<td>
-				<div style="max-width: 520px;">
-<pre lang="json">
-{}
-</pre>
-</div>
-			</td>
-			<td>Manually configure the Kasm Redis Deployment resources. This overrides the pre-defined `deploymentSize` values.</td>
-		</tr>
-		<tr>
-			<td id="components--redis--labels"><a href="./values.yaml#L391">components.redis.labels</a></td>
-			<td>
-object
-</td>
-			<td>
-				<div style="max-width: 520px;">
-<pre lang="json">
-{}
-</pre>
-</div>
-			</td>
-			<td>Custom labels to add to the Kasm Redis Deployment</td>
 		</tr>
 		<tr>
 			<td id="imagePullPolicy"><a href="./values.yaml#L399">imagePullPolicy</a></td>
