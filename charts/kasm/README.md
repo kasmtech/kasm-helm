@@ -1,10 +1,10 @@
 # Kasm on Kubernetes
 
-![Version: 1.1170.0](https://img.shields.io/badge/Version-1.1170.0-informational?style=flat-square) ![AppVersion: 1.17.0](https://img.shields.io/badge/AppVersion-1.17.0-informational?style=flat-square)
+![Version: 1.1180.0](https://img.shields.io/badge/Version-1.1180.0-informational?style=flat-square) ![AppVersion: 1.18.0](https://img.shields.io/badge/AppVersion-1.18.0-informational?style=flat-square)
 
 Kasm is a platform specializing in providing secure browser-based workspaces for a wide range of applications and industries. Its main goal is to provide isolated and secure environments that can be accessed via web browsers, ensuring that users can perform tasks without risking the security of their local systems.
 
-**Homepage:** <https://kasmweb.com>
+**Homepage:** <https://kasm.com>
 
 ## Maintainers
 
@@ -15,7 +15,7 @@ Kasm is a platform specializing in providing secure browser-based workspaces for
 <!-- This README.md.gotmpl is used by helm-docs to generate README.md which in turn generates the information on https://artifacthub.io/packages/helm/nautobot/nautobot so there are parts of this which are duplicated from `docs` -->
 ## Documentation
 
-Please see our [official documentation site](https://kasmweb.com/docs/latest/index.html) for more information.
+Please see our [official documentation site](https://docs.kasm.com) for more information.
 
 <!-- This section is a duplicate of docs/installation/prerequisites.md -->
 ## Prerequisites
@@ -75,7 +75,7 @@ list
 </pre>
 </div>
 			</td>
-			<td>This is a list of objects defining different Kasm Zone configurations for your deployment. This configuration is typically used for multi-region, large, or custom deployments where the customer requires a high degree of configurability and has multiple resources in disparate areas.  NOTE: If you configure custom zones below, you MUST use a valid `ingress` configuration due to the increased deployment complexity of a multi-zone Kasm deployment. Refer to the Kasm [Deployment Zones](https://kasmweb.com/docs/latest/guide/zones/deployment_zones.html) documentation for more information on Kasm Zones. </td>
+			<td>This is a list of objects defining different Kasm Zone configurations for your deployment. This configuration is typically used for multi-region, large, or custom deployments where the customer requires a high degree of configurability and has multiple resources in disparate areas.  NOTE: If you configure custom zones below, you MUST use a valid `ingress` configuration due to the increased deployment complexity of a multi-zone Kasm deployment. Refer to the Kasm [Deployment Zones](https://docs.kasm.com/docs/guide/deployment_zones) documentation for more information on Kasm Zones. </td>
 		</tr>
 		<tr>
 			<td id="proxyService"><a href="./values.yaml#L45">proxyService</a></td>
@@ -91,7 +91,7 @@ type: LoadBalancer
 </pre>
 </div>
 			</td>
-			<td>Configure the external-facing service type to use.  Allowed service types: ClusterIP or LoadBalancer.   The service.annotations defined here only apply to the `proxy` service (`proxy-service-external.yaml` file). If you wish to apply annotations to all services, use the annotations.service value at the bottom of this chart.  NOTE: If ingress.enabled or route.enabled set to `true` service.type MUST be set to `ClusterIP`. Also, if you wish to deploy a multi-zone Kasm (see [Deployment Zones](https://kasmweb.com/docs/latest/guide/zones/deployment_zones.html) documentation for reference), you MUST use either a Route or an Ingress and set the `proxyService.type` to `ClusterIP`. </td>
+			<td>Configure the external-facing service type to use.  Allowed service types: ClusterIP or LoadBalancer.   The service.annotations defined here only apply to the `proxy` service (`proxy-service-external.yaml` file). If you wish to apply annotations to all services, use the annotations.service value at the bottom of this chart.  NOTE: If ingress.enabled or route.enabled set to `true` service.type MUST be set to `ClusterIP`. Also, if you wish to deploy a multi-zone Kasm (see [Deployment Zones](https://docs.kasm.com/docs/guide/deployment_zones) documentation for reference), you MUST use either a Route or an Ingress and set the `proxyService.type` to `ClusterIP`. </td>
 		</tr>
 		<tr>
 			<td id="ingress--enabled"><a href="./values.yaml#L55">ingress.enabled</a></td>
@@ -363,7 +363,7 @@ object
 				<div style="max-width: 520px;">
 <pre lang="json">
 repository: kasmweb/postgres
-tag: 1.17.0
+tag: 1.18.0
 </pre>
 </div>
 			</td>
@@ -617,7 +617,7 @@ object
 				<div style="max-width: 520px;">
 <pre lang="json">
 repository: kasmweb/proxy
-tag: 1.17.0
+tag: 1.18.0
 </pre>
 </div>
 			</td>
@@ -674,7 +674,7 @@ object
 				<div style="max-width: 520px;">
 <pre lang="json">
 repository: kasmweb/api
-tag: 1.17.0
+tag: 1.18.0
 </pre>
 </div>
 			</td>
@@ -731,7 +731,7 @@ object
 				<div style="max-width: 520px;">
 <pre lang="json">
 repository: kasmweb/manager
-tag: 1.17.0
+tag: 1.18.0
 </pre>
 </div>
 			</td>
@@ -788,7 +788,7 @@ object
 				<div style="max-width: 520px;">
 <pre lang="json">
 repository: kasmweb/kasm-guac
-tag: 1.17.0
+tag: 1.18.0
 </pre>
 </div>
 			</td>
@@ -806,7 +806,7 @@ true
 </pre>
 </div>
 			</td>
-			<td>Use this setting to enable/disable deployment of the Kasm Guacamole web RDP service -  [Kasm Guac Service](https://kasmweb.com/docs/latest/guide/connection_proxies.html#guacamole-guac). </td>
+			<td>Use this setting to enable/disable deployment of the Kasm Guacamole web RDP service -  [Kasm Guac Service](https://docs.kasm.com/docs/guide/connection_proxies#guacamole-guac). </td>
 		</tr>
 		<tr>
 			<td id="components--guac--annotations"><a href="./values.yaml#L314">components.guac.annotations</a></td>
@@ -859,7 +859,7 @@ object
 				<div style="max-width: 520px;">
 <pre lang="json">
 repository: kasmweb/rdp-gateway
-tag: 1.17.0
+tag: 1.18.0
 </pre>
 </div>
 			</td>
@@ -877,7 +877,7 @@ true
 </pre>
 </div>
 			</td>
-			<td>Use this setting to enable/disable deployment of the Kasm RDP Gateway service -  [Kasm RDP Gateway](https://kasmweb.com/docs/latest/guide/connection_proxies.html#rdp-gateway). </td>
+			<td>Use this setting to enable/disable deployment of the Kasm RDP Gateway service -  [Kasm RDP Gateway](https://docs.kasm.com/docs/guide/connection_proxies#rdp-gateway). </td>
 		</tr>
 		<tr>
 			<td id="components--rdpGateway--annotations"><a href="./values.yaml#L333">components.rdpGateway.annotations</a></td>
@@ -930,7 +930,7 @@ object
 				<div style="max-width: 520px;">
 <pre lang="json">
 repository: kasmweb/rdp-https-gateway
-tag: 1.17.0
+tag: 1.18.0
 </pre>
 </div>
 			</td>
@@ -948,7 +948,7 @@ true
 </pre>
 </div>
 			</td>
-			<td>Use this setting to enable/disable deployment of the Kasm RDP HTTPS Gateway service. This service allows users to use native RDP clients via HTTPS connections rather than exposing 3389 -  [Kasm RDP HTTPS Gateway](https://kasmweb.com/docs/latest/guide/connection_proxies.html#rdp-https-gateway). </td>
+			<td>Use this setting to enable/disable deployment of the Kasm RDP HTTPS Gateway service. This service allows users to use native RDP clients via HTTPS connections rather than exposing 3389 -  [Kasm RDP HTTPS Gateway](https://docs.kasm.com/docs/guide/connection_proxies#rdp-https-gateway). </td>
 		</tr>
 		<tr>
 			<td id="components--rdpHttpsGateway--annotations"><a href="./values.yaml#L353">components.rdpHttpsGateway.annotations</a></td>
@@ -1001,7 +1001,7 @@ object
 				<div style="max-width: 520px;">
 <pre lang="json">
 repository: kasmweb/share
-tag: 1.17.0
+tag: 1.18.0
 </pre>
 </div>
 			</td>
@@ -1019,7 +1019,7 @@ true
 </pre>
 </div>
 			</td>
-			<td>Use this setting to enable/disable deployment of the Kasm Share and associated Redis services -  [Kasm Share Service](https://kasmweb.com/docs/latest/guide/session_sharing.html). </td>
+			<td>Use this setting to enable/disable deployment of the Kasm Share -  [Kasm Share Service](https://docs.kasm.com/docs/guide/session_sharing). </td>
 		</tr>
 		<tr>
 			<td id="components--share--annotations"><a href="./values.yaml#L372">components.share.annotations</a></td>
@@ -1062,63 +1062,6 @@ object
 </div>
 			</td>
 			<td>Custom labels to add to the Kasm Share Deployment</td>
-		</tr>
-		<tr>
-			<td id="components--redis--image"><a href="./values.yaml#L383">components.redis.image</a></td>
-			<td>
-object
-</td>
-			<td>
-				<div style="max-width: 520px;">
-<pre lang="json">
-repository: redis
-tag: 5-alpine
-</pre>
-</div>
-			</td>
-			<td>Configure the image repository where the image is stored. Use this to point to an private hosted container registry instead of our public DockerHub hosted one. </td>
-		</tr>
-		<tr>
-			<td id="components--redis--annotations"><a href="./values.yaml#L387">components.redis.annotations</a></td>
-			<td>
-object
-</td>
-			<td>
-				<div style="max-width: 520px;">
-<pre lang="json">
-{}
-</pre>
-</div>
-			</td>
-			<td>Custom annotations to add to the Kasm Redis Deployment</td>
-		</tr>
-		<tr>
-			<td id="components--redis--resources"><a href="./values.yaml#L389">components.redis.resources</a></td>
-			<td>
-object
-</td>
-			<td>
-				<div style="max-width: 520px;">
-<pre lang="json">
-{}
-</pre>
-</div>
-			</td>
-			<td>Manually configure the Kasm Redis Deployment resources. This overrides the pre-defined `deploymentSize` values.</td>
-		</tr>
-		<tr>
-			<td id="components--redis--labels"><a href="./values.yaml#L391">components.redis.labels</a></td>
-			<td>
-object
-</td>
-			<td>
-				<div style="max-width: 520px;">
-<pre lang="json">
-{}
-</pre>
-</div>
-			</td>
-			<td>Custom labels to add to the Kasm Redis Deployment</td>
 		</tr>
 		<tr>
 			<td id="imagePullPolicy"><a href="./values.yaml#L399">imagePullPolicy</a></td>

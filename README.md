@@ -8,7 +8,7 @@
 
 ## Overview
 
-This Helm chart enables you to deploy [Kasm Workspaces](https://kasmweb.com/) in Kubernetes with minimal friction.
+This Helm chart enables you to deploy [Kasm Workspaces](https://kasm.com/) in Kubernetes with minimal friction.
 For more detailed information or procedures for upgrading your Kasm Kubernetes deployment, refer to our **[additional documentation](./docs)**.
 
 ## Quickstart
@@ -93,7 +93,7 @@ After deployment, get your connection details and credentials:
 ## Upgrades & Versioning
 
 - **Branching:**  
-  This repo maintains a release branch matching each Kasm Workspaces version (e.g., `release/1.17.0`).  
+  This repo maintains a release branch matching each Kasm Workspaces version (e.g., `release/1.18.0`).  
   Use the matching branch for your Kasm deployment version.
 - **Development:**  
   Use the default `develop` branch for developer previews.

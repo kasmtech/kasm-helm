@@ -20,7 +20,7 @@ appVersion: 1.18.0
 name: kasm
 description: Kasm is a platform specializing in providing secure browser-based workspaces for a wide range of applications and industries. Its main goal is to provide isolated and secure environments that can be accessed via web browsers, ensuring that users can perform tasks without risking the security of their local systems.
 icon: https://kasm-static-content.s3.amazonaws.com/icons/kasm-logo-small.png
-home: https://kasmweb.com
+home: https://kasm.com
 keywords:
   - kasm
   - vdi

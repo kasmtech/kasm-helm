@@ -22,7 +22,7 @@ publicAddr: ""
 #
 # NOTE: If you configure custom zones below, you MUST use a valid `ingress` configuration due to the increased
 # deployment complexity of a multi-zone Kasm deployment. Refer to the Kasm
-# [Deployment Zones](https://kasmweb.com/docs/latest/guide/zones/deployment_zones.html) documentation for more
+# [Deployment Zones](https://docs.kasm.com/docs/guide/deployment_zones) documentation for more
 # information on Kasm Zones.
 #
 # The first zone in the list is treated as the primary zone.
@@ -42,7 +42,7 @@ kasmZones: []
 # If you wish to apply annotations to all services, use the annotations.service value at the bottom of this chart.
 #
 # NOTE: If ingress.enabled or route.enabled set to `true` service.type MUST be set to `ClusterIP`. Also, if you
-# wish to deploy a multi-zone Kasm (see [Deployment Zones](https://kasmweb.com/docs/latest/guide/zones/deployment_zones.html)
+# wish to deploy a multi-zone Kasm (see [Deployment Zones](https://docs.kasm.com/docs/guide/deployment_zones)
 # documentation for reference), you MUST use either a Route or an Ingress and set the `proxyService.type` to `ClusterIP`.
 #
 proxyService:
@@ -310,7 +310,7 @@ components:
       repository: kasmweb/kasm-guac
       tag: 1.18.0
     # components.guac.enabled -- Use this setting to enable/disable deployment of the Kasm Guacamole web RDP service - 
-    # [Kasm Guac Service](https://kasmweb.com/docs/latest/guide/connection_proxies.html#guacamole-guac).
+    # [Kasm Guac Service](https://docs.kasm.com/docs/guide/connection_proxies#guacamole-guac).
     #
     enabled: true
     # components.guac.annotations -- Custom annotations to add to the Kasm Guac Deployment
@@ -329,7 +329,7 @@ components:
       repository: kasmweb/rdp-gateway
       tag: 1.18.0
     # components.rdpGateway.enabled -- Use this setting to enable/disable deployment of the Kasm RDP Gateway service - 
-    # [Kasm RDP Gateway](https://kasmweb.com/docs/latest/guide/connection_proxies.html#rdp-gateway).
+    # [Kasm RDP Gateway](https://docs.kasm.com/docs/guide/connection_proxies#rdp-gateway).
     #
     enabled: true
     # components.rdpGateway.annotations -- Custom annotations to add to the Kasm RDP Gateway Deployment
@@ -349,7 +349,7 @@ components:
       tag: 1.18.0
     # components.rdpHttpsGateway.enabled -- Use this setting to enable/disable deployment of the Kasm RDP HTTPS Gateway service.
     # This service allows users to use native RDP clients via HTTPS connections rather than exposing 3389 - 
-    # [Kasm RDP HTTPS Gateway](https://kasmweb.com/docs/latest/guide/connection_proxies.html#rdp-https-gateway).
+    # [Kasm RDP HTTPS Gateway](https://docs.kasm.com/docs/guide/connection_proxies#rdp-https-gateway.
     #
     enabled: true
     # components.rdpHttpsGateway.annotations -- Custom annotations to add to the Kasm RDP HTTPS Gateway Deployment
