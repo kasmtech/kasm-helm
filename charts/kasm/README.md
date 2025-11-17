@@ -1,8 +1,10 @@
 # Kasm on Kubernetes
 
-![Version: 1.1180.0](https://img.shields.io/badge/Version-1.1180.0-informational?style=flat-square) ![AppVersion: 1.18.0](https://img.shields.io/badge/AppVersion-1.18.0-informational?style=flat-square)
+![Version: 1.1181.0](https://img.shields.io/badge/Version-1.1181.0-informational?style=flat-square) ![AppVersion: 1.18.1](https://img.shields.io/badge/AppVersion-1.18.1-informational?style=flat-square)
 
 Kasm is a platform specializing in providing secure browser-based workspaces for a wide range of applications and industries. Its main goal is to provide isolated and secure environments that can be accessed via web browsers, ensuring that users can perform tasks without risking the security of their local systems.
+
+> Important: The [Kasm agent](https://docs.kasm.com/docs/install/multi_server_install#install-agent-server-roles) is not included in this Helm chart. It must be installed separately on a VM or bare-metal server. A Kasm session cannot be started without a running agent.
 
 **Homepage:** <https://kasm.com>
 
@@ -363,7 +365,7 @@ object
 				<div style="max-width: 520px;">
 <pre lang="json">
 repository: kasmweb/postgres
-tag: 1.18.0
+tag: 1.18.1
 </pre>
 </div>
 			</td>
@@ -617,7 +619,7 @@ object
 				<div style="max-width: 520px;">
 <pre lang="json">
 repository: kasmweb/proxy
-tag: 1.18.0
+tag: 1.18.1
 </pre>
 </div>
 			</td>
@@ -674,7 +676,7 @@ object
 				<div style="max-width: 520px;">
 <pre lang="json">
 repository: kasmweb/api
-tag: 1.18.0
+tag: 1.18.1
 </pre>
 </div>
 			</td>
@@ -731,7 +733,7 @@ object
 				<div style="max-width: 520px;">
 <pre lang="json">
 repository: kasmweb/manager
-tag: 1.18.0
+tag: 1.18.1
 </pre>
 </div>
 			</td>
@@ -788,7 +790,7 @@ object
 				<div style="max-width: 520px;">
 <pre lang="json">
 repository: kasmweb/kasm-guac
-tag: 1.18.0
+tag: 1.18.1
 </pre>
 </div>
 			</td>
@@ -859,7 +861,7 @@ object
 				<div style="max-width: 520px;">
 <pre lang="json">
 repository: kasmweb/rdp-gateway
-tag: 1.18.0
+tag: 1.18.1
 </pre>
 </div>
 			</td>
@@ -930,7 +932,7 @@ object
 				<div style="max-width: 520px;">
 <pre lang="json">
 repository: kasmweb/rdp-https-gateway
-tag: 1.18.0
+tag: 1.18.1
 </pre>
 </div>
 			</td>
@@ -1001,7 +1003,7 @@ object
 				<div style="max-width: 520px;">
 <pre lang="json">
 repository: kasmweb/share
-tag: 1.18.0
+tag: 1.18.1
 </pre>
 </div>
 			</td>

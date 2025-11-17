@@ -1,14 +1,16 @@
 # Kasm on Kubernetes (Helm Chart)
 
-![Version: 1.1180.0](https://img.shields.io/badge/Version-1.1180.0-informational?style=flat-square) ![AppVersion: 1.18.0](https://img.shields.io/badge/AppVersion-1.18.0-informational?style=flat-square)
+![Version: 1.1181.0](https://img.shields.io/badge/Version-1.1181.0-informational?style=flat-square) ![AppVersion: 1.18.1](https://img.shields.io/badge/AppVersion-1.18.1-informational?style=flat-square)
 
-> ⚠️ **This Helm chart is not intended for production use.**  
+> ⚠️ **This Helm chart is currently under technical Preview. Potential users should be advised that it is suitable for demo and evaluation purposes.**  
 > For advanced configurations, see the [Chart README](./charts/kasm/README.md).
 
 ## Overview
 
 This Helm chart enables you to deploy [Kasm Workspaces](https://kasm.com/) in Kubernetes with minimal friction.
 For more detailed information or procedures for upgrading your Kasm Kubernetes deployment, refer to our **[additional documentation](./docs)**.
+
+> Important: The [Kasm agent](https://docs.kasm.com/docs/install/multi_server_install#install-agent-server-roles) is not included in this Helm chart. It must be installed separately on a VM or bare-metal server. A Kasm session cannot be started without a running agent.
 
 ## Quickstart
 
@@ -92,7 +94,7 @@ After deployment, get your connection details and credentials:
 ## Upgrades & Versioning
 
 - **Branching:**  
-  This repo maintains a release branch matching each Kasm Workspaces version (e.g., `release/1.18.0`).  
+  This repo maintains a release branch matching each Kasm Workspaces version (e.g., `release/1.18.1`).  
   Use the matching branch for your Kasm deployment version.
 - **Development:**  
   Use the default `develop` branch for developer previews.

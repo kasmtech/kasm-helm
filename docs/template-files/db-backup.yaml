@@ -15,7 +15,7 @@ spec:
       restartPolicy: OnFailure
       initContainers:
         - name: db-is-ready
-          image: kasmweb/api:1.18.0
+          image: kasmweb/api:1.18.1
           imagePullPolicy: IfNotPresent
           env:
             - name: POSTGRES_HOST
@@ -29,7 +29,7 @@ spec:
             - |
               while ! pg_isready -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -t 10; do echo "Waiting for DB..."; sleep 5; done
         - name: kasm-old-db-backup-set-perms
-          image: kasmweb/api:1.18.0
+          image: kasmweb/api:1.18.1
           imagePullPolicy: IfNotPresent
           command:
             - /bin/sh
@@ -47,7 +47,7 @@ spec:
               mountPath: /data/kasm-db-dump
       containers:
         - name: kasm-old-db-backup-container
-          image: kasmweb/api:1.18.0
+          image: kasmweb/api:1.18.1
           imagePullPolicy: IfNotPresent
           env:
             - name: POSTGRES_HOST
