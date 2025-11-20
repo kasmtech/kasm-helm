@@ -1,0 +1,26 @@
+variables:
+  DOCKER_HOST: tcp://docker:2375
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: ""
+  SHARED_PATH: /builds/$CI_PROJECT_PATH
+ 
+stages:
+  - config_check
+
+
+config_check:
+  stage: config_check
+  image: ubuntu:24.04
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "trigger"'
+    - if: '$CI_PIPELINE_SOURCE == "api"'
+    - when: never
+  tags: ["oci-fixed-amd"]
+  script: 
+    - |
+      # ENCODED_FILE_LIST is coming from a trigger in the Kasm_backend job
+      # This job will only run if there were changes to a config in the backend
+      echo -e "=== CONFIG FILES THAT CHANGED ===\n"
+      echo "$ENCODED_FILE_LIST" | base64 -d
+      exit 1
+
