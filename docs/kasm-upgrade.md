@@ -14,9 +14,9 @@ This guide walks you through safely **upgrading your Kasm deployment on Kubernet
 
 | Scenario                                                   | Use This Section                                                  |
 |------------------------------------------------------------|-------------------------------------------------------------------|
-| Upgrade legacy `kasm-single-zone` chart 1.17.0 -> 1.1180.0 | [Upgrade Legacy Helm Deployment](legacy-helm-chart-upgrade.md)    |
-| Upgrade new `kasm` chart 1.1170.0 -> 1.1180.0              | [Upgrade Existing Helm Deployment](new-helm-chart-upgrade.md)     |
-| Migrate VM deployment → K8s (v1.1180.0/latest)             | [Migrate from VM to Kubernetes](vm-to-kubernetes.md)              |
+| Upgrade legacy `kasm-single-zone` chart 1.17.0 -> 1.1181.0 | [Upgrade Legacy Helm Deployment](legacy-helm-chart-upgrade.md)    |
+| Upgrade new `kasm` chart 1.1170.0 -> 1.1181.0              | [Upgrade Existing Helm Deployment](new-helm-chart-upgrade.md)     |
+| Migrate VM deployment → K8s (v1.1181.0/latest)             | [Migrate from VM to Kubernetes](vm-to-kubernetes.md)              |
 
 ### Assumptions:
 ---

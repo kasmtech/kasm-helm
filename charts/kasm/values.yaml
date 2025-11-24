@@ -177,7 +177,7 @@ database:
   #
   image:
     repository: kasmweb/postgres
-    tag: develop
+    tag: 1.18.1
   # Configure the Storage for the Kasm DB StatefulSet
   #
   storage:
@@ -263,7 +263,7 @@ components:
     #
     image:
       repository: kasmweb/proxy
-      tag: develop
+      tag: 1.18.1
     # components.proxy.annotations -- Custom annotations to add to the Kasm Proxy Deployment
     annotations: {}
     # components.proxy.resources -- Manually configure the Kasm Proxy Deployment resources. This overrides the pre-defined `deploymentSize` values.
@@ -278,7 +278,7 @@ components:
     #
     image:
       repository: kasmweb/api
-      tag: develop
+      tag: 1.18.1
     # components.api.annotations -- Custom annotations to add to the Kasm api Deployment
     annotations: {}
     # components.api.resources -- Manually configure the Kasm api Deployment resources. This overrides the pre-defined `deploymentSize` values.
@@ -293,7 +293,7 @@ components:
     #
     image:
       repository: kasmweb/manager
-      tag: develop
+      tag: 1.18.1
     # components.manager.annotations -- Custom annotations to add to the Kasm Manager Deployment
     annotations: {}
     # components.manager.resources -- Manually configure the Kasm Manager Deployment resources. This overrides the pre-defined `deploymentSize` values.
@@ -308,7 +308,7 @@ components:
     #
     image:
       repository: kasmweb/kasm-guac
-      tag: develop
+      tag: 1.18.1
     # components.guac.enabled -- Use this setting to enable/disable deployment of the Kasm Guacamole web RDP service - 
     # [Kasm Guac Service](https://docs.kasm.com/docs/guide/connection_proxies#guacamole-guac).
     #
@@ -327,7 +327,7 @@ components:
     #
     image:
       repository: kasmweb/rdp-gateway
-      tag: develop
+      tag: 1.18.1
     # components.rdpGateway.enabled -- Use this setting to enable/disable deployment of the Kasm RDP Gateway service - 
     # [Kasm RDP Gateway](https://docs.kasm.com/docs/guide/connection_proxies#rdp-gateway).
     #
@@ -346,7 +346,7 @@ components:
     #
     image:
       repository: kasmweb/rdp-https-gateway
-      tag: develop
+      tag: 1.18.1
     # components.rdpHttpsGateway.enabled -- Use this setting to enable/disable deployment of the Kasm RDP HTTPS Gateway service.
     # This service allows users to use native RDP clients via HTTPS connections rather than exposing 3389 - 
     # [Kasm RDP HTTPS Gateway](https://docs.kasm.com/docs/guide/connection_proxies#rdp-https-gateway.
