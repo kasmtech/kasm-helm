@@ -529,6 +529,121 @@
             "annotations",
             "labels"
           ]
+        },
+        "share": {
+          "additionalProperties": false,
+          "description": " ",
+          "properties": {
+            "annotations": {
+              "additionalProperties": true,
+              "description": "Custom annotations to add to the Kasm Share Deployment",
+              "title": "annotations",
+              "type": "object"
+            },
+            "enabled": {
+              "default": true,
+              "description": "Use this setting to enable/disable deployment of the Kasm Share and associated Redis services - [Kasm Share Service](https://kasmweb.com/docs/latest/guide/session_sharing.html).",
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "image": {
+              "additionalProperties": false,
+              "description": "Configure the image repository where the image is stored. Use this to point to an private hosted container registry instead of our public DockerHub hosted one.",
+              "properties": {
+                "repository": {
+                  "default": "kasmweb/share",
+                  "title": "repository",
+                  "type": "string"
+                },
+                "tag": {
+                  "default": "1.18.1",
+                  "title": "tag",
+                  "type": "string"
+                }
+              },
+              "title": "image",
+              "type": "object",
+              "requied": [
+                "repository",
+                "tag"
+              ]
+            },
+            "labels": {
+              "additionalProperties": true,
+              "description": "Custom labels to add to the Kasm Share Deployment",
+              "title": "labels",
+              "type": "object"
+            },
+            "resources": {
+              "additionalProperties": true,
+              "description": "Manually configure the Kasm Share Deployment resources. This overrides the pre-defined `deploymentSize` values.",
+              "title": "resources",
+              "type": "object"
+            }
+          },
+          "title": "share",
+          "type": "object",
+          "requied": [
+            "enabled",
+            "image",
+            "resources",
+            "annotations",
+            "labels"
+          ]
+        },
+        "redis": {
+          "additionalProperties": false,
+          "description": " ",
+          "properties": {
+            "annotations": {
+              "additionalProperties": true,
+              "description": "Custom annotations to add to the Kasm Redis Deployment",
+              "title": "annotations",
+              "type": "object"
+            },
+            "image": {
+              "additionalProperties": false,
+              "description": "Configure the image repository where the image is stored. Use this to point to an private hosted container registry instead of our public DockerHub hosted one.",
+              "properties": {
+                "repository": {
+                  "default": "redis",
+                  "title": "repository",
+                  "type": "string"
+                },
+                "tag": {
+                  "default": "5-alpine",
+                  "title": "tag",
+                  "type": "string"
+                }
+              },
+              "title": "image",
+              "type": "object",
+              "requied": [
+                "repository",
+                "tag"
+              ]
+            },
+            "labels": {
+              "additionalProperties": true,
+              "description": "Custom labels to add to the Kasm Redis Deployment",
+              "title": "labels",
+              "type": "object"
+            },
+            "resources": {
+              "additionalProperties": true,
+              "description": "Manually configure the Kasm Redis Deployment resources. This overrides the pre-defined `deploymentSize` values.",
+              "title": "resources",
+              "type": "object"
+            }
+          },
+          "title": "redis",
+          "type": "object",
+          "requied": [
+            "image",
+            "resources",
+            "annotations",
+            "labels"
+          ]
         }
       },
       "title": "components",
