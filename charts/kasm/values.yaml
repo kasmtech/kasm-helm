@@ -283,6 +283,8 @@ components:
     annotations: {}
     # components.api.resources -- Manually configure the Kasm api Deployment resources. This overrides the pre-defined `deploymentSize` values.
     resources: {}
+    # components.api.ttlBeforeDelete -- Time to live setting for the db-init-job
+    ttlBeforeDelete: 100
     # components.api.labels -- Custom labels to add to the Kasm api Deployment
     labels: {}
   # Configuration settings for the Kasm Manager service
