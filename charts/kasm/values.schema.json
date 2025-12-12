@@ -220,6 +220,12 @@
               "title": "labels",
               "type": "object"
             },
+            "ttlBeforeDelete": {
+              "additionalProperties": true,
+              "description": "Time to live setting for the db-init-job",
+              "title": "ttlBeforeDelete",
+              "type": "integer"
+            },
             "resources": {
               "additionalProperties": true,
               "description": "Manually configure the Kasm api Deployment resources. This overrides the pre-defined `deploymentSize` values.",
@@ -234,6 +240,7 @@
             "image",
             "resources",
             "annotations",
+	    "ttlBeforeDelete",
             "labels"
           ]
         },
