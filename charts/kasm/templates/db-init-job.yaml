@@ -124,5 +124,18 @@ spec:
             - "-c"
           args:
             - |
-              if [[ "$DB_AUTO_INITIALIZE" == "true" ]]; then /usr/bin/startup.sh; else echo "DB already initialized."; fi
+              if [[ "$DB_AUTO_INITIALIZE" == "true" ]]; then
+                # Check if database is already initialized
+                echo "Checking if database is already initialized..."
+                if PGPASSWORD="$POSTGRES_PASSWORD" psql -h "${POSTGRES_HOST}" -p "${POSTGRES_PORT}" -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -c "SELECT COUNT(*) FROM settings;" 2>&1 > /dev/null; then
+                  echo "Database already initialized. Nothing to do."
+                  exit 0
+                fi
+
+                # Database needs initialization - startup.sh will initialize and exit due to POST_DB_INIT_EXIT
+                echo "Database not initialized. Starting initialization..."
+                /usr/bin/startup.sh
+              else
+                echo "DB auto-initialization disabled.";
+              fi
 {{- end }}
