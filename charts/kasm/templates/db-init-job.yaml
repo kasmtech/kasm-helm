@@ -11,12 +11,11 @@ metadata:
   labels:
     app.kubernetes.io/name: {{ .Release.Name }}-db-init
     {{- include "kasm.defaultLabels" . | indent 4 }}
-    {{- with .Values.components.api.labels }}{{- toYaml . | nindent 4 }}{{- end }}
+    {{- with .Values.components.init_db.labels }}{{- toYaml . | nindent 4 }}{{- end }}
     {{- with .Values.extraLabels.job }}{{- toYaml . | nindent 4 }}{{- end }}
     {{- with .Values.labels }}{{- toYaml . | nindent 4 }}{{- end }}
-  {{- with .Values.components.api.annotations }}
+  {{- with .Values.components.init_db.annotations }}
   annotations: {{- toYaml . | nindent 4 }}
-    helm.sh/hook: pre-install
   {{- end }}
 spec:
   ttlSecondsAfterFinished: 100
@@ -26,13 +25,13 @@ spec:
         app.kubernetes.io/name: {{ .Release.Name }}-db-init
         app.kubernetes.io/component: db-init
         {{- include "kasm.defaultLabels" . | indent 8 }}
-        {{- with .Values.components.api.labels }}{{ toYaml . | nindent 8 }}{{- end }}
+        {{- with .Values.components.init_db.labels }}{{ toYaml . | nindent 8 }}{{- end }}
         {{- with .Values.extraLabels.jobPod }}{{ toYaml . | nindent 8 }}{{- end }}
         {{- with .Values.labels }}{{- toYaml . | nindent 8 }}{{- end }}
-      {{- if or .Values.components.api.annotations .Values.annotations.pod }}
+      {{- if or .Values.components.init_db.annotations .Values.annotations.pod }}
       annotations:
         {{- with .Values.annotations.pod }}{{ toYaml . | nindent 8 }}{{- end }}
-        {{- with .Values.components.api.annotations }}{{ toYaml . | nindent 8 }}{{- end }}
+        {{- with .Values.components.init_db.annotations }}{{ toYaml . | nindent 8 }}{{- end }}
       {{- end }}
     spec:
       {{- if .Values.imagePullSecrets.enabled }}

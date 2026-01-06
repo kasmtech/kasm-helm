@@ -237,6 +237,30 @@
             "labels"
           ]
         },
+        "init_db": {
+          "additionalProperties": false,
+          "description": "Configuration settings for the DB initialization job",
+          "properties": {
+            "annotations": {
+              "additionalProperties": true,
+              "description": "Custom annotations to add to the DB init Job. By default includes helm.sh/hook for Helm deployments. ArgoCD users should override this to remove the hook to prevent deployment deadlocks.",
+              "title": "annotations",
+              "type": "object"
+            },
+            "labels": {
+              "additionalProperties": true,
+              "description": "Custom labels to add to the DB init Job",
+              "title": "labels",
+              "type": "object"
+            }
+          },
+          "title": "init_db",
+          "type": "object",
+          "requied": [
+            "annotations",
+            "labels"
+          ]
+        },
         "guac": {
           "additionalProperties": false,
           "description": " ",
