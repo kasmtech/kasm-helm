@@ -285,6 +285,16 @@ components:
     resources: {}
     # components.api.labels -- Custom labels to add to the Kasm api Deployment
     labels: {}
+  # Configuration settings for the DB initialization job
+  #
+  init_db:
+    # components.init_db.annotations -- Custom annotations to add to the DB init Job.
+    # By default includes helm.sh/hook for Helm deployments. ArgoCD users should override
+    # this to remove the hook to prevent deployment deadlocks.
+    annotations:
+      helm.sh/hook: pre-install
+    # components.init_db.labels -- Custom labels to add to the DB init Job
+    labels: {}
   # Configuration settings for the Kasm Manager service
   #
   manager:
