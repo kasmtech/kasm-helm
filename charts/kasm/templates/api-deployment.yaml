@@ -91,10 +91,6 @@ spec:
                   name: {{ .Release.Name }}-secrets
                   key: "db-password"
                 {{- end }}
-            - name: SSL_CERT_FILE
-              value: /opt/certs/combined-ca-bundle.pem
-            - name: REQUESTS_CA_BUNDLE
-              value: /opt/certs/combined-ca-bundle.pem
           command:
             - /bin/bash
             - -c
@@ -146,6 +142,10 @@ spec:
                   name: {{ .Release.Name }}-secrets
                   key: "db-password"
                 {{- end }}
+            - name: SSL_CERT_FILE
+              value: /opt/certs/combined-ca-bundle.pem
+            - name: REQUESTS_CA_BUNDLE
+              value: /opt/certs/combined-ca-bundle.pem
           ports:
             - name: {{ $constants.api.portName }}
               containerPort: {{ $constants.api.port }}
@@ -164,10 +164,10 @@ spec:
           {{- if .Values.applyPodSecurity }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}
-      volumeMounts:
-        - name: uds-trust-bundle
-          mountPath: /etc/ssl/certs/uds-ca-bundle.pem
-          readOnly: true
-          subPath: ca-bundle.pem
-        - mountPath: /opt/certs
-          name: combined-certs
+          volumeMounts:
+            - name: uds-trust-bundle
+              mountPath: /etc/ssl/certs/uds-ca-bundle.pem
+              readOnly: true
+              subPath: ca-bundle.pem
+            - mountPath: /opt/certs
+              name: combined-certs
