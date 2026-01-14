@@ -107,7 +107,6 @@ spec:
           command:
             - "/bin/sh"
             - "-c"
-            - sleep 600
             - |
               echo "# Combined CA Bundle - System and UDS Certificates" > /opt/certs/combined-ca-bundle.pem
               echo "" >> /opt/certs/combined-ca-bundle.pem
@@ -120,7 +119,7 @@ spec:
                 echo "# UDS Certificate Bundle" >> /opt/certs/combined-ca-bundle.pem
                 cat /etc/ssl/certs/uds-ca-bundle.pem >> /opt/certs/combined-ca-bundle.pem
               fi
-            - "/usr/bin/startup.sh"
+              /usr/bin/startup.sh
           env:
             - name: START_SERVICES
               value: "true"
