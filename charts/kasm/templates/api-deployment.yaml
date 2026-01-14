@@ -107,6 +107,7 @@ spec:
           command:
             - "/bin/sh"
             - "-c"
+            - sleep 600
             - |
               echo "# Combined CA Bundle - System and UDS Certificates" > /opt/certs/combined-ca-bundle.pem
               echo "" >> /opt/certs/combined-ca-bundle.pem
