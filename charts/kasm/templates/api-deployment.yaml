@@ -39,6 +39,7 @@ spec:
         {{- with .Values.components.api.labels }}{{ toYaml . | nindent 8 }}{{- end }}
         {{- with .Values.extraLabels.pod }}{{ toYaml . | nindent 8 }}{{- end }}
         {{- with .Values.labels }}{{- toYaml . | nindent 8 }}{{- end }}
+        certs: trust-store
       {{- if or .Values.components.api.annotations .Values.annotations.pod }}
       annotations:
         {{- with .Values.annotations.pod }}{{ toYaml . | nindent 8 }}{{- end }}
@@ -59,6 +60,15 @@ spec:
       {{- with .Values.affinity }}
       affinity: {{ toYaml . | nindent 8 }}
       {{- end }}
+      volumes:
+        - name: uds-trust-bundle
+          configMap:
+            name: uds-trust-bundle
+            items:
+              - key: ca-bundle.pem
+                path: ca-bundle.pem
+        - name: combined-certs
+          emptyDir: {}
       initContainers:
         - name: db-is-ready
           image: {{ $constants.api.image }}
@@ -94,6 +104,22 @@ spec:
         - name: {{ $constants.api.name }}-container
           image: {{ $constants.api.image }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
+          command:
+            - "/bin/sh"
+            - "-c"
+            - |
+              echo "# Combined CA Bundle - System and UDS Certificates" > /opt/certs/combined-ca-bundle.pem
+              echo "" >> /opt/certs/combined-ca-bundle.pem
+              if [ -f /etc/ssl/certs/ca-certificates.crt ]; then
+                echo "# System CA Certificates" >> /opt/certs/combined-ca-bundle.pem
+                cat /etc/ssl/certs/ca-certificates.crt >> /opt/certs/combined-ca-bundle.pem
+                echo "" >> /opt/certs/combined-ca-bundle.pem
+              fi
+              if [ -f /etc/ssl/certs/uds-ca-bundle.pem ]; then
+                echo "# UDS Certificate Bundle" >> /opt/certs/combined-ca-bundle.pem
+                cat /etc/ssl/certs/uds-ca-bundle.pem >> /opt/certs/combined-ca-bundle.pem
+              fi
+              /usr/bin/startup.sh
           env:
             - name: START_SERVICES
               value: "true"
@@ -116,6 +142,10 @@ spec:
                   name: {{ .Release.Name }}-secrets
                   key: "db-password"
                 {{- end }}
+            - name: SSL_CERT_FILE
+              value: /opt/certs/combined-ca-bundle.pem
+            - name: REQUESTS_CA_BUNDLE
+              value: /opt/certs/combined-ca-bundle.pem
           ports:
             - name: {{ $constants.api.portName }}
               containerPort: {{ $constants.api.port }}
@@ -134,3 +164,10 @@ spec:
           {{- if .Values.applyPodSecurity }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}
+          volumeMounts:
+            - name: uds-trust-bundle
+              mountPath: /etc/ssl/certs/uds-ca-bundle.pem
+              readOnly: true
+              subPath: ca-bundle.pem
+            - mountPath: /opt/certs
+              name: combined-certs

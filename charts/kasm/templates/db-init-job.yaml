@@ -19,7 +19,7 @@ metadata:
     helm.sh/hook: pre-install
   {{- end }}
 spec:
-  ttlSecondsAfterFinished: 100
+  ttlSecondsAfterFinished: {{ .Values.components.api.ttlBeforeDelete }}
   template:
     metadata:
       labels:
