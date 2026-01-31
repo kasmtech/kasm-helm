@@ -272,6 +272,8 @@ components:
     labels: {}
     # components.proxy.initContainers -- Custom init containers to run
     initContainers: []
+    # components.proxy.extraEnv -- Additional environment variables
+    extraEnv: []
     # components.proxy.extraVolumes -- Additional volumes to add to pod
     extraVolumes: []
     # components.proxy.extraVolumeMounts -- Additional volume mounts
@@ -293,6 +295,8 @@ components:
     labels: {}
     # components.api.initContainers -- Custom init containers to run
     initContainers: []
+    # components.api.extraEnv -- Additional environment variables
+    extraEnv: []
     # components.api.extraVolumes -- Additional volumes to add to pod
     extraVolumes: []
     # components.api.extraVolumeMounts -- Additional volume mounts
@@ -314,6 +318,8 @@ components:
     labels: {}
     # components.manager.initContainers -- Custom init containers to run
     initContainers: []
+    # components.manager.extraEnv -- Additional environment variables
+    extraEnv: []
     # components.manager.extraVolumes -- Additional volumes to add to pod
     extraVolumes: []
     # components.manager.extraVolumeMounts -- Additional volume mounts
@@ -339,6 +345,8 @@ components:
     labels: {}
     # components.guac.initContainers -- Custom init containers to run
     initContainers: []
+    # components.guac.extraEnv -- Additional environment variables
+    extraEnv: []
     # components.guac.extraVolumes -- Additional volumes to add to pod
     extraVolumes: []
     # components.guac.extraVolumeMounts -- Additional volume mounts
@@ -364,6 +372,8 @@ components:
     labels: {}
     # components.rdpGateway.initContainers -- Custom init containers to run
     initContainers: []
+    # components.rdpGateway.extraEnv -- Additional environment variables
+    extraEnv: []
     # components.rdpGateway.extraVolumes -- Additional volumes to add to pod
     extraVolumes: []
     # components.rdpGateway.extraVolumeMounts -- Additional volume mounts
@@ -390,6 +400,8 @@ components:
     labels: {}
     # components.rdpHttpsGateway.initContainers -- Custom init containers to run
     initContainers: []
+    # components.rdpHttpsGateway.extraEnv -- Additional environment variables
+    extraEnv: []
     # components.rdpHttpsGateway.extraVolumes -- Additional volumes to add to pod
     extraVolumes: []
     # components.rdpHttpsGateway.extraVolumeMounts -- Additional volume mounts

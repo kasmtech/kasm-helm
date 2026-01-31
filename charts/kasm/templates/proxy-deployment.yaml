@@ -124,6 +124,9 @@ spec:
           {{- if $values.applySecurity }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}
+          {{- with $values.components.proxy.env }}
+          env: {{ toYaml . | nindent 12 }}
+          {{- end }}
           volumeMounts:
             - name: {{ $constants.proxy.name }}-cert
               mountPath: /etc/ssl/certs/kasm_nginx.crt

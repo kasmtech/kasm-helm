@@ -97,6 +97,9 @@ spec:
                   name: {{ $.Release.Name }}-secrets
                   key: "db-password"
                 {{- end }}
+            {{- if $values.components.manager.extraEnv }}
+              {{- toYaml $values.components.manager.extraEnv | nindent 10 }}
+            {{- end }}
           ports:
             - name: {{ printf "zn%s-%s" ($idx | toString) $constants.manager.portName }}
               containerPort: {{ $constants.manager.port }}

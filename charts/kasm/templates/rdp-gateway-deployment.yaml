@@ -108,6 +108,9 @@ spec:
                   key: service-token
             - name: KUBERNETES_SERVICE_HOST
               value: "true"
+            {{- if .Values.components.rdpGateway.extraEnv }}
+              {{- toYaml .Values.components.rdpGateway.extraEnv | nindent 10 }}
+            {{- end }}
           ports:
             - name: {{ $constants.rdpGateway.portName }}
               containerPort: 5555

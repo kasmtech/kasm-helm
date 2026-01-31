@@ -122,6 +122,9 @@ spec:
                   name: {{ .Release.Name }}-secrets
                   key: "db-password"
                 {{- end }}
+            {{- if .Values.components.api.extraEnv }}
+              {{- toYaml .Values.components.api.extraEnv | nindent 10 }}
+            {{- end }}
           ports:
             - name: {{ $constants.api.portName }}
               containerPort: {{ $constants.api.port }}

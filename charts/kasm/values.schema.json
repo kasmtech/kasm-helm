@@ -187,6 +187,15 @@
               "title": "annotations",
               "type": "object"
             },
+            "extraEnv": {
+              "additionalProperties": true,
+              "description": "Additional environement variables",
+              "title": "extraEnv",
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
             "extraVolumes": {
               "additionalProperties": true,
               "description": "Additional volumes to add to pod",
@@ -255,6 +264,7 @@
             "annotations",
             "labels",
             "initContainers",
+            "extraEnv",
             "extraVolumes",
             "extraVolumeMounts"
           ]
@@ -274,6 +284,15 @@
               "description": "Use this setting to enable/disable deployment of the Kasm Guacamole web RDP service - [Kasm Guac Service](https://docs.kasm.com/docs/guide/connection_proxies#guacamole-guac).",
               "title": "enabled",
               "type": "boolean"
+            },
+            "extraEnv": {
+              "additionalProperties": true,
+              "description": "Additional environement variables",
+              "title": "extraEnv",
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
             },
             "extraVolumes": {
               "additionalProperties": true,
@@ -343,6 +362,7 @@
             "annotations",
             "labels",
             "initContainers",
+            "extraEnv",
             "extraVolumes",
             "extraVolumeMounts"
           ]
@@ -356,6 +376,15 @@
               "description": "Custom annotations to add to the Kasm Manager Deployment",
               "title": "annotations",
               "type": "object"
+            },
+            "extraEnv": {
+              "additionalProperties": true,
+              "description": "Additional environement variables",
+              "title": "extraEnv",
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
             },
             "extraVolumes": {
               "additionalProperties": true,
@@ -425,6 +454,7 @@
             "annotations",
             "labels",
             "initContainers",
+            "extraEnv",
             "extraVolumes",
             "extraVolumeMounts"
           ]
@@ -438,6 +468,15 @@
               "description": "Custom annotations to add to the Kasm Proxy Deployment",
               "title": "annotations",
               "type": "object"
+            },
+            "extraEnv": {
+              "additionalProperties": true,
+              "description": "Additional environement variables",
+              "title": "extraEnv",
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
             },
             "extraVolumes": {
               "additionalProperties": true,
@@ -507,6 +546,7 @@
             "annotations",
             "labels",
             "initContainers",
+            "extraEnv",
             "extraVolumes",
             "extraVolumeMounts"
           ]
@@ -526,6 +566,15 @@
               "description": "Use this setting to enable/disable deployment of the Kasm RDP Gateway service -  [Kasm RDP Gateway](https://docs.kasm.com/docs/guide/connection_proxies#rdp-gateway).",
               "title": "enabled",
               "type": "boolean"
+            },
+            "extraEnv": {
+              "additionalProperties": true,
+              "description": "Additional environement variables",
+              "title": "extraEnv",
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
             },
             "extraVolumes": {
               "additionalProperties": true,
@@ -595,6 +644,7 @@
             "annotations",
             "labels",
             "initContainers",
+            "extraEnv",
             "extraVolumes",
             "extraVolumeMounts"
           ]
@@ -614,6 +664,15 @@
               "description": "Use this setting to enable/disable deployment of the Kasm RDP HTTPS Gateway service. This service allows users to use native RDP clients via HTTPS connections rather than exposing 3389 - [Kasm RDP HTTPS Gateway](https://docs.kasm.com/docs/guide/connection_proxies#rdp-https-gateway).",
               "title": "enabled",
               "type": "boolean"
+            },
+            "extraEnv": {
+              "additionalProperties": true,
+              "description": "Additional environement variables",
+              "title": "extraEnv",
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
             },
             "extraVolumes": {
               "additionalProperties": true,
@@ -683,6 +742,7 @@
             "annotations",
             "labels",
             "initContainers",
+            "extraEnv",
             "extraVolumes",
             "extraVolumeMounts"
           ]

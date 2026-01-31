@@ -110,6 +110,9 @@ spec:
               value: {{ $constants.guac.svc }}
             - name: SERVER_PORT
               value: {{ $constants.guac.port | quote }}
+            {{- if .Values.components.guac.extraEnv }}
+              {{- toYaml .Values.components.guac.extraEnv | nindent 10 }}
+            {{- end }}
           ports:
             - name: {{ $constants.guac.portName }}
               containerPort: {{ $constants.guac.port }}
