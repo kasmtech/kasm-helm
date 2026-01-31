@@ -85,6 +85,9 @@ spec:
         {{- if .Values.applySecurity }}
           {{- include "kasm.containerSecurity" . | indent 10 }}
         {{- end }}
+        {{- if .Values.components.rdpGateway.initContainers }}
+          {{- toYaml .Values.components.rdpGateway.initContainers | nindent 8 }}
+        {{- end }}
       containers:
         - name: {{ $constants.rdpGateway.name }}-container
           image: {{ $constants.rdpGateway.image }}
@@ -141,6 +144,9 @@ spec:
             - name: {{ $constants.rdpGateway.name }}-config
               mountPath: /usr/local/etc/rdpproxy/conf/passthrough.app.config.yaml
               subPath: passthrough.app.config.yaml
+            {{- if .Values.components.rdpGateway.extraVolumeMounts }}
+              {{- toYaml .Values.components.rdpGateway.extraVolumeMounts | nindent 10 }}
+            {{- end }}
       volumes:
         - name: {{ $constants.rdpGateway.name }}-cert
           secret:
@@ -151,4 +157,7 @@ spec:
         - name: {{ $constants.rdpGateway.name }}-config
           configMap:
             name: {{ $constants.rdpGateway.name }}-configmap
+        {{- if .Values.components.rdpGateway.extraVolumes }}
+          {{- toYaml .Values.components.rdpGateway.extraVolumes | nindent 8 }}
+        {{- end }}
 {{- end }}

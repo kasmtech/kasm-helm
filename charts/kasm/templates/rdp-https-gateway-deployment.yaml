@@ -81,6 +81,9 @@ spec:
             - name: {{ $constants.rdpHttpsGateway.name }}-data
               mountPath: /tmp
         {{- end }}
+        {{- if .Values.components.rdpHttpsGateway.initContainers }}
+          {{- toYaml .Values.components.rdpHttpsGateway.initContainers | nindent 8 }}
+        {{- end }}
       containers:
         - name: {{ $constants.rdpHttpsGateway.name }}-container
           image: {{ $constants.rdpHttpsGateway.image }}
@@ -132,6 +135,9 @@ spec:
               mountPath: /opt/kasm/current/log
             - name: {{ $constants.rdpHttpsGateway.name }}-data
               mountPath: /tmp
+            {{- if .Values.components.rdpHttpsGateway.extraVolumeMounts }}
+              {{- toYaml .Values.components.rdpHttpsGateway.extraVolumeMounts | nindent 10 }}
+            {{- end }}
       volumes:
         - name: {{ $constants.rdpHttpsGateway.name }}-cert
           secret:
@@ -139,4 +145,7 @@ spec:
         - name: {{ $constants.rdpHttpsGateway.name }}-data
           emptyDir:
             sizeLimit: 150Mi
+        {{- if .Values.components.rdpHttpsGateway.extraVolumes }}
+          {{- toYaml .Values.components.rdpHttpsGateway.extraVolumes | nindent 8 }}
+        {{- end }}
 {{- end }}
