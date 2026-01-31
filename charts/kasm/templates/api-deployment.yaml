@@ -123,7 +123,7 @@ spec:
                   key: "db-password"
                 {{- end }}
             {{- if .Values.components.api.extraEnv }}
-              {{- toYaml .Values.components.api.extraEnv | nindent 10 }}
+              {{- toYaml .Values.components.api.extraEnv | nindent 12 }}
             {{- end }}
           ports:
             - name: {{ $constants.api.portName }}

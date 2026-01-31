@@ -109,7 +109,7 @@ spec:
             - name: KUBERNETES_SERVICE_HOST
               value: "true"
             {{- if .Values.components.rdpGateway.extraEnv }}
-              {{- toYaml .Values.components.rdpGateway.extraEnv | nindent 10 }}
+              {{- toYaml .Values.components.rdpGateway.extraEnv | nindent 12 }}
             {{- end }}
           ports:
             - name: {{ $constants.rdpGateway.portName }}
@@ -148,7 +148,7 @@ spec:
               mountPath: /usr/local/etc/rdpproxy/conf/passthrough.app.config.yaml
               subPath: passthrough.app.config.yaml
             {{- if .Values.components.rdpGateway.extraVolumeMounts }}
-              {{- toYaml .Values.components.rdpGateway.extraVolumeMounts | nindent 10 }}
+              {{- toYaml .Values.components.rdpGateway.extraVolumeMounts | nindent 12 }}
             {{- end }}
       volumes:
         - name: {{ $constants.rdpGateway.name }}-cert

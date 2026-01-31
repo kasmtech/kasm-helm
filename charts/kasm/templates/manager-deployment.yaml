@@ -98,7 +98,7 @@ spec:
                   key: "db-password"
                 {{- end }}
             {{- if $values.components.manager.extraEnv }}
-              {{- toYaml $values.components.manager.extraEnv | nindent 10 }}
+              {{- toYaml $values.components.manager.extraEnv | nindent 12 }}
             {{- end }}
           ports:
             - name: {{ printf "zn%s-%s" ($idx | toString) $constants.manager.portName }}
@@ -124,7 +124,7 @@ spec:
             - name: {{ $constants.manager.name }}-tmp
               mountPath: /tmp
             {{- if $values.components.manager.extraVolumeMounts }}
-              {{- toYaml $values.components.manager.extraVolumeMounts | nindent 10 }}
+              {{- toYaml $values.components.manager.extraVolumeMounts | nindent 12 }}
             {{- end }}
       volumes:
         - name: {{ $constants.manager.name }}-tmp

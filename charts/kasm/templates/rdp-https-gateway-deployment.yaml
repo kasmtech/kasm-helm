@@ -105,7 +105,7 @@ spec:
             - name: KUBERNETES_SERVICE_HOST
               value: "true"
             {{- if .Values.components.rdpHttpsGateway.extraEnv }}
-              {{- toYaml .Values.components.rdpHttpsGateway.extraEnv | nindent 10 }}
+              {{- toYaml .Values.components.rdpHttpsGateway.extraEnv | nindent 12 }}
             {{- end }}
           ports:
             - name: {{ $constants.rdpHttpsGateway.portName }}
@@ -139,7 +139,7 @@ spec:
             - name: {{ $constants.rdpHttpsGateway.name }}-data
               mountPath: /tmp
             {{- if .Values.components.rdpHttpsGateway.extraVolumeMounts }}
-              {{- toYaml .Values.components.rdpHttpsGateway.extraVolumeMounts | nindent 10 }}
+              {{- toYaml .Values.components.rdpHttpsGateway.extraVolumeMounts | nindent 12 }}
             {{- end }}
       volumes:
         - name: {{ $constants.rdpHttpsGateway.name }}-cert

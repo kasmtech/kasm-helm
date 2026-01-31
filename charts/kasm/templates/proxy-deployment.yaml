@@ -124,7 +124,7 @@ spec:
           {{- if $values.applySecurity }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}
-          {{- with $values.components.proxy.env }}
+          {{- with $values.components.proxy.extraEnv }}
           env: {{ toYaml . | nindent 12 }}
           {{- end }}
           volumeMounts:
@@ -142,7 +142,7 @@ spec:
               mountPath: /etc/nginx/nginx.conf
               subPath: nginx.conf
             {{- if $values.components.proxy.extraVolumeMounts }}
-              {{- toYaml $values.components.proxy.extraVolumeMounts | nindent 10 }}
+              {{- toYaml $values.components.proxy.extraVolumeMounts | nindent 12 }}
             {{- end }}
             {{- if $values.applySecurity }}
             - name: {{ $constants.proxy.name }}-data
