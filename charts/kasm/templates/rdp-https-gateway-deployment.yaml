@@ -81,6 +81,9 @@ spec:
             - name: {{ $constants.rdpHttpsGateway.name }}-data
               mountPath: /tmp
         {{- end }}
+        {{- if .Values.components.rdpHttpsGateway.initContainers }}
+          {{- toYaml .Values.components.rdpHttpsGateway.initContainers | nindent 8 }}
+        {{- end }}
       containers:
         - name: {{ $constants.rdpHttpsGateway.name }}-container
           image: {{ $constants.rdpHttpsGateway.image }}
@@ -101,6 +104,9 @@ spec:
                   key: service-token
             - name: KUBERNETES_SERVICE_HOST
               value: "true"
+            {{- if .Values.components.rdpHttpsGateway.extraEnv }}
+              {{- toYaml .Values.components.rdpHttpsGateway.extraEnv | nindent 12 }}
+            {{- end }}
           ports:
             - name: {{ $constants.rdpHttpsGateway.portName }}
               containerPort: {{ $constants.rdpHttpsGateway.port }}
@@ -132,6 +138,9 @@ spec:
               mountPath: /opt/kasm/current/log
             - name: {{ $constants.rdpHttpsGateway.name }}-data
               mountPath: /tmp
+            {{- if .Values.components.rdpHttpsGateway.extraVolumeMounts }}
+              {{- toYaml .Values.components.rdpHttpsGateway.extraVolumeMounts | nindent 12 }}
+            {{- end }}
       volumes:
         - name: {{ $constants.rdpHttpsGateway.name }}-cert
           secret:
@@ -139,4 +148,7 @@ spec:
         - name: {{ $constants.rdpHttpsGateway.name }}-data
           emptyDir:
             sizeLimit: 150Mi
+        {{- if .Values.components.rdpHttpsGateway.extraVolumes }}
+          {{- toYaml .Values.components.rdpHttpsGateway.extraVolumes | nindent 8 }}
+        {{- end }}
 {{- end }}

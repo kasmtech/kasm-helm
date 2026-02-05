@@ -63,7 +63,11 @@ spec:
       {{- with $values.affinity }}
       affinity: {{ toYaml . | nindent 8 }}
       {{- end }}
-      initContainers: {{- include "kasm.initContainer" (dict "serviceName" $constants.api.svc "servicePort" $constants.api.port "path" "/api/__healthcheck" "schema" "http" "image" $constants.api.image) | indent 8 }}
+      initContainers:
+        {{- include "kasm.initContainer" (dict "serviceName" $constants.api.svc "servicePort" $constants.api.port "path" "/api/__healthcheck" "schema" "http" "image" $constants.api.image) | indent 8 }}
+        {{- if $values.components.manager.initContainers }}
+          {{- toYaml $values.components.manager.initContainers | nindent 8 }}
+        {{- end }}
       {{- if $values.applySecurity }}
         {{- include "kasm.containerSecurity" . | indent 10 }}
       {{- end }}
@@ -93,6 +97,9 @@ spec:
                   name: {{ $.Release.Name }}-secrets
                   key: "db-password"
                 {{- end }}
+            {{- if $values.components.manager.extraEnv }}
+              {{- toYaml $values.components.manager.extraEnv | nindent 12 }}
+            {{- end }}
           ports:
             - name: {{ printf "zn%s-%s" ($idx | toString) $constants.manager.portName }}
               containerPort: {{ $constants.manager.port }}
@@ -116,8 +123,14 @@ spec:
           volumeMounts:
             - name: {{ $constants.manager.name }}-tmp
               mountPath: /tmp
+            {{- if $values.components.manager.extraVolumeMounts }}
+              {{- toYaml $values.components.manager.extraVolumeMounts | nindent 12 }}
+            {{- end }}
       volumes:
         - name: {{ $constants.manager.name }}-tmp
           emptyDir:
             sizeLimit: 1Gi
+        {{- if $values.components.manager.extraVolumes }}
+          {{- toYaml $values.components.manager.extraVolumes | nindent 8 }}
+        {{- end }}
 {{- end }}

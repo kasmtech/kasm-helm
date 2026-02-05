@@ -81,6 +81,9 @@ spec:
         {{- if .Values.applySecurity }}
           {{- include "kasm.containerSecurity" . | indent 10 }}
         {{- end }}
+        {{- if .Values.components.guac.initContainers }}
+          {{- toYaml .Values.components.guac.initContainers | nindent 8 }}
+        {{- end }}
       containers:
         - name: {{ $constants.guac.name }}-container
           image: {{ $constants.guac.image }}
@@ -107,12 +110,16 @@ spec:
               value: {{ $constants.guac.svc }}
             - name: SERVER_PORT
               value: {{ $constants.guac.port | quote }}
+            {{- if .Values.components.guac.extraEnv }}
+              {{- toYaml .Values.components.guac.extraEnv | nindent 12 }}
+            {{- end }}
           ports:
             - name: {{ $constants.guac.portName }}
               containerPort: {{ $constants.guac.port }}
               protocol: TCP
-          {{- if .Values.applySecurity }}
+          {{- if or .Values.applySecurity .Values.components.guac.extraVolumeMounts }}
           volumeMounts:
+            {{- if .Values.applySecurity }}
             - name: {{ $constants.guac.name }}-data
               mountPath: /tmp
             - name: {{ $constants.guac.name }}-readonly
@@ -120,6 +127,10 @@ spec:
               readOnly: true
             - name: {{ $constants.guac.name }}-data
               mountPath: /opt/kasm/current/tmp/guac
+            {{- end }}
+            {{- if .Values.components.guac.extraVolumeMounts }}
+              {{- toYaml .Values.components.guac.extraVolumeMounts | nindent 12 }}
+            {{- end }}
           {{- end }}
           {{- if .Values.applyHealthChecks }}
           livenessProbe:
@@ -137,13 +148,18 @@ spec:
           {{- if .Values.applySecurity }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}
-      {{- if .Values.applySecurity }}
+      {{- if or .Values.applySecurity .Values.components.guac.extraVolumes }}
       volumes:
+        {{- if .Values.applySecurity }}
         - name: {{ $constants.guac.name }}-data
           emptyDir:
             sizeLimit: 1Gi
         - name: {{ $constants.guac.name }}-readonly
           emptyDir:
             sizeLimit: 150Mi
+        {{- end }}
+        {{- if .Values.components.guac.extraVolumes }}
+          {{- toYaml .Values.components.guac.extraVolumes | nindent 8 }}
+        {{- end }}
       {{- end }}
 {{- end }}

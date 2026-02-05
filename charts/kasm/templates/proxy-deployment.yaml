@@ -109,6 +109,9 @@ spec:
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}
         {{- end }}
+        {{- if $values.components.proxy.initContainers }}
+          {{- toYaml $values.components.proxy.initContainers | nindent 8 }}
+        {{- end }}
       containers:
         - name: {{ $constants.proxy.name }}-container
           image: {{ $constants.proxy.image }}
@@ -120,6 +123,9 @@ spec:
           {{- end }}
           {{- if $values.applySecurity }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
+          {{- end }}
+          {{- with $values.components.proxy.extraEnv }}
+          env: {{ toYaml . | nindent 12 }}
           {{- end }}
           volumeMounts:
             - name: {{ $constants.proxy.name }}-cert
@@ -135,6 +141,9 @@ spec:
             - name: {{ $constants.proxy.name }}-base-config
               mountPath: /etc/nginx/nginx.conf
               subPath: nginx.conf
+            {{- if $values.components.proxy.extraVolumeMounts }}
+              {{- toYaml $values.components.proxy.extraVolumeMounts | nindent 12 }}
+            {{- end }}
             {{- if $values.applySecurity }}
             - name: {{ $constants.proxy.name }}-data
               mountPath: /var/cache/nginx
@@ -171,6 +180,9 @@ spec:
         - name: {{ $constants.proxy.name }}-services-config
           configMap:
             name: {{ $constants.proxy.name }}-services-configmap
+        {{- if $values.components.proxy.extraVolumes }}
+          {{- toYaml $values.components.proxy.extraVolumes | nindent 8 }}
+        {{- end }}
         {{- if $values.applySecurity }}
         - name: {{ $constants.proxy.name }}-data
           emptyDir:

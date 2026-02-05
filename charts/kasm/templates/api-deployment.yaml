@@ -59,6 +59,9 @@ spec:
       {{- with .Values.affinity }}
       affinity: {{ toYaml . | nindent 8 }}
       {{- end }}
+      {{- with .Values.components.api.extraVolumes }}
+      volumes: {{ toYaml . | nindent 8 }}
+      {{- end }}
       initContainers:
         - name: db-is-ready
           image: {{ $constants.api.image }}
@@ -90,6 +93,9 @@ spec:
           {{- if .Values.applySecurity }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
           {{- end }}
+        {{- if .Values.components.api.initContainers }}
+          {{- toYaml .Values.components.api.initContainers | nindent 8 }}
+        {{- end }}
       containers:
         - name: {{ $constants.api.name }}-container
           image: {{ $constants.api.image }}
@@ -116,6 +122,9 @@ spec:
                   name: {{ .Release.Name }}-secrets
                   key: "db-password"
                 {{- end }}
+            {{- if .Values.components.api.extraEnv }}
+              {{- toYaml .Values.components.api.extraEnv | nindent 12 }}
+            {{- end }}
           ports:
             - name: {{ $constants.api.portName }}
               containerPort: {{ $constants.api.port }}
@@ -133,4 +142,7 @@ spec:
           {{- end }}
           {{- if .Values.applyPodSecurity }}
             {{- include "kasm.containerSecurity" . | indent 10 }}
+          {{- end }}
+          {{- with .Values.components.api.extraVolumeMounts }}
+          volumeMounts: {{ toYaml . | nindent 12 }}
           {{- end }}

@@ -161,17 +161,12 @@
           "description": "Set the secret name where the certificate is stored. This secret name will store a certificate created by `cert-manager` if you set `cert-manager.enabled` to true",
           "title": "secretName",
           "type": "string",
-          "required": [
-            "secretName"
-          ]
+          "required": ["secretName"]
         }
       },
       "title": "certificate",
       "type": "object",
-      "required": [
-        "secretName",
-        "certManager"
-      ]
+      "required": ["secretName", "certManager"]
     },
     "clusterDomain": {
       "default": "cluster.local",
@@ -192,6 +187,33 @@
               "title": "annotations",
               "type": "object"
             },
+            "extraEnv": {
+              "additionalProperties": true,
+              "description": "Additional environement variables",
+              "title": "extraEnv",
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "extraVolumes": {
+              "additionalProperties": true,
+              "description": "Additional volumes to add to pod",
+              "title": "extraVolumes",
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "extraVolumeMounts": {
+              "additionalProperties": true,
+              "description": "Additional volumes to mount",
+              "title": "extraVolumeMounts",
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
             "image": {
               "additionalProperties": false,
               "description": "Configure the image repository where the image is stored. Use this to point to an private hosted container registry instead of our public DockerHub hosted one.",
@@ -209,10 +231,16 @@
               },
               "title": "image",
               "type": "object",
-              "requied": [
-                "repository",
-                "tag"
-              ]
+              "requied": ["repository", "tag"]
+            },
+            "initContainers": {
+              "additionalProperties": true,
+              "description": "Custom init containers to run",
+              "title": "initContainers",
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
             },
             "labels": {
               "additionalProperties": true,
@@ -234,7 +262,11 @@
             "image",
             "resources",
             "annotations",
-            "labels"
+            "labels",
+            "initContainers",
+            "extraEnv",
+            "extraVolumes",
+            "extraVolumeMounts"
           ]
         },
         "guac": {
@@ -253,6 +285,33 @@
               "title": "enabled",
               "type": "boolean"
             },
+            "extraEnv": {
+              "additionalProperties": true,
+              "description": "Additional environement variables",
+              "title": "extraEnv",
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "extraVolumes": {
+              "additionalProperties": true,
+              "description": "Additional volumes to add to pod",
+              "title": "extraVolumes",
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "extraVolumeMounts": {
+              "additionalProperties": true,
+              "description": "Additional volumes to mount",
+              "title": "extraVolumeMounts",
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
             "image": {
               "additionalProperties": false,
               "description": "Configure the image repository where the image is stored. Use this to point to an private hosted container registry instead of our public DockerHub hosted one.",
@@ -270,10 +329,16 @@
               },
               "title": "image",
               "type": "object",
-              "requied": [
-                "repository",
-                "tag"
-              ]
+              "requied": ["repository", "tag"]
+            },
+            "initContainers": {
+              "additionalProperties": true,
+              "description": "Custom init containers to run",
+              "title": "initContainers",
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
             },
             "labels": {
               "additionalProperties": true,
@@ -295,7 +360,11 @@
             "image",
             "resources",
             "annotations",
-            "labels"
+            "labels",
+            "initContainers",
+            "extraEnv",
+            "extraVolumes",
+            "extraVolumeMounts"
           ]
         },
         "manager": {
@@ -307,6 +376,33 @@
               "description": "Custom annotations to add to the Kasm Manager Deployment",
               "title": "annotations",
               "type": "object"
+            },
+            "extraEnv": {
+              "additionalProperties": true,
+              "description": "Additional environement variables",
+              "title": "extraEnv",
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "extraVolumes": {
+              "additionalProperties": true,
+              "description": "Additional volumes to add to pod",
+              "title": "extraVolumes",
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "extraVolumeMounts": {
+              "additionalProperties": true,
+              "description": "Additional volumes to mount",
+              "title": "extraVolumeMounts",
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
             },
             "image": {
               "additionalProperties": false,
@@ -325,10 +421,16 @@
               },
               "title": "image",
               "type": "object",
-              "requied": [
-                "repository",
-                "tag"
-              ]
+              "requied": ["repository", "tag"]
+            },
+            "initContainers": {
+              "additionalProperties": true,
+              "description": "Custom init containers to run",
+              "title": "initContainers",
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
             },
             "labels": {
               "additionalProperties": true,
@@ -350,7 +452,11 @@
             "image",
             "resources",
             "annotations",
-            "labels"
+            "labels",
+            "initContainers",
+            "extraEnv",
+            "extraVolumes",
+            "extraVolumeMounts"
           ]
         },
         "proxy": {
@@ -362,6 +468,33 @@
               "description": "Custom annotations to add to the Kasm Proxy Deployment",
               "title": "annotations",
               "type": "object"
+            },
+            "extraEnv": {
+              "additionalProperties": true,
+              "description": "Additional environement variables",
+              "title": "extraEnv",
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "extraVolumes": {
+              "additionalProperties": true,
+              "description": "Additional volumes to add to pod",
+              "title": "extraVolumes",
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "extraVolumeMounts": {
+              "additionalProperties": true,
+              "description": "Additional volumes to mount",
+              "title": "extraVolumeMounts",
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
             },
             "image": {
               "additionalProperties": false,
@@ -380,10 +513,16 @@
               },
               "title": "image",
               "type": "object",
-              "requied": [
-                "repository",
-                "tag"
-              ]
+              "requied": ["repository", "tag"]
+            },
+            "initContainers": {
+              "additionalProperties": true,
+              "description": "Custom init containers to run",
+              "title": "initContainers",
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
             },
             "labels": {
               "additionalProperties": true,
@@ -405,7 +544,11 @@
             "image",
             "resources",
             "annotations",
-            "labels"
+            "labels",
+            "initContainers",
+            "extraEnv",
+            "extraVolumes",
+            "extraVolumeMounts"
           ]
         },
         "rdpGateway": {
@@ -424,6 +567,33 @@
               "title": "enabled",
               "type": "boolean"
             },
+            "extraEnv": {
+              "additionalProperties": true,
+              "description": "Additional environement variables",
+              "title": "extraEnv",
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "extraVolumes": {
+              "additionalProperties": true,
+              "description": "Additional volumes to add to pod",
+              "title": "extraVolumes",
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "extraVolumeMounts": {
+              "additionalProperties": true,
+              "description": "Additional volumes to mount",
+              "title": "extraVolumeMounts",
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
             "image": {
               "additionalProperties": false,
               "description": "Configure the image repository where the image is stored. Use this to point to an private hosted container registry instead of our public DockerHub hosted one.",
@@ -441,10 +611,16 @@
               },
               "title": "image",
               "type": "object",
-              "requied": [
-                "repository",
-                "tag"
-              ]
+              "requied": ["repository", "tag"]
+            },
+            "initContainers": {
+              "additionalProperties": true,
+              "description": "Custom init containers to run",
+              "title": "initContainers",
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
             },
             "labels": {
               "additionalProperties": true,
@@ -466,7 +642,11 @@
             "image",
             "resources",
             "annotations",
-            "labels"
+            "labels",
+            "initContainers",
+            "extraEnv",
+            "extraVolumes",
+            "extraVolumeMounts"
           ]
         },
         "rdpHttpsGateway": {
@@ -485,6 +665,33 @@
               "title": "enabled",
               "type": "boolean"
             },
+            "extraEnv": {
+              "additionalProperties": true,
+              "description": "Additional environement variables",
+              "title": "extraEnv",
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "extraVolumes": {
+              "additionalProperties": true,
+              "description": "Additional volumes to add to pod",
+              "title": "extraVolumes",
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "extraVolumeMounts": {
+              "additionalProperties": true,
+              "description": "Additional volumes to mount",
+              "title": "extraVolumeMounts",
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
             "image": {
               "additionalProperties": false,
               "description": "Configure the image repository where the image is stored. Use this to point to an private hosted container registry instead of our public DockerHub hosted one.",
@@ -502,10 +709,16 @@
               },
               "title": "image",
               "type": "object",
-              "requied": [
-                "repository",
-                "tag"
-              ]
+              "requied": ["repository", "tag"]
+            },
+            "initContainers": {
+              "additionalProperties": true,
+              "description": "Custom init containers to run",
+              "title": "initContainers",
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
             },
             "labels": {
               "additionalProperties": true,
@@ -527,7 +740,11 @@
             "image",
             "resources",
             "annotations",
-            "labels"
+            "labels",
+            "initContainers",
+            "extraEnv",
+            "extraVolumes",
+            "extraVolumeMounts"
           ]
         }
       },
@@ -567,10 +784,7 @@
           },
           "title": "image",
           "type": "object",
-          "requied": [
-            "repository",
-            "tag"
-          ]
+          "requied": ["repository", "tag"]
         },
         "kasmDbName": {
           "default": "kasm",
@@ -676,10 +890,7 @@
                 }
               },
               "title": "retentionPolicy",
-              "required": [
-                "whenDeleted",
-                "whenScaled"
-              ]
+              "required": ["whenDeleted", "whenScaled"]
             },
             "storageClassName": {
               "default": "",
@@ -689,11 +900,7 @@
             }
           },
           "title": "storage",
-          "required": [
-            "storageClassName",
-            "pvcSize",
-            "retentionPolicy"
-          ]
+          "required": ["storageClassName", "pvcSize", "retentionPolicy"]
         }
       },
       "title": "database",
@@ -811,22 +1018,14 @@
         }
       },
       "title": "dbManagement",
-      "required": [
-        "initialize",
-        "upgrade",
-        "backupCron"
-      ]
+      "required": ["initialize", "upgrade", "backupCron"]
     },
     "deploymentSize": {
       "default": "small",
       "description": "Define the estimated size of the Kasm deployment in expected session load.  small  = Up to 10-15 sessions  medium = Up to 25-30 sessions  large  = Up to 50+ sessions",
       "title": "deploymentSize",
       "type": "string",
-      "enum": [
-        "small",
-        "medium",
-        "large"
-      ]
+      "enum": ["small", "medium", "large"]
     },
     "extraLabels": {
       "additionalProperties": false,
@@ -1081,10 +1280,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "name",
-          "upstream_auth_addr"
-        ]
+        "required": ["name", "upstream_auth_addr"]
       }
     },
     "labels": {
@@ -1117,27 +1313,18 @@
           "default": "LoadBalancer",
           "title": "type",
           "type": "string",
-          "enum": [
-            "ClusterIP",
-            "LoadBalancer"
-          ]
+          "enum": ["ClusterIP", "LoadBalancer"]
         }
       },
       "title": "proxyService",
       "type": "object",
-      "required": [
-        "type",
-        "annotations",
-        "labels"
-      ]
+      "required": ["type", "annotations", "labels"]
     },
     "publicAddr": {
       "description": "Set the access URL to be used for the Kasm deployment. This is the URL you will use to access your Kasm deployment. This URL can be a private address, it just needs to be resolvable by systems you use to interface with Kasm.",
       "title": "publicAddr",
       "type": "string",
-      "required": [
-        "publicAddr"
-      ]
+      "required": ["publicAddr"]
     },
     "restartPolicy": {
       "default": "Always",
@@ -1196,12 +1383,7 @@
       },
       "title": "route",
       "type": "object",
-      "required": [
-        "enabled",
-        "tls",
-        "annotations",
-        "labels"
-      ]
+      "required": ["enabled", "tls", "annotations", "labels"]
     }
   },
   "type": "object"

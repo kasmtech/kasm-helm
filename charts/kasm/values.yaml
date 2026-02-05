@@ -9,7 +9,7 @@ deploymentSize: "small"
 # publicAddr -- Set the access URL to be used for the Kasm deployment. This is the URL you will use to access
 # your Kasm deployment. This URL can be a private address, it just needs to be resolvable by systems you use
 # to interface with Kasm.
-# 
+#
 # If you create a self-signed or custom certificate, this is the value you should assign as the Common Name
 # associated with the certificate. If `certificate.certManager.enabled` is set to true, this is the
 # name used to generate the certificate.
@@ -34,9 +34,9 @@ kasmZones: []
 #     upstream_auth_addr: zone-a.kasm.contoso.com
 #   - name: Zone-B
 #     upstream_auth_addr: zone-b.kasm.contoso.com
-    
-# proxyService -- Configure the external-facing service type to use. 
-# Allowed service types: ClusterIP or LoadBalancer. 
+
+# proxyService -- Configure the external-facing service type to use.
+# Allowed service types: ClusterIP or LoadBalancer.
 #
 # The service.annotations defined here only apply to the `proxy` service (`proxy-service-external.yaml` file).
 # If you wish to apply annotations to all services, use the annotations.service value at the bottom of this chart.
@@ -50,8 +50,8 @@ proxyService:
   annotations: {}
   labels: {}
 
-# Configure an Ingress for your Kasm deployment. 
-# 
+# Configure an Ingress for your Kasm deployment.
+#
 ingress:
   # ingress.enabled -- Set the enabled value to `true` to use a pre-defined Ingress service to expose Kasm
   #
@@ -72,12 +72,12 @@ ingress:
   annotations: {}
   labels: {}
 
-# route -- Configure an OpenShift Route for your Kasm deployment. 
-# 
+# route -- Configure an OpenShift Route for your Kasm deployment.
+#
 route:
   # route.enabled -- Set the enabled value to `true` to use a pre-defined Route service to expose Kasm
   enabled: false
-  # route.tls -- Object to define the TLS configuration for your OpenShift Route - 
+  # route.tls -- Object to define the TLS configuration for your OpenShift Route -
   # [Configuring Secure Routes](https://docs.redhat.com/en/documentation/openshift_dedicated/4/html/networking/configuring-routes#configuring-default-certificate).
   #
   tls: {}
@@ -111,12 +111,12 @@ certificate:
   #
   secretName: ""
   # certificate.certManager -- For additional cert-manager configuration/deployment information refer to the online documentation
-  # [Cert Manager Docs](https://cert-manager.io/v1.1-docs/installation/kubernetes/). 
-  # 
+  # [Cert Manager Docs](https://cert-manager.io/v1.1-docs/installation/kubernetes/).
+  #
   # NOTE: If you do not enable `cert-manager`, you must generate your own certificates and add them as a Kubernetes secret, or
   # present cloud-managed certificates.
   #
-  # Refer to [Kubernetes Secrets](https://kubernetes.io/docs/concepts/configuration/secret/), and 
+  # Refer to [Kubernetes Secrets](https://kubernetes.io/docs/concepts/configuration/secret/), and
   # [Kubernetes TLS Secret](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_create/kubectl_create_secret_tls/)
   # for more information.
   #
@@ -270,6 +270,14 @@ components:
     resources: {}
     # components.proxy.labels -- Custom labels to add to the Kasm Proxy Deployment
     labels: {}
+    # components.proxy.initContainers -- Custom init containers to run
+    initContainers: []
+    # components.proxy.extraEnv -- Additional environment variables
+    extraEnv: []
+    # components.proxy.extraVolumes -- Additional volumes to add to pod
+    extraVolumes: []
+    # components.proxy.extraVolumeMounts -- Additional volume mounts
+    extraVolumeMounts: []
   # Configuration settings for the Kasm API service
   #
   api:
@@ -285,6 +293,14 @@ components:
     resources: {}
     # components.api.labels -- Custom labels to add to the Kasm api Deployment
     labels: {}
+    # components.api.initContainers -- Custom init containers to run
+    initContainers: []
+    # components.api.extraEnv -- Additional environment variables
+    extraEnv: []
+    # components.api.extraVolumes -- Additional volumes to add to pod
+    extraVolumes: []
+    # components.api.extraVolumeMounts -- Additional volume mounts
+    extraVolumeMounts: []
   # Configuration settings for the Kasm Manager service
   #
   manager:
@@ -300,6 +316,14 @@ components:
     resources: {}
     # components.manager.labels -- Custom labels to add to the Kasm Manager Deployment
     labels: {}
+    # components.manager.initContainers -- Custom init containers to run
+    initContainers: []
+    # components.manager.extraEnv -- Additional environment variables
+    extraEnv: []
+    # components.manager.extraVolumes -- Additional volumes to add to pod
+    extraVolumes: []
+    # components.manager.extraVolumeMounts -- Additional volume mounts
+    extraVolumeMounts: []
   # Configuration settings for the Kasm Guac RDP service
   #
   guac:
@@ -309,7 +333,7 @@ components:
     image:
       repository: kasmweb/kasm-guac
       tag: 1.18.1
-    # components.guac.enabled -- Use this setting to enable/disable deployment of the Kasm Guacamole web RDP service - 
+    # components.guac.enabled -- Use this setting to enable/disable deployment of the Kasm Guacamole web RDP service -
     # [Kasm Guac Service](https://docs.kasm.com/docs/guide/connection_proxies#guacamole-guac).
     #
     enabled: true
@@ -319,6 +343,14 @@ components:
     resources: {}
     # components.guac.labels -- Custom labels to add to the Kasm Guac Deployment
     labels: {}
+    # components.guac.initContainers -- Custom init containers to run
+    initContainers: []
+    # components.guac.extraEnv -- Additional environment variables
+    extraEnv: []
+    # components.guac.extraVolumes -- Additional volumes to add to pod
+    extraVolumes: []
+    # components.guac.extraVolumeMounts -- Additional volume mounts
+    extraVolumeMounts: []
   # Configuration settings for the Kasm RDP Gateway service
   #
   rdpGateway:
@@ -328,7 +360,7 @@ components:
     image:
       repository: kasmweb/rdp-gateway
       tag: 1.18.1
-    # components.rdpGateway.enabled -- Use this setting to enable/disable deployment of the Kasm RDP Gateway service - 
+    # components.rdpGateway.enabled -- Use this setting to enable/disable deployment of the Kasm RDP Gateway service -
     # [Kasm RDP Gateway](https://docs.kasm.com/docs/guide/connection_proxies#rdp-gateway).
     #
     enabled: true
@@ -338,6 +370,14 @@ components:
     resources: {}
     # components.rdpGateway.labels -- Custom labels to add to the Kasm RDP Gateway Deployment
     labels: {}
+    # components.rdpGateway.initContainers -- Custom init containers to run
+    initContainers: []
+    # components.rdpGateway.extraEnv -- Additional environment variables
+    extraEnv: []
+    # components.rdpGateway.extraVolumes -- Additional volumes to add to pod
+    extraVolumes: []
+    # components.rdpGateway.extraVolumeMounts -- Additional volume mounts
+    extraVolumeMounts: []
   # Configuration settings for the Kasm RDP HTTPS Gateway service
   #
   rdpHttpsGateway:
@@ -348,7 +388,7 @@ components:
       repository: kasmweb/rdp-https-gateway
       tag: 1.18.1
     # components.rdpHttpsGateway.enabled -- Use this setting to enable/disable deployment of the Kasm RDP HTTPS Gateway service.
-    # This service allows users to use native RDP clients via HTTPS connections rather than exposing 3389 - 
+    # This service allows users to use native RDP clients via HTTPS connections rather than exposing 3389 -
     # [Kasm RDP HTTPS Gateway](https://docs.kasm.com/docs/guide/connection_proxies#rdp-https-gateway.
     #
     enabled: true
@@ -358,6 +398,14 @@ components:
     resources: {}
     # components.rdpHttpsGateway.labels -- Custom labels to add to the Kasm RDP HTTPS Gateway Deployment
     labels: {}
+    # components.rdpHttpsGateway.initContainers -- Custom init containers to run
+    initContainers: []
+    # components.rdpHttpsGateway.extraEnv -- Additional environment variables
+    extraEnv: []
+    # components.rdpHttpsGateway.extraVolumes -- Additional volumes to add to pod
+    extraVolumes: []
+    # components.rdpHttpsGateway.extraVolumeMounts -- Additional volume mounts
+    extraVolumeMounts: []
 
 ####################################
 # Extra Kubernetes config settings #
@@ -397,12 +445,12 @@ imagePullSecrets:
 #
 clusterDomain: "cluster.local"
 
-# nodeSelector -- Configure node selector settings for your Kasm pods - 
+# nodeSelector -- Configure node selector settings for your Kasm pods -
 # [Kubernetes Node Selector](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector).
 #
 nodeSelector: {}
 
-# affinity -- Configure node affinity settings for Kasm pods - 
+# affinity -- Configure node affinity settings for Kasm pods -
 # [Kubernetes Affinity](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/).
 # Kasm is not guaranteed to work with Affinity settings - use caution if you must configuring these settings.
 # The below, optional object passes in raw Affinity rules for Pods, Nodes, etc. for your environment. Make sure you
