@@ -1,8 +1,11 @@
 name: Publish Chart to OCI
 
 on:
-  release:
-    types: [published]
+  push:
+    branches:
+      - 'release/**'
+    paths:
+      - 'charts/**/Chart.yaml'
   workflow_dispatch:
 
 concurrency:
@@ -12,8 +15,6 @@ concurrency:
 permissions:
   contents: read
   packages: write
-  id-token: write
-  attestations: write
 
 jobs:
   publish:
@@ -29,22 +30,7 @@ jobs:
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
 
-      - name: Package Chart
+      - name: Package and Push
         run: |
           helm package charts/kasm --destination ./dist
-          echo "CHART_FILE=$(ls dist/*.tgz)" >> $GITHUB_ENV
-
-      - name: Push Chart to GHCR
-        id: push
-        run: |
-          PUSH_OUTPUT=$(helm push ${{ env.CHART_FILE }} oci://ghcr.io/${{ github.repository_owner }} 2>&1)
-          echo "$PUSH_OUTPUT"
-          DIGEST=$(echo "$PUSH_OUTPUT" | grep 'Digest:' | awk '{print $2}')
-          echo "digest=$DIGEST" >> $GITHUB_OUTPUT
-
-      - name: Generate Artifact Attestation
-        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
-        with:
-          subject-name: ghcr.io/${{ github.repository_owner }}/kasm
-          subject-digest: ${{ steps.push.outputs.digest }}
-          push-to-registry: true
+          helm push dist/*.tgz oci://ghcr.io/${{ github.repository_owner }}

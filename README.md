@@ -14,25 +14,23 @@ For more detailed information or procedures for upgrading your Kasm Kubernetes d
 
 ## Quickstart
 
-### Option 1: Using OCI Registry (Recommended for Production)
-
-> **Note:** OCI charts are published on GitHub releases. This method provides better security with signed artifacts.
-
-```bash
-helm install kasm oci://ghcr.io/kasmtech/kasm \
-  --namespace {namespace} --create-namespace \
-  --set publicAddr="kasm.contoso.com" \
-  --set certificate.secretName="<some-cert-secret>"
-```
-
-### Option 2: Using Helm Repository
-
-> **Note:** This requires GitHub Pages to be enabled for this repository. If not available, use Option 3.
+### Option 1: Using Helm Repository
 
 ```bash
 helm repo add kasm https://kasmtech.github.io/kasm-helm
 helm repo update
 helm install kasm kasm/kasm \
+  --namespace {namespace} --create-namespace \
+  --set publicAddr="kasm.contoso.com" \
+  --set certificate.secretName="<some-cert-secret>"
+```
+
+> **Note:** Requires GitHub Pages enabled. See [Setup Instructions](#github-pages-setup) below.
+
+### Option 2: Using OCI Registry
+
+```bash
+helm install kasm oci://ghcr.io/kasmtech/kasm \
   --namespace {namespace} --create-namespace \
   --set publicAddr="kasm.contoso.com" \
   --set certificate.secretName="<some-cert-secret>"
@@ -129,6 +127,19 @@ After deployment, get your connection details and credentials:
 
 - For detailed chart values and configuration, see the [Chart README](./charts/kasm/README.md).
 - For backup, restore, or upgrade procedures, see this [additional documentation](./docs)
+
+---
+
+## GitHub Pages Setup
+
+To enable the Helm repository (Option 2), GitHub Pages must be configured:
+
+1. Go to **Settings** → **Pages**
+2. Set **Source** to `gh-pages` branch
+3. Set **Folder** to `/ (root)`
+4. Click **Save**
+
+The `gh-pages` branch is automatically created and maintained by the CI workflow when charts are released.
 
 ---
 
