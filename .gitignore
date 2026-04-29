@@ -1,3 +1,14 @@
 ## Ignore cert files
 *.key
 *.crt
+
+## Ignore Helm chart artifacts
+*.tgz
+dist/
+docs/*.tgz
+
+## Ignore IDE files
+.idea/
+.vscode/
+*.swp
+*.swo

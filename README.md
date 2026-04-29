@@ -14,7 +14,31 @@ For more detailed information or procedures for upgrading your Kasm Kubernetes d
 
 ## Quickstart
 
-Get up and running in just a few steps!
+### Option 1: Using OCI Registry (Recommended for Production)
+
+> **Note:** OCI charts are published on GitHub releases. This method provides better security with signed artifacts.
+
+```bash
+helm install kasm oci://ghcr.io/kasmtech/kasm \
+  --namespace {namespace} --create-namespace \
+  --set publicAddr="kasm.contoso.com" \
+  --set certificate.secretName="<some-cert-secret>"
+```
+
+### Option 2: Using Helm Repository
+
+> **Note:** This requires GitHub Pages to be enabled for this repository. If not available, use Option 3.
+
+```bash
+helm repo add kasm https://kasmtech.github.io/kasm-helm
+helm repo update
+helm install kasm kasm/kasm \
+  --namespace {namespace} --create-namespace \
+  --set publicAddr="kasm.contoso.com" \
+  --set certificate.secretName="<some-cert-secret>"
+```
+
+### Option 3: Cloning the Repository
 
 1. **Clone the Helm Chart Repository:**
     ```bash
