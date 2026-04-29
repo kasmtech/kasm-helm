@@ -27,7 +27,7 @@ helm install kasm oci://ghcr.io/kasmtech/kasm \
 
 ### Option 2: Using Helm Repository
 
-> **Note:** This requires GitHub Pages to be enabled for this repository. If not available, use Option 3.
+> **Note:** Requires GitHub Pages enabled on `gh-pages` branch. See [Setup Instructions](#github-pages-setup) below.
 
 ```bash
 helm repo add kasm https://kasmtech.github.io/kasm-helm
@@ -129,6 +129,19 @@ After deployment, get your connection details and credentials:
 
 - For detailed chart values and configuration, see the [Chart README](./charts/kasm/README.md).
 - For backup, restore, or upgrade procedures, see this [additional documentation](./docs)
+
+---
+
+## GitHub Pages Setup
+
+To enable the Helm repository (Option 2), GitHub Pages must be configured:
+
+1. Go to **Settings** → **Pages**
+2. Set **Source** to `gh-pages` branch
+3. Set **Folder** to `/ (root)`
+4. Click **Save**
+
+The `gh-pages` branch is automatically created and maintained by the CI workflow when charts are released.
 
 ---
 
