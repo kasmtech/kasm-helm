@@ -1,8 +1,11 @@
 name: Publish Chart to OCI
 
 on:
-  release:
-    types: [published]
+  push:
+    branches:
+      - 'release/**'
+    paths:
+      - 'charts/**/Chart.yaml'
   workflow_dispatch:
 
 concurrency:
@@ -27,7 +30,7 @@ jobs:
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
 
-      - name: Package and Push Chart
+      - name: Package and Push
         run: |
           helm package charts/kasm --destination ./dist
           helm push dist/*.tgz oci://ghcr.io/${{ github.repository_owner }}
