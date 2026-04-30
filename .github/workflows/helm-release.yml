@@ -46,6 +46,18 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
 
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@74a5d142397b4f367a1b7dda937da443f5a9c3d5 # v3.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Package and Push Helm Chart to OCI
+        run: |
+          helm package charts/kasm --version $(grep "version:" charts/kasm/Chart.yaml | awk '{print $2}')
+          helm push kasm-*.tgz oci://ghcr.io/${{ github.repository_owner }}/charts
+
       - name: Run chart-releaser
         uses: helm/chart-releaser-action@a0d2dc62c5e491af8ef6ba64a2e02bcf3fb33aa1 # v1.7.0
         env:
