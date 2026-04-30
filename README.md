@@ -1,8 +1,8 @@
 # Kasm on Kubernetes (Helm Chart)
 
-![Version: 1.1180.0](https://img.shields.io/badge/Version-1.1180.0-informational?style=flat-square) ![AppVersion: 1.18.0](https://img.shields.io/badge/AppVersion-1.18.0-informational?style=flat-square)
+![Version: 1.1181.0](https://img.shields.io/badge/Version-1.1181.0-informational?style=flat-square) ![AppVersion: 1.18.1](https://img.shields.io/badge/AppVersion-1.18.1-informational?style=flat-square)
 
-> ⚠️ **This Helm chart is not intended for production use.**  
+> ⚠️ **This Helm chart is currently under technical Preview. Potential users should be advised that it is suitable for demo and evaluation purposes.**  
 > For advanced configurations, see the [Chart README](./charts/kasm/README.md).
 
 ## Overview
@@ -10,9 +10,33 @@
 This Helm chart enables you to deploy [Kasm Workspaces](https://kasm.com/) in Kubernetes with minimal friction.
 For more detailed information or procedures for upgrading your Kasm Kubernetes deployment, refer to our **[additional documentation](./docs)**.
 
+> Important: The [Kasm agent](https://docs.kasm.com/docs/install/multi_server_install#install-agent-server-roles) is not included in this Helm chart. It must be installed separately on a VM or bare-metal server. A Kasm session cannot be started without a running agent.
+
 ## Quickstart
 
-Get up and running in just a few steps!
+### Option 1: Using Helm Repository
+
+```bash
+helm repo add kasm https://kasmtech.github.io/kasm-helm
+helm repo update
+helm install kasm kasm/kasm \
+  --namespace {namespace} --create-namespace \
+  --set publicAddr="kasm.contoso.com" \
+  --set certificate.secretName="<some-cert-secret>"
+```
+
+> **Note:** Requires GitHub Pages enabled. See [Setup Instructions](#github-pages-setup) below.
+
+### Option 2: Using OCI Registry
+
+```bash
+helm install kasm oci://ghcr.io/kasmtech/kasm \
+  --namespace {namespace} --create-namespace \
+  --set publicAddr="kasm.contoso.com" \
+  --set certificate.secretName="<some-cert-secret>"
+```
+
+### Option 3: Cloning the Repository
 
 1. **Clone the Helm Chart Repository:**
     ```bash
@@ -92,7 +116,7 @@ After deployment, get your connection details and credentials:
 ## Upgrades & Versioning
 
 - **Branching:**  
-  This repo maintains a release branch matching each Kasm Workspaces version (e.g., `release/1.18.0`).  
+  This repo maintains a release branch matching each Kasm Workspaces version (e.g., `release/1.18.1`).  
   Use the matching branch for your Kasm deployment version.
 - **Development:**  
   Use the default `develop` branch for developer previews.
@@ -103,6 +127,19 @@ After deployment, get your connection details and credentials:
 
 - For detailed chart values and configuration, see the [Chart README](./charts/kasm/README.md).
 - For backup, restore, or upgrade procedures, see this [additional documentation](./docs)
+
+---
+
+## GitHub Pages Setup
+
+To enable the Helm repository (Option 2), GitHub Pages must be configured:
+
+1. Go to **Settings** → **Pages**
+2. Set **Source** to `gh-pages` branch
+3. Set **Folder** to `/ (root)`
+4. Click **Save**
+
+The `gh-pages` branch is automatically created and maintained by the CI workflow when charts are released.
 
 ---
 

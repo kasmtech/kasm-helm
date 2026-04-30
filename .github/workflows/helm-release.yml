@@ -1,0 +1,66 @@
+name: Release Charts
+
+on:
+  push:
+    branches:
+      - 'release/**'
+    paths:
+      - 'charts/**/Chart.yaml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup gh-pages branch
+        run: |
+          if ! git ls-remote --heads origin gh-pages >/dev/null 2>&1; then
+            git config user.name "$GITHUB_ACTOR"
+            git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+            git checkout --orphan gh-pages
+            git rm -rf .
+            printf 'apiVersion: v1\nentries: {}\n' > index.yaml
+            git add index.yaml
+            git commit -m "Initialize Helm repository"
+            git push origin gh-pages
+            git checkout -
+          fi
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Install Helm
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Package and Push Helm Chart to OCI
+        run: |
+          helm package charts/kasm --version $(grep "version:" charts/kasm/Chart.yaml | awk '{print $2}')
+          helm push kasm-*.tgz oci://ghcr.io/${{ github.repository_owner }}/charts
+
+      - name: Run chart-releaser
+        uses: helm/chart-releaser-action@a0d2dc62c5e491af8ef6ba64a2e02bcf3fb33aa1 # v1.7.0
+        env:
+          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          CR_SKIP_EXISTING: "true"
