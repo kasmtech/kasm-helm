@@ -1,0 +1,33 @@
+suite: health checks toggle
+templates:
+  - templates/api-deployment.yaml
+  - templates/db-statefulset.yaml
+  - templates/proxy-deployment.yaml
+
+tests:
+  - it: adds probes when applyHealthChecks=true
+    set:
+      applyHealthChecks: true
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].livenessProbe
+      - exists:
+          path: spec.template.spec.containers[0].readinessProbe
+
+  - it: omits probes when applyHealthChecks=false
+    set:
+      applyHealthChecks: false
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].livenessProbe
+      - notExists:
+          path: spec.template.spec.containers[0].readinessProbe
+
+  - it: omits liveness/readiness probes when applyHealthChecks=false
+    set:
+      applyHealthChecks: false
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].livenessProbe
+      - notExists:
+          path: spec.template.spec.containers[0].readinessProbe

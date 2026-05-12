@@ -1,0 +1,14 @@
+{{/*
+  Deploy additional Kubernetes manifests. This field is expected to be either a list of strings or a list of objects.
+*/}}
+{{- if and (hasKey .Values "extraObjects") (not (kindIs "slice" .Values.extraObjects)) -}}
+  {{- fail "extraObjects must be an array (YAML list). Each item may be a string or an object." -}}
+{{- end -}}
+{{- range .Values.extraObjects }}
+---
+  {{- if typeIs "string" . }}
+    {{- tpl . $ }}
+  {{- else }}
+    {{- tpl (. | toYaml | nindent 0) $ }}
+  {{- end }}
+{{- end }}

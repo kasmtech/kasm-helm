@@ -1,0 +1,261 @@
+suite: database management jobs and cron
+templates:
+  - templates/db-init-job.yaml
+  - templates/db-upgrade-job.yaml
+  - templates/db-upgrade-backup-job.yaml
+  - templates/db-backup-cron.yaml
+  - templates/db-backup-pvc.yaml
+  - templates/db-configmap.yaml
+tests:
+  - it: does not render db init job when initialize=false
+    template: templates/db-init-job.yaml
+    set:
+      dbManagement:
+        initialize: false
+    asserts:
+      - hasDocuments:
+          count: 0
+  
+  - it: renders db init job when initialize=true
+    template: templates/db-init-job.yaml
+    set:
+      dbManagement:
+        initialize: true
+        upgrade:
+          enable: false
+    asserts:
+      - isKind:
+          of: Job
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: 'Database initialization verified\.'
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: 'alembic -c /tmp/alembic\.ini'
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: '/usr/bin/startup\.sh \|\| true'
+  
+  - it: renders backup cronjob when backupCron enabled
+    template: templates/db-backup-cron.yaml
+    set:
+      dbManagement:
+        backupCron:
+          enabled: true
+          schedule: "0 2 * * *"
+    asserts:
+      - isKind:
+          of: CronJob
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.volumes[0].persistentVolumeClaim.claimName
+          value: RELEASE-NAME-db-backup
+
+  - it: renders backup pvc when backupCron enabled
+    template: templates/db-backup-pvc.yaml
+    set:
+      dbManagement:
+        backupCron:
+          enabled: true
+          schedule: "0 2 * * *"
+    asserts:
+      - isKind:
+          of: PersistentVolumeClaim
+
+  - it: defaults backup pvc size to 5Gi when unset-like value is provided
+    template: templates/db-backup-pvc.yaml
+    set:
+      dbManagement:
+        backupCron:
+          enabled: true
+          pvcSize: 0
+    asserts:
+      - isKind:
+          of: PersistentVolumeClaim
+      - equal:
+          path: spec.resources.requests.storage
+          value: 5Gi
+  
+  - it: renders upgrade job only when upgrade.enable=true
+    template: templates/db-upgrade-job.yaml
+    set:
+      dbManagement:
+        initialize: false
+        upgrade:
+          enable: true
+    asserts:
+      - isKind:
+          of: Job
+  
+  - it: does not render upgrade job when upgrade.enable=false
+    template: templates/db-upgrade-job.yaml
+    set:
+      dbManagement:
+        initialize: false
+        upgrade:
+          enable: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: fails when initialize=true and upgrade.enable=true
+    template: templates/db-upgrade-job.yaml
+    set:
+      dbManagement:
+        initialize: true
+        upgrade:
+          enable: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "You cannot enable both initialize and upgrade for the DB. If you have an existing Kasm deployment you wish to upgrade, refer to our upgrade procedures - https://some.upgrade.url. Otherwise, select initialize for a new deployment."
+
+  - it: renders valid postgres timeout settings
+    template: templates/db-configmap.yaml
+    set:
+      database:
+        standalone: false
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - matchRegex:
+          path: data["postgresql.conf"]
+          pattern: 'statement_timeout = 900000'
+      - matchRegex:
+          path: data["postgresql.conf"]
+          pattern: 'idle_in_transaction_session_timeout = 30000'
+
+  - it: pre-upgrade backup pvc name strips dots from chart appVersion
+    template: templates/db-upgrade-backup-job.yaml
+    set:
+      dbManagement:
+        initialize: false
+        upgrade:
+          enable: true
+    asserts:
+      - isKind:
+          of: PersistentVolumeClaim
+        documentIndex: 0
+      - matchRegex:
+          path: metadata.name
+          pattern: '^RELEASE-NAME-.+-db-pre-upgrade-backup$'
+        documentIndex: 0
+      - notMatchRegex:
+          path: metadata.name
+          pattern: '\.'
+        documentIndex: 0
+      - matchRegex:
+          path: spec.template.spec.volumes[?(@.name=="kasm-db-dump")].persistentVolumeClaim.claimName
+          pattern: '^RELEASE-NAME-.+-db-pre-upgrade-backup$'
+        documentIndex: 1
+
+  - it: pre-upgrade backup claimName in upgrade job strips dots from chart appVersion
+    template: templates/db-upgrade-job.yaml
+    set:
+      dbManagement:
+        initialize: false
+        upgrade:
+          enable: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.volumes[?(@.name=="kasm-db-dump")].persistentVolumeClaim.claimName
+          pattern: '^RELEASE-NAME-.+-db-pre-upgrade-backup$'
+      - notMatchRegex:
+          path: spec.template.spec.volumes[?(@.name=="kasm-db-dump")].persistentVolumeClaim.claimName
+          pattern: '\.'
+
+  # ---------- skipBackupAndRestore ----------
+  - it: skipBackupAndRestore=true does not render the pre-upgrade backup PVC or Job
+    template: templates/db-upgrade-backup-job.yaml
+    set:
+      database:
+        standalone: true
+        hostname: postgresql.example.test
+      dbManagement:
+        initialize: false
+        upgrade:
+          enable: true
+          skipBackupAndRestore: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: skipBackupAndRestore=true makes upgrade job volume an emptyDir
+    template: templates/db-upgrade-job.yaml
+    set:
+      database:
+        standalone: true
+        hostname: postgresql.example.test
+      dbManagement:
+        initialize: false
+        upgrade:
+          enable: true
+          skipBackupAndRestore: true
+    asserts:
+      - exists:
+          path: spec.template.spec.volumes[?(@.name=="kasm-db-dump")].emptyDir
+      - notExists:
+          path: spec.template.spec.volumes[?(@.name=="kasm-db-dump")].persistentVolumeClaim
+
+  - it: skipBackupAndRestore=true replaces pg_restore branch with a fail-fast error message
+    template: templates/db-upgrade-job.yaml
+    set:
+      database:
+        standalone: true
+        hostname: postgresql.example.test
+      dbManagement:
+        initialize: false
+        upgrade:
+          enable: true
+          skipBackupAndRestore: true
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: 'pg_restore -h'
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: 'skipBackupAndRestore=true'
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: 'exit 1'
+
+  - it: skipBackupAndRestore=false (default) keeps the existing pg_restore branch
+    template: templates/db-upgrade-job.yaml
+    set:
+      dbManagement:
+        initialize: false
+        upgrade:
+          enable: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: 'pg_restore'
+      - exists:
+          path: spec.template.spec.volumes[?(@.name=="kasm-db-dump")].persistentVolumeClaim
+
+  - it: skipBackupAndRestore=true with database.standalone=false fails with explanatory message
+    template: templates/db-upgrade-job.yaml
+    set:
+      database:
+        standalone: false
+      dbManagement:
+        initialize: false
+        upgrade:
+          enable: true
+          skipBackupAndRestore: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "dbManagement.upgrade.skipBackupAndRestore is only supported with database.standalone=true. The chart-included (in-cluster) DB lifecycle is owned by the chart; backup/restore cannot be delegated to the operator in that mode. Either set database.standalone=true (and manage backup/restore yourself before helm upgrade) or set dbManagement.upgrade.skipBackupAndRestore=false."
+
+  - it: skipBackupAndRestore=true is ignored when upgrade.enable=false (no fail-render)
+    template: templates/db-upgrade-job.yaml
+    set:
+      database:
+        standalone: false
+      dbManagement:
+        initialize: false
+        upgrade:
+          enable: false
+          skipBackupAndRestore: true
+    asserts:
+      - hasDocuments:
+          count: 0
+

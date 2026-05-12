@@ -1,3 +1,40 @@
 ## Ignore cert files
 *.key
 *.crt
+
+## Python caches
+__pycache__/
+*.py[cod]
+*.pyd
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+
+## Test artifacts
+.cache/
+tests/e2e/.pytest_cache/
+tests/e2e/__pycache__/
+tests/e2e/*.log
+tests/e2e/.logs/
+charts/kasm-helm/tests/__snapshot__/
+
+## Tooling / build outputs
+bin/
+.rendered/
+*.egg-info/
+dist/
+build/
+.helm/
+.kind/
+.gitlab-ci-local/
+.e2e-old-chart/
+
+## OS/editor
+.DS_Store
+Thumbs.db
+charts/kasm-helm/values-test.yaml

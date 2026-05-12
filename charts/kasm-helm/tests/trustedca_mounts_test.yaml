@@ -1,0 +1,58 @@
+suite: Trusted CA volume mounts
+templates:
+  - templates/api-deployment.yaml
+  - templates/manager-deployment.yaml
+  - templates/guac-deployment.yaml
+  - templates/rdp-gateway-deployment.yaml
+  - templates/rdp-https-gateway-deployment.yaml
+  - templates/db-statefulset.yaml
+
+tests:
+  - it: creates trusted CA volumes and mounts when enabled
+    set:
+      trustedCaBundle:
+        enabled: true
+        configMapName: kasm-trusted-ca-test
+    asserts:
+      - exists:
+          path: spec.template.spec.volumes[?(@.name=="usr-local-share")]
+      - equal:
+          path: spec.template.spec.volumes[?(@.name=="usr-local-share")].configMap.name
+          value: kasm-trusted-ca-test
+      - exists:
+          path: spec.template.spec.volumes[?(@.name=="ca-init-script")]
+      - matchRegex:
+          path: spec.template.spec.volumes[?(@.name=="ca-init-script")].configMap.name
+          pattern: ca-bundle-script$
+      - exists:
+          path: spec.template.spec.volumes[?(@.name=="etc-ssl-certs")]
+      - exists:
+          path: spec.template.spec.initContainers[?(@.name=="trusted-ca-init")]
+      - exists:
+          path: spec.template.spec.initContainers[?(@.name=="trusted-ca-init")].volumeMounts[?(@.name=="ca-init-script")]
+      - exists:
+          path: spec.template.spec.initContainers[?(@.name=="trusted-ca-init")].volumeMounts[?(@.name=="usr-local-share")]
+      - exists:
+          path: spec.template.spec.initContainers[?(@.name=="trusted-ca-init")].volumeMounts[?(@.name=="etc-ssl-certs")]
+
+  - it: does not create trusted CA volumes when disabled
+    set:
+      trustedCaBundle:
+        enabled: false
+    asserts:
+      - notExists:
+          path: spec.template.spec.volumes[?(@.name=="usr-local-share")]
+      - notExists:
+          path: spec.template.spec.volumes[?(@.name=="ca-init-script")]
+      - notExists:
+          path: spec.template.spec.initContainers[?(@.name=="trusted-ca-init")]
+
+  - it: mounts trusted CA ConfigMap with dynamic name when enabled and no name provided
+    values: 
+      - ../../../tests/values/trustedca-dynamic-name.yaml
+    asserts:
+      - exists:
+          path: spec.template.spec.volumes[?(@.name=="usr-local-share")]
+      - equal:
+          path: spec.template.spec.volumes[?(@.name=="usr-local-share")].configMap.name
+          value: RELEASE-NAME-ca-bundle-cert

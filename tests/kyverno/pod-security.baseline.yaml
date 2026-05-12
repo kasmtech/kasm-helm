@@ -1,0 +1,129 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: kasm-pod-security-restricted
+  annotations:
+    policies.kyverno.io/title: Restricted-compatible workload hardening
+    policies.kyverno.io/category: Security
+    policies.kyverno.io/severity: high
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: require-workload-pod-security-context
+      match:
+        any:
+          - resources:
+              kinds:
+                - Deployment
+                - StatefulSet
+                - DaemonSet
+                - Job
+      preconditions:
+        all:
+          - key: "{{ request.object.spec.template.metadata.annotations.\"kasm.com/security\" || '' }}"
+            operator: Equals
+            value: "true"
+      validate:
+        message: "Workload pod templates must set fsGroupChangePolicy=OnRootMismatch when security is enabled."
+        pattern:
+          spec:
+            template:
+              spec:
+                securityContext:
+                  fsGroupChangePolicy: OnRootMismatch
+
+    - name: require-cronjob-pod-security-context
+      match:
+        any:
+          - resources:
+              kinds:
+                - CronJob
+      preconditions:
+        all:
+          - key: "{{ request.object.spec.jobTemplate.spec.template.metadata.annotations.\"kasm.com/security\" || '' }}"
+            operator: Equals
+            value: "true"
+      validate:
+        message: "CronJob pod templates must set fsGroupChangePolicy=OnRootMismatch when security is enabled."
+        pattern:
+          spec:
+            jobTemplate:
+              spec:
+                template:
+                  spec:
+                    securityContext:
+                      fsGroupChangePolicy: OnRootMismatch
+
+    - name: require-workload-container-hardening
+      match:
+        any:
+          - resources:
+              kinds:
+                - Deployment
+                - StatefulSet
+                - DaemonSet
+                - Job
+      preconditions:
+        all:
+          - key: "{{ request.object.spec.template.metadata.annotations.\"kasm.com/security\" || '' }}"
+            operator: Equals
+            value: "true"
+      validate:
+        message: "Containers and initContainers must set restricted-compatible securityContext fields when security is enabled."
+        foreach:
+          - list: "request.object.spec.template.spec.containers"
+            pattern:
+              securityContext:
+                allowPrivilegeEscalation: false
+                runAsNonRoot: true
+                seccompProfile:
+                  type: RuntimeDefault
+                capabilities:
+                  drop:
+                    - ALL
+          - list: "request.object.spec.template.spec.initContainers || []"
+            pattern:
+              securityContext:
+                allowPrivilegeEscalation: false
+                runAsNonRoot: true
+                seccompProfile:
+                  type: RuntimeDefault
+                capabilities:
+                  drop:
+                    - ALL
+
+    - name: require-cronjob-container-hardening
+      match:
+        any:
+          - resources:
+              kinds:
+                - CronJob
+      preconditions:
+        all:
+          - key: "{{ request.object.spec.jobTemplate.spec.template.metadata.annotations.\"kasm.com/security\" || '' }}"
+            operator: Equals
+            value: "true"
+      validate:
+        message: "CronJob containers and initContainers must set restricted-compatible securityContext fields when security is enabled."
+        foreach:
+          - list: "request.object.spec.jobTemplate.spec.template.spec.containers"
+            pattern:
+              securityContext:
+                allowPrivilegeEscalation: false
+                runAsNonRoot: true
+                seccompProfile:
+                  type: RuntimeDefault
+                capabilities:
+                  drop:
+                    - ALL
+          - list: "request.object.spec.jobTemplate.spec.template.spec.initContainers || []"
+            pattern:
+              securityContext:
+                allowPrivilegeEscalation: false
+                runAsNonRoot: true
+                seccompProfile:
+                  type: RuntimeDefault
+                capabilities:
+                  drop:
+                    - ALL

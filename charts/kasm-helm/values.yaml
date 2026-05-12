@@ -1,0 +1,843 @@
+# yaml-language-server: $schema=values.schema.json
+# deploymentSize -- Define the estimated size of the Kasm deployment in expected session load.
+#  small  = Up to 10-15 sessions
+#  medium = Up to 25-30 sessions
+#  large  = Up to 50+ sessions
+#
+deploymentSize: "small"
+
+# publicAddr -- Set the access URL to be used for the Kasm deployment. This is the URL you will use to access
+# your Kasm deployment. This URL can be a private address, it just needs to be resolvable by systems you use
+# to interface with Kasm.
+# 
+# If you create a self-signed or custom certificate, this is the value you should assign as the Common Name
+# associated with the certificate. If `certificate.certManager.enabled` is set to true, this is the
+# name used to generate the certificate.
+#
+publicAddr: ""
+
+# kasmZones -- This is a list of objects defining different Kasm Zone configurations for your deployment. This
+# configuration is typically used for multi-region, large, or custom deployments where the customer requires a
+# high degree of configurability and has multiple resources in disparate areas.
+#
+# NOTE: If you configure custom zones below, you MUST use a valid `ingress` configuration due to the increased
+# deployment complexity of a multi-zone Kasm deployment. Refer to the Kasm
+# [Deployment Zones](https://docs.kasm.com/docs/latest/guide/deployment_zones) documentation for more
+# information on Kasm Zones.
+#
+# The first zone in the list is treated as the primary zone.
+# Traffic to the configured `publicAddr` in the ingress rule will be routed to this primary zone.
+#
+kasmZones: []
+# Example Kasm Zone configuration:
+#   - name: zonea
+#     proxyAddress: zonea.kasm.contoso.com
+#   - name: zoneb
+#     proxyAddress: zoneb.kasm.contoso.com
+
+# isOpenshift -- Use this flag to remove Pod and Container security ID values and allow OpenShift to dynamically
+# set them in accordance with [OpenShift UIDs](https://www.redhat.com/en/blog/a-guide-to-openshift-and-uids) documentation.
+isOpenshift: false
+
+# proxyService -- Configure the external-facing service type to use. 
+# Allowed service types: ClusterIP, LoadBalancer, or NodePort. 
+#
+# The proxyService.annotations defined here only apply to the `proxy` service (`proxy-service-external.yaml` file).
+# If you wish to apply annotations to all services, use the annotations.service value at the bottom of this chart.
+#
+# NOTE: If ingress.enabled or route.enabled set to `true` service.type MUST be set to `ClusterIP`. Also, if you
+# wish to deploy a multi-zone Kasm (see [Deployment Zones](https://docs.kasm.com/docs/latest/guide/deployment_zones)
+# documentation for reference), you MUST use either a Route or an Ingress and set the `proxyService.type` to `ClusterIP`.
+#
+proxyService:
+  type: LoadBalancer
+  annotations: {}
+  labels: {}
+
+# directRdpService -- Configure the directRdpService settings and service type to use for the Kasm RDP Gateway service.
+# This is only applicable if you have enabled the Kasm RDP Gateway component in `components.rdpGateway.enabled`.
+#
+directRdpService:
+  # directRdpService.enabled -- Enable the exposure of the RDP Gateway service via a separate Service of the type defined in
+  # `directRdpService.type`. This is only applicable if you have enabled the Kasm RDP Gateway component in `components.rdpGateway.enabled`.
+  #
+  enabled: false
+  # directRdpService.rdpAccessURL -- If you are exposing the RDP Gateway service via a separate Service, set the access URL
+  # to be used for the RDP Gateway. This is the URL you will use to access the RDP Gateway service and must be resolvable by
+  # your users' systems.
+  #
+  rdpAccessURL: ""
+  # directRdpService.type -- The service type to use for the RDP Gateway service if `directRdpService.enabled` is set to true.
+  # Allowed values are LoadBalancer or NodePort.
+  #
+  type: LoadBalancer
+  # directRdpService.annotations -- Custom annotations to add to the RDP Gateway Service. This only applies if `directRdpService.enabled`
+  # is set to true. If you use the annotations below to deploy a load balancer in your cloud provider, you must ensure the load balancer
+  # type supports RDP. This typically requires using a Network Load Balancer type that supports TCP load balancing, and not a HTTP/HTTPS
+  # load balancer type.
+  #
+  annotations: {}
+  labels: {}
+
+# Configure an Ingress for your Kasm deployment. 
+# 
+ingress:
+  # ingress.enabled -- Set the enabled value to `true` to use a pre-defined Ingress service to expose Kasm
+  #
+  enabled: false
+  # ingress.tls -- Set tls value to `true` to eanble TLS configuration for the hostname defined at `publicAddr` parameter
+  #
+  tls: true
+  # ingress.backendProtocol -- The backend protocol to for the Ingress to communicate with the Kasm proxy service.
+  # Valid values: http or https
+  #
+  backendProtocol: http
+  # ingress.ingressClassName -- Define the ingress Class to use for your Kasm ingress
+  #
+  ingressClassName: ""
+  annotations: {}
+  labels: {}
+
+# route -- Configure an OpenShift Route for your Kasm deployment. 
+# 
+route:
+  # route.enabled -- Set the enabled value to `true` to use a pre-defined Route service to expose Kasm
+  enabled: false
+  # route.backendProtocol -- The backend protocol to for the OpenShift Route to communicate with the Kasm proxy service.
+  # Valid values: http or https
+  #
+  backendProtocol: http
+  # route.wildcardPolicy -- Set the wildcard policy for the OpenShift Route.
+  # Valid values: None, Subdomain
+  #
+  wildcardPolicy: None
+  # route.tls -- Object to define the TLS configuration for your OpenShift Route - 
+  # [Configuring Secure Routes](https://docs.redhat.com/en/documentation/openshift_dedicated/4/html/networking/configuring-routes#configuring-default-certificate).
+  #
+  tls: {}
+  # Example TLS configuration
+  #   termination: edge
+  #   insecureEdgeTerminationPolicy: Redirect
+  #   key: |-
+  #     -----BEGIN PRIVATE KEY-----
+  #     [...]
+  #     -----END PRIVATE KEY-----
+  #   certificate: |-
+  #     -----BEGIN CERTIFICATE-----
+  #     [...]
+  #     -----END CERTIFICATE-----
+  #   caCertificate: |-
+  #     -----BEGIN CERTIFICATE-----
+  #     [...]
+  #     -----END CERTIFICATE-----
+  #
+  annotations: {}
+  labels: {}
+
+# Configure certificate settings.
+# You can create your own certificate and upload it to the `secretName` supplied below, or if you have
+# an existing cert-manager configured and you wish to use that, set the `secretName` and configure the
+# associated cert-manager settings.
+#
+certificate:
+  # certificate.secretName -- Set the secret name where the certificate is stored.
+  # This secret name will store a certificate created by `cert-manager` if you set `cert-manager.enabled` to true
+  #
+  secretName: ""
+  # certificate.certManager -- For additional cert-manager configuration/deployment information refer to the online documentation
+  # [Cert Manager Docs](https://cert-manager.io/v1.1-docs/installation/kubernetes/). 
+  # 
+  # NOTE: If you do not enable `cert-manager`, you must generate your own certificates and add them as a Kubernetes secret, or
+  # present cloud-managed certificates.
+  #
+  # Refer to [Kubernetes Secrets](https://kubernetes.io/docs/concepts/configuration/secret/), and 
+  # [Kubernetes TLS Secret](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_create/kubectl_create_secret_tls/)
+  # for more information.
+  #
+  certManager:
+    enabled: false
+    addWildCard: true
+    issuerName: ""
+    issuerKind: ""
+    issuerGroup: ""
+    annotations: {}
+    labels: {}
+
+# Configure a trusted CA certificate bundle to be added to Kasm services.
+# You can either pre-create the configmap containing the CA bundle, or have the Helm chart create it for you.
+# To have the Helm chart create the configmap, provide the CA bundle data in PEM format in the `caBundle` field.
+#
+trustedCaBundle:
+  # trustedCaBundle.enabled -- Set to true to enable the trusted CA bundle configuration
+  #
+  enabled: false
+  # trustedCaBundle.configmapName -- The name of the Kubernetes configmap where the CA bundle is stored.
+  # If you are populating the trustedCaBundle.caCerts field, you can leave this blank, if you pre-created
+  # the configmap, you MUST provide the name here.
+  #
+  configMapName: ""
+  # trustedCaBundle.caCerts -- The CA certificates to be stored in the configmap. This is an object where you
+  # can paste your PEM-formatted CA certificates in a key-value format where the key is the file name and the value
+  # is the PEM-formatted certificate data. All keys MUST end with a `.crt` extension.
+  #
+  caCerts: {}
+  # Example CA Certs configuration
+  # ca-cert-1.crt: |-
+  #   -----BEGIN CERTIFICATE-----
+  #   [...]
+  #   -----END CERTIFICATE-----
+  # ca-cert-2.crt: |-
+  #   -----BEGIN CERTIFICATE-----
+  #   [...]
+  #   -----END CERTIFICATE-----
+
+
+# Kasm DB settings and configuration options
+#
+database:
+  # database.standalone -- Setting standalone to true will prevent the deployment of the Kasm DB StatefulSet and requires
+  # the user to have a self-hosted PostgreSQL Database v16 server already setup and awaiting connections. Use the below
+  # database configuration values to connect to your external DB.
+  # see, https://docs.kasm.com/docs/latest/how-to/remote_database#requirements for list of full db requirements.
+  standalone: false
+  # database.hostname -- The hostname of the external PostgreSQL server.
+  # Only used when database.standalone is true.
+  hostname: ""
+  # database.port -- The port Kasm will use to connect to the PostgreSQL DB server
+  #
+  port: 5432
+  # database.kasmDbName -- The name of the database where Kasm is to be initialized and that Kasm services are to connect
+  #
+  kasmDbName: kasm
+  # database.kasmDbUser -- The name of the Kasm database User with READ/WRITE permission to the Kasm database
+  #
+  kasmDbUser: kasmapp
+  # database.kasmDbSecret -- The name of the Kasm database password secret to use for a user-created, custom Database password
+  # secret value.
+  #
+  # NOTE: Leave this empty to use the password created by this Helm chart. If you create a custom DB secret, define the `kasmDbSecret`
+  # object below in the example format.
+  #
+  kasmDbSecret: {}
+  # Example Custom DB Secret configuration
+  #   name: kasm-db-secret
+  #   key: kasm-db-secret-key
+
+  # database.postgresMasterUser -- An object defining the PostgreSQL DB Master user and the Kubernetes secret and key values for
+  # the Master DB password. These credentials are only used by the `db-init-job` to create the `kasmDbName` database, the `kasmDbUser`
+  # user account, set permissions for the user account, and initialize and pre-seed the Kasm Database.
+  #
+  postgresMasterUser: {}
+  # Example DB Master User configuration
+  #   username: postgres
+  #   secret:
+  #     name: postgres-secret
+  #     key: db-password
+
+  # database.image -- Configure the image repository where the image is stored. Use this to point to an private hosted
+  # container registry instead of our public DockerHub hosted one.
+  #
+  image:
+    registry: docker.io
+    repository: kasmweb/postgres
+    tag: develop
+  # Configure the Storage for the Kasm DB StatefulSet
+  #
+  storage:
+    # database.storage.storageClassName -- Set the storage class to attach to the DB for storage.
+    # NOTE: Leaving this blank will use the cluster-default storage class.
+    #
+    storageClassName: ""
+    # database.storage.pvcSize -- Set the size of the PVC to attach to your Kubernetes-hosted Database server. The default
+    # size is 8Gi. Just supply the integer value of the PVC size in GB you wish to use.
+    #
+    pvcSize: 0
+    # database.storage.retentionPolicy -- Configure how the DB volume should be retained or deleted throughout the DB's lifecycle
+    #
+    retentionPolicy:
+      whenDeleted: Delete
+      whenScaled: Retain
+  # database.annotations -- Custom annotations to add to the Kasm DB StatefulSet
+  annotations: {}
+  # database.resources -- Manually configure the Kasm DB StatefulSet resources. This overrides the pre-defined `deploymentSize` values.
+  resources: {}
+  # database.labels -- Custom labels to add to the Kasm DB StatefulSet
+  labels: {}
+  # database.extraVolumes -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
+  #  like custom SSL certificates, config files, or data volumes to the Kasm Database container
+  # Example:
+  #   extraVolumes:
+  #     - secret:
+  #         defaultMode: 420
+  #         secretName: kasm-custom-tls
+  #       name: pkichain
+  extraVolumes: []
+  # database.extraVolumeMounts -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
+  #  like custom SSL certificates, config files, or data volumes Kasm Database container
+  # Example: 
+  #   extraVolumeMounts:
+  #     - mountPath: /etc/ssl/certs/ca-certificates.crt
+  #       name: pkichain
+  #       readOnly: true
+  #       subPath: ca.crt
+  extraVolumeMounts: []
+  # database.extraContainers -- Additional sidecar containers to run in the pod
+  # Example
+  #  - name: sidecar-example
+  #    image: busybox
+  #    command: [/bin/sh, -c, 'echo "Hello world"']
+  extraContainers: []
+  # database.extraInitContainers -- Additional sidecar containers to run in the pod
+  # Example
+  #  - name: init-example
+  #    image: busybox
+  #    command: [/bin/sh, -c, 'echo "Hello world"']
+  extraInitContainers: []
+
+# Configure the Kasm Database management functions
+#
+dbManagement:
+  # dbManagement.initialize -- Initialize the DB. This is required for an initial deployment of Kasm to configure the DB for Kasm usage
+  #
+  initialize: true
+  # dbManagement.initJobTTLSecondsAfterFinished -- The time in seconds the DB initialization job remains after successful completion.
+  #
+  initJobTTLSecondsAfterFinished: 300
+  # Use this to manage Kasm DB Schema and data upgrade operations
+  #
+  upgrade:
+    # dbManagement.upgrade.enabled -- Enable the DB upgrade job to run.
+    #
+    # NOTE: You cannot set both `dbManagement.initialize` and `dbManagement.upgrade.enabled` to true. You can either initialize the
+    # DB for a new installation, or you can upgrade an existing DB to a new Kasm version, but you cannot do both.
+    #
+    enable: false
+    # dbManagement.upgrade.oldDbHostname -- Hostname of the database from the previous Helm release.
+    # Only required if your old deployment used a non-default DB hostname (i.e. not kasm-db).
+    # Leave empty if using a standalone DB or to fall back to the default.
+    #
+    oldDbHostname: ""
+    # dbManagement.upgrade.skipBackupAndRestore -- Skip the chart-included pre-upgrade DB backup AND
+    # restore steps. The chart will NOT render the backup PVC + Job, and the upgrade Job will NOT attempt
+    # to `pg_restore` from a dump file — it will only run the Kasm schema (alembic) migration against
+    # the DB it finds.
+    #
+    # ONLY supported with `database.standalone=true`. Setting this to true with the bundled
+    # (in-chart) DB will cause the upgrade Job to fail-render with an explanatory error.
+    #
+    # When this is true, the operator is responsible for performing the data-plane upgrade manually,
+    # in this order, BEFORE running `helm upgrade`:
+    #   1. pg_dump the existing standalone DB (old Postgres major version).
+    #   2. Stand up the new Postgres major version server.
+    #   3. pg_restore the dump into the new Postgres server.
+    #   4. Run `helm upgrade` with this flag set to true — the chart's upgrade Job then runs only
+    #      the Kasm schema migration (alembic) against the already-restored DB.
+    #
+    # When this is true, `oldDbHostname` and `oldDbBackupFileName` are ignored.
+    #
+    skipBackupAndRestore: false
+    # dbManagement.upgrade.backupStorageClass -- The storageClass to use to create PV for the backup PVC.
+    #
+    backupStorageClass: ""
+    # dbManagement.upgrade.oldDbSecretsName -- The name of the Kubernetes secret where Kasm and DB passwords are stored.
+    # Leave empty to default to "<release-name>-secrets" (the standard 1.18.1+ name). Only override if you renamed
+    # the secret manually before upgrading; the value MUST equal the in-cluster secret name so the chart can read
+    # existing credentials via `lookup`.
+    #
+    oldDbSecretsName: ""
+    # dbManagement.upgrade.oldDbBackupFileName -- The file name of the database backup to restore and upgrade.
+    #
+    oldDbBackupFileName: kasm_dump.tar
+  # Enable and configure a Kubernetes-based DB Backup cron job to run at specified intervals to automatically handle DB backups
+  # to a specified PVC. You can use an NFS or other shared or external PVC specified by `storageClass` to keep this backup tarball.
+  #
+  backupCron:
+    # dbManagement.backupCron.enabled -- Set to true to enable automatic Kasm DB backups
+    #
+    enabled: false
+    # dbManagement.backupCron.pvcName -- The name of the Persistent Volume Claim to use for DB Backups
+    #
+    pvcName: ""
+    # dbManagement.backupCron.schedule -- Use a cron-style syntax to schedule how often the backup cron job runs. The default value
+    # will run a backup every 24 hours at midnight UTC. Refer to the
+    # [Kubernetes CronJob](https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/) documentation for more information.
+    #
+    schedule: ""
+    # dbManagement.backupCron.timeZone -- The time zone to use for the backup cron job. The default is UTC.
+    #
+    timeZone: ""
+    # dbManagement.backupCron.storageClass -- The `storageClassName` to attach the DB backup job for storage of regular DB backups.
+    # Leave the value empty to use your default Kubernetes storageClass
+    #
+    storageClass: ""
+    # dbManagement.backupCron.pvcSize -- Set the size of the PVC to attach to your Kubernetes-hosted Database backup job. The default
+    # size is 5Gi. Just supply the integer value of the PVC size in GB you wish to use.
+    #
+    pvcSize: 0
+
+# Kasm component resources and associated settings
+#
+components:
+  # Configuration settings for the Kasm Nginx Proxy service
+  #
+  proxy:
+    # components.proxy.image -- Configure the image repository where the image is stored. Use this to point to an private hosted
+    # container registry instead of our public DockerHub hosted one.
+    #
+    image:
+      registry: docker.io
+      repository: kasmweb/proxy
+      tag: develop
+    # components.proxy.annotations -- Custom annotations to add to the Kasm Proxy Deployment
+    annotations: {}
+    # components.proxy.resources -- Manually configure the Kasm Proxy Deployment resources. This overrides the pre-defined `deploymentSize` values.
+    resources: {}
+    # components.proxy.labels -- Custom labels to add to the Kasm Proxy Deployment
+    labels: {}
+    # components.proxy.extraVolumes -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
+    #  like custom SSL certificates, config files, or data volumes to the Kasm Proxy container
+    # Example:
+    #   extraVolumes:
+    #     - secret:
+    #         defaultMode: 420
+    #         secretName: kasm-custom-tls
+    #       name: pkichain
+    extraVolumes: []
+    # components.proxy.extraVolumeMounts -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
+    #  like custom SSL certificates, config files, or data volumes Kasm Proxy container
+    # Example: 
+    #   extraVolumeMounts:
+    #     - mountPath: /etc/ssl/certs/ca-certificates.crt
+    #       name: pkichain
+    #       readOnly: true
+    #       subPath: ca.crt
+    extraVolumeMounts: []
+    # components.proxy.extraContainers -- Additional sidecar containers to run in the pod
+    # Example
+    #  - name: sidecar-example
+    #    image: busybox
+    #    command: [/bin/sh, -c, 'echo "Hello world"']
+    extraContainers: []
+    # components.proxy.extraInitContainers -- Additional sidecar containers to run in the pod
+    # Example
+    #  - name: init-example
+    #    image: busybox
+    #    command: [/bin/sh, -c, 'echo "Hello world"']
+    extraInitContainers: []
+
+  # Configuration settings for the Kasm API service
+  #
+  api:
+    # components.api.image -- Configure the image repository where the image is stored. Use this to point to an private hosted
+    # container registry instead of our public DockerHub hosted one.
+    #
+    image:
+      registry: docker.io
+      repository: kasmweb/api
+      tag: develop
+    # components.api.annotations -- Custom annotations to add to the Kasm api Deployment
+    annotations: {}
+    # components.api.resources -- Manually configure the Kasm api Deployment resources. This overrides the pre-defined `deploymentSize` values.
+    resources: {}
+    # components.api.labels -- Custom labels to add to the Kasm api Deployment
+    labels: {}
+    # components.api.extraVolumes -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
+    #  like custom SSL certificates, config files, or data volumes to the Kasm API container
+    # Example:
+    #   extraVolumes:
+    #     - secret:
+    #         defaultMode: 420
+    #         secretName: kasm-custom-tls
+    #       name: pkichain
+    extraVolumes: []
+    # components.api.extraVolumeMounts -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
+    #  like custom SSL certificates, config files, or data volumes Kasm API container
+    # Example: 
+    #   extraVolumeMounts:
+    #     - mountPath: /etc/ssl/certs/ca-certificates.crt
+    #       name: pkichain
+    #       readOnly: true
+    #       subPath: ca.crt
+    extraVolumeMounts: []
+    # components.api.extraContainers -- Additional sidecar containers to run in the pod
+    # Example
+    #  - name: sidecar-example
+    #    image: busybox
+    #    command: [/bin/sh, -c, 'echo "Hello world"']
+    extraContainers: []
+    # components.api.extraInitContainers -- Additional sidecar containers to run in the pod
+    # Example
+    #  - name: init-example
+    #    image: busybox
+    #    command: [/bin/sh, -c, 'echo "Hello world"']
+    extraInitContainers: []
+  
+  # Configuration settings for the Kasm Manager service
+  #
+  manager:
+    # components.manager.image -- Configure the image repository where the image is stored. Use this to point to an private hosted
+    # container registry instead of our public DockerHub hosted one.
+    #
+    image:
+      registry: docker.io
+      repository: kasmweb/manager
+      tag: develop
+    # components.manager.annotations -- Custom annotations to add to the Kasm Manager Deployment
+    annotations: {}
+    # components.manager.resources -- Manually configure the Kasm Manager Deployment resources. This overrides the pre-defined `deploymentSize` values.
+    resources: {}
+    # components.manager.labels -- Custom labels to add to the Kasm Manager Deployment
+    labels: {}
+    # components.manager.extraVolumes -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
+    #  like custom SSL certificates, config files, or data volumes to the Kasm Manager container
+    # Example:
+    #   extraVolumes:
+    #     - secret:
+    #         defaultMode: 420
+    #         secretName: kasm-custom-tls
+    #       name: pkichain
+    extraVolumes: []
+    # components.manager.extraVolumeMounts -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
+    #  like custom SSL certificates, config files, or data volumes Kasm Manager container
+    # Example: 
+    #   extraVolumeMounts:
+    #     - mountPath: /etc/ssl/certs/ca-certificates.crt
+    #       name: pkichain
+    #       readOnly: true
+    #       subPath: ca.crt
+    extraVolumeMounts: []
+    # components.manager.extraContainers -- Additional sidecar containers to run in the pod
+    # Example
+    #  - name: sidecar-example
+    #    image: busybox
+    #    command: [/bin/sh, -c, 'echo "Hello world"']
+    extraContainers: []
+    # components.manager.extraInitContainers -- Additional sidecar containers to run in the pod
+    # Example
+    #  - name: init-example
+    #    image: busybox
+    #    command: [/bin/sh, -c, 'echo "Hello world"']
+    extraInitContainers: []
+
+  # Configuration settings for the Kasm Guac RDP service
+  #
+  guac:
+    # components.guac.image -- Configure the image repository where the image is stored. Use this to point to an private hosted
+    # container registry instead of our public DockerHub hosted one.
+    #
+    image:
+      registry: docker.io
+      repository: kasmweb/kasm-guac
+      tag: develop
+    # components.guac.enabled -- Use this setting to enable/disable deployment of the Kasm Guacamole web RDP service - 
+    # [Kasm Guac Service](https://docs.kasm.com/docs/latest/guide/connection_proxies#guacamole-guac).
+    #
+    enabled: true
+    # components.guac.annotations -- Custom annotations to add to the Kasm Guac Deployment
+    annotations: {}
+    # components.guac.resources -- Manually configure the Kasm Guac Deployment resources. This overrides the pre-defined `deploymentSize` values.
+    resources: {}
+    # components.guac.labels -- Custom labels to add to the Kasm Guac Deployment
+    labels: {}
+    # components.guac.extraVolumes -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
+    #  like custom SSL certificates, config files, or data volumes to the Kasm Guac container
+    # Example:
+    #   extraVolumes:
+    #     - secret:
+    #         defaultMode: 420
+    #         secretName: kasm-custom-tls
+    #       name: pkichain
+    extraVolumes: []
+    # components.guac.extraVolumeMounts -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
+    #  like custom SSL certificates, config files, or data volumes Kasm Guac container
+    # Example: 
+    #   extraVolumeMounts:
+    #     - mountPath: /etc/ssl/certs/ca-certificates.crt
+    #       name: pkichain
+    #       readOnly: true
+    #       subPath: ca.crt
+    extraVolumeMounts: []
+    # components.guac.extraContainers -- Additional sidecar containers to run in the pod
+    # Example
+    #  - name: sidecar-example
+    #    image: busybox
+    #    command: [/bin/sh, -c, 'echo "Hello world"']
+    extraContainers: []
+    # components.guac.extraInitContainers -- Additional sidecar containers to run in the pod
+    # Example
+    #  - name: init-example
+    #    image: busybox
+    #    command: [/bin/sh, -c, 'echo "Hello world"']
+    extraInitContainers: []
+
+  # Configuration settings for the Kasm RDP Gateway service
+  #
+  rdpGateway:
+    # components.rdpGateway.image -- Configure the image repository where the image is stored. Use this to point to an private hosted
+    # container registry instead of our public DockerHub hosted one.
+    #
+    image:
+      registry: docker.io
+      repository: kasmweb/rdp-gateway
+      tag: develop
+    # components.rdpGateway.enabled -- Use this setting to enable/disable deployment of the Kasm RDP Gateway service - 
+    # [Kasm RDP Gateway](https://docs.kasm.com/docs/latest/guide/connection_proxies#rdp-gateway).
+    #
+    enabled: true
+    # components.rdpGateway.annotations -- Custom annotations to add to the Kasm RDP Gateway Deployment
+    annotations: {}
+    # components.rdpGateway.resources -- Manually configure the Kasm RDP Gateway Deployment resources. This overrides the pre-defined `deploymentSize` values.
+    resources: {}
+    # components.rdpGateway.labels -- Custom labels to add to the Kasm RDP Gateway Deployment
+    labels: {}
+    # components.rdpGateway.extraVolumes -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
+    #  like custom SSL certificates, config files, or data volumes to the Kasm RDP Gateway container
+    # Example:
+    #   extraVolumes:
+    #     - secret:
+    #         defaultMode: 420
+    #         secretName: kasm-custom-tls
+    #       name: pkichain
+    extraVolumes: []
+    # components.rdpGateway.extraVolumeMounts -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
+    #  like custom SSL certificates, config files, or data volumes Kasm RDP Gateway container
+    # Example: 
+    #   extraVolumeMounts:
+    #     - mountPath: /etc/ssl/certs/ca-certificates.crt
+    #       name: pkichain
+    #       readOnly: true
+    #       subPath: ca.crt
+    extraVolumeMounts: []
+    # database.extraContainers -- Additional sidecar containers to run in the pod
+    # Example
+    #  - name: sidecar-example
+    #    image: busybox
+    #    command: [/bin/sh, -c, 'echo "Hello world"']
+    extraContainers: []
+    # components.rdpGateway.extraInitContainers -- Additional sidecar containers to run in the pod
+    # Example
+    #  - name: init-example
+    #    image: busybox
+    #    command: [/bin/sh, -c, 'echo "Hello world"']
+    extraInitContainers: []
+
+  # Configuration settings for the Kasm RDP HTTPS Gateway service
+  #
+  rdpHttpsGateway:
+    # components.rdpHttpsGateway.image -- Configure the image repository where the image is stored. Use this to point to an private hosted
+    # container registry instead of our public DockerHub hosted one.
+    #
+    image:
+      registry: docker.io
+      repository: kasmweb/rdp-https-gateway
+      tag: develop
+    # components.rdpHttpsGateway.enabled -- Use this setting to enable/disable deployment of the Kasm RDP HTTPS Gateway service.
+    # This service allows users to use native RDP clients via HTTPS connections rather than exposing 3389 - 
+    # [Kasm RDP HTTPS Gateway](https://docs.kasm.com/docs/latest/guide/connection_proxies#rdp-https-gateway).
+    #
+    enabled: true
+    # components.rdpHttpsGateway.annotations -- Custom annotations to add to the Kasm RDP HTTPS Gateway Deployment
+    annotations: {}
+    # components.rdpHttpsGateway.resources -- Manually configure the Kasm RDP HTTPS Gateway Deployment resources. This overrides the pre-defined `deploymentSize` values.
+    resources: {}
+    # components.rdpHttpsGateway.labels -- Custom labels to add to the Kasm RDP HTTPS Gateway Deployment
+    labels: {}
+    # components.rdpHttpsGateway.extraVolumes -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
+    #  like custom SSL certificates, config files, or data volumes to the Kasm RDP HTTPS Gateway container
+    # Example:
+    #   extraVolumes:
+    #     - secret:
+    #         defaultMode: 420
+    #         secretName: kasm-custom-tls
+    #       name: pkichain
+    extraVolumes: []
+    # components.rdpHttpsGateway.extraVolumeMounts -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
+    #  like custom SSL certificates, config files, or data volumes Kasm RDP HTTPS Gateway container
+    # Example: 
+    #   extraVolumeMounts:
+    #     - mountPath: /etc/ssl/certs/ca-certificates.crt
+    #       name: pkichain
+    #       readOnly: true
+    #       subPath: ca.crt
+    extraVolumeMounts: []
+    # components.rdpHttpsGateway.extraInitContainers -- Additional sidecar containers to run in the pod
+    # Example
+    #  - name: init-example
+    #    image: busybox
+    #    command: [/bin/sh, -c, 'echo "Hello world"']
+    extraContainers: []
+    # components.rdpHttpsGateway.extraInitContainers -- Additional sidecar containers to run in the pod
+    # Example
+    #  - name: init-example
+    #    image: busybox
+    #    command: [/bin/sh, -c, 'echo "Hello world"']
+    extraInitContainers: []
+
+####################################
+# Extra Kubernetes config settings #
+####################################
+
+# imagePullPolicy -- Configure global image pull policy
+#
+imagePullPolicy: "Always"
+
+# Create an image pull credential. Useful for offline or self-hosted repos, or dev builds.
+#
+imagePullSecrets:
+  # imagePullSecrets.enabled -- Enable/disable image pull secrets
+  enabled: false
+  # imagePullSecrets.name -- Secret name to use. If left blank, will be dynamically generated.
+  # To use an existing Image pull secret, or one you manually created, set `imagePullSecrets.enabled`, and provide the
+  # name of the Image Pull Secret you created, making sure to leave all other values below empty.
+  #
+  name: ""
+  # imagePullSecrets.registry -- The Registry to use when pulling images (e.g. index.docker.io, myprivateregistry.com)
+  registry: ""
+  # imagePullSecrets.username -- The username used to authenticate agaisnt your Registry.
+  username: ""
+  # imagePullSecrets.password -- The password used to authenticate agaisnt your Registry.
+  password: ""
+  # imagePullSecrets.email -- The email address used to authenticate (optional, used by some registries).
+  email: ""
+  # imagePullSecrets.labels -- Additional labels for this secret
+  labels: {}
+  # imagePullSecrets.annotations -- Additional annotations for this secret
+  annotations: {}
+
+# clusterDomain -- Cluster-wide Kubernetes DNS domain name
+#
+clusterDomain: "cluster.local"
+
+# nodeSelector -- Configure node selector settings for your Kasm pods -
+# [Kubernetes Node Selector](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector).
+#
+nodeSelector: {}
+
+# affinity -- Configure node affinity settings for Kasm pods - 
+# [Kubernetes Affinity](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/).
+# Kasm is not guaranteed to work with Affinity settings - use caution if you must configuring these settings.
+# The below, optional object passes in raw Affinity rules for Pods, Nodes, etc. for your environment. Make sure you
+# use the correct values below as this Helm chart will not do any error checking for you.
+#
+affinity: {}
+
+# applySecurity -- Apply Pod/Container security settings for Kasm resources
+#
+applySecurity: true
+
+# applyHealthChecks -- Add Pod/Container healthchecks settings for Kasm resources
+#
+applyHealthChecks: true
+
+# restartPolicy -- Configure global Pod restart policy for Kasm resources
+#
+restartPolicy: "Always"
+
+# labels -- Custom labels to apply to all deployed resources
+#
+labels: {}
+
+# annotations -- Custom annotations to apply to all deployed resources
+#
+annotations: {}
+
+# Additional resource annotations to apply to resources created by this chart.
+# See [Kubernetes Annotations](https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/)
+# for more information.
+#
+extraAnnotations:
+  # extraAnnotations.configMap -- Additional configMap annotations to apply to resources created by this chart
+  configMap: {}
+  # extraAnnotations.cronJob -- Additional cronJob annotations to apply to resources created by this chart
+  cronJob: {}
+  # extraAnnotations.cronPod -- Additional annotations to apply to the pod template inside CronJobs created by this chart
+  cronPod: {}
+  # extraAnnotations.deployment -- Additional deployment annotations to apply to resources created by this chart
+  deployment: {}
+  # extraAnnotations.job -- Additional job annotations to apply to resources created by this chart
+  job: {}
+  # extraAnnotations.pod -- Additional pod annotations to apply to resources created by this chart
+  pod: {}
+  # extraAnnotations.pvc -- Additional PersistentVolumeClaim annotations to apply to resources created by this chart
+  pvc: {}
+  # extraAnnotations.service -- Additional service annotations to apply to resources created by this chart
+  service: {}
+  # extraAnnotations.secret -- Additional secret annotations to apply to resources created by this chart
+  secret: {}
+  # extraAnnotations.statefulSet -- Additional statefulSet annotations to apply to resources created by this chart
+  statefulSet: {}
+
+# Additional Kubernetes labels to apply to resources created by this chart.
+# See [Kubernetes Labels](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/)
+# for more information.
+#
+extraLabels:
+  # extraLabels.configMap -- Additional configMap labels to apply to resources created by this chart
+  configMap: {}
+  # extraLabels.deployment -- Additional deployment labels to apply to resources created by this chart
+  deployment: {}
+  # extraLabels.pod -- Additional pod labels to apply to resources created by this chart
+  pod: {}
+  # extraLabels.secret -- Additional secret labels to apply to resources created by this chart
+  secret: {}
+  # extraLabels.service -- Additional service labels to apply to resources created by this chart
+  service: {}
+  # extraLabels.job -- Additional job labels to apply to resources created by this chart
+  job: {}
+  # extraLabels.cronJob -- Additional cronJob labels to apply to resources created by this chart
+  cronJob: {}
+  # extraLabels.cronPod -- Additional labels to apply to the pod template inside CronJobs created by this chart
+  cronPod: {}
+  # extraLabels.pvc -- Additional PersistentVolumeClaim labels to apply to resources created by this chart
+  pvc: {}
+  # extraLabels.statefulSet -- Additional statefulSet labels to apply to resources created by this chart
+  statefulSet: {}
+
+# extraContainerVolumes -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
+#  like custom SSL certificates, config files, or data volumes to all Kasm containers
+# Example:
+#   extraContainerVolumes:
+#     - secret:
+#         defaultMode: 420
+#         secretName: kasm-custom-tls
+#       name: pkichain
+extraVolumes: []
+
+# extraContainerVolumeMounts -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
+#  like custom SSL certificates, config files, or data volumes to all Kasm containers
+# Example: 
+#   extraContainerVolumeMounts:
+#     - mountPath: /etc/ssl/certs/ca-certificates.crt
+#       name: pkichain
+#       readOnly: true
+#       subPath: ca.crt
+extraContainerVolumeMounts: []
+
+# extraInitVolumeMounts -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
+#  like custom SSL certificates, config files, or data volumes to all Kasm Service Init containers
+# Example: 
+#   extraInitVolumeMounts:
+#     - mountPath: /etc/ssl/certs/ca-certificates.crt
+#       name: pkichain
+#       readOnly: true
+#       subPath: ca.crt
+extraInitVolumeMounts: []
+
+# extraContainers -- Additional sidecar containers to run in every pod
+# Example
+#  - name: sidecar-example
+#    image: busybox
+#    command: [/bin/sh, -c, 'echo "Hello world"']
+extraContainers: []
+
+# extraContainers -- Additional sidecar containers to run in every pod
+# Example
+#  - name: init-example
+#    image: busybox
+#    command: [/bin/sh, -c, 'echo "Hello world"']
+extraInitContainers: []
+
+# extraObjects -- Deploy additional Kubernetes manifests.
+# This field is expected to be either a multi-line string, a list of strings, or a list of objects.
+#
+extraObjects: []

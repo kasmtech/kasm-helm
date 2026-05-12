@@ -1,0 +1,23 @@
+{{/*
+Deploy the Kasm Proxy service
+*/}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $values := .Values }}
+{{- range $idx, $zone := (.Values.kasmZones | default (list (dict "name" "default"))) }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  {{- include "kasm.metadata" (dict "context" $ "component" "proxy" "resource" "service" "zone" $zone.name "include" "all") | indent 2 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "kasm.metadata" (dict "context" $ "component" "proxy" "resource" "service" "zone" $zone.name "include" "match") | indent 4 }}
+  ports:
+    - name: {{ printf "%s-%s-svc-%s" $constants.proxy.svc (include "kasm.zoneName" $zone.name) ($constants.proxy.http | toString) }}
+      protocol: TCP
+      port: {{ $constants.proxy.http }}
+    - name: {{ printf "%s-%s-svc-%s" $constants.proxy.svc (include "kasm.zoneName" $zone.name) ($constants.proxy.https | toString) }}
+      protocol: TCP
+      port: {{ $constants.proxy.https }}
+{{- end }}

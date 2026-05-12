@@ -1,0 +1,62 @@
+suite: Ingress wiring
+templates:
+  - templates/ingress.yaml
+tests:
+  - it: does not render an Ingress when ingress.enabled is false
+    set:
+      ingress:
+        enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders an Ingress with TLS and wildcard host when enabled
+    values:
+      - ../../../tests/values/ingress.yaml
+    set:
+      ingress:
+        enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Ingress
+      - equal:
+          path: spec.rules[0].host
+          value: kasm.example.com
+      - equal:
+          path: spec.tls[0].secretName
+          value: kasm-tls
+      - contains:
+          path: spec.tls[0].hosts
+          content: kasm.example.com
+      - contains:
+          path: spec.tls[0].hosts
+          content: "*.kasm.example.com"
+
+  - it: adds per-zone rules when kasmZones are defined
+    values:
+      - ../../../tests/values/multizone-config.yaml
+    set:
+      ingress:
+        enabled: true
+      certificate:
+        secretName: kasm-tls
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: spec.rules[0].host
+          value: zonea.kasm.example.com
+      - equal:
+          path: spec.rules[1].host
+          value: zoneb.kasm.example.com
+      - equal:
+          path: spec.rules[2].host
+          value: kasm.example.com
+      - contains:
+          path: spec.tls[0].hosts
+          content: zonea.kasm.example.com
+      - contains:
+          path: spec.tls[0].hosts
+          content: zoneb.kasm.example.com

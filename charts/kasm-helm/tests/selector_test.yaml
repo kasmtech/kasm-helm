@@ -1,0 +1,109 @@
+suite: match selector parity
+templates:
+  - templates/api-deployment.yaml
+  - templates/api-service.yaml
+  - templates/db-service.yaml
+  - templates/db-statefulset.yaml
+  - templates/proxy-deployment.yaml
+  - templates/proxy-service.yaml
+  - templates/proxy-service-external.yaml
+
+tests:
+  - it: api selectors are identical
+    template: templates/api-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/component"]
+          value: api
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/name"]
+          value: RELEASE-NAME-api-default
+
+  - it: api service selector matches deployment pod selectors
+    template: templates/api-service.yaml
+    asserts:
+      - equal:
+          path: spec.selector["app.kubernetes.io/component"]
+          value: api
+      - equal:
+          path: spec.selector["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+      - equal:
+          path: spec.selector["app.kubernetes.io/name"]
+          value: RELEASE-NAME-api-default
+
+  - it: db service selector matches statefulset pod labels
+    template: templates/db-service.yaml
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.selector["app.kubernetes.io/component"]
+          value: db
+      - equal:
+          path: spec.selector["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+      - equal:
+          path: spec.selector["app.kubernetes.io/name"]
+          value: RELEASE-NAME-db
+
+  - it: db statefulset matches service pod selectors
+    template: templates/db-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/component"]
+          value: db
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/name"]
+          value: RELEASE-NAME-db
+
+  - it: proxy clusterip service selector matches proxy pods
+    template: templates/proxy-service.yaml
+    asserts:
+      - equal:
+          path: spec.selector["app.kubernetes.io/component"]
+          value: proxy
+      - equal:
+          path: spec.selector["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+      - equal:
+          path: spec.selector["app.kubernetes.io/name"]
+          value: RELEASE-NAME-proxy-default
+
+  - it: proxy external service selector matches proxy pods when rendered
+    template: templates/proxy-service-external.yaml
+    set:
+      ingress:
+        enabled: false
+      route:
+        enabled: false
+      proxyService:
+        type: LoadBalancer
+    asserts:
+      - equal:
+          path: spec.selector["app.kubernetes.io/component"]
+          value: proxy
+      - equal:
+          path: spec.selector["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+      - equal:
+          path: spec.selector["app.kubernetes.io/name"]
+          value: RELEASE-NAME-proxy-default
+
+  - it: proxy deployment matches service pod selectors
+    template: templates/proxy-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/component"]
+          value: proxy
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/name"]
+          value: RELEASE-NAME-proxy-default

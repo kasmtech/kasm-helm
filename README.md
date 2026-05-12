@@ -1,116 +1,99 @@
-# Kasm on Kubernetes (Helm Chart)
+# Kasm Workspaces on Kubernetes
 
-![Version: 1.1180.0](https://img.shields.io/badge/Version-1.1180.0-informational?style=flat-square) ![AppVersion: 1.18.0](https://img.shields.io/badge/AppVersion-1.18.0-informational?style=flat-square)
+![Version: 1.1190.0-develop](https://img.shields.io/badge/Version-1.1190.0--develop-informational?style=flat-square) ![AppVersion: develop](https://img.shields.io/badge/AppVersion-develop-informational?style=flat-square) ![Type: Application](https://img.shields.io/badge/Type-application-informational?style=flat-square)
 
-> ⚠️ **This Helm chart is not intended for production use.**  
-> For advanced configurations, see the [Chart README](./charts/kasm/README.md).
+Kasm Workspaces core services can be deployed to Kubernetes using the [open-source Kasm Helm chart](https://github.com/kasmtech/kasm-helm), which will be Generally Available as of Kasm version 1.19.0 (the developer preview is available using chart version 1.1190.0-develop).
 
-## Overview
+## Live Demo
 
-This Helm chart enables you to deploy [Kasm Workspaces](https://kasm.com/) in Kubernetes with minimal friction.
-For more detailed information or procedures for upgrading your Kasm Kubernetes deployment, refer to our **[additional documentation](./docs)**.
+Try Kasm Workspaces in your browser: [kasm.com](https://kasm.com/solutions/platform)
 
-## Quickstart
+## Get Started
 
-Get up and running in just a few steps!
+[Kasm Workspaces Community Edition](https://kasm.com/community-edition) is free for personal and small-team use. The chart works with both Community and commercial editions.
 
-1. **Clone the Helm Chart Repository:**
-    ```bash
-    git clone https://github.com/kasmtech/kasm-helm.git
-    cd kasm-helm
-    ```
+## About This Chart
 
-2. **Select the Kasm Workspaces Release (Optional):**  
-   (Skip if you want the latest release build)
-    ```bash
-    git checkout develop
-    ```
+Kasm Workspaces is a container streaming platform that delivers browsers, desktops, and applications as disposable, isolated sessions in any modern browser. This chart deploys the Kasm **core control-plane services** — `api`, `manager`, `guac`, `rdp-gateway`, and `rdp-https-gateway` — into a Kubernetes cluster, along with an optional bundled PostgreSQL database.
 
-3. **Prepare TLS Certificate Secret:**  
-   - Create a Kubernetes secret containing your TLS cert.  
-   - For cert-manager, see [cert-manager integration](./docs/upload-certs-to-k8s.md).
-   - For manual upload, see [Uploading Certs to K8s](./docs/upload-certs-to-k8s.md).
+A few things to know up front:
 
-4. **Install the Chart:**  
-   *(Replace variables in brackets with your own values.)*
-    ```bash
-    helm install kasm ./charts/kasm \
-      --namespace {namespace} \
-      --set publicAddr="kasm.contoso.com" \
-      --set certificate.secretName="<some-cert-secret>"
-    ```
+- **Sessions do not run in the cluster.** Containerized desktop, browser, and app sessions are hosted on external Docker Agent servers that you provision separately (statically or via auto scaling).
+- **RDP target hosts are external.** RDP sessions are routed by the in-cluster gateways to Windows or Linux hosts running outside the cluster.
+- **Ingress fronts the deployment.** Browser and HTTPS-based client traffic enters through your Ingress controller, typically backed by a cloud load balancer.
 
-> **Note:**  
-> It may take several minutes for all Kasm services to be ready.  
-> For custom configuration, edit `values.yaml` as described in the [Chart README](./charts/kasm/README.md).
+## Prerequisites
 
----
+- **Kubernetes 1.24+**
+- **Helm 3.18.x+** ([install Helm](https://helm.sh/docs/intro/install/))
+- `kubectl` configured against your target cluster
+- A **default StorageClass** (or explicit `storageClassName` in your values) for the built-in PostgreSQL PVC — not required if you point the chart at an external database
+- A **domain name** you control, used as the `publicAddr` for Kasm
+- A **TLS certificate** (or cert-manager installed in the cluster)
 
-## Post-Install: Access & Credentials
+## Quick Start
 
-After deployment, get your connection details and credentials:
+Create a minimal `my-values.yaml`:
 
-- **Kasm URL:**  
-  `https://kasm.contoso.com` (use port 8443 if using the quick deploy with no ingress or cloud load balancer)
+```yaml
+publicAddr: kasm.example.com
+certificate:
+  secretName: my-tls-secret
+```
 
-- **Admin Login:**  
-  - Username: `admin@kasm.local`
-  - Retrieve password:
-    ```bash
-    kubectl get secret --namespace {namespace} {secret-name} \
-      -o jsonpath="{.data.admin-password}" | base64 -d
-    ```
+Install from the OCI registry (recommended):
 
-    Replace `{namespace}` the namespace where the Kasm is running, `{secret-name}` with your actual kasm secret name.
-    You can retrieve secret name by running:
-    ```bash
-    kubectl -n {namespace} get secrets | grep secrets
-    ```
+```bash
+helm install kasm oci://registry-1.docker.io/kasmweb/kasm-helm \
+  --version 1.1190.0-develop \
+  --namespace kasm --create-namespace \
+  -f my-values.yaml
+```
 
-- **User Login:**  
-  - Username: `user@kasm.local`
-  - Retrieve password:
-    ```bash
-    kubectl get secret --namespace {namespace} {secret-name} \
-      -o jsonpath="{.data.user-password}" | base64 -d
-    ```
+Or from the classic Helm repository:
 
+```bash
+helm repo add kasmweb https://helm.kasm.com
+helm repo update
+helm install kasm kasmweb/kasm-helm \
+  --version 1.1190.0-develop \
+  --namespace kasm --create-namespace \
+  -f my-values.yaml
+```
 
-### Other Secrets
+After the pods are healthy, retrieve generated credentials and post-install notes:
 
-| Secret Description          | Command                                                                                                       |
-|-----------------------------|---------------------------------------------------------------------------------------------------------------|
-| Database Password           | `kubectl get secret --namespace {namespace} {secret-name} -o jsonpath="{.data.db-password}" \| base64 -d`     |
-| Manager Token               | `kubectl get secret --namespace {namespace} {secret-name} -o jsonpath="{.data.manager-token}" \| base64 -d`   |
-| Service Registration Token  | `kubectl get secret --namespace {namespace} {secret-name} -o jsonpath="{.data.service-token}" \| base64 -d`   |
+```bash
+helm get notes kasm -n kasm
+```
 
-> **Tip:**  
-> Store these secrets in a secure vault. They will be reused for chart upgrades.
+For step-by-step instructions — including TLS, DNS, secret pre-seeding, and verification — see the Documentation section below.
 
----
+## Configuration
 
-## Upgrades & Versioning
+The chart is configured through `values.yaml`. Two values are required to install — `publicAddr` (the public DNS name for the deployment) and `certificate.secretName` (the TLS secret to terminate ingress with) — both shown in the Quick Start above.
 
-- **Branching:**  
-  This repo maintains a release branch matching each Kasm Workspaces version (e.g., `release/1.18.0`).  
-  Use the matching branch for your Kasm deployment version.
-- **Development:**  
-  Use the default `develop` branch for developer previews.
+For the full values reference (cert-manager, external database, ingress, per-component overrides, multi-zone topology, and more), see the chart documentation in the [Helm chart repository](https://github.com/kasmtech/kasm-helm). The repo also includes example manifests for pre-seeding secrets and managing database backups.
 
----
+## Versioning
 
-## Next Steps & Customization
+Chart versions track Kasm Workspaces versions. The middle component of the chart version corresponds to the Kasm release — for example, chart **1.1181.0** matches Kasm Workspaces **1.18.1**. This branch (`1.1190.0-develop` / app `develop`) is the developer preview for the upcoming **1.19** release.
 
-- For detailed chart values and configuration, see the [Chart README](./charts/kasm/README.md).
-- For backup, restore, or upgrade procedures, see this [additional documentation](./docs)
+| Branch | Purpose |
+| --- | --- |
+| `release/<version>` | Stable chart for a specific Kasm Workspaces release |
+| `develop` | Developer previews — no guaranteed migration path; not for production |
 
----
+Always use the chart version that matches the Kasm Workspaces version you are deploying.
 
-## Troubleshooting
+## Resources
 
-- It may take several minutes for pods to be ready after install.
-- If you have issues with ingress or service access consult your cloud provider's troubleshooting documentation.
+- [Kasm Workspaces website](https://kasm.com/)
+- [Kasm documentation](https://docs.kasm.com/) — installation, upgrade, configuration, multi-region, VM-to-Kubernetes migration, and troubleshooting
+- [Helm chart repository](https://github.com/kasmtech/kasm-helm) — chart source, values reference, and examples
+- [Kasm on GitHub](https://github.com/kasmtech) — KasmVNC and the open-source workspace image library
+- [Helm chart issues and discussion](https://github.com/kasmtech/kasm-helm/issues)
 
----
+## License
 
-
+This chart is published by Kasm Technologies. Kasm Workspaces itself is licensed separately — see [kasm.com](https://kasm.com/) for license terms.

@@ -1,0 +1,45 @@
+suite: Standalone DB mode
+templates:
+  - templates/db-statefulset.yaml
+  - templates/db-service.yaml
+  - templates/api-deployment.yaml
+  - templates/manager-deployment.yaml
+tests:
+  - it: renders DB StatefulSet by default
+    template: templates/db-statefulset.yaml
+    set:
+      database.standalone: false
+    asserts:
+      - isKind:
+          of: StatefulSet
+
+  - it: renders DB StatefulSet by default
+    template: templates/db-service.yaml
+    set:
+      database.standalone: false
+    asserts:
+      - isKind:
+          of: Service
+
+  - it: does not render DB StatefulSet when database.standalone=true
+    values:
+      - ../../../tests/values/external-db.yaml
+    templates:
+      - templates/db-statefulset.yaml
+      - templates/db-service.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: wires POSTGRES_HOST env var to the configured hostname
+    values:
+      - ../../../tests/values/external-db.yaml
+    templates:
+      - templates/api-deployment.yaml
+      - templates/manager-deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POSTGRES_HOST
+            value: postgresql.example.test

@@ -1,0 +1,56 @@
+suite: extra objects rendering
+templates:
+  - templates/extra-objects.yaml
+
+tests:
+  - it: renders object-form extraObjects
+    set:
+      extraObjects:
+        - apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: test-object
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: kind
+          value: ConfigMap
+      - equal:
+          path: metadata.name
+          value: test-object
+
+  - it: renders string-form extraObjects
+    set:
+      extraObjects:
+        - |
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: test-secret
+          type: Opaque
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: kind
+          value: Secret
+      - equal:
+          path: metadata.name
+          value: test-secret
+
+  - it: renders mixed object and string extraObjects
+    set:
+      extraObjects:
+        - apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: object-form
+        - |
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: string-form
+    asserts:
+      - hasDocuments:
+          count: 2

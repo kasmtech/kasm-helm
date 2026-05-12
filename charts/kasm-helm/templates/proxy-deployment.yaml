@@ -1,0 +1,126 @@
+{{/*
+Kasm Proxy server Deployment definition
+*/}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $proxyReplicas := include "replicas.preset" (dict "node" $constants.proxy.component "size" .Values.deploymentSize) -}}
+{{- $merged := fromYaml (include "kasm.mergedValues" (dict "root" . "componentName" "proxy")) -}}
+{{- range $idx, $zone := (.Values.kasmZones | default (list (dict "name" "default"))) }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  {{- include "kasm.metadata" (dict "context" $ "component" "proxy" "resource" "deployment" "zone" $zone.name "include" "all") | indent 2 }}
+spec:
+  replicas: {{ $proxyReplicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: {{ add1 $proxyReplicas }}
+  selector:
+    matchLabels:
+      {{- include "kasm.metadata" (dict "context" $ "component" "proxy" "resource" "deployment" "zone" $zone.name "include" "match") | indent 6 }}
+  template:
+    metadata:
+      {{- include "kasm.metadata" (dict "context" $ "component" "proxy" "resource" "pod" "zone" $zone.name "include" "la") | indent 6 }}
+    spec:
+      restartPolicy: {{ $.Values.restartPolicy }}
+      {{- if $.Values.imagePullSecrets.enabled }}
+      imagePullSecrets:
+        - name: {{ $.Values.imagePullSecrets.name | default (printf "%s-image-pull-secret" $.Release.Name) }}
+      {{- end }}
+      {{- include "kasm.securityContext" (list $ 1000 "pod") | nindent 6 }}
+      {{- with $.Values.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $.Values.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        {{- if $.Values.trustedCaBundle.enabled }}
+          {{- include "kasm.trustedCaInit" (list $ "proxy") | nindent 8 }}
+        {{- end }}
+        {{- include "kasm.initContainer" (dict "context" $ "serviceName" (printf "%s-%s" $constants.api.svc (include "kasm.zoneName" $zone.name)) "servicePort" $constants.api.port "path" "/api/__healthcheck" "schema" "http" "image" $constants.api.image "component" "api") | nindent 8 }}
+        {{- include "kasm.initContainer" (dict "context" $ "serviceName" (printf "%s-%s" $constants.manager.svc (include "kasm.zoneName" $zone.name)) "servicePort" $constants.manager.port "path" "/__healthcheck" "schema" "http" "image" $constants.api.image "component" "manager") | nindent 8 }}
+        {{- if $.Values.components.guac.enabled }}
+          {{- include "kasm.initContainer" (dict "context" $ "serviceName" $constants.guac.svc "servicePort" $constants.guac.port "path" "/__healthcheck" "schema" "http" "image" $constants.api.image "component" "guac") | nindent 8 }}
+        {{- end }}
+        {{- if $.Values.components.rdpGateway.enabled }}
+          {{- include "kasm.initContainer" (dict "context" $ "serviceName" $constants.rdpGateway.svc "servicePort" $constants.rdpGateway.port "path" "/__healthcheck" "schema" "http" "image" $constants.api.image "component" "rdpGateway") | nindent 8 }}
+        {{- end }}
+        {{- with $merged.extraInitContainers }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      containers:
+        - name: {{ include "kasm.name" (list $ "proxy" "container" $zone.name) }}
+          image: {{ $constants.proxy.image }}
+          imagePullPolicy: {{ $.Values.imagePullPolicy }}
+          {{- if $.Values.components.proxy.resources }}
+          resources: {{- toYaml $.Values.components.proxy.resources | nindent 12 }}
+          {{- else }}
+          resources: {{- include "resources.preset" (dict "node" $constants.proxy.component "size" $.Values.deploymentSize) | nindent 12 }}
+          {{- end }}
+          {{- include "kasm.securityContext" (list $ 1000 "container") | nindent 10 }}
+          volumeMounts:
+            - name: kasm-proxy-cert
+              mountPath: /etc/ssl/certs/kasm_nginx.crt
+              subPath: tls.crt
+            - name: kasm-proxy-cert
+              mountPath: /etc/ssl/private/kasm_nginx.key
+              subPath: tls.key
+            - name: kasm-proxy-settings-config
+              mountPath: /etc/nginx/conf.d
+            - name: kasm-proxy-services-config
+              mountPath: /etc/nginx/conf.d/services.d
+            - name: kasm-proxy-base-config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+            - name: kasm-proxy-data
+              mountPath: /var/cache/nginx
+            - name: kasm-proxy-data
+              mountPath: /var/log/external/nginx
+            - name: kasm-proxy-data
+              mountPath: /run
+            {{- with $merged.containerMounts }}
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- include "kasm.trustedCaVolumeMounts" $ | nindent 12 }}
+          ports:
+            - name: {{ $constants.proxy.portName }}-http
+              containerPort: {{ $constants.proxy.http }}
+              protocol: TCP
+            - name: {{ $constants.proxy.portName }}-https
+              containerPort: {{ $constants.proxy.https }}
+              protocol: TCP
+          {{- if $.Values.applyHealthChecks }}
+          livenessProbe:
+            {{- include "health.tcp" (dict "portName" (print $constants.proxy.portName "-http") ) | indent 12 }}
+          {{- end }}
+          {{- if $.Values.applyHealthChecks }}
+          readinessProbe:
+            {{- include "health.command" (dict "command" "nginx -t") | indent 12 }}
+          {{- end }}
+        {{- with $merged.extraContainers }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      volumes:
+        - name: kasm-proxy-cert
+          secret:
+            secretName: {{ $.Values.certificate.secretName | default (include "kasm.name" (list $ "cert-manager" "secret")) }}
+        - name: kasm-proxy-base-config
+          configMap:
+            name: {{ include "kasm.name" (list $ "proxy-base" "configmap") }}
+        - name: kasm-proxy-settings-config
+          configMap:
+            name: {{ include "kasm.name" (list $ "proxy-settings" "" $zone.name) }}
+        - name: kasm-proxy-services-config
+          configMap:
+            name: {{ include "kasm.name" (list $ "proxy-services" "configmap") }}
+        - name: kasm-proxy-data
+          emptyDir:
+            sizeLimit: 1Gi
+        {{- with $merged.volumes }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- include "kasm.trustedCaVolumes" $ | nindent 8 }}
+{{- end }}

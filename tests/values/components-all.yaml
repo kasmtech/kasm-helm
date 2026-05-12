@@ -1,0 +1,7 @@
+components:
+  guac:
+    enabled: true
+  rdpGateway:
+    enabled: true
+  rdpHttpsGateway:
+    enabled: true

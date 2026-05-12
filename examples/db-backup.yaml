@@ -1,0 +1,111 @@
+---
+# Kasm DB Backup Job
+#
+# Use this to take a manual backup of the Kasm PostgreSQL database into a PVC.
+# Typical use cases:
+#   - Upgrading from the legacy Kasm single-zone chart to 1.1181.0
+#
+# Note: This job is NOT required when upgrading from 1.1181.0 to 1.1190.0.
+#       Version 1.1190.0 performs an automated backup during the upgrade process.
+#
+# Prerequisites:
+#   - This job must be deployed in the same namespace as your Kasm Helm release.
+#   - Run this job before applying the Helm chart upgrade.
+#
+# Field reference:
+#   storageClassName  — Storage class for the backup PVC. Commented out by default to use the namespace
+#                       default. Uncomment and set a value to use a specific storage class.
+#
+# Before applying:
+#   1. Replace all values marked with # <-- REPLACE
+#   2. Apply with:  kubectl apply -n {NAMESPACE} -f examples/db-backup.yaml
+#   3. Monitor completion with: kubectl logs -f job/backup -n {NAMESPACE}
+#   4. Verify the dump was created before proceeding with the Helm chart upgrade.
+#
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: backup
+spec:
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+      restartPolicy: OnFailure
+      initContainers:
+        - name: db-is-ready
+          image: kasmweb/api:1.18.1
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: POSTGRES_HOST
+              value: db
+            - name: POSTGRES_PORT
+              value: "5432"
+          command:
+            - "/bin/bash"
+            - "-c"
+          args:
+            - |
+              while ! pg_isready -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -t 10; do echo "Waiting for DB..."; sleep 5; done
+      containers:
+        - name: kasm-old-db-backup-container
+          image: kasmweb/api:1.18.1
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: POSTGRES_HOST
+              value: db
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_DB
+              value: kasm
+            - name: POSTGRES_USER
+              value: kasmapp
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: db-password
+                  name: kasm-secrets
+          command:
+            - "/bin/bash"
+            - "-c"
+          args:
+            - |
+              export PGPASSWORD=$POSTGRES_PASSWORD;
+              echo "Creating DB Backup..."
+              pg_dump -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -d $POSTGRES_DB -Ft > /data/kasm-db-dump/kasm_dump.tar;
+              ls -lah /data/kasm-db-dump/kasm_dump.tar;
+          volumeMounts:
+            - name: kasm-db-dump
+              mountPath: /data/kasm-db-dump
+              readOnly: false
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+      volumes:
+        - name: kasm-db-dump
+          persistentVolumeClaim:
+            claimName: kasm-db-dump-pvc
+---
+# PVC definition
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: kasm-db-dump-pvc
+spec:
+  # storageClassName: ""  # <-- Uncomment and set to use a specific storage class. Leave commented to use the namespace default.
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi

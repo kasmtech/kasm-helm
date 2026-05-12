@@ -1,0 +1,244 @@
+suite: kasm.dbIsReady init container variants
+templates:
+  - templates/api-deployment.yaml
+  - templates/db-init-job.yaml
+  - templates/db-upgrade-job.yaml
+  - templates/db-upgrade-backup-job.yaml
+  - templates/db-backup-cron.yaml
+tests:
+  - it: api deployment "ready" init container is named db-is-ready and has POSTGRES_PASSWORD from release secret
+    template: templates/api-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: db-is-ready
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: POSTGRES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-secrets
+                key: db-password
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: POSTGRES_HOST
+            value: "RELEASE-NAME-db"
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: POSTGRES_DB
+            value: kasm
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: POSTGRES_USER
+            value: kasmapp
+
+  - it: api deployment "ready" propagates custom database.kasmDbName and database.kasmDbUser
+    template: templates/api-deployment.yaml
+    set:
+      database:
+        kasmDbName: corpkasm
+        kasmDbUser: kasm_svc
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: POSTGRES_DB
+            value: corpkasm
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: POSTGRES_USER
+            value: kasm_svc
+
+  - it: api deployment "ready" sources POSTGRES_PASSWORD from user-supplied kasmDbSecret when configured
+    template: templates/api-deployment.yaml
+    set:
+      database:
+        kasmDbSecret:
+          name: my-db-secret
+          key: password
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: POSTGRES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: my-db-secret
+                key: password
+
+  - it: db init job "init" init container is named db-is-ready and omits DB credential env vars
+    template: templates/db-init-job.yaml
+    set:
+      dbManagement:
+        initialize: true
+        upgrade:
+          enable: false
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: db-is-ready
+      - notContains:
+          path: spec.template.spec.initContainers[0].env
+          any: true
+          content:
+            name: POSTGRES_PASSWORD
+      - notContains:
+          path: spec.template.spec.initContainers[0].env
+          any: true
+          content:
+            name: POSTGRES_DB
+      - notContains:
+          path: spec.template.spec.initContainers[0].env
+          any: true
+          content:
+            name: POSTGRES_USER
+
+  - it: db upgrade job "version" init container is named db-major-version-is-ready and includes credentials
+    template: templates/db-upgrade-job.yaml
+    set:
+      dbManagement:
+        initialize: false
+        upgrade:
+          enable: true
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: db-major-version-is-ready
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: POSTGRES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-secrets
+                key: db-password
+
+  - it: db upgrade backup job "backup" init container is named db-is-ready-for-backup and uses default kasm-db host
+    template: templates/db-upgrade-backup-job.yaml
+    documentSelector:
+      path: kind
+      value: Job
+    set:
+      dbManagement:
+        initialize: false
+        upgrade:
+          enable: true
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: db-is-ready-for-backup
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: POSTGRES_HOST
+            value: "kasm-db"
+
+  - it: db upgrade backup "backup" host follows dbManagement.upgrade.oldDbHostname
+    template: templates/db-upgrade-backup-job.yaml
+    documentSelector:
+      path: kind
+      value: Job
+    set:
+      dbManagement:
+        initialize: false
+        upgrade:
+          enable: true
+          oldDbHostname: legacy-postgres.example
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: POSTGRES_HOST
+            value: "legacy-postgres.example"
+
+  - it: db upgrade backup "backup" host follows database.hostname when standalone=true
+    template: templates/db-upgrade-backup-job.yaml
+    documentSelector:
+      path: kind
+      value: Job
+    set:
+      dbManagement:
+        initialize: false
+        upgrade:
+          enable: true
+      database:
+        standalone: true
+        hostname: external-postgres.example
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: POSTGRES_HOST
+            value: "external-postgres.example"
+
+  - it: db upgrade backup job main container POSTGRES_HOST defaults to literal "kasm-db"
+    template: templates/db-upgrade-backup-job.yaml
+    documentSelector:
+      path: kind
+      value: Job
+    set:
+      dbManagement:
+        initialize: false
+        upgrade:
+          enable: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POSTGRES_HOST
+            value: "kasm-db"
+
+  - it: db upgrade backup job main container POSTGRES_HOST follows dbManagement.upgrade.oldDbHostname
+    template: templates/db-upgrade-backup-job.yaml
+    documentSelector:
+      path: kind
+      value: Job
+    set:
+      dbManagement:
+        initialize: false
+        upgrade:
+          enable: true
+          oldDbHostname: legacy-postgres.example
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POSTGRES_HOST
+            value: "legacy-postgres.example"
+
+  - it: db upgrade backup job main container POSTGRES_HOST follows database.hostname when standalone=true
+    template: templates/db-upgrade-backup-job.yaml
+    documentSelector:
+      path: kind
+      value: Job
+    set:
+      dbManagement:
+        initialize: false
+        upgrade:
+          enable: true
+      database:
+        standalone: true
+        hostname: external-postgres.example
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POSTGRES_HOST
+            value: "external-postgres.example"
+
+  - it: db backup cronjob uses db-is-ready init container
+    template: templates/db-backup-cron.yaml
+    set:
+      dbManagement:
+        backupCron:
+          enabled: true
+          schedule: "0 2 * * *"
+    asserts:
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.initContainers[0].name
+          value: db-is-ready

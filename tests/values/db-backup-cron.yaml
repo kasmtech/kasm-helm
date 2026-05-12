@@ -1,0 +1,4 @@
+dbManagement:
+  backupCron:
+    enabled: true
+    schedule: "0 2 * * *"

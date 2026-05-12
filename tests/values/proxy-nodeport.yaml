@@ -1,0 +1,8 @@
+proxyService:
+  type: NodePort
+
+ingress:
+  enabled: false
+
+route:
+  enabled: false

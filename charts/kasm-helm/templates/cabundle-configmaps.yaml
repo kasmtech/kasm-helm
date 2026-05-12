@@ -1,0 +1,59 @@
+{{/*
+Kasm Trusted CA Bundle ConfigMap Template
+*/}}
+{{- if and .Values.trustedCaBundle.enabled (not .Values.trustedCaBundle.caCerts) (not .Values.trustedCaBundle.configMapName) }}
+{{- fail "trustedCaBundle.configMapName must be set when trustedCaBundle.enabled is true and trustedCaBundle.caCerts is empty" }}
+{{- end }}
+{{- if and .Values.trustedCaBundle.enabled .Values.trustedCaBundle.caCerts }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  {{- include "kasm.metadata" (dict "context" . "component" "caBundleCert" "resource" "configMap" "name" .Values.trustedCaBundle.configMapName "include" "all") | indent 2 }}
+data:
+  {{- range $fileName, $pemData := .Values.trustedCaBundle.caCerts }}
+    {{- if not (hasSuffix ".crt" $fileName) }}
+    {{- fail (printf "trustedCaBundle.caCerts key '%s' must end with .crt" $fileName) }}
+    {{- end }}
+  {{ $fileName }}: |-
+{{ $pemData | indent 4 }}
+  {{- end }}
+{{- end -}}
+{{- if and .Values.trustedCaBundle.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  {{- include "kasm.metadata" (dict "context" . "component" "caBundleScript" "resource" "configMap" "include" "all")  | indent 2 }}
+data:
+  init-ca-trust.sh: |
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    echo "[ca-trust] Starting CA trust init"
+    echo "[ca-trust] Running as: $(id)"
+
+    if ! command -v update-ca-certificates >/dev/null 2>&1; then
+      echo "[ca-trust] ERROR: update-ca-certificates not found in image."
+      exit 1
+    fi
+
+    if [ ! -d /etc/ssl/certs ]; then
+      echo "[ca-trust] ERROR: /etc/ssl/certs does not exist (emptyDir mount missing?)."
+      ls -ld /etc /etc/ssl || true
+      exit 1
+    fi
+
+    if ! test -w /etc/ssl/certs; then
+      echo "[ca-trust] ERROR: /etc/ssl/certs is not writable (permissions/SCC/fsGroup issue)."
+      ls -ld /etc/ssl/certs || true
+      exit 1
+    fi
+
+    echo "[ca-trust] Inputs in /usr/local/share/ca-certificates:"
+    ls -la /usr/local/share/ca-certificates || true
+
+    echo "[ca-trust] Running update-ca-certificates..."
+    update-ca-certificates
+
+    echo "[ca-trust] Done."
+{{- end }}

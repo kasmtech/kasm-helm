@@ -1,0 +1,94 @@
+suite: optional components
+templates:
+  - templates/guac-service.yaml
+  - templates/rdp-gateway-service.yaml
+  - templates/rdp-https-gateway-service.yaml
+  - templates/guac-deployment.yaml
+  - templates/rdp-gateway-deployment.yaml
+  - templates/rdp-https-gateway-deployment.yaml
+
+tests:
+  - it: does not render optional services or deployments when disabled
+    set:
+      components:
+        guac:
+          enabled: false
+        rdpGateway:
+          enabled: false
+        rdpHttpsGateway:
+          enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders guac service when enabled
+    template: templates/guac-service.yaml
+    set:
+      components:
+        guac:
+          enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Service
+
+  - it: renders guac deployment when enabled
+    template: templates/guac-deployment.yaml
+    set:
+      components:
+        guac:
+          enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Deployment
+
+  - it: renders rdp gateway service when enabled
+    template: templates/rdp-gateway-service.yaml
+    set:
+      components:
+        rdpGateway:
+          enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Service
+
+  - it: renders rdp gateway deployment when enabled
+    template: templates/rdp-gateway-deployment.yaml
+    set:
+      components:
+        rdpGateway:
+          enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Deployment
+
+  - it: renders rdp HTTPS gateway service when enabled
+    template: templates/rdp-https-gateway-service.yaml
+    set:
+      components:
+        rdpHttpsGateway:
+          enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Service
+
+  - it: renders rdp HTTPS gateway deployment when enabled
+    template: templates/rdp-https-gateway-deployment.yaml
+    set:
+      components:
+        rdpHttpsGateway:
+          enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Deployment

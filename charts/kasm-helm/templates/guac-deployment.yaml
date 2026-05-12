@@ -1,0 +1,141 @@
+{{/*
+Deploy the Guacamole Web RDP if .Values.components.guac.enabled set to true
+*/}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $guacReplicas := include "replicas.preset" (dict "node" ($constants.guac.component) "size" .Values.deploymentSize) -}}
+{{- $merged := fromYaml (include "kasm.mergedValues" (dict "root" . "componentName" "guac")) -}}
+{{- $zoneName := "default" -}}
+{{- if .Values.kasmZones }}
+  {{- $zoneName = (index .Values.kasmZones 0).name -}}
+{{- end }}
+{{- if .Values.components.guac.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  {{- include "kasm.metadata" (dict "context" . "component" "guac" "resource" "deployment" "include" "all") | indent 2 }}
+spec:
+  replicas: {{ $guacReplicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: {{ add1 $guacReplicas }}
+  selector:
+    matchLabels:
+      {{- include "kasm.metadata" (dict "context" . "component" "guac" "resource" "deployment" "include" "match") | indent 6 }}
+  template:
+    metadata:
+      {{- include "kasm.metadata" (dict "context" . "component" "guac" "resource" "deployment" "include" "la") | indent 6 }}
+    spec:
+      restartPolicy: {{ .Values.restartPolicy }}
+      {{- if .Values.imagePullSecrets.enabled }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets.name | default (printf "%s-image-pull-secret" .Release.Name) }}
+      {{- end }}
+      {{- include "kasm.securityContext" (list . 1000 "pod") | nindent 6 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        {{- if .Values.trustedCaBundle.enabled }}
+          {{- include "kasm.trustedCaInit" (list . "guac") | nindent 8 }}
+        {{- end }}
+        {{- include "kasm.initContainer" (dict "context" . "serviceName" (printf "%s-%s" $constants.api.svc (include "kasm.zoneName" $zoneName)) "servicePort" ($constants.api.port) "path" "/api/__healthcheck" "schema" "http" "image" ($constants.api.image) "component" "api") | nindent 8 }}
+        {{- with $merged.extraInitContainers }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      containers:
+        - name: {{ include "kasm.name" (list . "guac" "container") }}
+          image: {{ $constants.guac.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          env:
+            - name: CLUSTER_SIZE
+              value: "4"
+            - name: REGISTRATION_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-secrets
+                  key: service-token
+            - name: ZONE
+            {{- if .Values.kasmZones }}
+              {{- with index .Values.kasmZones 0 }}
+              value: {{ .name }}
+              {{- end }}
+            {{- else }}
+              value: "default"
+            {{- end }}
+            - name: SERVER_ADDRESS
+            {{- if .Values.kasmZones }}
+              {{- with index .Values.kasmZones 0 }}
+              value: {{ printf "%s-%s" $constants.proxy.svc (include "kasm.zoneName" .name) | quote }}
+              {{- end }}
+            {{- else }}
+              value: {{ printf "%s-%s" $constants.proxy.svc "default" }}
+            {{- end }}
+            - name: SERVER_PORT
+              value: {{ $constants.proxy.http | quote }}
+            - name: API_SCHEMA
+              value: "http"
+            - name: API_HOSTNAME
+            {{- if .Values.kasmZones }}
+              {{- with index .Values.kasmZones 0 }}
+              value: {{ printf "%s-%s" $constants.api.svc (include "kasm.zoneName" .name) | quote }}
+              {{- end }}
+            {{- else }}
+              value: {{ printf "%s-%s" $constants.api.svc "default" | quote }}
+            {{- end }}
+            - name: API_PORT
+              value: {{ $constants.api.port | quote }}
+            - name: KASM_EPHEMERAL
+              value: "true"
+          ports:
+            - name: {{ $constants.guac.portName }}
+              containerPort: {{ $constants.guac.port }}
+              protocol: TCP
+          volumeMounts:
+            - name: tmp-data
+              mountPath: /tmp
+            - name: guac-log-data
+              mountPath: /opt/kasm/current/log
+              readOnly: true
+            - name: kasm-guac-data
+              mountPath: /opt/kasm/current/tmp/guac
+            {{- include "kasm.trustedCaVolumeMounts" . | nindent 12 }}
+            {{- with $merged.containerMounts }}
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- if .Values.applyHealthChecks }}
+          livenessProbe:
+            {{- include "health.tcp" (dict "portName" $constants.guac.portName ) | indent 12 }}
+          {{- end }}
+          {{- if .Values.applyHealthChecks }}
+          readinessProbe:
+            {{- include "health.http" (dict "path" "/__healthcheck" "portName" $constants.guac.portName ) | indent 12 }}
+          {{- end }}
+          {{- if .Values.components.guac.resources }}
+          resources: {{- toYaml .Values.components.guac.resources | nindent 12 }}
+          {{- else }}
+          resources: {{- include "resources.preset" (dict "node" ($constants.guac.component) "size" .Values.deploymentSize) | nindent 12 }}
+          {{- end }}
+          {{- include "kasm.securityContext" (list . 1000 "container") | nindent 10 }}
+        {{- with $merged.extraContainers }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      volumes:
+        - name: tmp-data
+          emptyDir:
+            sizeLimit: 256Mi
+        - name: guac-log-data
+          emptyDir:
+            sizeLimit: 1Mi
+        - name: kasm-guac-data
+          emptyDir:
+            sizeLimit: 256Mi
+        {{- with $merged.volumes }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- include "kasm.trustedCaVolumes" . | nindent 8 }}
+{{- end }}

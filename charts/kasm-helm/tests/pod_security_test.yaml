@@ -1,0 +1,356 @@
+suite: pod security standards compatibility
+templates:
+  - templates/api-deployment.yaml
+  - templates/db-backup-cron.yaml
+  - templates/db-init-job.yaml
+  - templates/db-statefulset.yaml
+  - templates/db-upgrade-backup-job.yaml
+  - templates/db-upgrade-job.yaml
+  - templates/guac-deployment.yaml
+  - templates/manager-deployment.yaml
+  - templates/proxy-deployment.yaml
+  - templates/rdp-gateway-deployment.yaml
+  - templates/rdp-https-gateway-deployment.yaml
+
+tests:
+  - it: hardens core workload pod templates and main containers when security is enabled
+    templates:
+      - templates/api-deployment.yaml
+      - templates/db-init-job.yaml
+      - templates/db-statefulset.yaml
+      - templates/manager-deployment.yaml
+      - templates/proxy-deployment.yaml
+    set:
+      ingress:
+        enabled: false
+      dbManagement:
+        initialize: true
+        backupCron:
+          enabled: false
+        upgrade:
+          enable: false
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["kasm.com/security"]
+          value: "true"
+      - equal:
+          path: spec.template.spec.securityContext.fsGroupChangePolicy
+          value: OnRootMismatch
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop[0]
+          value: ALL
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.seccompProfile.type
+          value: RuntimeDefault
+
+  - it: hardens built in init containers on core workloads
+    templates:
+      - templates/api-deployment.yaml
+      - templates/db-init-job.yaml
+      - templates/manager-deployment.yaml
+      - templates/proxy-deployment.yaml
+    set:
+      ingress:
+        enabled: false
+      dbManagement:
+        initialize: true
+        backupCron:
+          enabled: false
+        upgrade:
+          enable: false
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.capabilities.drop[0]
+          value: ALL
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.seccompProfile.type
+          value: RuntimeDefault
+
+  - it: hardens optional component deployments and their first init container
+    templates:
+      - templates/guac-deployment.yaml
+      - templates/rdp-gateway-deployment.yaml
+      - templates/rdp-https-gateway-deployment.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      ingress:
+        enabled: false
+      dbManagement:
+        initialize: false
+        backupCron:
+          enabled: false
+        upgrade:
+          enable: false
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["kasm.com/security"]
+          value: "true"
+      - equal:
+          path: spec.template.spec.securityContext.fsGroupChangePolicy
+          value: OnRootMismatch
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop[0]
+          value: ALL
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.seccompProfile.type
+          value: RuntimeDefault
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.capabilities.drop[0]
+          value: ALL
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.seccompProfile.type
+          value: RuntimeDefault
+
+  - it: hardens backup cronjob pod templates
+    template: templates/db-backup-cron.yaml
+    values:
+      - ../../../tests/values/db-backup-cron.yaml
+    set:
+      ingress:
+        enabled: false
+      dbManagement:
+        initialize: false
+        upgrade:
+          enable: false
+    asserts:
+      - equal:
+          path: spec.jobTemplate.spec.template.metadata.annotations["kasm.com/security"]
+          value: "true"
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.securityContext.fsGroupChangePolicy
+          value: OnRootMismatch
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].securityContext.capabilities.drop[0]
+          value: ALL
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].securityContext.seccompProfile.type
+          value: RuntimeDefault
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.initContainers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.initContainers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.initContainers[0].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.initContainers[0].securityContext.capabilities.drop[0]
+          value: ALL
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.initContainers[0].securityContext.seccompProfile.type
+          value: RuntimeDefault
+
+  - it: hardens the trusted ca init container for api workloads
+    template: templates/api-deployment.yaml
+    values:
+      - ../../../tests/values/trustedca-enabled.yaml
+    set:
+      ingress:
+        enabled: false
+      dbManagement:
+        initialize: false
+        backupCron:
+          enabled: false
+        upgrade:
+          enable: false
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: trusted-ca-init
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.runAsUser
+          value: 1000
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.runAsGroup
+          value: 1000
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.capabilities.drop[0]
+          value: ALL
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.seccompProfile.type
+          value: RuntimeDefault
+
+  - it: hardens the trusted ca init container for the postgres workload uid
+    template: templates/db-statefulset.yaml
+    values:
+      - ../../../tests/values/trustedca-enabled.yaml
+    set:
+      ingress:
+        enabled: false
+      dbManagement:
+        initialize: false
+        backupCron:
+          enabled: false
+        upgrade:
+          enable: false
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: trusted-ca-init
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.runAsUser
+          value: 70
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.runAsGroup
+          value: 70
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.capabilities.drop[0]
+          value: ALL
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.seccompProfile.type
+          value: RuntimeDefault
+
+  - it: keeps the db upgrade job restricted-compatible while preserving required writable mounts
+    template: templates/db-upgrade-job.yaml
+    set:
+      ingress:
+        enabled: false
+      dbManagement:
+        initialize: false
+        upgrade:
+          enable: true
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["kasm.com/security"]
+          value: "true"
+      - equal:
+          path: spec.template.spec.securityContext.fsGroupChangePolicy
+          value: OnRootMismatch
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop[0]
+          value: ALL
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.seccompProfile.type
+          value: RuntimeDefault
+      - exists:
+          path: spec.template.spec.containers[0].volumeMounts[?(@.name=="tmp-data" && @.mountPath=="/tmp")]
+      - exists:
+          path: spec.template.spec.volumes[?(@.name=="tmp-data")]
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.runAsNonRoot
+          value: true
+
+  - it: hardens the pre upgrade backup job pod and init container
+    template: templates/db-upgrade-backup-job.yaml
+    documentIndex: 1
+    set:
+      ingress:
+        enabled: false
+      dbManagement:
+        initialize: false
+        upgrade:
+          enable: true
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["kasm.com/security"]
+          value: "true"
+      - equal:
+          path: spec.template.spec.securityContext.fsGroupChangePolicy
+          value: OnRootMismatch
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop[0]
+          value: ALL
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.seccompProfile.type
+          value: RuntimeDefault
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.capabilities.drop[0]
+          value: ALL
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.seccompProfile.type
+          value: RuntimeDefault
