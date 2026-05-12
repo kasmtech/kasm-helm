@@ -111,15 +111,19 @@ helm-deploy-gitlab:
   extends:
     - .run-deploy
   script:
-    - apk add --no-cache git
-    - git config --global user.email "ci_bot@kasm.com"
+    - apk add --no-cache git gnupg
+    - echo "$GPG_PRIVATE_KEY_B64" | base64 -d | gpg --batch --import
+    - git config --global user.email "$GPG_COMMITTER_EMAIL"
     - git config --global user.name "CI Bot"
+    - git config --global user.signingkey "$GPG_KEY_ID"
+    - git config --global commit.gpgsign true
+    - git config --global gpg.program gpg
     - git clone -b main --single-branch https://oauth2:${HELM_REPO_TOKEN}@gitlab.com/kasm-technologies/internal/kasm-helm-repo.git
     - cp kasm-helm-1.*.tgz kasm-helm-repo/public/
     - helm repo index kasm-helm-repo/public/ --url https://helm.kasm.com --merge kasm-helm-repo/public/index.yaml
     - cd kasm-helm-repo
     - git add public/index.yaml public/kasm-helm-1.*.tgz
-    - git commit -m "AUTOMATIC PUSH FROM KASM-HELM"
+    - git commit -S -m "AUTOMATIC PUSH FROM KASM-HELM"
     - git push origin HEAD
   tags: ["oci-fixed-amd"]
 
