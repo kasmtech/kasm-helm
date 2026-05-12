@@ -1,0 +1,28 @@
+{{/*
+Deploy the Certificates with certManager
+*/}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- if .Values.certificate.certManager.enabled }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  {{- include "kasm.metadata" (dict "context" . "component" "cert-manager" "resource" "certificate" "include" "all") | indent 2 }}
+spec:
+  secretTemplate:
+    {{- include "kasm.metadata" (dict "context" . "component" "cert-manager" "resource" "secret" "include" "la") | indent 4 }}
+  secretName: {{ .Values.certificate.secretName | default (include "kasm.name" (list . "cert-manager" "secret")) }}
+  commonName: {{ .Values.publicAddr | quote }}
+  dnsNames:
+    - {{ .Values.publicAddr | quote }}
+    {{- if .Values.certificate.certManager.addWildCard }}
+    - {{ printf "*.%s" .Values.publicAddr | quote }}
+    {{- else }}
+    {{- range $idx, $zone := (.Values.kasmZones) }}
+    - {{ $zone.proxyAddress | quote }}
+    {{- end }}
+    {{- end }}
+  issuerRef:
+    name: {{ .Values.certificate.certManager.issuerName }}
+    kind: {{ .Values.certificate.certManager.issuerKind | default "Issuer" }}
+    group: {{ .Values.certificate.certManager.issuerGroup | default "cert-manager.io" }}
+{{- end }}

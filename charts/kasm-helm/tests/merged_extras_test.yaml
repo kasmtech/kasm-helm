@@ -1,0 +1,100 @@
+suite: Merged extras (volumes, mounts, sidecars)
+
+templates:
+  - templates/api-deployment.yaml
+  - templates/proxy-deployment.yaml
+  - templates/db-statefulset.yaml
+
+tests:
+  - it: supports component-specific extras using proxy as example
+    template: templates/proxy-deployment.yaml
+    set:
+      components:
+        proxy:
+          extraContainers:
+            - name: proxy-sidecar
+              image: nginx
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[?(@.name=="proxy-sidecar")]
+
+  - it: attaches merged volumes and mounts to db container
+    template: templates/db-statefulset.yaml
+    set:
+      database:
+        extraVolumeMounts:
+          - name: extra-db-volume
+            mountPath: /etc/db-extra
+        extraVolumes:
+          - name: extra-db-volume
+            configMap:
+              name: db-extra-config
+      extraVolumes:
+        - name: extra-global-volume
+          configMap:
+            name: test-config
+      extraContainerVolumeMounts:
+        - name: extra-global-volume
+          mountPath: /etc/extra
+    asserts:
+      - exists:
+          path: spec.template.spec.volumes[?(@.name=="extra-global-volume")]
+      - exists:
+          path: spec.template.spec.containers[*].volumeMounts[?(@.name=="extra-global-volume" && @.mountPath=="/etc/extra")]
+      - exists:
+          path: spec.template.spec.volumes[?(@.name=="extra-db-volume")]
+      - exists:
+          path: spec.template.spec.containers[*].volumeMounts[?(@.name=="extra-db-volume" && @.mountPath=="/etc/db-extra")]
+
+  - it: merges global and component initContainers and mounts
+    templates:
+      - templates/api-deployment.yaml
+      - templates/proxy-deployment.yaml
+    set:
+      extraInitContainers:
+        - name: init-global
+          image: busybox
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      extraVolumes:
+        - name: extra-global-volume
+          emptyDir: {}
+      extraInitVolumeMounts:
+        - name: extra-global-volume
+          mountPath: /etc/extra
+      components:
+        api:
+          extraInitContainers:
+            - name: init-component
+              image: alpine
+        proxy:
+          extraInitContainers:
+            - name: init-component
+              image: alpine
+    asserts:
+      - exists:
+          path: spec.template.spec.initContainers[?(@.name=="init-global")]
+      - exists:
+          path: spec.template.spec.initContainers[?(@.name=="init-component")]
+      - exists:
+          path: spec.template.spec.volumes[?(@.name=="extra-global-volume")]
+      - exists:
+          path: spec.template.spec.initContainers[*].volumeMounts[?(@.name=="extra-global-volume" && @.mountPath=="/etc/extra")]
+
+  - it: component extraContainers override global by name
+    template: templates/api-deployment.yaml
+    set:
+      extraContainers:
+        - name: shared-sidecar-global
+          image: busybox:1.36
+      components:
+        api:
+          extraContainers:
+            - name: shared-sidecar-api
+              image: alpine:3.20
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[?(@.name=="shared-sidecar-api" && @.image=="alpine:3.20")]
+      - exists:
+          path: spec.template.spec.containers[?(@.name=="shared-sidecar-global" && @.image=="busybox:1.36")]

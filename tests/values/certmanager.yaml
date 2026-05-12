@@ -1,0 +1,8 @@
+publicAddr: kasm.example.com
+certificate:
+  secretName: kasm-tls
+  certManager:
+    enabled: true
+    addWildCard: true
+    issuerName: letsencrypt-prod
+    issuerKind: ClusterIssuer

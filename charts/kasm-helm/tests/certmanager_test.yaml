@@ -1,0 +1,43 @@
+suite: cert-manager certificate rendering
+templates:
+  - templates/cert-manager-certificate.yaml
+tests:
+  - it: does not render certificate when certManager disabled
+    set:
+      certificate:
+        certManager:
+          enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders certificate with expected secretName and DNS names
+    values:
+      - ../../../tests/values/certmanager.yaml
+    set:
+      certificate:
+        certManager:
+          addWildCard: false
+    asserts:
+      - isKind:
+          of: Certificate
+      - equal:
+          path: spec.secretName
+          value: kasm-tls
+      - contains:
+          path: spec.dnsNames
+          content: kasm.example.com
+      - equal:
+          path: spec.issuerRef.name
+          value: letsencrypt-prod
+      - equal:
+          path: spec.issuerRef.kind
+          value: ClusterIssuer
+
+  - it: includes wildcard DNS when addWildCard=true
+    values:
+      - ../../../tests/values/certmanager.yaml
+    asserts:
+      - contains:
+          path: spec.dnsNames
+          content: "*.kasm.example.com"

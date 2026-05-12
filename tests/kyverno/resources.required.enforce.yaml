@@ -1,0 +1,153 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: kasm-require-resources
+  annotations:
+    policies.kyverno.io/title: Require cpu/memory requests and limits
+    policies.kyverno.io/category: Best Practices
+    policies.kyverno.io/severity: medium
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: require-resources-deployments-statefulsets-daemonsets
+      match:
+        any:
+          - resources:
+              kinds:
+                - Deployment
+                - StatefulSet
+                - DaemonSet
+      validate:
+        message: "All containers and initContainers must set resources.requests and resources.limits for cpu and memory."
+        foreach:
+          - list: "request.object.spec.template.spec.containers"
+            validate:
+              pattern:
+                resources:
+                  requests:
+                    cpu: "?*"
+                    memory: "?*"
+                  limits:
+                    cpu: "?*"
+                    memory: "?*"
+          - list: "request.object.spec.template.spec.initContainers"
+            preconditions:
+              all:
+                - key: "{{ length(request.object.spec.template.spec.initContainers || []) }}"
+                  operator: GreaterThan
+                  value: 0
+            validate:
+              pattern:
+                resources:
+                  requests:
+                    cpu: "?*"
+                    memory: "?*"
+                  limits:
+                    cpu: "?*"
+                    memory: "?*"
+
+    - name: require-resources-jobs
+      match:
+        any:
+          - resources:
+              kinds:
+                - Job
+      validate:
+        message: "All containers and initContainers must set resources.requests and resources.limits for cpu and memory."
+        foreach:
+          - list: "request.object.spec.template.spec.containers"
+            validate:
+              pattern:
+                resources:
+                  requests:
+                    cpu: "?*"
+                    memory: "?*"
+                  limits:
+                    cpu: "?*"
+                    memory: "?*"
+          - list: "request.object.spec.template.spec.initContainers"
+            preconditions:
+              all:
+                - key: "{{ length(request.object.spec.template.spec.initContainers || []) }}"
+                  operator: GreaterThan
+                  value: 0
+            validate:
+              pattern:
+                resources:
+                  requests:
+                    cpu: "?*"
+                    memory: "?*"
+                  limits:
+                    cpu: "?*"
+                    memory: "?*"
+
+    - name: require-resources-cronjobs
+      match:
+        any:
+          - resources:
+              kinds:
+                - CronJob
+      validate:
+        message: "All containers and initContainers must set resources.requests and resources.limits for cpu and memory."
+        foreach:
+          - list: "request.object.spec.jobTemplate.spec.template.spec.containers"
+            validate:
+              pattern:
+                resources:
+                  requests:
+                    cpu: "?*"
+                    memory: "?*"
+                  limits:
+                    cpu: "?*"
+                    memory: "?*"
+          - list: "request.object.spec.jobTemplate.spec.template.spec.initContainers"
+            preconditions:
+              all:
+                - key: "{{ length(request.object.spec.jobTemplate.spec.template.spec.initContainers || []) }}"
+                  operator: GreaterThan
+                  value: 0
+            validate:
+              pattern:
+                resources:
+                  requests:
+                    cpu: "?*"
+                    memory: "?*"
+                  limits:
+                    cpu: "?*"
+                    memory: "?*"
+
+    - name: require-resources-pods
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      validate:
+        message: "All containers and initContainers must set resources.requests and resources.limits for cpu and memory."
+        foreach:
+          - list: "request.object.spec.containers"
+            validate:
+              pattern:
+                resources:
+                  requests:
+                    cpu: "?*"
+                    memory: "?*"
+                  limits:
+                    cpu: "?*"
+                    memory: "?*"
+          - list: "request.object.spec.initContainers"
+            preconditions:
+              all:
+                - key: "{{ length(request.object.spec.initContainers || []) }}"
+                  operator: GreaterThan
+                  value: 0
+            validate:
+              pattern:
+                resources:
+                  requests:
+                    cpu: "?*"
+                    memory: "?*"
+                  limits:
+                    cpu: "?*"
+                    memory: "?*"

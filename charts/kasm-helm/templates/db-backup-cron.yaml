@@ -1,0 +1,95 @@
+{{/*
+Initialize the DB
+*/}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- if .Values.dbManagement.backupCron.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  {{- include "kasm.metadata" (dict "context" . "component" "dbBackup" "resource" "cronJob" "include" "all") | indent 2 }}
+spec:
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  timeZone: {{ .Values.dbManagement.backupCron.timeZone | default "Etc/UTC" }}
+  schedule: {{ .Values.dbManagement.backupCron.schedule | default "0 0 * * *" | quote }}
+  jobTemplate:
+    metadata:
+      {{- include "kasm.metadata" (dict "context" . "component" "dbBackup" "resource" "cronJob" "include" "la") | indent 6 }}
+    spec:
+      template:
+        metadata:
+          {{- include "kasm.metadata" (dict "context" . "component" "dbBackup" "resource" "cronPod" "include" "la") | indent 10 }}
+        spec:
+          {{- with .Values.nodeSelector }}
+          nodeSelector: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if .Values.imagePullSecrets.enabled }}
+          imagePullSecrets:
+            - name: {{ .Values.imagePullSecrets.name | default (printf "%s-image-pull-secret" .Release.Name) }}
+          {{- end }}
+          {{- with .Values.affinity }}
+          affinity: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          restartPolicy: OnFailure
+          {{- include "kasm.securityContext" (list . 1000 "pod") | nindent 10 }}
+          initContainers:
+            {{- if .Values.trustedCaBundle.enabled }}
+              {{- include "kasm.trustedCaInit" (list . "api") | nindent 12 }}
+            {{- end }}
+            {{- include "kasm.dbIsReady" (dict "context" . "function" "ready") | nindent 12 }}
+          containers:
+            - name: {{ include "kasm.name" (list . "dbBackup" "container") }}
+              image: {{ $constants.api.image }}
+              imagePullPolicy: {{ .Values.imagePullPolicy }}
+              env:
+                - name: POSTGRES_HOST
+                  value: {{ $constants.db.svc | quote }}
+                - name: POSTGRES_PORT
+                  value: {{ $constants.db.port | quote }}
+                - name: POSTGRES_DB
+                  value: {{ .Values.database.kasmDbName }}
+                - name: POSTGRES_USER
+                  value: {{ .Values.database.kasmDbUser }}
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                    {{- if .Values.database.kasmDbSecret }}
+                      {{- .Values.database.kasmDbSecret | toYaml | nindent 22 }}
+                    {{- else }}
+                      name: {{ .Release.Name }}-secrets
+                      key: "db-password"
+                    {{- end }}
+              {{- include "kasm.securityContext" (list . 1000 "container") | nindent 14 }}
+              resources:
+                {{- include "resources.preset" (dict "node" "api" "size" "small") | nindent 16 }}
+              command:
+                - "/bin/bash"
+                - "-c"
+              args:
+                - |
+                  set -e
+                  DATE=$(date "+%Y%m%d_%H.%M.%S")
+                  BACKUP_FILE="/data/kasm-db-dump/kasm_dump_${DATE}.tar"
+                  echo "Starting backup to $BACKUP_FILE"
+                  pg_dump -Ft -h "${POSTGRES_HOST}" -p "${POSTGRES_PORT}" -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" --exclude-table-data=logs > "${BACKUP_FILE}"
+                  echo "Backup complete"
+              volumeMounts:
+                - name: db-backup-dir
+                  mountPath: /data/kasm-db-dump
+                  readOnly: false
+                - name: tmp-data
+                  mountPath: /tmp
+              {{- if .Values.trustedCaBundle.enabled }}
+                {{- include "kasm.trustedCaVolumeMounts" . | nindent 16 }}
+              {{- end }}
+          volumes:
+            - name: db-backup-dir
+              persistentVolumeClaim:
+                claimName: {{ .Values.dbManagement.backupCron.pvcName | default (include "kasm.name" (list . "db-backup")) }}
+            - name: tmp-data
+              emptyDir:
+                sizeLimit: 256Mi
+          {{- if $.Values.trustedCaBundle.enabled }}
+            {{- include "kasm.trustedCaVolumes" . | nindent 12 }}
+          {{- end }}
+{{- end }}

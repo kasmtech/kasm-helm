@@ -1,0 +1,87 @@
+suite: service names from kasm.constants
+templates:
+  - templates/api-deployment.yaml
+  - templates/api-service.yaml
+  - templates/db-init-job.yaml
+  - templates/db-service.yaml
+  - templates/guac-service.yaml
+  - templates/manager-service.yaml
+  - templates/proxy-service.yaml
+  - templates/rdp-gateway-service.yaml
+  - templates/rdp-https-gateway-service.yaml
+
+tests:
+  - it: api service uses constants svc name
+    template: templates/api-service.yaml
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-api-default
+
+  - it: db service uses constants svc name derived from values
+    template: templates/db-service.yaml
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-db
+
+  - it: api deployment uses constants db svc for POSTGRES_HOST
+    template: templates/api-deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POSTGRES_HOST
+            value: RELEASE-NAME-db
+
+  - it: db init job uses constants db svc for POSTGRES_HOST
+    template: templates/db-init-job.yaml
+    set:
+      dbManagement:
+        initialize: true
+        upgrade:
+          enable: false
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POSTGRES_HOST
+            value: RELEASE-NAME-db
+
+  - it: guac service uses constants svc name
+    template: templates/guac-service.yaml
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-guac-default
+
+  - it: manager service uses constants svc name
+    template: templates/manager-service.yaml
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-manager-default
+
+  - it: proxy service uses constants svc name
+    template: templates/proxy-service.yaml
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-proxy-default
+
+  - it: rdp gateway service uses constants svc name
+    template: templates/rdp-gateway-service.yaml
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-rdp-gateway-default
+
+  - it: rdp https gateway service uses constants svc name
+    template: templates/rdp-https-gateway-service.yaml
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-rdp-https-gateway-default

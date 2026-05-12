@@ -1,0 +1,18 @@
+{{/*
+Deploy the Manager .Values.components.manager
+*/}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- range $idx, $zone := (.Values.kasmZones | default (list (dict "name" "default"))) }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  {{- include "kasm.metadata" (dict "context" $ "component" "manager" "resource" "service" "zone" $zone.name "include" "all") | indent 2 }}
+spec:
+  selector:
+    {{- include "kasm.metadata" (dict "context" $ "component" "manager" "resource" "service" "zone" $zone.name "include" "match") | indent 6 }}
+  ports:
+    - name: {{ printf "%s-svc-%s" $constants.manager.svc ($constants.manager.port | toString) }}
+      protocol: TCP
+      port: {{ $constants.manager.port | toString }}
+{{- end }}

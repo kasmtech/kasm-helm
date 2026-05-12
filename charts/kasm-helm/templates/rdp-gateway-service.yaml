@@ -1,0 +1,32 @@
+{{/*
+Deploy the RDP Gateway if .Values.components.rdpGateway.enabled set to true
+*/}}
+{{- $type := "ClusterIP" -}}
+{{- if and .Values.directRdpService.enabled (or (eq .Values.directRdpService.type "NodePort") (eq .Values.directRdpService.type "LoadBalancer")) -}}
+  {{- $type = .Values.directRdpService.type -}}
+{{- else if .Values.directRdpService.enabled -}}
+  {{- fail "The RDP service type is not valid. Please set it to either NodePort or LoadBalancer." -}}
+{{- end -}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $rdpPort := 3389 -}}
+{{- $zoneName := "default" -}}
+{{- if .Values.kasmZones }}
+  {{- $zoneName = (index .Values.kasmZones 0).name -}}
+{{- end }}
+{{- if .Values.components.rdpGateway.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  {{- include "kasm.metadata" (dict "context" . "component" "rdpGateway" "resource" "service" "zone" $zoneName "include" "all") | indent 2 }}
+spec:
+  type: {{ $type }}
+  selector:
+    {{- include "kasm.metadata" (dict "context" . "component" "rdpGateway" "resource" "service" "zone" $zoneName "include" "match") | indent 4 }}
+  ports:
+    - name: {{ printf "%s-svc-%s" $constants.rdpGateway.svc ($constants.rdpGateway.port | toString) }}
+      protocol: TCP
+      port: {{ $constants.rdpGateway.port }}
+    - name: {{ printf "%s-svc-%s" $constants.rdpGateway.svc ($rdpPort | toString) }}
+      protocol: TCP
+      port: {{ $rdpPort }}
+{{- end }}

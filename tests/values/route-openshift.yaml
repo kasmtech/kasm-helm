@@ -1,0 +1,23 @@
+deploymentSize: small
+
+publicAddr: kasm.apps.example.test
+
+isOpenshift: true
+
+proxyService:
+  type: ClusterIP
+
+ingress:
+  enabled: false
+
+route:
+  enabled: true
+  backendProtocol: http
+  wildcardPolicy: None
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+
+dbManagement:
+  backupCron:
+    enabled: false

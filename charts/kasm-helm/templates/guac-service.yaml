@@ -1,0 +1,26 @@
+{{/*
+Deploy the Guac if .Values.components.guac.enabled set to true
+*/}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $zoneName := "default" -}}
+{{- if .Values.kasmZones }}
+  {{- $zoneName = (index .Values.kasmZones 0).name -}}
+{{- end }}
+{{- if .Values.components.guac.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  {{- include "kasm.metadata" (dict "context" . "component" "guac" "resource" "service" "zone" $zoneName "include" "all") | indent 2 }}
+spec:
+  selector:
+    {{- include "kasm.metadata" (dict "context" . "component" "guac" "resource" "service" "include" "match") | indent 6 }}
+  ports:
+    - name: {{ printf "%s-svc-%s" $constants.guac.svc ($constants.guac.port | toString) }}
+      protocol: TCP
+      port: {{ $constants.guac.port }}
+    {{- range $constants.guac.ports }}
+    - name: {{ printf "%s-svc-%s" $constants.guac.svc (. | toString) }}
+      protocol: TCP
+      port: {{ . }}
+    {{- end }}
+{{- end }}

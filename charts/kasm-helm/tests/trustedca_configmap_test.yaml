@@ -1,0 +1,98 @@
+suite: Trusted CA ConfigMap
+templates:
+  - templates/cabundle-configmaps.yaml
+tests:
+  - it: renders 2 ConfigMaps when enabled and certs are provided
+    values:
+      - ../../../tests/values/trustedca-enabled.yaml
+    asserts:
+      - hasDocuments:
+          count: 2
+  
+  - it: renders trusted CA ConfigMap when enabled and certs are provided
+    values:
+      - ../../../tests/values/trustedca-enabled.yaml
+    documentSelector:
+      path: metadata.name
+      value: kasm-trusted-ca-test
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - exists:
+          path: data["ca-cert-1.crt"]
+  
+  - it: renders trusted CA ConfigMap when enabled and certs are provided
+    values:
+      - ../../../tests/values/trustedca-enabled.yaml
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-ca-bundle-script
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - exists:
+          path: data["init-ca-trust.sh"]
+
+  - it: only renders script trusted CA ConfigMap when enabled and no certs provided
+    set:
+      trustedCaBundle:
+        enabled: true
+        configMapName: kasm-trusted-ca-test
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind: 
+          of: ConfigMap
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-ca-bundle-script
+      - exists:
+          path: data["init-ca-trust.sh"]
+
+  - it: does not render trusted CA ConfigMap when disabled
+    set:
+      trustedCaBundle:
+        enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders trusted CA ConfigMap with dynamic name when enabled and no name provided
+    values: 
+      - ../../../tests/values/trustedca-dynamic-name.yaml
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-ca-bundle-cert
+    asserts:
+      - isKind: 
+          of: ConfigMap
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-ca-bundle-cert
+      - exists:
+          path: data["ca-cert-1.crt"]
+
+  - it: fails when trustedCaBundle.caCerts contains a non-.crt key
+    template: templates/cabundle-configmaps.yaml
+    set:
+      trustedCaBundle:
+        enabled: true
+        caCerts:
+          bad.pem: |-
+            -----BEGIN CERTIFICATE-----
+            FAKE
+            -----END CERTIFICATE-----
+    asserts:
+      - failedTemplate:
+          errorMessage: "trustedCaBundle.caCerts key 'bad.pem' must end with .crt"
+
+  - it: fails when enabled with no generated certs and no external ConfigMap name
+    template: templates/cabundle-configmaps.yaml
+    set:
+      trustedCaBundle:
+        enabled: true
+        caCerts: {}
+        configMapName: ""
+    asserts:
+      - failedTemplate:
+          errorMessage: "trustedCaBundle.configMapName must be set when trustedCaBundle.enabled is true and trustedCaBundle.caCerts is empty"

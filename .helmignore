@@ -23,5 +23,8 @@ CHANGELOG.md
 .idea/
 *.tmproj
 
+# Ignore the tests directory
+tests/
+
 # Ignore readme template
 README.md.*

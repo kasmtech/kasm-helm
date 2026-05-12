@@ -1,0 +1,61 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: kasm-require-probes-when-enabled
+  annotations:
+    policies.kyverno.io/title: Require probes when applyHealthChecks is enabled
+    policies.kyverno.io/category: Reliability
+    policies.kyverno.io/severity: medium
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: require-probes-on-deployments
+      match:
+        any:
+          - resources:
+              kinds:
+                - Deployment
+      preconditions:
+        all:
+          - key: "{{ request.object.spec.template.metadata.annotations.\"kasm.com/healthcheck\" || '' }}"
+            operator: Equals
+            value: "true"
+      validate:
+        message: "When applyHealthChecks is enabled, each container in Deployments must define a readinessProbe or livenessProbe."
+        foreach:
+          - list: "request.object.spec.template.spec.containers"
+            deny:
+              conditions:
+                all:
+                  - key: "{{ element.livenessProbe || '' }}"
+                    operator: Equals
+                    value: ""
+                  - key: "{{ element.readinessProbe || '' }}"
+                    operator: Equals
+                    value: ""
+
+    - name: require-probes-on-statefulsets
+      match:
+        any:
+          - resources:
+              kinds:
+                - StatefulSet
+      preconditions:
+        all:
+          - key: "{{ request.object.spec.template.metadata.annotations.\"kasm.com/healthcheck\" || '' }}"
+            operator: Equals
+            value: "true"
+      validate:
+        message: "When applyHealthChecks is enabled, each container in StatefulSets must define a readinessProbe or livenessProbe."
+        foreach:
+          - list: "request.object.spec.template.spec.containers"
+            deny:
+              conditions:
+                all:
+                  - key: "{{ element.livenessProbe || '' }}"
+                    operator: Equals
+                    value: ""
+                  - key: "{{ element.readinessProbe || '' }}"
+                    operator: Equals
+                    value: ""

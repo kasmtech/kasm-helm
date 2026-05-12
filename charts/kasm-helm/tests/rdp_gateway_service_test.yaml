@@ -1,0 +1,30 @@
+suite: optional components
+templates:
+  - templates/rdp-gateway-service.yaml
+  - templates/rdp-gateway-deployment.yaml
+
+tests:
+  - it: renders rdp gateway service when enabled
+    template: templates/rdp-gateway-service.yaml
+    values:
+      - ../../../tests/values/rdp_gateway_service.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Service
+
+  - it: renders rdp gateway deployment when enabled
+    template: templates/rdp-gateway-deployment.yaml
+    values:
+      - ../../../tests/values/rdp_gateway_service.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Deployment
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SERVER_HOSTNAME
+            value: rdp.example.com

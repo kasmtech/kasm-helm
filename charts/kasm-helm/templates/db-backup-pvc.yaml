@@ -1,0 +1,20 @@
+{{/*
+Initialize the DB
+*/}}
+{{- $kasmSecrets := (.Values.dbManagement.upgrade.oldDbSecretsName | default (printf "%s-secrets" .Release.Name)) }}
+{{- if .Values.dbManagement.backupCron.enabled }}
+{{- $backupSizeGi := (default 5 .Values.dbManagement.backupCron.pvcSize) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  {{- include "kasm.metadata" (dict "context" . "component" "db-backup" "resource" "pvc" "name" .Values.dbManagement.backupCron.pvcName "include" "all") | indent 2 }}
+spec:
+  {{- with .Values.dbManagement.backupCron.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ printf "%vGi" (int $backupSizeGi) }}
+{{- end }}

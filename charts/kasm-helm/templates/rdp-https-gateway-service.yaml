@@ -1,0 +1,21 @@
+{{/*
+Deploy the Redis if .Values.components.rdpHttpsGateway.enabled set to true
+*/}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $zoneName := "default" -}}
+{{- if .Values.kasmZones }}
+  {{- $zoneName = (index .Values.kasmZones 0).name -}}
+{{- end }}
+{{- if .Values.components.rdpHttpsGateway.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  {{- include "kasm.metadata" (dict "context" . "component" "rdpHttpsGateway" "resource" "service" "zone" $zoneName "include" "all") | nindent 2 }}
+spec:
+  selector:
+    {{- include "kasm.metadata" (dict "context" . "component" "rdpHttpsGateway" "resource" "service" "zone" $zoneName "include" "match") | nindent 4 }}
+  ports:
+    - name: {{ printf "%s-svc-%s" $constants.rdpHttpsGateway.svc ($constants.rdpHttpsGateway.port | toString) }}
+      protocol: TCP
+      port: {{ $constants.rdpHttpsGateway.port }}
+{{- end }}

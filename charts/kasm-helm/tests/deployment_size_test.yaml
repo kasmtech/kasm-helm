@@ -1,0 +1,99 @@
+suite: deployment size presets
+
+templates:
+  - templates/api-deployment.yaml
+  - templates/db-statefulset.yaml
+  - templates/proxy-deployment.yaml
+
+tests:
+  - it: sets all replicas to 1 for small
+    set:
+      deploymentSize: small
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 1
+
+  - it: sets all deployment replicas to 2 for medium
+    templates:
+      - templates/api-deployment.yaml
+      - templates/proxy-deployment.yaml
+    set:
+      deploymentSize: medium
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 2
+
+  - it: sets all deployment replicas to 3 for large
+    templates:
+      - templates/api-deployment.yaml
+      - templates/proxy-deployment.yaml
+    set:
+      deploymentSize: large
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 3
+
+  - it: sets db replicas to 1 for medium
+    template: templates/db-statefulset.yaml
+    set:
+      deploymentSize: medium
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 1
+
+  - it: sets db replicas to 1 for large
+    template: templates/db-statefulset.yaml
+    set:
+      deploymentSize: large
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 1
+
+  - it: applies proxy resource preset for small size
+    template: templates/proxy-deployment.yaml
+    set:
+      deploymentSize: small
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[?(@.name=="RELEASE-NAME-proxy-default")].resources
+      - equal:
+          path: spec.template.spec.containers[?(@.name=="RELEASE-NAME-proxy-default")].resources.requests.cpu
+          value: "500m"
+      - equal:
+          path: spec.template.spec.containers[?(@.name=="RELEASE-NAME-proxy-default")].resources.limits.memory
+          value: "512Mi"
+
+  - it: applies different proxy limits for large size
+    template: templates/proxy-deployment.yaml
+    set:
+      deploymentSize: large
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[?(@.name=="RELEASE-NAME-proxy-default")].resources.limits.cpu
+          value: "500m"
+
+  - it: allows component resource overrides to replace preset values
+    template: templates/proxy-deployment.yaml
+    set:
+      deploymentSize: small
+      components:
+        proxy:
+          resources:
+            requests:
+              cpu: "2"
+              memory: 2Gi
+            limits:
+              cpu: "3"
+              memory: 4Gi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[?(@.name=="RELEASE-NAME-proxy-default")].resources.requests.cpu
+          value: "2"
+      - equal:
+          path: spec.template.spec.containers[?(@.name=="RELEASE-NAME-proxy-default")].resources.limits.memory
+          value: "4Gi"

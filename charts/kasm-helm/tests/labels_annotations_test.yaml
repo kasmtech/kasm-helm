@@ -1,0 +1,596 @@
+suite: labels and annotations propagation through kasm.metadata
+templates:
+  - templates/api-deployment.yaml
+  - templates/manager-deployment.yaml
+  - templates/db-statefulset.yaml
+  - templates/db-configmap.yaml
+  - templates/db-init-job.yaml
+  - templates/db-backup-cron.yaml
+  - templates/db-backup-pvc.yaml
+  - templates/kasm-password-secret.yaml
+  - templates/proxy-deployment.yaml
+  - templates/proxy-service.yaml
+  - templates/ingress.yaml
+  - templates/route.yaml
+  - templates/image-pull-secret.yaml
+  - templates/rdp-gateway-service.yaml
+  - templates/cert-manager-certificate.yaml
+
+tests:
+  # ---------- Tier 1: cross-resource propagation ----------
+
+  - it: top-level labels propagate to api/db/proxy resources
+    set:
+      labels:
+        team: workspaces
+        cost-center: "cc-42"
+    templates:
+      - templates/api-deployment.yaml
+      - templates/db-statefulset.yaml
+      - templates/proxy-service.yaml
+    asserts:
+      - equal:
+          path: metadata.labels.team
+          value: workspaces
+      - equal:
+          path: metadata.labels["cost-center"]
+          value: "cc-42"
+
+  - it: top-level annotations propagate to api/db/proxy resources
+    set:
+      annotations:
+        tracker.example.com/ticket: "ABC-1"
+    templates:
+      - templates/api-deployment.yaml
+      - templates/db-statefulset.yaml
+      - templates/proxy-service.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["tracker.example.com/ticket"]
+          value: "ABC-1"
+
+  - it: component-scoped labels merge with globals; sprig merge gives globals precedence on key collision
+    set:
+      labels:
+        env: prod
+      components:
+        api:
+          labels:
+            env: staging
+            team: api-only
+    templates:
+      - templates/api-deployment.yaml
+    asserts:
+      - equal:
+          path: metadata.labels.env
+          value: prod
+      - equal:
+          path: metadata.labels.team
+          value: api-only
+
+  - it: component-scoped annotations merge with globals; globals precedence on key collision
+    set:
+      annotations:
+        owner: platform
+      components:
+        api:
+          annotations:
+            owner: api-team
+            on-call: pager-1
+    templates:
+      - templates/api-deployment.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations.owner
+          value: platform
+      - equal:
+          path: metadata.annotations["on-call"]
+          value: pager-1
+
+  - it: component-scoped annotations do not leak to other components
+    set:
+      components:
+        api:
+          annotations:
+            api-only-anno: yes
+    templates:
+      - templates/manager-deployment.yaml
+    asserts:
+      - notExists:
+          path: metadata.annotations["api-only-anno"]
+
+  - it: component-scoped labels do not leak to other components
+    set:
+      components:
+        api:
+          labels:
+            tier: backend
+    templates:
+      - templates/manager-deployment.yaml
+    asserts:
+      - notExists:
+          path: metadata.labels.tier
+
+  - it: extraLabels[deployment] applies to deployments
+    set:
+      extraLabels:
+        deployment:
+          scope: apps
+    templates:
+      - templates/api-deployment.yaml
+      - templates/manager-deployment.yaml
+      - templates/proxy-deployment.yaml
+    asserts:
+      - equal:
+          path: metadata.labels.scope
+          value: apps
+
+  - it: extraLabels[deployment] is absent on services
+    set:
+      extraLabels:
+        deployment:
+          scope: apps
+    templates:
+      - templates/proxy-service.yaml
+    asserts:
+      - notExists:
+          path: metadata.labels.scope
+
+  - it: extraAnnotations[service] applies only to services
+    set:
+      extraAnnotations:
+        service:
+          monitor.example.com/scrape: "true"
+    templates:
+      - templates/proxy-service.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["monitor.example.com/scrape"]
+          value: "true"
+
+  - it: extraAnnotations[service] is absent on deployments
+    set:
+      extraAnnotations:
+        service:
+          monitor.example.com/scrape: "true"
+    templates:
+      - templates/api-deployment.yaml
+    asserts:
+      - notExists:
+          path: metadata.annotations["monitor.example.com/scrape"]
+
+  - it: built-in selector labels are always present on every resource
+    templates:
+      - templates/api-deployment.yaml
+      - templates/db-statefulset.yaml
+      - templates/proxy-service.yaml
+    asserts:
+      - exists:
+          path: metadata.labels["app.kubernetes.io/name"]
+      - exists:
+          path: metadata.labels["app.kubernetes.io/instance"]
+      - exists:
+          path: metadata.labels["app.kubernetes.io/component"]
+      - exists:
+          path: metadata.labels["app.kubernetes.io/version"]
+      - exists:
+          path: metadata.labels["app.kubernetes.io/managed-by"]
+      - exists:
+          path: metadata.labels["app.kubernetes.io/part-of"]
+      - exists:
+          path: metadata.labels["helm.sh/chart"]
+      - exists:
+          path: metadata.labels["kasm.com/version"]
+
+  - it: built-in app.kubernetes.io/instance equals the release name
+    templates:
+      - templates/api-deployment.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+      - equal:
+          path: metadata.labels["app.kubernetes.io/managed-by"]
+          value: Helm
+      - equal:
+          path: metadata.labels["app.kubernetes.io/part-of"]
+          value: kasm
+
+  # ---------- Tier 2: per-resource label/annotation paths ----------
+
+  - it: database.labels and database.annotations apply to db-statefulset
+    set:
+      database:
+        labels:
+          db-tier: primary
+        annotations:
+          backup-window: "02:00-04:00"
+    templates:
+      - templates/db-statefulset.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["db-tier"]
+          value: primary
+      - equal:
+          path: metadata.annotations["backup-window"]
+          value: "02:00-04:00"
+
+  - it: database.labels do not leak to non-db resources
+    set:
+      database:
+        labels:
+          db-tier: primary
+    templates:
+      - templates/api-deployment.yaml
+      - templates/proxy-service.yaml
+    asserts:
+      - notExists:
+          path: metadata.labels["db-tier"]
+
+  - it: proxyService.labels and proxyService.annotations apply to proxy service
+    set:
+      proxyService:
+        type: ClusterIP
+        labels:
+          lb-class: internal
+        annotations:
+          service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    templates:
+      - templates/proxy-service.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["lb-class"]
+          value: internal
+      - equal:
+          path: metadata.annotations["service.beta.kubernetes.io/aws-load-balancer-type"]
+          value: "nlb"
+
+  - it: proxyService.labels do not apply to proxy-deployment
+    set:
+      proxyService:
+        type: ClusterIP
+        labels:
+          lb-class: internal
+    templates:
+      - templates/proxy-deployment.yaml
+    asserts:
+      - notExists:
+          path: metadata.labels["lb-class"]
+
+  - it: ingress.labels and ingress.annotations apply to the Ingress
+    set:
+      ingress:
+        enabled: true
+        ingressClassName: nginx
+        labels:
+          ingress-tier: edge
+        annotations:
+          nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+      certificate:
+        secretName: kasm-deployment-tls
+      publicAddr: kasm.example.com
+    template: templates/ingress.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["ingress-tier"]
+          value: edge
+      - equal:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/proxy-body-size"]
+          value: "100m"
+
+  - it: route.labels and route.annotations apply to the OpenShift Route
+    values:
+      - ../../../tests/values/route-openshift.yaml
+    set:
+      route:
+        labels:
+          route-tier: edge
+        annotations:
+          haproxy.router.openshift.io/timeout: 30s
+    template: templates/route.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["route-tier"]
+          value: edge
+      - equal:
+          path: metadata.annotations["haproxy.router.openshift.io/timeout"]
+          value: 30s
+
+  - it: imagePullSecrets.labels and imagePullSecrets.annotations apply to the pull secret
+    values:
+      - ../../../tests/values/imagepullsecret.yaml
+    set:
+      imagePullSecrets:
+        labels:
+          registry-source: ghcr
+        annotations:
+          rotate.example.com/policy: monthly
+    template: templates/image-pull-secret.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["registry-source"]
+          value: ghcr
+      - equal:
+          path: metadata.annotations["rotate.example.com/policy"]
+          value: monthly
+
+  - it: directRdpService.labels and directRdpService.annotations apply to the rdp-gateway service
+    values:
+      - ../../../tests/values/rdp_gateway_service.yaml
+    set:
+      directRdpService:
+        labels:
+          rdp-exposure: external
+        annotations:
+          rdp.example.com/notes: "direct lb"
+    template: templates/rdp-gateway-service.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["rdp-exposure"]
+          value: external
+      - equal:
+          path: metadata.annotations["rdp.example.com/notes"]
+          value: "direct lb"
+
+  # ---------- Resource-key renames: configMap, statefulSet, cron ----------
+
+  - it: extraLabels.pvc applies to PersistentVolumeClaims
+    set:
+      dbManagement:
+        backupCron:
+          enabled: true
+          schedule: "0 2 * * *"
+      extraLabels:
+        pvc:
+          pvc-key: applied
+    templates:
+      - templates/db-backup-pvc.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["pvc-key"]
+          value: applied
+
+  - it: extraLabels.secret applies to Secrets
+    set:
+      extraLabels:
+        secret:
+          secret-key: applied
+    templates:
+      - templates/kasm-password-secret.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["secret-key"]
+          value: applied
+
+  - it: extraAnnotations.deployment applies to Deployments
+    set:
+      extraAnnotations:
+        deployment:
+          dep-anno: applied
+    templates:
+      - templates/api-deployment.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["dep-anno"]
+          value: applied
+
+  - it: extraAnnotations.statefulSet applies to StatefulSets
+    set:
+      extraAnnotations:
+        statefulSet:
+          sts-anno: applied
+    templates:
+      - templates/db-statefulset.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["sts-anno"]
+          value: applied
+
+  - it: extraAnnotations.configMap applies to ConfigMaps
+    set:
+      extraAnnotations:
+        configMap:
+          cm-anno: applied
+    templates:
+      - templates/db-configmap.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["cm-anno"]
+          value: applied
+
+  - it: extraAnnotations.cronJob applies to CronJob outer metadata, not the pod template
+    set:
+      dbManagement:
+        backupCron:
+          enabled: true
+          schedule: "0 2 * * *"
+      extraAnnotations:
+        cronJob:
+          cj-anno: applied
+    templates:
+      - templates/db-backup-cron.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["cj-anno"]
+          value: applied
+      - notExists:
+          path: spec.jobTemplate.spec.template.metadata.annotations["cj-anno"]
+
+  - it: extraLabels.configMap applies to ConfigMaps
+    set:
+      extraLabels:
+        configMap:
+          cm-key: applied
+    templates:
+      - templates/db-configmap.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["cm-key"]
+          value: applied
+
+  - it: extraLabels.statefulSet applies to StatefulSets
+    set:
+      extraLabels:
+        statefulSet:
+          sts-key: applied
+    templates:
+      - templates/db-statefulset.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["sts-key"]
+          value: applied
+
+  - it: extraLabels.job applies to the Job outer metadata, not the inner pod template
+    set:
+      dbManagement:
+        initialize: true
+      extraLabels:
+        job:
+          job-key: outer
+    templates:
+      - templates/db-init-job.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["job-key"]
+          value: outer
+      - notExists:
+          path: spec.template.metadata.labels["job-key"]
+
+  - it: extraAnnotations.job applies to the Job outer metadata, not the inner pod template
+    set:
+      dbManagement:
+        initialize: true
+      extraAnnotations:
+        job:
+          job-anno: outer
+    templates:
+      - templates/db-init-job.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["job-anno"]
+          value: outer
+      - notExists:
+          path: spec.template.metadata.annotations["job-anno"]
+
+  - it: extraLabels.job and extraAnnotations.job do not leak to Deployments or StatefulSets
+    set:
+      extraLabels:
+        job:
+          leak-label: should-not-appear
+      extraAnnotations:
+        job:
+          leak-anno: should-not-appear
+    templates:
+      - templates/api-deployment.yaml
+      - templates/db-statefulset.yaml
+    asserts:
+      - notExists:
+          path: metadata.labels["leak-label"]
+      - notExists:
+          path: metadata.annotations["leak-anno"]
+
+  - it: extraLabels.cronJob applies to the CronJob outer metadata and jobTemplate, not the pod template
+    set:
+      dbManagement:
+        backupCron:
+          enabled: true
+          schedule: "0 2 * * *"
+      extraLabels:
+        cronJob:
+          cronjob-key: outer-only
+    templates:
+      - templates/db-backup-cron.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["cronjob-key"]
+          value: outer-only
+      - equal:
+          path: spec.jobTemplate.metadata.labels["cronjob-key"]
+          value: outer-only
+      - notExists:
+          path: spec.jobTemplate.spec.template.metadata.labels["cronjob-key"]
+
+  # ---------- Inner pod templates use the generic `pod` resource key ----------
+
+  - it: extraLabels.pod applies to the inner pod template of a Job, not the Job's outer metadata
+    set:
+      dbManagement:
+        initialize: true
+      extraLabels:
+        pod:
+          pod-only: pod-value
+    templates:
+      - templates/db-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["pod-only"]
+          value: pod-value
+      - notExists:
+          path: metadata.labels["pod-only"]
+
+  - it: extraLabels.cronPod applies to the pod template inside a CronJob, not the CronJob outer or jobTemplate
+    set:
+      dbManagement:
+        backupCron:
+          enabled: true
+          schedule: "0 2 * * *"
+      extraLabels:
+        cronPod:
+          pod-only: cronpod-value
+    templates:
+      - templates/db-backup-cron.yaml
+    asserts:
+      - equal:
+          path: spec.jobTemplate.spec.template.metadata.labels["pod-only"]
+          value: cronpod-value
+      - notExists:
+          path: metadata.labels["pod-only"]
+      - notExists:
+          path: spec.jobTemplate.metadata.labels["pod-only"]
+
+  - it: extraLabels.pod does not apply to the CronJob's inner pod template (uses cronPod instead)
+    set:
+      dbManagement:
+        backupCron:
+          enabled: true
+          schedule: "0 2 * * *"
+      extraLabels:
+        pod:
+          generic-pod: applied
+    templates:
+      - templates/db-backup-cron.yaml
+    asserts:
+      - notExists:
+          path: spec.jobTemplate.spec.template.metadata.labels["generic-pod"]
+
+  - it: extraLabels.pod also applies to the pod template inside Deployments and StatefulSets
+    set:
+      extraLabels:
+        pod:
+          shared: pod-everywhere
+    templates:
+      - templates/api-deployment.yaml
+      - templates/db-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels.shared
+          value: pod-everywhere
+
+  - it: certificate.certManager.labels and certificate.certManager.annotations apply to the Certificate
+    values:
+      - ../../../tests/values/certmanager.yaml
+    set:
+      certificate:
+        certManager:
+          labels:
+            cert-tier: public
+          annotations:
+            cert-manager.io/issue-temporary-certificate: "true"
+    template: templates/cert-manager-certificate.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["cert-tier"]
+          value: public
+      - equal:
+          path: metadata.annotations["cert-manager.io/issue-temporary-certificate"]
+          value: "true"

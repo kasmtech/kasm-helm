@@ -1,0 +1,14 @@
+deploymentSize: small
+
+# Keep tests deterministic and fast.
+dbManagement:
+  backupCron:
+    enabled: false
+
+# Use a minimal but valid image pull secret flow (chart wires imagePullSecrets into pod specs).
+imagePullSecrets:
+  enabled: true
+  name: kasm-test-regcred
+  username: test-user
+  password: test-
+  registry: ghcr.io

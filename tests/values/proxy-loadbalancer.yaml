@@ -1,0 +1,10 @@
+proxyService:
+  type: LoadBalancer
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: nlb
+
+ingress:
+  enabled: false
+
+route:
+  enabled: false

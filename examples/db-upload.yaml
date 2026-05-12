@@ -1,0 +1,94 @@
+---
+# Kasm DB Upload Job
+#
+# Use this to upload a Kasm database backup file into a PVC so it can be
+# consumed by the db-restore.yaml job.
+# Typical use cases:
+#   - Migrating from a VM-based Kasm deployment to Kubernetes
+#
+# Prerequisites:
+#   - This job must be deployed in the same namespace as your Kasm Helm release.
+#   - Run this job before applying db-restore.yaml.
+#
+# Field reference:
+#   image             — Replace with your Kasm version, e.g. kasmweb/api:1.19.0
+#   storageClassName  — Storage class for the backup PVC. Commented out by default to use the namespace
+#                       default. Uncomment and set a value to use a specific storage class.
+#
+# Before applying:
+#   1. Replace all values marked with # <-- REPLACE
+#   2. Apply with:  kubectl apply -n {NAMESPACE} -f examples/db-upload.yaml
+#   3. Upload your backup file with:
+#        kubectl cp -n {NAMESPACE} /path/to/kasm_dump.tar {UPLOAD-POD-NAME}:/data/kasm-db-dump/kasm_dump.tar
+#      Retrieve the pod name with: kubectl get pods -n {NAMESPACE}
+#   4. Monitor upload completion with: kubectl logs -f job/upload -n {NAMESPACE}
+#
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kasm-db-backup-upload
+spec:
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+      restartPolicy: OnFailure
+      containers:
+        - name: kasm-old-db-upload-container
+          image: kasmweb/api:1.19.0  # <-- REPLACE with your Kasm version
+          imagePullPolicy: IfNotPresent
+          command:
+            - "/bin/bash"
+            - "-c"
+          args:
+            - |
+              while [[ ! -f /data/kasm-db-dump/kasm_dump.tar ]]; do sleep 5; echo "Waiting for DB file upload..."; done
+              echo "File uploading."
+              
+              FILE="/data/kasm-db-dump/kasm_dump.tar"
+              while true; do
+                SIZE1=$(stat -c%s "$FILE" 2>/dev/null || echo 0)
+                sleep 5
+                SIZE2=$(stat -c%s "$FILE" 2>/dev/null || echo 0)
+                if [ "$SIZE1" -gt 0 ] && [ "$SIZE1" -eq "$SIZE2" ]; then
+                  echo "✅ File upload complete. Final size: $SIZE1 bytes"
+                  break
+                else
+                  echo "⏳ Upload in progress... (size: $SIZE2 bytes)"
+                fi
+              done
+          volumeMounts:
+            - name: kasm-db-dump
+              mountPath: /data/kasm-db-dump
+              readOnly: false
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+      volumes:
+        - name: kasm-db-dump
+          persistentVolumeClaim:
+            claimName: kasm-db-dump-pvc
+---
+# PVC definition
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: kasm-db-dump-pvc
+spec:
+  # storageClassName: ""  # <-- Uncomment and set to use a specific storage class. Leave commented to use the namespace default.
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi

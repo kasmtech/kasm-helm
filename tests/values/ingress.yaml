@@ -1,0 +1,22 @@
+deploymentSize: small
+
+publicAddr: kasm.example.com
+
+proxyService:
+  type: ClusterIP
+
+certificate:
+  secretName: kasm-tls
+  certManager:
+    enabled: false
+    addWildCard: true
+
+ingress:
+  enabled: true
+  tls: true
+  backendProtocol: http
+  ingressClassName: nginx
+
+dbManagement:
+  backupCron:
+    enabled: false

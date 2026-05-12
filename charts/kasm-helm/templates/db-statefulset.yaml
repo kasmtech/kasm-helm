@@ -1,0 +1,149 @@
+{{/*
+Kasm DB server StatefullSet definition
+*/}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $dbReplicas := include "replicas.preset" (dict "node" $constants.db.component "size" .Values.deploymentSize) -}}
+{{- $merged := fromYaml (include "kasm.mergedValues" (dict "root" . "componentName" "database")) -}}
+{{- if not .Values.database.standalone }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  {{- include "kasm.metadata" (dict "context" . "component" "db" "resource" "statefulSet" "include" "all") | indent 2 }}
+spec:
+  replicas: 1
+  serviceName: {{ $constants.db.svc }}
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      {{- include "kasm.metadata" (dict "context" . "component" "db" "resource" "service" "include" "match") | indent 6 }}
+  template:
+    metadata:
+      {{- include "kasm.metadata" (dict "context" . "component" "db" "resource" "pod" "include" "la") | indent 6 }}
+    spec:
+      restartPolicy: {{ .Values.restartPolicy }}
+      {{- if .Values.imagePullSecrets.enabled }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets.name | default (printf "%s-image-pull-secret" .Release.Name) }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- include "kasm.securityContext" (list . 70 "pod") | nindent 6 }}
+      {{- if or .Values.trustedCaBundle.enabled $merged.extraInitContainers }}
+      initContainers:
+        {{- if .Values.trustedCaBundle.enabled }}
+          {{- include "kasm.trustedCaInit" (list . "db") | nindent 8 }}
+        {{- end }}
+        {{- with $merged.extraInitContainers }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+      containers:
+        - name: {{ include "kasm.name" (list . "db" "container") }}
+          image: {{ $constants.db.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          env:
+            - name: POSTGRES_DB
+              value: {{ .Values.database.kasmDbName }}
+            - name: POSTGRES_USER
+              value: {{ .Values.database.kasmDbUser }}
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                {{- if .Values.database.kasmDbSecret -}}
+                {{ .Values.database.kasmDbSecret | toYaml | nindent 18 }}
+                {{- else }}
+                  name: {{ .Release.Name }}-secrets
+                  key: "db-password"
+                {{- end }}
+          ports:
+            - name: {{ $constants.db.portName }}
+              containerPort: {{ $constants.db.port }}
+              protocol: TCP
+          {{- if .Values.applyHealthChecks }}
+          livenessProbe:
+            {{- include "health.command" (dict "command" (printf "pg_isready --port=%s -t 10" ($constants.db.port | toString))) | indent 12 }}
+          {{- end }}
+          {{- if .Values.applyHealthChecks }}
+          readinessProbe:
+            {{- include "health.command" (dict "command" "psql -d ${POSTGRES_DB} -U ${POSTGRES_USER} -c 'SELECT 1' || exit 1") | indent 12 }}
+          {{- end }}
+          {{- if .Values.database.resources }}
+          resources: {{- toYaml .Values.database.resources | nindent 12 }}
+          {{- else }}
+          resources: {{- include "resources.preset" (dict "node" $constants.db.component "size" .Values.deploymentSize) | nindent 12 }}
+          {{- end }}
+          {{- if .Values.applySecurity }}
+            {{- include "kasm.securityContext" (list . 70 "container") | nindent 10 }}
+          {{- end }}
+          volumeMounts:
+            - name: {{ include "kasm.name" (list . "database" "data" .Chart.AppVersion) }}
+              mountPath: /var/lib/postgresql/data
+            - name: kasm-db-configs
+              mountPath: /docker-entrypoint-initdb.d/data.sql
+              subPath: data.sql
+            - name: kasm-db-configs
+              mountPath: /var/lib/postgresql/conf/postgresql.conf
+              subPath: postgresql.conf
+            - name: kasm-db-configs
+              mountPath: /var/lib/postgresql/conf/pg_hba.conf
+              subPath: pg_hba.conf
+            - name: kasm-db-cert
+              mountPath: /etc/ssl/certs/db_server.crt
+              subPath: tls.crt
+            - name: kasm-db-cert
+              mountPath: /etc/ssl/certs/db_server.key
+              subPath: tls.key
+            - name: {{ include "kasm.name" (list . "database" "data" .Chart.AppVersion) }}
+              mountPath: /tmp
+              subPath: log
+            {{- with $merged.containerMounts }}
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- if .Values.applySecurity }}
+            - name: {{ include "kasm.name" (list . "database" "data" .Chart.AppVersion) }}
+              mountPath: /var/run/postgresql
+              subPath: run
+            {{- end }}
+            {{- include "kasm.trustedCaVolumeMounts" . | nindent 12 }}
+        {{- with $merged.extraContainers }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      volumes:
+        - name: kasm-db-configs
+          configMap:
+            name: {{ include "kasm.name" (list . "db" "configmap") }}
+        - name: kasm-db-cert
+          secret:
+            secretName: {{ .Values.certificate.secretName | default (include "kasm.name" (list . "cert-manager" "secret")) }}
+            defaultMode: 0o600
+        {{- with $merged.volumes }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- include "kasm.trustedCaVolumes" . | nindent 8 }}
+  {{- if .Values.database.storage.retentionPolicy }}
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: {{ .Values.database.storage.retentionPolicy.whenDeleted }}
+    whenScaled: {{ .Values.database.storage.retentionPolicy.whenScaled }}
+  {{- end }}
+  volumeClaimTemplates:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: {{ include "kasm.name" (list . "database" "data" .Chart.AppVersion) }}
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        {{- with .Values.database.storage.storageClassName }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ printf "%sGi" ((.Values.database.storage.pvcSize | default 8) | toString) }}
+{{- end }}

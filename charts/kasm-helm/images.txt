@@ -1,0 +1,7 @@
+kasmweb/api:develop
+kasmweb/manager:develop
+kasmweb/postgres:develop
+kasmweb/proxy:develop
+kasmweb/kasm-guac:develop
+kasmweb/rdp-gateway:develop
+kasmweb/rdp-https-gateway:develop

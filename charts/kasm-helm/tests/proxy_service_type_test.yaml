@@ -1,0 +1,60 @@
+suite: proxy service type behavior
+templates:
+  - templates/proxy-service.yaml
+  - templates/proxy-service-external.yaml
+tests:
+  - it: renders external service when type=LoadBalancer and ingress/route disabled
+    template: templates/proxy-service-external.yaml
+    set:
+      proxyService:
+        type: LoadBalancer
+      ingress:
+        enabled: false
+      route:
+        enabled: false
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: spec.type
+          value: LoadBalancer
+
+  - it: fails when ingress enabled and proxyService.type=LoadBalancer
+    template: templates/proxy-service-external.yaml
+    set:
+      proxyService:
+        type: LoadBalancer
+      ingress:
+        enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "The service.type must not be LoadBalancer when using an ingress or a route - any load balancer or Route should be provisioned using the Ingress/Route settings. Set service.type=ClusterIP or mark ingress.enabled or route.enabled to disabled."
+
+  - it: fails when route enabled and proxyService.type=LoadBalancer
+    template: templates/proxy-service-external.yaml
+    set:
+      proxyService:
+        type: LoadBalancer
+      ingress:
+        enabled: false
+      route:
+        enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "The service.type must not be LoadBalancer when using an ingress or a route - any load balancer or Route should be provisioned using the Ingress/Route settings. Set service.type=ClusterIP or mark ingress.enabled or route.enabled to disabled."
+
+  - it: fails when kasmZones configured and proxyService.type=LoadBalancer
+    template: templates/proxy-service-external.yaml
+    set:
+      proxyService:
+        type: LoadBalancer
+      ingress:
+        enabled: false
+      route:
+        enabled: false
+      kasmZones:
+        - name: Zone-A
+          proxyAddress: zone-a.kasm.example.test
+    asserts:
+      - failedTemplate:
+          errorMessage: "The service.type must not be LoadBalancer when using a Multi-Zone Kasm deployment - any load balancer or Route should be provisioned using the Ingress/Route settings. Set service.type=ClusterIP or remove your kasmZones settings."

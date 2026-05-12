@@ -1,0 +1,52 @@
+suite: OpenShift Route and security mode
+templates:
+  - templates/route.yaml
+  - templates/api-deployment.yaml
+  - templates/proxy-deployment.yaml
+  - templates/manager-deployment.yaml
+  - templates/db-statefulset.yaml
+  - templates/rdp-gateway-deployment.yaml
+  - templates/rdp-https-gateway-deployment.yaml
+tests:
+  - it: renders an OpenShift Route when enabled
+    template: templates/route.yaml
+    values:
+      - ../../../tests/values/route-openshift.yaml
+    asserts:
+      - documentIndex: 0
+        isKind:
+          of: Route
+      - documentIndex: 0
+        equal:
+          path: spec.host
+          value: kasm.apps.example.test
+
+  - it: fails if both ingress.enabled and route.enabled are true
+    template: templates/route.yaml
+    set:
+      ingress:
+        enabled: true
+      route:
+        enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "The ingress.enabled and route.enabled cannot both be set. Either configure an Ingress or an OpenShift Route, not both."
+
+  - it: omits runAsUser/runAsGroup when isOpenshift=true (OpenShift assigns UID)
+    templates:
+      - templates/api-deployment.yaml
+      - templates/proxy-deployment.yaml
+      - templates/manager-deployment.yaml
+      - templates/db-statefulset.yaml
+      - templates/rdp-gateway-deployment.yaml
+      - templates/rdp-https-gateway-deployment.yaml
+    values:
+      - ../../../tests/values/route-openshift.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.securityContext.runAsUser
+      - notExists:
+          path: spec.template.spec.containers[0].securityContext.runAsUser
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsNonRoot
+          value: true

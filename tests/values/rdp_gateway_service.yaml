@@ -1,0 +1,7 @@
+directRdpService:
+  enabled: true
+  type: LoadBalancer
+  rdpAccessURL: rdp.example.com
+components:
+  rdpGateway:
+    enabled: true

@@ -1,0 +1,11 @@
+deploymentSize: small
+
+database:
+  standalone: true
+  hostname: postgresql.example.test
+  port: 5432
+
+dbManagement:
+  initialize: false
+  backupCron:
+    enabled: false

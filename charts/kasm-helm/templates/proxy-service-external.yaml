@@ -1,0 +1,25 @@
+{{/*
+Deploy the Kasm Proxy service
+*/}}
+{{- if and (or .Values.ingress.enabled .Values.route.enabled) (eq .Values.proxyService.type "LoadBalancer") -}}
+  {{- fail "The service.type must not be LoadBalancer when using an ingress or a route - any load balancer or Route should be provisioned using the Ingress/Route settings. Set service.type=ClusterIP or mark ingress.enabled or route.enabled to disabled." -}}
+{{- end -}}
+{{- if and (eq .Values.proxyService.type "LoadBalancer") .Values.kasmZones -}}
+  {{- fail "The service.type must not be LoadBalancer when using a Multi-Zone Kasm deployment - any load balancer or Route should be provisioned using the Ingress/Route settings. Set service.type=ClusterIP or remove your kasmZones settings." -}}
+{{- end -}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- if eq .Values.proxyService.type "LoadBalancer" -}}
+apiVersion: v1
+kind: Service
+metadata:
+  {{- include "kasm.metadata" (dict "context" $ "component" "proxy-ext" "resource" "service" "zone" "default" "include" "all") | indent 2 }}
+spec:
+  type: {{ .Values.proxyService.type }}
+  selector:
+    {{- include "kasm.metadata" (dict "context" $ "component" "proxy" "resource" "service" "zone" "default" "include" "match") | indent 4 }}
+  ports:
+    - name: {{ printf "%s-ext-svc-%s" $constants.proxy.svc ($constants.proxy.extHttps | toString) }}
+      protocol: TCP
+      port: {{ $constants.proxy.extHttps }}
+      targetPort: {{ $constants.proxy.portName }}-https
+{{- end }}

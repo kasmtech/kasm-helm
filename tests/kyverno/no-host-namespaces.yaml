@@ -1,0 +1,62 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: kasm-disallow-host-namespaces
+  annotations:
+    policies.kyverno.io/title: Disallow host namespaces
+    policies.kyverno.io/category: Security
+    policies.kyverno.io/severity: high
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: disallow-host-namespaces-on-pods
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      validate:
+        message: "hostNetwork, hostPID, and hostIPC must not be enabled."
+        pattern:
+          spec:
+            =(hostNetwork): false
+            =(hostPID): false
+            =(hostIPC): false
+
+    - name: disallow-host-namespaces-on-workloads
+      match:
+        any:
+          - resources:
+              kinds:
+                - Deployment
+                - StatefulSet
+                - DaemonSet
+                - Job
+      validate:
+        message: "Workload pod templates must not enable hostNetwork, hostPID, or hostIPC."
+        pattern:
+          spec:
+            template:
+              spec:
+                =(hostNetwork): false
+                =(hostPID): false
+                =(hostIPC): false
+
+    - name: disallow-host-namespaces-on-cronjobs
+      match:
+        any:
+          - resources:
+              kinds:
+                - CronJob
+      validate:
+        message: "CronJob pod templates must not enable hostNetwork, hostPID, or hostIPC."
+        pattern:
+          spec:
+            jobTemplate:
+              spec:
+                template:
+                  spec:
+                    =(hostNetwork): false
+                    =(hostPID): false
+                    =(hostIPC): false

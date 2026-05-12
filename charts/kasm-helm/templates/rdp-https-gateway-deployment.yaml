@@ -1,0 +1,147 @@
+{{/*
+Deploy the RDP HTTPS Gateway if .Values.kasmApp.servicesToDeploy.rdpHttpsGateway.deploy set to true
+*/}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $rdpHttpsGatewayReplicas := include "replicas.preset" (dict "node" $constants.rdpHttpsGateway.component "size" .Values.deploymentSize) -}}
+{{- $merged := fromYaml (include "kasm.mergedValues" (dict "root" . "componentName" "rdpHttpsGateway")) -}}
+{{- $zoneName := "default" -}}
+{{- if .Values.kasmZones }}
+  {{- $zoneName = (index .Values.kasmZones 0).name -}}
+{{- end }}
+{{- if .Values.components.rdpHttpsGateway.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  {{- include "kasm.metadata" (dict "context" . "component" "rdpHttpsGateway" "resource" "deployment" "zone" $zoneName "include" "all") | indent 2 }}
+spec:
+  replicas: {{ $rdpHttpsGatewayReplicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: {{ add1 $rdpHttpsGatewayReplicas }}
+  selector:
+    matchLabels:
+      {{- include "kasm.metadata" (dict "context" . "component" "rdpHttpsGateway" "resource" "deployment" "zone" $zoneName "include" "match") | indent 6 }}
+  template:
+    metadata:
+      {{- include "kasm.metadata" (dict "context" . "component" "rdpHttpsGateway" "resource" "pod" "zone" $zoneName "include" "la") | indent 6 }}
+    spec:
+      restartPolicy: {{ $.Values.restartPolicy }}
+      {{- if .Values.imagePullSecrets.enabled }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets.name | default (printf "%s-image-pull-secret" .Release.Name) }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- include "kasm.securityContext" (list . 1000 "pod") | nindent 6 }}
+      initContainers:
+        {{- if .Values.trustedCaBundle.enabled }}
+          {{- include "kasm.trustedCaInit" (list . "rdpHttpsGw") | nindent 8 }}
+        {{- end }}
+        {{- include "kasm.initContainer" (dict "context" $ "serviceName" (printf "%s-%s" $constants.api.svc (include "kasm.zoneName" $zoneName)) "servicePort" $constants.api.port "path" "/api/__healthcheck" "schema" "http" "image" $constants.api.image "component" "api") | nindent 8 }}
+        {{- with $merged.extraInitContainers }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      containers:
+        - name: {{ include "kasm.name" (list . "rdpHttpsGateway" "container") }}
+          image: {{ $constants.rdpHttpsGateway.image }}
+          imagePullPolicy: {{ $.Values.imagePullPolicy }}
+          env:
+            - name: SERVER_ZONE_NAME
+            {{- if .Values.kasmZones }}
+              {{- with index .Values.kasmZones 0 }}
+              value: {{ .name }}
+              {{- end }}
+            {{- else }}
+              value: "default"
+            {{- end }}
+            - name: REGISTRATION_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-secrets
+                  key: service-token
+            - name: SERVER_HOSTNAME
+              value: {{ $constants.rdpHttpsGateway.svc }}
+            - name: KASM_EPHEMERAL
+              value: "true"
+            - name: API_SCHEMA
+              value: http
+            - name: API_HOSTNAME
+            {{- if .Values.kasmZones }}
+              {{- with index .Values.kasmZones 0 }}
+              value: {{ printf "%s-%s" $constants.api.svc (include "kasm.zoneName" .name) | quote }}
+              {{- end }}
+            {{- else }}
+              value: {{ printf "%s-%s" $constants.api.svc "default" | quote }}
+            {{- end }}
+            - name: API_PORT
+              value: {{ $constants.api.port | quote }}
+            - name: API_REFRESH_INTERVAL
+              value: "30"
+            - name: SERVER_ID
+              value: "auto"
+            - name: PROXY_PORT
+              value: "3389"
+            - name: SERVER_PORT
+              value: {{ $constants.rdpHttpsGateway.port | quote }}
+            - name: SERVER_THREADS
+              value: "10"
+            - name: SESSION_WATCH_INTERVAL
+              value: "60"
+            - name: KEEPALIVE_LOOP_INTERVAL
+              value: "30"
+            - name: FORWARD_LOGS
+              value: "true"
+          ports:
+            - name: {{ $constants.rdpHttpsGateway.portName }}
+              containerPort: {{ $constants.rdpHttpsGateway.port }}
+              protocol: TCP
+          {{- if $.Values.applyHealthChecks }}
+          livenessProbe:
+            {{- include "health.tcp" (dict "portName" $constants.rdpHttpsGateway.portName ) | indent 12 }}
+          {{- end }}
+          {{- if $.Values.applyHealthChecks }}
+          readinessProbe:
+            {{- include "health.https" (dict "path" "/rdp-https-gateway/__healthcheck" "portName" $constants.rdpHttpsGateway.portName ) | indent 12 }}
+          {{- end }}
+          {{- if $.Values.components.rdpHttpsGateway.resources }}
+          resources: {{- toYaml $.Values.components.rdpHttpsGateway.resources | nindent 12 }}
+          {{- else }}
+          resources: {{- include "resources.preset" (dict "node" $constants.rdpHttpsGateway.component "size" $.Values.deploymentSize) | nindent 12 }}
+          {{- end }}
+          {{- include "kasm.securityContext" (list . 1000 "container") | nindent 10 }}
+          volumeMounts:
+            - name: kasm-rdp-https-gateway-cert
+              mountPath: /opt/rdpgw/server.pem
+              subPath: tls.crt
+            - name: kasm-rdp-https-gateway-cert
+              mountPath: /opt/rdpgw/key.pem
+              subPath: tls.key
+            - name: kasm-rdp-https-gateway-data
+              mountPath: /opt/kasm/current/log
+            - name: kasm-rdp-https-gateway-data
+              mountPath: /tmp
+            {{- with $merged.containerMounts }}
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- include "kasm.trustedCaVolumeMounts" . | nindent 12 }}
+        {{- with $merged.extraContainers }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      volumes:
+        - name: kasm-rdp-https-gateway-cert
+          secret:
+            secretName: {{ .Values.certificate.secretName | default (include "kasm.name" (list . "cert-manager" "secret")) }}
+        - name: kasm-rdp-https-gateway-data
+          emptyDir:
+            sizeLimit: 150Mi
+        {{- with $merged.volumes }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- include "kasm.trustedCaVolumes" . | nindent 8 }}
+{{- end }}

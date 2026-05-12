@@ -1,13 +1,54 @@
-variables:
-  DOCKER_HOST: tcp://docker:2375
-  DOCKER_DRIVER: overlay2
-  DOCKER_TLS_CERTDIR: ""
-  SHARED_PATH: /builds/$CI_PROJECT_PATH
- 
+default:
+  tags:
+    - oci-fixed-amd
+
 stages:
   - config_check
+  - lint
+  - build
+  - deploy
+  - validate
+  # E2E scenarios are split across three sequential stages instead of
+  # one 9-way parallel matrix.  Running 9 kind clusters + DinD daemons
+  # concurrently on the shared ``oci-fixed-amd`` runner pool created
+  # CPU contention severe enough to starve CoreDNS, which manifested
+  # as silent ``startup.sh`` failures (EAI_AGAIN at DB init time) and
+  # false-positive test failures.  Three groups of three reduces the
+  # peak concurrent load by ~3× while keeping wall-clock time
+  # reasonable.  Heavy/known-flaky tests (the ``upgrade-*`` pair and
+  # ``externaldb``) are spread one per group rather than piled in one,
+  # so no single stage is the bottleneck.
+  - e2e_group_a
+  - e2e_group_b
+  - e2e_group_c
 
+# Prevent duplicate pipelines for push events to branches that also have open MRs
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    - when: always
 
+.run-deploy:
+  rules:
+    - if: '$CI_COMMIT_REF_NAME == "develop" || $CI_COMMIT_REF_NAME =~ /^release\/.*$/'
+    - when: never
+
+variables:
+  DOCKER_TLS_CERTDIR: ""
+  DOCKER_HOST: tcp://docker:2375
+  DOCKER_DRIVER: overlay2
+  DOCKER_BUILDKIT: "1"
+  DOCKER_AUTH_CONFIG: ${_DOCKER_AUTH_CONFIG}
+
+cache:
+  key: "${CI_PROJECT_ID}"
+  paths:
+    - bin/
+    - .helm/
+
+# This job is for observability. It will only be triggered by
+# kasm_backend and show that a config change.
 config_check:
   stage: config_check
   image: ubuntu:24.04
@@ -24,3 +65,213 @@ config_check:
       echo "$ENCODED_FILE_LIST" | base64 -d
       exit 1
 
+helm-lint:
+  stage: lint
+  image: 
+    name: alpine/helm:latest
+    entrypoint: [""]
+  extends:
+    - .run-deploy
+  script:
+    - helm lint ./charts/kasm-helm
+  tags: ["oci-fixed-amd"]
+
+helm-build:
+  stage: build
+  image: 
+    name: alpine/helm:latest
+    entrypoint: [""]
+  extends:
+    - .run-deploy
+  script:
+    - helm package charts/kasm-helm
+  artifacts:
+    paths:
+      - kasm-helm-1.*.tgz
+  tags: ["oci-fixed-amd"]
+
+helm-deploy-docker-hub:
+  stage: deploy
+  image: 
+    name: alpine/helm:latest
+    entrypoint: [""]
+  extends:
+    - .run-deploy
+  script:
+    - echo "$DOCKER_HUB_PASSWORD" | helm registry login registry-1.docker.io -u "$DOCKER_HUB_USERNAME" --password-stdin
+    - helm push kasm-helm-1.*.tgz "oci://registry-1.docker.io/kasmweb/kasm-helm"
+  tags: ["oci-fixed-amd"]
+
+helm-deploy-gitlab:
+  resource_group: helm-repo-publish
+  stage: deploy
+  image: 
+    name: alpine/helm:latest
+    entrypoint: [""]
+  extends:
+    - .run-deploy
+  script:
+    - apk add --no-cache git
+    - git config --global user.email "ci_bot@kasm.com"
+    - git config --global user.name "CI Bot"
+    - git clone -b main --single-branch https://oauth2:${HELM_REPO_TOKEN}@gitlab.com/kasm-technologies/internal/kasm-helm-repo.git
+    - cp kasm-helm-1.*.tgz kasm-helm-repo/public/
+    - helm repo index kasm-helm-repo/public/ --url https://helm.kasm.com --merge kasm-helm-repo/public/index.yaml
+    - cd kasm-helm-repo
+    - git add public/index.yaml public/kasm-helm-1.*.tgz
+    - git commit -m "AUTOMATIC PUSH FROM KASM-HELM"
+    - git push origin HEAD
+  tags: ["oci-fixed-amd"]
+
+validate:
+  stage: validate
+  image: python:3.12-bookworm
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends bash curl make git ca-certificates
+  script:
+    - make test
+  rules:
+    - if: $CI_COMMIT_BRANCH
+      when: on_success
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: on_success
+    - if: $CI_PIPELINE_SOURCE == "web"
+      when: manual
+
+.e2e_kind_base:
+  # Hidden template (leading dot) — not run directly.  Each concrete
+  # ``e2e_group_*`` job extends this and supplies its own ``stage`` and
+  # ``parallel.matrix``.  Keeps before_script / script / after_script /
+  # retry / rules in one place so future tweaks land everywhere at once.
+  image: python:3.12-bookworm
+  services:
+    - name: docker:28.2.2-dind
+      alias: docker
+      command: ["--mtu=1460"]
+  before_script:
+    # On retry attempts, pause before doing anything else.  Many of the
+    # transient failures we retry on are CPU-contention-induced (CoreDNS
+    # starvation, scheduler pressure under matrix concurrency); jumping
+    # straight back into work on the same shared runner pool is likely
+    # to land in the same contended window.  5 minutes is long enough
+    # for the matrix peers that started near us to either finish or
+    # move past their own peak-load phases.  CI_JOB_ATTEMPT is a
+    # GitLab-predefined var (>=16.6) that increments on each retry;
+    # ``:-1`` covers older GitLab versions by treating an unset value
+    # as the first attempt (no sleep).
+    - |
+      if [ "${CI_JOB_ATTEMPT:-1}" -gt 1 ]; then
+        echo "Job retry attempt ${CI_JOB_ATTEMPT}; sleeping 300s to let runner CPU contention subside before re-running ${E2E_TARGET}"
+        sleep 300
+      fi
+    - apt-get update
+    - apt-get install -y --no-install-recommends bash curl make git ca-certificates docker.io
+    - python -m pip install --upgrade pip
+    - echo $DOCKER_HUB_PASSWORD | docker login -u $DOCKER_HUB_USERNAME --password-stdin
+    # Purge orphaned docker state from any previous job that may have shared
+    # this DinD service. If a prior job crashed (or was force-killed) before
+    # its cleanup ran, leftover containers/volumes/networks can survive into
+    # this job and cause stale-data races (e.g. a "fresh" PVC mounting an
+    # empty-but-existing kasm schema, or an external postgres reusing a
+    # previously seeded data volume). Each step is `|| true` so a clean
+    # runner is a no-op.
+    #
+    # Kill orphan kind node containers (kind labels these per-cluster).
+    - docker ps -aq --filter "label=io.x-k8s.kind.cluster" | xargs -r docker rm -f || true
+    # Kill any lingering pytest harness container from a force-killed run.
+    - docker ps -aq --filter "ancestor=kasm-e2e-pytest" | xargs -r docker rm -f || true
+    # Reuse the canonical external-postgres cleanup so any future change to
+    # what counts as "external-postgres state" lands in one place. Normally
+    # this runs via Makefile trap on test exit; we re-run it here to cover
+    # the case where a prior job was force-killed and skipped the trap.
+    # Removes the kasm-e2e-postgres container and kasm-e2e-postgres-data-*
+    # volumes; preserves kasm-e2e-postgres-ssl (disposable, regenerated
+    # on demand by start_external_postgres.sh).
+    - ./tests/e2e/stop_external_postgres.sh || true
+    # Drop the shared kind docker network so `kind-up` recreates it with
+    # its required 172.30.0.0/16 subnet (needed by start_external_postgres.sh
+    # --ip pinning). Without removal, `kind-up` reuses whatever subnet the
+    # network already has, which on a kind-auto-created network won't match.
+    - docker network rm kind || true
+    # NOTE: deliberately *not* pruning anonymous volumes broadly. kind's
+    # leftover node-filesystem volumes are unlabeled 64-hex-char names, but
+    # so are anonymous volumes from any other workload sharing this docker
+    # daemon — a blanket prune risks nuking unrelated state. Removing the
+    # labeled kind containers above is enough to prevent the stale-mount
+    # race; the orphan volumes they leave behind are disk-space only, not
+    # a correctness problem, and accumulate slowly.
+    # Per-job cluster/namespace/release names so concurrent or back-to-back
+    # jobs on the same runner cannot collide on the hardcoded `kasm-e2e`.
+    # CI_JOB_ID is unique per GitLab job; truncate to keep k8s name length
+    # constraints (DNS-1123: 63 chars) safe with downstream resource suffixes.
+    - export KIND_CLUSTER_NAME="kasm-e2e-${CI_JOB_ID}"
+    - export E2E_NAMESPACE="${KIND_CLUSTER_NAME}"
+    - export E2E_RELEASE="${KIND_CLUSTER_NAME}"
+  script:
+    - make tools
+    - make kind-up
+    - make ${E2E_TARGET}
+  after_script:
+    # `after_script` runs in a fresh shell, so re-derive the per-job name.
+    - export KIND_CLUSTER_NAME="kasm-e2e-${CI_JOB_ID}"
+    - make kind-down
+  # Re-run a failed matrix entry up to twice before failing the
+  # pipeline.  Even with the 3-stage split below, some residual
+  # contention is possible on busy runner pools.  ``script_failure``
+  # is the right scope: real test regressions still surface (after 3
+  # attempts they're not flakes), but environment-induced races get
+  # a chance to land on a less contended scheduling window.  Excludes
+  # ``stuck_or_timeout_failure`` so a runaway job doesn't burn 3× the
+  # budget.
+  retry:
+    max: 2
+    when:
+      - script_failure
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - charts/**/*
+        - tests/e2e/**/*
+      when: on_success
+    - if: $CI_PIPELINE_SOURCE == "web"
+      when: manual
+
+# Group A: one heavy (upgrade-included) + one medium (multizone) +
+# one light (basic).
+e2e_group_a:
+  extends: .e2e_kind_base
+  stage: e2e_group_a
+  parallel:
+    matrix:
+      - E2E_TARGET:
+          - e2e-basic
+          - e2e-multizone
+          - e2e-upgrade-included
+
+# Group B: one heavy (upgrade-standalone) + one medium (backup) +
+# one light (trustedca).  Standalone-DB upgrade and backup both touch
+# external-postgres state via DinD volumes; spreading them across
+# different stages avoids two of them stepping on each other's
+# kasm-e2e-postgres-data-* volumes within one stage.
+e2e_group_b:
+  extends: .e2e_kind_base
+  stage: e2e_group_b
+  parallel:
+    matrix:
+      - E2E_TARGET:
+          - e2e-trustedca
+          - e2e-backup
+          - e2e-upgrade-standalone
+
+# Group C: one external-DB (externaldb) + one PSS-restricted
+# variant (backup-pss) + one light (pss).
+e2e_group_c:
+  extends: .e2e_kind_base
+  stage: e2e_group_c
+  parallel:
+    matrix:
+      - E2E_TARGET:
+          - e2e-pss
+          - e2e-backup-pss
+          - e2e-externaldb
