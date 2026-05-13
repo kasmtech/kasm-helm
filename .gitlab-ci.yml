@@ -99,7 +99,7 @@ helm-deploy-docker-hub:
     - .run-deploy
   script:
     - echo "$DOCKER_HUB_PASSWORD" | helm registry login registry-1.docker.io -u "$DOCKER_HUB_USERNAME" --password-stdin
-    - helm push kasm-helm-1.*.tgz "oci://registry-1.docker.io/kasmweb/kasm-helm"
+    - helm push kasm-helm-1.*.tgz "oci://registry-1.docker.io/kasmweb/"
   tags: ["oci-fixed-amd"]
 
 helm-deploy-gitlab:
