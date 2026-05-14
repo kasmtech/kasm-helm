@@ -569,6 +569,13 @@ components:
     #    image: busybox
     #    command: [/bin/sh, -c, 'echo "Hello world"']
     extraInitContainers: []
+    # components.guac.recordingData -- PVC backing guac /tmp for session recording segments.
+    # See [Session Recording](https://docs.kasm.com/docs/latest/guide/session_recording) for sizing guidance.
+    recordingData:
+      # components.guac.recordingData.pvcSize -- PVC size in GiB.
+      pvcSize: 10
+      # components.guac.recordingData.storageClassName -- StorageClass. Blank uses the cluster default.
+      storageClassName: ""
 
   # Configuration settings for the Kasm RDP Gateway service
   #

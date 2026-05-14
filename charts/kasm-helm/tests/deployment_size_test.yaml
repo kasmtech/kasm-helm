@@ -4,6 +4,9 @@ templates:
   - templates/api-deployment.yaml
   - templates/db-statefulset.yaml
   - templates/proxy-deployment.yaml
+  - templates/guac-deployment.yaml
+  - templates/rdp-gateway-deployment.yaml
+  - templates/rdp-https-gateway-deployment.yaml
 
 tests:
   - it: sets all replicas to 1 for small
@@ -35,6 +38,30 @@ tests:
       - equal:
           path: spec.replicas
           value: 3
+
+  - it: pins guac and rdp gateways to 1 replica for medium
+    templates:
+      - templates/guac-deployment.yaml
+      - templates/rdp-gateway-deployment.yaml
+      - templates/rdp-https-gateway-deployment.yaml
+    set:
+      deploymentSize: medium
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 1
+
+  - it: pins guac and rdp gateways to 1 replica for large
+    templates:
+      - templates/guac-deployment.yaml
+      - templates/rdp-gateway-deployment.yaml
+      - templates/rdp-https-gateway-deployment.yaml
+    set:
+      deploymentSize: large
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 1
 
   - it: sets db replicas to 1 for medium
     template: templates/db-statefulset.yaml

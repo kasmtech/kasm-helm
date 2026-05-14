@@ -126,8 +126,8 @@ spec:
         {{- end }}
       volumes:
         - name: tmp-data
-          emptyDir:
-            sizeLimit: 256Mi
+          persistentVolumeClaim:
+            claimName: {{ printf "%s-guac-recordings" .Release.Name }}
         - name: guac-log-data
           emptyDir:
             sizeLimit: 1Mi
