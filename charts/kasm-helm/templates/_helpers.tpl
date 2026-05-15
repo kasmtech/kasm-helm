@@ -731,23 +731,18 @@ successThreshold: 1
   )
   "guac" (dict
     "small" 1
-    "medium" 2
-    "large" 3
-  )
-  "rdp" (dict
-    "small" 1
-    "medium" 2
-    "large" 3
+    "medium" 1
+    "large" 1
   )
   "rdp-gateway" (dict
     "small" 1
-    "medium" 2
-    "large" 3
+    "medium" 1
+    "large" 1
   )
   "rdp-https-gateway" (dict
     "small" 1
-    "medium" 2
-    "large" 3
+    "medium" 1
+    "large" 1
   )
 -}}
 

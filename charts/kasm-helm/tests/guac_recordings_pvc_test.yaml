@@ -1,0 +1,72 @@
+suite: guac recordings PVC
+
+templates:
+  - templates/guac-recordings-pvc.yaml
+  - templates/guac-deployment.yaml
+
+tests:
+  - it: renders the PVC by default when guac is enabled
+    template: templates/guac-recordings-pvc.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: kind
+          value: PersistentVolumeClaim
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-guac-recordings
+      - equal:
+          path: spec.accessModes[0]
+          value: ReadWriteOnce
+      - equal:
+          path: spec.resources.requests.storage
+          value: 10Gi
+      - notExists:
+          path: spec.storageClassName
+
+  - it: does not render the PVC when guac is disabled
+    template: templates/guac-recordings-pvc.yaml
+    set:
+      components:
+        guac:
+          enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: honors pvcSize override
+    template: templates/guac-recordings-pvc.yaml
+    set:
+      components:
+        guac:
+          recordingData:
+            pvcSize: 25
+    asserts:
+      - equal:
+          path: spec.resources.requests.storage
+          value: 25Gi
+
+  - it: honors storageClassName override
+    template: templates/guac-recordings-pvc.yaml
+    set:
+      components:
+        guac:
+          recordingData:
+            storageClassName: fast-ssd
+    asserts:
+      - equal:
+          path: spec.storageClassName
+          value: fast-ssd
+
+  - it: guac deployment mounts the PVC at /tmp via tmp-data
+    template: templates/guac-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.volumes[?(@.name=="tmp-data")].persistentVolumeClaim.claimName
+          value: RELEASE-NAME-guac-recordings
+      - notExists:
+          path: spec.template.spec.volumes[?(@.name=="tmp-data")].emptyDir
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[?(@.name=="tmp-data")].mountPath
+          value: /tmp

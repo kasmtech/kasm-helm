@@ -383,6 +383,28 @@
               "description": "Manually configure the Kasm Guac Deployment resources. This overrides the pre-defined `deploymentSize` values.",
               "title": "resources",
               "type": "object"
+            },
+            "recordingData": {
+              "additionalProperties": false,
+              "description": "Backs the guac /tmp directory with a PersistentVolumeClaim so in-flight recordings survive pod restarts.",
+              "properties": {
+                "pvcSize": {
+                  "default": 10,
+                  "title": "pvcSize",
+                  "type": "integer"
+                },
+                "storageClassName": {
+                  "default": "",
+                  "title": "storageClassName",
+                  "type": "string"
+                }
+              },
+              "title": "recordingData",
+              "type": "object",
+              "required": [
+                "pvcSize",
+                "storageClassName"
+              ]
             }
           },
           "title": "guac",
@@ -396,7 +418,8 @@
             "extraVolumes",
             "extraVolumeMounts",
             "extraContainers",
-            "extraInitContainers"
+            "extraInitContainers",
+            "recordingData"
           ]
         },
         "manager": {
