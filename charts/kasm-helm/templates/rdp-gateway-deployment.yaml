@@ -137,6 +137,11 @@ spec:
             - name: kasm-rdp-gateway-config
               mountPath: /usr/local/etc/rdpproxy/conf/passthrough.app.config.yaml
               subPath: passthrough.app.config.yaml
+            {{- if .Values.components.rdpGateway.iniConfigMapName }}
+            - name: kasm-rdp-gateway-ini
+              mountPath: /usr/local/etc/rdpproxy/conf/rdpproxy.ini
+              subPath: rdpproxy.ini
+            {{- end }}
           {{- with $merged.containerMounts }}
             {{- toYaml . | nindent 12 }}
           {{- end }}
@@ -154,6 +159,14 @@ spec:
         - name: kasm-rdp-gateway-config
           configMap:
             name: {{ include "kasm.name" (list $ "rdpGateway" "configmap") }}
+        {{- if .Values.components.rdpGateway.iniConfigMapName }}
+        - name: kasm-rdp-gateway-ini
+          configMap:
+            name: {{ .Values.components.rdpGateway.iniConfigMapName }}
+            items:
+              - key: rdpproxy.ini
+                path: rdpproxy.ini
+        {{- end }}
         {{- with $merged.volumes }}
           {{- toYaml . | nindent 8 }}
         {{- end }}

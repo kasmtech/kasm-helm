@@ -627,6 +627,10 @@ components:
     #    image: busybox
     #    command: [/bin/sh, -c, 'echo "Hello world"']
     extraInitContainers: []
+    # components.rdpGateway.iniConfigMapName -- Name of a user-created ConfigMap
+    # providing a custom `rdpproxy.ini` for the rdp-gateway pod. See the Kasm
+    # documentation for details.
+    iniConfigMapName: ""
 
   # Configuration settings for the Kasm RDP HTTPS Gateway service
   #
