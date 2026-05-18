@@ -627,6 +627,17 @@ components:
     #    image: busybox
     #    command: [/bin/sh, -c, 'echo "Hello world"']
     extraInitContainers: []
+    # components.rdpGateway.iniConfigMapName -- Name of a user-created ConfigMap containing a
+    # custom `rdpproxy.ini` key. When set, the file is mounted into the rdp-gateway pod at
+    # `/usr/local/etc/rdpproxy/conf/rdpproxy.ini`. The ConfigMap must exist in the release
+    # namespace and contain a key named `rdpproxy.ini`. A reference rdpproxy.ini is bundled with
+    # the chart at `files/rdpproxy.ini`.
+    # Example (extract the bundled reference once, edit, create the ConfigMap, then install):
+    #   helm pull oci://registry-1.docker.io/kasmweb/kasm-helm --version <version> --untar
+    #   cp kasm-helm/files/rdpproxy.ini ./my-rdpproxy.ini   # then edit
+    #   kubectl create configmap my-rdpproxy-ini -n kasm --from-file=rdpproxy.ini=./my-rdpproxy.ini
+    # Replace <version> with the chart version you are installing (see the root README).
+    iniConfigMapName: ""
 
   # Configuration settings for the Kasm RDP HTTPS Gateway service
   #
