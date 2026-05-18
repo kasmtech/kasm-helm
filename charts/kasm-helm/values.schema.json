@@ -618,7 +618,7 @@
             },
             "iniConfigMapName": {
               "default": "",
-              "description": "Name of a user-created ConfigMap containing a custom `rdpproxy.ini` key. When set, the file is mounted into the rdp-gateway pod at `/usr/local/etc/rdpproxy/conf/rdpproxy.ini`. A reference rdpproxy.ini is bundled at the chart's `files/rdpproxy.ini` for users to copy and customize.",
+              "description": "Name of a user-created ConfigMap providing a custom `rdpproxy.ini` for the rdp-gateway pod. See the Kasm documentation for details.",
               "title": "iniConfigMapName",
               "type": "string"
             },
