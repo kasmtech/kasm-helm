@@ -67,7 +67,7 @@ images = [
     get_image(get_block("rdpGateway", components_block)),
     get_image(get_block("rdpHttpsGateway", components_block)),
     "postgres:16",
-    "nginx:1.27-alpine",
+    "nginx:1.30-alpine",
 ]
 
 print(" ".join(images))
