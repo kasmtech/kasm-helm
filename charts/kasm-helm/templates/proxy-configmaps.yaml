@@ -105,7 +105,7 @@ data:
     }
     
     # Extract the real port of the client request url (unfortunately nginx has no variable to get this info)
-      map $http_host $request_port {
+      map $http_host $real_request_port {
       default                 $default_http_port; # If port not explicitly defined in url take the default one associated to the calling scheme/protocol (80 for http, 443 for https)
       "~^[^\:]+:(?<p>\d+)$"   $p;
     }
@@ -113,7 +113,7 @@ data:
     # Check if a X-Forwarded-Port header (set by reverse-proxy) is already present. If not take the port from the client request url
       map $http_x_forwarded_port $x_forwarded_port {
       default $http_x_forwarded_port;
-      ""      $request_port;
+      ""      $real_request_port;
     }
     server {
       listen {{ $constants.proxy.https }} ssl;
@@ -159,7 +159,7 @@ data:
     }
     
     # Extract the real port of the client request url (unfortunately nginx has no variable to get this info)
-      map $http_host $request_port {
+      map $http_host $real_request_port {
       default                 $default_http_port; # If port not explicitly defined in url take the default one associated to the calling scheme/protocol (80 for http, 443 for https)
       "~^[^\:]+:(?<p>\d+)$"   $p;
     }
@@ -167,7 +167,7 @@ data:
     # Check if a X-Forwarded-Port header (set by reverse-proxy) is already present. If not take the port from the client request url
       map $http_x_forwarded_port $x_forwarded_port {
       default $http_x_forwarded_port;
-      ""      $request_port;
+      ""      $real_request_port;
     }
 
     server {
