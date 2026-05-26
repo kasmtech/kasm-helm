@@ -1,0 +1,168 @@
+suite: TLS sources, secret naming, and ingress combinations
+
+templates:
+  - templates/cert-manager-certificate.yaml
+  - templates/ingress.yaml
+  - templates/proxy-deployment.yaml
+  - templates/rdp-gateway-deployment.yaml
+  - templates/rdp-https-gateway-deployment.yaml
+
+tests:
+  # ---------- TLS source variations ----------
+  - it: cert-manager Certificate omits wildcard DNS when addWildCard=false
+    template: templates/cert-manager-certificate.yaml
+    values:
+      - ../../../tests/values/certmanager.yaml
+    set:
+      certificate:
+        certManager:
+          addWildCard: false
+    asserts:
+      - notContains:
+          path: spec.dnsNames
+          content: "*.kasm.example.com"
+
+  - it: cert-manager Certificate falls back to default issuerKind when unset
+    template: templates/cert-manager-certificate.yaml
+    set:
+      publicAddr: kasm.example.com
+      certificate:
+        secretName: kasm-tls
+        certManager:
+          enabled: true
+          issuerName: my-issuer
+    asserts:
+      - equal:
+          path: spec.issuerRef.kind
+          value: Issuer
+
+  - it: cert-manager Certificate adds zone proxyAddresses when wildcard is off
+    template: templates/cert-manager-certificate.yaml
+    values:
+      - ../../../tests/values/multizone-config.yaml
+    set:
+      certificate:
+        secretName: kasm-tls
+        certManager:
+          enabled: true
+          issuerName: my-issuer
+          addWildCard: false
+    asserts:
+      - contains:
+          path: spec.dnsNames
+          content: zonea.kasm.example.com
+      - contains:
+          path: spec.dnsNames
+          content: zoneb.kasm.example.com
+
+  - it: proxy deployment mounts user-provided secretName for TLS
+    template: templates/proxy-deployment.yaml
+    set:
+      certificate:
+        secretName: my-custom-tls
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: kasm-proxy-cert
+            secret:
+              secretName: my-custom-tls
+
+  - it: rdp gateway deployment mounts user-provided secretName for TLS
+    template: templates/rdp-gateway-deployment.yaml
+    set:
+      certificate:
+        secretName: my-custom-tls
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: kasm-rdp-gateway-cert
+            secret:
+              secretName: my-custom-tls
+
+  - it: rdp https gateway deployment mounts user-provided secretName for TLS
+    template: templates/rdp-https-gateway-deployment.yaml
+    set:
+      certificate:
+        secretName: my-custom-tls
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: kasm-rdp-https-gateway-cert
+            secret:
+              secretName: my-custom-tls
+
+  # ---------- ingress combinations ----------
+  - it: ingress sets ingressClassName when configured
+    template: templates/ingress.yaml
+    values:
+      - ../../../tests/values/ingress.yaml
+    asserts:
+      - equal:
+          path: spec.ingressClassName
+          value: nginx
+
+  - it: ingress omits TLS block when ingress.tls=false
+    template: templates/ingress.yaml
+    values:
+      - ../../../tests/values/ingress.yaml
+    set:
+      ingress:
+        tls: false
+    asserts:
+      - notExists:
+          path: spec.tls
+
+  - it: ingress backend port is 8080 when backendProtocol=http
+    template: templates/ingress.yaml
+    values:
+      - ../../../tests/values/ingress.yaml
+    set:
+      ingress:
+        backendProtocol: http
+    asserts:
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.port.number
+          value: 8080
+
+  - it: ingress backend port is 8443 when backendProtocol=https
+    template: templates/ingress.yaml
+    values:
+      - ../../../tests/values/ingress.yaml
+    set:
+      ingress:
+        backendProtocol: https
+    asserts:
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.port.number
+          value: 8443
+
+  - it: ingress backend service points to the primary zone proxy in multizone
+    template: templates/ingress.yaml
+    values:
+      - ../../../tests/values/multizone-config.yaml
+    set:
+      ingress:
+        enabled: true
+      certificate:
+        secretName: kasm-tls
+    asserts:
+      - equal:
+          path: spec.rules[2].http.paths[0].backend.service.name
+          value: RELEASE-NAME-proxy-zonea
+
+  - it: ingress falls back to default secretName helper when not specified
+    template: templates/ingress.yaml
+    set:
+      publicAddr: kasm.example.test
+      ingress:
+        enabled: true
+        tls: true
+      certificate:
+        secretName: ""
+    asserts:
+      - matchRegex:
+          path: spec.tls[0].secretName
+          pattern: "RELEASE-NAME.*cert-manager"

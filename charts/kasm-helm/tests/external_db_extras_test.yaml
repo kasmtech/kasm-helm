@@ -1,0 +1,92 @@
+suite: external database mode extras
+
+templates:
+  - templates/db-statefulset.yaml
+  - templates/db-configmap.yaml
+  - templates/db-init-job.yaml
+  - templates/db-backup-cron.yaml
+  - templates/db-backup-pvc.yaml
+  - templates/api-deployment.yaml
+  - templates/manager-deployment.yaml
+
+tests:
+  - it: db statefulset, configmap, and backup resources are not rendered with external db
+    values:
+      - ../../../tests/values/external-db.yaml
+    templates:
+      - templates/db-statefulset.yaml
+      - templates/db-configmap.yaml
+      - templates/db-backup-cron.yaml
+      - templates/db-backup-pvc.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: api deployment uses external db hostname for POSTGRES_HOST
+    template: templates/api-deployment.yaml
+    values:
+      - ../../../tests/values/external-db.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POSTGRES_HOST
+            value: postgresql.example.test
+
+  - it: api deployment uses configured POSTGRES_PORT
+    template: templates/api-deployment.yaml
+    values:
+      - ../../../tests/values/external-db.yaml
+    set:
+      database:
+        port: 6543
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POSTGRES_PORT
+            value: "6543"
+
+  - it: manager deployment uses external kasmDbSecret when set
+    template: templates/manager-deployment.yaml
+    values:
+      - ../../../tests/values/external-db.yaml
+    set:
+      database:
+        kasmDbSecret:
+          name: external-db-secret
+          key: kasm-password
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POSTGRES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: external-db-secret
+                key: kasm-password
+
+  - it: db init job is not rendered when dbManagement.initialize=false
+    template: templates/db-init-job.yaml
+    set:
+      dbManagement:
+        initialize: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: db init job renders when dbManagement.initialize=true with external db
+    template: templates/db-init-job.yaml
+    values:
+      - ../../../tests/values/external-db.yaml
+    set:
+      dbManagement:
+        initialize: true
+    asserts:
+      - isKind:
+          of: Job
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POSTGRES_HOST
+            value: postgresql.example.test

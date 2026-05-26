@@ -1,0 +1,95 @@
+suite: configmap content rendering
+
+templates:
+  - templates/db-configmap.yaml
+  - templates/rdp-gateway-configmap.yaml
+  - templates/proxy-configmaps.yaml
+
+tests:
+  # ---------- db-configmap ----------
+  - it: db configmap is not rendered when database.standalone=true
+    template: templates/db-configmap.yaml
+    values:
+      - ../../../tests/values/external-db.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: db configmap renders pg_hba.conf and postgresql.conf keys
+    template: templates/db-configmap.yaml
+    asserts:
+      - exists:
+          path: data["pg_hba.conf"]
+      - exists:
+          path: data["postgresql.conf"]
+      - exists:
+          path: data["data.sql"]
+
+  - it: db configmap sets max_connections=200 for small deployments
+    template: templates/db-configmap.yaml
+    set:
+      deploymentSize: small
+    asserts:
+      - matchRegex:
+          path: data["postgresql.conf"]
+          pattern: "max_connections = 200"
+
+  - it: db configmap scales max_connections by zone count for medium
+    template: templates/db-configmap.yaml
+    set:
+      deploymentSize: medium
+    asserts:
+      - matchRegex:
+          path: data["postgresql.conf"]
+          pattern: "max_connections = 400"
+
+  - it: db configmap enables ssl
+    template: templates/db-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["postgresql.conf"]
+          pattern: "ssl = on"
+
+  # ---------- rdp gateway configmap ----------
+  - it: rdp gateway configmap is not rendered when rdpGateway disabled
+    template: templates/rdp-gateway-configmap.yaml
+    set:
+      components:
+        rdpGateway:
+          enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: rdp gateway configmap renders passthrough config key
+    template: templates/rdp-gateway-configmap.yaml
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - exists:
+          path: data["passthrough.app.config.yaml"]
+      - matchRegex:
+          path: data["passthrough.app.config.yaml"]
+          pattern: "rdp-gateway:"
+
+  # ---------- proxy configmaps ----------
+  - it: proxy configmaps render at least one ConfigMap document
+    template: templates/proxy-configmaps.yaml
+    asserts:
+      - hasDocuments:
+          count: 3
+
+  - it: proxy configmaps all have kind ConfigMap
+    template: templates/proxy-configmaps.yaml
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: ConfigMap
+
+  - it: proxy configmap fans out per zone in multizone deployments
+    template: templates/proxy-configmaps.yaml
+    values:
+      - ../../../tests/values/multizone-config.yaml
+    asserts:
+      - hasDocuments:
+          count: 4

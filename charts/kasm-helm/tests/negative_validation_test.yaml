@@ -1,0 +1,52 @@
+suite: negative path / explicit fail messages
+
+templates:
+  - templates/proxy-service-external.yaml
+  - templates/route.yaml
+  - templates/rdp-gateway-deployment.yaml
+
+tests:
+  - it: ingress + route both enabled fails the route template with a clear message
+    template: templates/route.yaml
+    set:
+      ingress:
+        enabled: true
+      route:
+        enabled: true
+      proxyService:
+        type: ClusterIP
+    asserts:
+      - failedTemplate:
+          errorMessage: "The ingress.enabled and route.enabled cannot both be set. Either configure an Ingress or an OpenShift Route, not both."
+
+  - it: LoadBalancer + ingress fails the external proxy service
+    template: templates/proxy-service-external.yaml
+    set:
+      proxyService:
+        type: LoadBalancer
+      ingress:
+        enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "The service.type must not be LoadBalancer when using an ingress or a route - any load balancer or Route should be provisioned using the Ingress/Route settings. Set service.type=ClusterIP or mark ingress.enabled or route.enabled to disabled."
+
+  - it: LoadBalancer + multi-zone fails the external proxy service
+    template: templates/proxy-service-external.yaml
+    values:
+      - ../../../tests/values/multizone-config.yaml
+    set:
+      proxyService:
+        type: LoadBalancer
+    asserts:
+      - failedTemplate:
+          errorMessage: "The service.type must not be LoadBalancer when using a Multi-Zone Kasm deployment - any load balancer or Route should be provisioned using the Ingress/Route settings. Set service.type=ClusterIP or remove your kasmZones settings."
+
+  - it: directRdpService.enabled=true without rdpAccessURL fails the rdp gateway deployment
+    template: templates/rdp-gateway-deployment.yaml
+    set:
+      directRdpService:
+        enabled: true
+        rdpAccessURL: ""
+    asserts:
+      - failedTemplate:
+          errorMessage: "directRdpService.rdpAccessURL must be set if directRdpService.enabled is true."
