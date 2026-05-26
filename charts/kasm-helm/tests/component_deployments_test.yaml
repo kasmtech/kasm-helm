@@ -1,0 +1,229 @@
+suite: per-component deployment specifics (manager/guac/rdp)
+
+templates:
+  - templates/manager-deployment.yaml
+  - templates/guac-deployment.yaml
+  - templates/rdp-gateway-deployment.yaml
+  - templates/rdp-https-gateway-deployment.yaml
+
+tests:
+  # ---------- manager ----------
+  - it: manager builds image from registry/repository/tag
+    template: templates/manager-deployment.yaml
+    set:
+      components:
+        manager:
+          image:
+            registry: registry.example.test
+            repository: kasm/manager
+            tag: 1.2.3
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: registry.example.test/kasm/manager:1.2.3
+
+  - it: manager exposes container port 8181
+    template: templates/manager-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].containerPort
+          value: 8181
+
+  - it: manager wires SERVER_ZONE_NAME from the zone
+    template: templates/manager-deployment.yaml
+    values:
+      - ../../../tests/values/multizone-config.yaml
+    documentIndex: 0
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SERVER_ZONE_NAME
+            value: zonea
+
+  - it: manager uses default db password secret when no override
+    template: templates/manager-deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POSTGRES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-secrets
+                key: db-password
+
+  - it: manager uses external kasmDbSecret when provided
+    template: templates/manager-deployment.yaml
+    set:
+      database:
+        kasmDbSecret:
+          name: my-db-secret
+          key: password
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POSTGRES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: my-db-secret
+                key: password
+
+  - it: manager honors deploymentSize=large with 3 replicas
+    template: templates/manager-deployment.yaml
+    set:
+      deploymentSize: large
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 3
+
+  - it: manager honors explicit resource override
+    template: templates/manager-deployment.yaml
+    set:
+      components:
+        manager:
+          resources:
+            requests:
+              cpu: "1"
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: "1"
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 2Gi
+
+  - it: manager applies imagePullSecrets when enabled
+    template: templates/manager-deployment.yaml
+    set:
+      imagePullSecrets:
+        enabled: true
+        name: my-pull-secret
+    asserts:
+      - contains:
+          path: spec.template.spec.imagePullSecrets
+          content:
+            name: my-pull-secret
+
+  - it: manager omits imagePullSecrets when disabled
+    template: templates/manager-deployment.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.imagePullSecrets
+
+  # ---------- guac ----------
+  - it: guac is not rendered when components.guac.enabled=false
+    template: templates/guac-deployment.yaml
+    set:
+      components:
+        guac:
+          enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: guac exposes container port 3000
+    template: templates/guac-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].containerPort
+          value: 3000
+
+  - it: guac wires API_PORT and SERVER_PORT to proxy http port
+    template: templates/guac-deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: API_PORT
+            value: "8080"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SERVER_PORT
+            value: "8080"
+
+  - it: guac uses primary zone in multizone deployments
+    template: templates/guac-deployment.yaml
+    values:
+      - ../../../tests/values/multizone-config.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ZONE
+            value: zonea
+
+  # ---------- rdp gateway ----------
+  - it: rdp gateway is not rendered when disabled
+    template: templates/rdp-gateway-deployment.yaml
+    set:
+      components:
+        rdpGateway:
+          enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: rdp gateway exposes container port 5555
+    template: templates/rdp-gateway-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].containerPort
+          value: 5555
+
+  - it: rdp gateway uses directRdpService.rdpAccessURL as SERVER_HOSTNAME when enabled
+    template: templates/rdp-gateway-deployment.yaml
+    set:
+      directRdpService:
+        enabled: true
+        rdpAccessURL: rdp.kasm.example.test
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SERVER_HOSTNAME
+            value: rdp.kasm.example.test
+
+  - it: rdp gateway fails when directRdpService.enabled is true but rdpAccessURL is unset
+    template: templates/rdp-gateway-deployment.yaml
+    set:
+      directRdpService:
+        enabled: true
+        rdpAccessURL: ""
+    asserts:
+      - failedTemplate:
+          errorMessage: "directRdpService.rdpAccessURL must be set if directRdpService.enabled is true."
+
+  # ---------- rdp https gateway ----------
+  - it: rdp https gateway is not rendered when disabled
+    template: templates/rdp-https-gateway-deployment.yaml
+    set:
+      components:
+        rdpHttpsGateway:
+          enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: rdp https gateway exposes container port 9443
+    template: templates/rdp-https-gateway-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].containerPort
+          value: 9443
+
+  - it: rdp https gateway wires SERVER_PORT env to 9443
+    template: templates/rdp-https-gateway-deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SERVER_PORT
+            value: "9443"
