@@ -11,6 +11,7 @@ KIND := $(BIN_DIR)/kind
 KUBECTL := $(BIN_DIR)/kubectl
 CLOUD_PROVIDER_KIND := $(BIN_DIR)/cloud-provider-kind
 CRANE := $(BIN_DIR)/crane
+HELM_DOCS := $(BIN_DIR)/helm-docs
 HELM_PLUGINS_DIR := $(CURDIR)/.helm/plugins
 PYTEST_IMAGE ?= kasm-e2e-pytest:latest
 ifeq ($(strip $(PYTEST_IMAGE)),)
@@ -40,6 +41,9 @@ KIND_VERSION := v0.23.0
 KUBECTL_VERSION := v1.30.7
 CLOUD_PROVIDER_KIND_VERSION := v0.9.0
 CRANE_VERSION := v0.20.6
+# helm-docs regenerates charts/kasm-helm/README.md from values.yaml + README.md.gotmpl.
+# Pinned so `make readme` and the readme-check guard in `make test` stay reproducible.
+HELM_DOCS_VERSION := v1.14.2
 
 KIND_CLUSTER_NAME ?= kasm-e2e
 E2E_NAMESPACE ?= kasm-e2e
@@ -107,7 +111,7 @@ CRANE_ARCH := $(subst amd64,x86_64,$(ARCH))
 CLOUD_PROVIDER_KIND_PID_FILE ?= $(CURDIR)/.kind/cloud-provider-kind.pid
 CLOUD_PROVIDER_KIND_LOG ?= $(CURDIR)/.kind/cloud-provider-kind.log
 
-.PHONY: tools lint render kubeconform kyverno unittest test build-pytest kind-up kind-down kind-recreate kind-ensure kind-load-images kind-load-old-images kind-clean-namespace kind-prep pytest-docker e2e e2e-basic e2e-trustedca e2e-multizone e2e-externaldb e2e-backup e2e-backup-pss e2e-pss e2e-upgrade e2e-upgrade-included e2e-upgrade-standalone e2e-settle extract-old-chart clean
+.PHONY: tools lint render kubeconform kyverno unittest readme readme-check test build-pytest kind-up kind-down kind-recreate kind-ensure kind-load-images kind-load-old-images kind-clean-namespace kind-prep pytest-docker e2e e2e-basic e2e-trustedca e2e-multizone e2e-externaldb e2e-backup e2e-backup-pss e2e-pss e2e-upgrade e2e-upgrade-included e2e-upgrade-standalone e2e-settle extract-old-chart clean
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*## "; printf "\nUsage: make \033[36m<target>\033[0m\n"} \
@@ -116,7 +120,7 @@ help: ## Show available targets
 
 ##@ Tooling
 
-tools: $(HELM) $(KUBECONFORM) $(KYVERNO) $(KIND) $(KUBECTL) $(CLOUD_PROVIDER_KIND) $(CRANE) helm-unittest ## Install all pinned tooling into bin/
+tools: $(HELM) $(KUBECONFORM) $(KYVERNO) $(KIND) $(KUBECTL) $(CLOUD_PROVIDER_KIND) $(CRANE) $(HELM_DOCS) helm-unittest ## Install all pinned tooling into bin/
 
 $(BIN_DIR):
 	@mkdir -p $(BIN_DIR)
@@ -174,6 +178,18 @@ $(CRANE): | $(BIN_DIR)
 	  tar -xzf $$tmp_dir/crane.tgz -C $$tmp_dir crane && \
 	  cp $$tmp_dir/crane $(CRANE) && \
 	  chmod +x $(CRANE) && \
+	  rm -rf $$tmp_dir
+
+# helm-docs release tarballs use the same OS/ARCH casing pattern as crane
+# (Linux/Darwin + x86_64/arm64) and drop the leading v from the version.
+$(HELM_DOCS): | $(BIN_DIR)
+	@echo "Installing helm-docs $(HELM_DOCS_VERSION)"
+	@tmp_dir=$$(mktemp -d) && \
+	  version_no_v=$$(echo "$(HELM_DOCS_VERSION)" | sed 's/^v//') && \
+	  curl -fsSL -o $$tmp_dir/helm-docs.tgz https://github.com/norwoodj/helm-docs/releases/download/$(HELM_DOCS_VERSION)/helm-docs_$${version_no_v}_$(CRANE_OS)_$(CRANE_ARCH).tar.gz && \
+	  tar -xzf $$tmp_dir/helm-docs.tgz -C $$tmp_dir helm-docs && \
+	  cp $$tmp_dir/helm-docs $(HELM_DOCS) && \
+	  chmod +x $(HELM_DOCS) && \
 	  rm -rf $$tmp_dir
 
 $(CURDIR)/.kind:
@@ -265,6 +281,29 @@ kyverno: tools render ## Apply Kyverno policies against rendered manifests
 
 unittest: tools ## Run helm-unittest test suites
 	HELM_PLUGINS="$(HELM_PLUGINS_DIR)" $(HELM) unittest $(CHART_DIR)
+
+readme: $(HELM_DOCS) ## Regenerate charts/kasm-helm/README.md from values.yaml + README.md.gotmpl
+	cd $(CHART_DIR) && $(HELM_DOCS)
+
+# Fails (non-zero exit) if the committed README is out of date with the chart's
+# values.yaml or README.md.gotmpl. Run `make readme` locally to fix. Wired into
+# `make test` so the GitLab CI validate job catches stale READMEs on every MR.
+readme-check: $(HELM_DOCS) ## Verify charts/kasm-helm/README.md is up to date (use `make readme` to regen)
+	@set -euo pipefail; \
+	tmp_dir=$$(mktemp -d); \
+	trap 'rm -rf "$$tmp_dir"' EXIT; \
+	cp $(CHART_DIR)/README.md $$tmp_dir/README.md.before; \
+	cd $(CHART_DIR) && $(HELM_DOCS) >/dev/null && cd - >/dev/null; \
+	if ! diff -u $$tmp_dir/README.md.before $(CHART_DIR)/README.md > $$tmp_dir/diff; then \
+	  echo ""; \
+	  echo "ERROR: $(CHART_DIR)/README.md is out of date with values.yaml + README.md.gotmpl."; \
+	  echo "Run 'make readme' to regenerate, then commit the result."; \
+	  echo ""; \
+	  echo "Drift (committed -> regenerated):"; \
+	  cat $$tmp_dir/diff; \
+	  cp $$tmp_dir/README.md.before $(CHART_DIR)/README.md; \
+	  exit 1; \
+	fi
 
 test: lint kubeconform kyverno unittest ## Run full static suite: lint + kubeconform + kyverno + unittest
 
