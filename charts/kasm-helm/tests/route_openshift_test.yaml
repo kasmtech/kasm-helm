@@ -21,6 +21,95 @@ tests:
           path: spec.host
           value: kasm.apps.example.test
 
+  # Regression test: the proxy Service is created with a zone suffix
+  # (e.g. "RELEASE-NAME-proxy-default") via kasm.metadata in
+  # proxy-service.yaml, but $constants.proxy.svc is the unzoned base
+  # ("RELEASE-NAME-proxy"). route.yaml must apply the zone suffix or
+  # OpenShift can't resolve the target Service. Customers hit this
+  # before the fix and had to manually edit the Route.
+  - it: route's spec.to.name matches the zoned proxy Service name
+    template: templates/route.yaml
+    values:
+      - ../../../tests/values/route-openshift.yaml
+    asserts:
+      - equal:
+          path: spec.to.kind
+          value: Service
+      - equal:
+          path: spec.to.name
+          value: RELEASE-NAME-proxy-default
+
+  # Multizone: render 1 primary Route (publicAddr → zone[0] proxy) + 1 per
+  # additional zone (zone.proxyAddress → that zone's proxy). Mirrors the
+  # one-rule-per-zone structure of ingress.yaml.
+  - it: multizone renders one Route per zone plus a primary Route for publicAddr
+    template: templates/route.yaml
+    values:
+      - ../../../tests/values/route-openshift.yaml
+      - ../../../tests/values/multizone-config.yaml
+    asserts:
+      - hasDocuments:
+          count: 3
+
+  - it: primary Route (documentIndex 0) targets the first kasmZone via publicAddr
+    template: templates/route.yaml
+    values:
+      - ../../../tests/values/route-openshift.yaml
+      - ../../../tests/values/multizone-config.yaml
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-proxy
+      - equal:
+          path: spec.host
+          value: kasm.example.com
+      - equal:
+          path: spec.to.name
+          value: RELEASE-NAME-proxy-zonea
+
+  - it: zonea Route (documentIndex 1) uses zonea proxyAddress + zonea Service
+    template: templates/route.yaml
+    values:
+      - ../../../tests/values/route-openshift.yaml
+      - ../../../tests/values/multizone-config.yaml
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-proxy-zonea
+      - equal:
+          path: spec.host
+          value: zonea.kasm.example.com
+      - equal:
+          path: spec.to.name
+          value: RELEASE-NAME-proxy-zonea
+
+  - it: zoneb Route (documentIndex 2) uses zoneb proxyAddress + zoneb Service
+    template: templates/route.yaml
+    values:
+      - ../../../tests/values/route-openshift.yaml
+      - ../../../tests/values/multizone-config.yaml
+    documentIndex: 2
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-proxy-zoneb
+      - equal:
+          path: spec.host
+          value: zoneb.kasm.example.com
+      - equal:
+          path: spec.to.name
+          value: RELEASE-NAME-proxy-zoneb
+
+  - it: single-zone (no kasmZones) renders exactly one Route
+    template: templates/route.yaml
+    values:
+      - ../../../tests/values/route-openshift.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+
   - it: fails if both ingress.enabled and route.enabled are true
     template: templates/route.yaml
     set:

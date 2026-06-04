@@ -5,6 +5,10 @@ Deploy the Kasm OpenShift Route if .Values.route.enabled set to true
   {{- fail "The ingress.enabled and route.enabled cannot both be set. Either configure an Ingress or an OpenShift Route, not both." -}}
 {{- end -}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $primaryZoneName := "default" -}}
+{{- if .Values.kasmZones -}}
+  {{- $primaryZoneName = (index .Values.kasmZones 0).name -}}
+{{- end -}}
 {{- if eq .Values.route.enabled true }}
 apiVersion: route.openshift.io/v1
 kind: Route
@@ -14,7 +18,7 @@ spec:
   host: {{ .Values.publicAddr | quote }}
   to:
     kind: Service
-    name: {{ $constants.proxy.svc }}
+    name: {{ printf "%s-%s" $constants.proxy.svc (include "kasm.zoneName" $primaryZoneName) }}
     weight: 100
   port:
     targetPort: {{ if eq .Values.route.backendProtocol "https" }}{{ $constants.proxy.https }}{{ else }}{{ $constants.proxy.http }}{{ end }}
@@ -38,4 +42,39 @@ spec:
       {{- . | nindent 6 }}
     {{- end }}
     {{- end }}
+{{- range $idx, $zone := .Values.kasmZones }}
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  {{- include "kasm.metadata" (dict "context" $ "component" "proxy" "resource" "route" "zone" $zone.name "include" "all") | indent 2 }}
+spec:
+  host: {{ $zone.proxyAddress | quote }}
+  to:
+    kind: Service
+    name: {{ printf "%s-%s" $constants.proxy.svc (include "kasm.zoneName" $zone.name) }}
+    weight: 100
+  port:
+    targetPort: {{ if eq $.Values.route.backendProtocol "https" }}{{ $constants.proxy.https }}{{ else }}{{ $constants.proxy.http }}{{ end }}
+  wildcardPolicy: {{ $.Values.route.wildcardPolicy | default "None" }}
+  {{- with $.Values.route.tls }}
+  tls:
+    termination: {{ .termination | default "edge" }}
+    {{- with .insecureEdgeTerminationPolicy }}
+    insecureEdgeTerminationPolicy: {{ . | default "Redirect" }}
+    {{- end }}
+    {{- with .certificate }}
+    certificate: |
+      {{- . | nindent 6 }}
+    {{- end }}
+    {{- with .key }}
+    key: |
+      {{- . | nindent 6 }}
+    {{- end }}
+    {{- with .caCertificate }}
+    caCertificate: |
+      {{- . | nindent 6 }}
+    {{- end }}
+    {{- end }}
+{{- end }}
 {{- end }}
