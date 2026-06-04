@@ -1,0 +1,152 @@
+suite: useImageTags chart-wide default tag
+
+tests:
+  # ---------- precedence: per-component tag wins, others unaffected ----------
+  - it: explicit components.api.image.tag wins for api, other components stay on useImageTags
+    set:
+      components.api.image.tag: "1.19.0-hotfix"
+      components.manager.image.tag: ""
+      components.proxy.image.tag: ""
+      components.guac.image.tag: ""
+      components.rdpGateway.image.tag: ""
+      components.rdpHttpsGateway.image.tag: ""
+      database.image.tag: ""
+      useImageTags: "1.19.0-rolling"
+    asserts:
+      # api: per-component override wins
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: docker.io/kasmweb/api:1.19.0-hotfix
+        template: templates/api-deployment.yaml
+      # other 6: untouched, fall back to useImageTags
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: docker.io/kasmweb/manager:1.19.0-rolling
+        template: templates/manager-deployment.yaml
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: docker.io/kasmweb/proxy:1.19.0-rolling
+        template: templates/proxy-deployment.yaml
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: docker.io/kasmweb/kasm-guac:1.19.0-rolling
+        template: templates/guac-statefulset.yaml
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: docker.io/kasmweb/rdp-gateway:1.19.0-rolling
+        template: templates/rdp-gateway-deployment.yaml
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: docker.io/kasmweb/rdp-https-gateway:1.19.0-rolling
+        template: templates/rdp-https-gateway-statefulset.yaml
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: docker.io/kasmweb/postgres:1.19.0-rolling
+        template: templates/db-statefulset.yaml
+
+  # ---------- useImageTags applies to every component ----------
+  - it: useImageTags applies to every component when per-component tag is empty
+    set:
+      components.api.image.tag: ""
+      components.manager.image.tag: ""
+      components.proxy.image.tag: ""
+      components.guac.image.tag: ""
+      components.rdpGateway.image.tag: ""
+      components.rdpHttpsGateway.image.tag: ""
+      database.image.tag: ""
+      useImageTags: "1.19.0-rolling"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: docker.io/kasmweb/api:1.19.0-rolling
+        template: templates/api-deployment.yaml
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: docker.io/kasmweb/manager:1.19.0-rolling
+        template: templates/manager-deployment.yaml
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: docker.io/kasmweb/proxy:1.19.0-rolling
+        template: templates/proxy-deployment.yaml
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: docker.io/kasmweb/kasm-guac:1.19.0-rolling
+        template: templates/guac-statefulset.yaml
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: docker.io/kasmweb/rdp-gateway:1.19.0-rolling
+        template: templates/rdp-gateway-deployment.yaml
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: docker.io/kasmweb/rdp-https-gateway:1.19.0-rolling
+        template: templates/rdp-https-gateway-statefulset.yaml
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: docker.io/kasmweb/postgres:1.19.0-rolling
+        template: templates/db-statefulset.yaml
+
+  # ---------- date-locked rolling tag ----------
+  - it: useImageTags accepts a date-locked rolling tag verbatim
+    template: templates/api-deployment.yaml
+    set:
+      components.api.image.tag: ""
+      useImageTags: "1.19.0-rolling-2026-06-02"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: docker.io/kasmweb/api:1.19.0-rolling-2026-06-02
+
+  # ---------- bare frozen tag ----------
+  - it: useImageTags accepts a bare frozen tag verbatim
+    template: templates/api-deployment.yaml
+    set:
+      components.api.image.tag: ""
+      useImageTags: "1.19.0"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: docker.io/kasmweb/api:1.19.0
+
+  # ---------- per-component tag carries the load when useImageTags is empty ----------
+  - it: per-component tag is used when useImageTags is empty
+    template: templates/api-deployment.yaml
+    set:
+      useImageTags: ""
+      components.api.image.tag: "1.19.0-hotfix"
+      # Other components left at the values.yaml defaults (which set tag: "")
+      # would also fail render, so set them too:
+      components.manager.image.tag: "1.19.0-hotfix"
+      components.proxy.image.tag: "1.19.0-hotfix"
+      components.guac.image.tag: "1.19.0-hotfix"
+      components.rdpGateway.image.tag: "1.19.0-hotfix"
+      components.rdpHttpsGateway.image.tag: "1.19.0-hotfix"
+      database.image.tag: "1.19.0-hotfix"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: docker.io/kasmweb/api:1.19.0-hotfix
+
+  # ---------- partial coverage also fails, error names the offending component ----------
+  - it: empty useImageTags with only SOME per-component tags set fails render and names the missing component
+    set:
+      useImageTags: ""
+      components.api.image.tag: "1.19.0"
+      # manager + others left empty -> helper has no tag to resolve for them
+    asserts:
+      - failedTemplate:
+          errorPattern: 'Image tag not set for "manager".*\.Values\.components\.manager\.image\.tag'
+
+  # ---------- fail when both empty ----------
+  - it: empty useImageTags AND empty per-component tag fails render
+    set:
+      useImageTags: ""
+      components.api.image.tag: ""
+      components.manager.image.tag: ""
+      components.proxy.image.tag: ""
+      components.guac.image.tag: ""
+      components.rdpGateway.image.tag: ""
+      components.rdpHttpsGateway.image.tag: ""
+      database.image.tag: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "Image tag not set"

@@ -1,4 +1,32 @@
 {{/*
+  Resolve the image tag for a given component.
+
+  Precedence:
+    1. per-component image.tag if set (always wins)
+    2. else .Values.useImageTags if non-empty (chart-wide default)
+    3. else: fail with an error naming the component
+
+  Call with a three-element list: (list <root context> <componentTag> <componentName>)
+  where <componentTag> is e.g. .Values.components.api.image.tag and <componentName>
+  is the values-path component name used in the fail message ("api", "manager",
+  "proxy", "guac", "rdpGateway", "rdpHttpsGateway", or "database").
+*/}}
+{{- define "kasm.imageTag" -}}
+{{- $ctx := index . 0 -}}
+{{- $componentTag := index . 1 -}}
+{{- $componentName := index . 2 -}}
+{{- $useImageTags := $ctx.Values.useImageTags | default "" -}}
+{{- if $componentTag -}}
+{{ $componentTag }}
+{{- else if $useImageTags -}}
+{{ $useImageTags }}
+{{- else -}}
+{{- $valuesPath := ternary (printf ".Values.database.image.tag") (printf ".Values.components.%s.image.tag" $componentName) (eq $componentName "database") -}}
+{{- fail (printf "Image tag not set for %q. Set .Values.useImageTags (chart-wide) or %s." $componentName $valuesPath) -}}
+{{- end -}}
+{{- end }}
+
+{{/*
   Constants to use across chart template files
 */}}
 {{- define "kasm.constants" }}
@@ -6,19 +34,19 @@ api:
   component: api
   svc: {{ printf "%s-api" .Release.Name }}
   portName: api-pt
-  image: {{ printf "%s/%s:%s" .Values.components.api.image.registry .Values.components.api.image.repository (default .Chart.AppVersion .Values.components.api.image.tag) }}
+  image: {{ printf "%s/%s:%s" .Values.components.api.image.registry .Values.components.api.image.repository (include "kasm.imageTag" (list . .Values.components.api.image.tag "api")) }}
   port: 8080
 manager:
   component: manager
   svc: {{ printf "%s-manager" .Release.Name }}
   portName: manager-pt
-  image: {{ printf "%s/%s:%s" .Values.components.manager.image.registry .Values.components.manager.image.repository (default .Chart.AppVersion .Values.components.manager.image.tag) }}
+  image: {{ printf "%s/%s:%s" .Values.components.manager.image.registry .Values.components.manager.image.repository (include "kasm.imageTag" (list . .Values.components.manager.image.tag "manager")) }}
   port: 8181
 proxy:
   component: proxy
   svc: {{ printf "%s-proxy" .Release.Name }}
   portName: proxy-pt
-  image: {{ printf "%s/%s:%s" .Values.components.proxy.image.registry .Values.components.proxy.image.repository (default .Chart.AppVersion .Values.components.proxy.image.tag) }}
+  image: {{ printf "%s/%s:%s" .Values.components.proxy.image.registry .Values.components.proxy.image.repository (include "kasm.imageTag" (list . .Values.components.proxy.image.tag "proxy")) }}
   http: 8080
   https: 8443
   extHttps: 443
@@ -26,14 +54,14 @@ db:
   component: db
   svc: {{ if .Values.database.standalone }}{{- .Values.database.hostname }}{{ else }}{{- printf "%s-db" .Release.Name }}{{ end }}
   portName: db-pt
-  image: {{ printf "%s/%s:%s" .Values.database.image.registry .Values.database.image.repository (default .Chart.AppVersion .Values.database.image.tag) }}
+  image: {{ printf "%s/%s:%s" .Values.database.image.registry .Values.database.image.repository (include "kasm.imageTag" (list . .Values.database.image.tag "database")) }}
   port: {{ .Values.database.port }}
 guac:
   component: guac
   svc: {{ if .Values.kasmZones }}{{ printf "%s-guac-%s" .Release.Name (include "kasm.zoneName" (index .Values.kasmZones 0).name) }}{{ else }}{{ printf "%s-guac-default" .Release.Name }}{{ end }}
   portName: guac-pt
   name: {{ if .Values.kasmZones }}{{ printf "%s-guac-%s" .Release.Name (include "kasm.zoneName" (index .Values.kasmZones 0).name) }}{{ else }}{{ printf "%s-guac-default" .Release.Name }}{{ end }}
-  image: {{ printf "%s/%s:%s" .Values.components.guac.image.registry .Values.components.guac.image.repository (default .Chart.AppVersion .Values.components.guac.image.tag) }}
+  image: {{ printf "%s/%s:%s" .Values.components.guac.image.registry .Values.components.guac.image.repository (include "kasm.imageTag" (list . .Values.components.guac.image.tag "guac")) }}
   port: 3000
   nginxPort: 9000
   ports:
@@ -45,14 +73,14 @@ rdpGateway:
   component: rdp-gateway
   svc: {{ if .Values.kasmZones }}{{ printf "%s-rdp-gateway-%s" .Release.Name (include "kasm.zoneName" (index .Values.kasmZones 0).name) }}{{ else }}{{ printf "%s-rdp-gateway-default" .Release.Name }}{{ end }}
   portName: rdp-gw-pt
-  image: {{ printf "%s/%s:%s" .Values.components.rdpGateway.image.registry .Values.components.rdpGateway.image.repository (default .Chart.AppVersion .Values.components.rdpGateway.image.tag) }}
+  image: {{ printf "%s/%s:%s" .Values.components.rdpGateway.image.registry .Values.components.rdpGateway.image.repository (include "kasm.imageTag" (list . .Values.components.rdpGateway.image.tag "rdpGateway")) }}
   port: 5555
   nginxPort: 9001
 rdpHttpsGateway:
   component: rdp-https-gateway
   svc: {{ if .Values.kasmZones }}{{ printf "%s-rdp-https-gateway-%s" .Release.Name (include "kasm.zoneName" (index .Values.kasmZones 0).name) }}{{ else }}{{ printf "%s-rdp-https-gateway-default" .Release.Name }}{{ end }}
   portName: rdp-https-gw-pt
-  image: {{ printf "%s/%s:%s" .Values.components.rdpHttpsGateway.image.registry .Values.components.rdpHttpsGateway.image.repository (default .Chart.AppVersion .Values.components.rdpHttpsGateway.image.tag) }}
+  image: {{ printf "%s/%s:%s" .Values.components.rdpHttpsGateway.image.registry .Values.components.rdpHttpsGateway.image.repository (include "kasm.imageTag" (list . .Values.components.rdpHttpsGateway.image.tag "rdpHttpsGateway")) }}
   port: 9443
   nginxPort: 9002
 {{- end }}
@@ -1027,7 +1055,7 @@ Dedup rules:
   {{- $uidGid = 70 -}}
 {{- end -}}
 - name: trusted-ca-init
-  image: {{ printf "%s/%s:%s" $context.Values.components.api.image.registry $context.Values.components.api.image.repository $context.Values.components.api.image.tag }}
+  image: {{ printf "%s/%s:%s" $context.Values.components.api.image.registry $context.Values.components.api.image.repository (include "kasm.imageTag" (list $context $context.Values.components.api.image.tag "api")) }}
   imagePullPolicy: {{ $context.Values.imagePullPolicy }}
   {{- include "kasm.securityContext" (list $context $uidGid "container") | nindent 2 }}
   command:

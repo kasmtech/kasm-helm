@@ -63,7 +63,6 @@ OLD_CHART_BRANCH ?= release/1.18.1
 OLD_CHART_HOST_DIR := $(CURDIR)/.e2e-old-chart
 # In 1.18.x the chart lives at charts/kasm.  Update this if the upgrade
 # baseline ever moves to a chart that uses charts/kasm-helm.
-OLD_CHART_VALUES := $(OLD_CHART_HOST_DIR)/charts/kasm/values.yaml
 
 # Scenarios are derived from tests/values/*.yaml (basename)
 SCENARIOS ?= $(patsubst $(TEST_VALUES_DIR)/%.yaml,%,$(wildcard $(TEST_VALUES_DIR)/*.yaml))
@@ -74,8 +73,15 @@ KYN_POLICIES ?= \
   tests/kyverno/resources.required.enforce.yaml \
   tests/kyverno/probes.required.yaml
 
-# Images are sourced from values.yaml to stay in sync with the chart
-KIND_IMAGES := $(shell python3 tests/e2e/list_kind_images.py $(CHART_DIR)/values.yaml)
+# Chart directory used by `kind-load-images` to discover the image list.
+# Defaults to the current chart; `kind-load-old-images` overrides this to
+# point at the extracted previous-version chart.
+KIND_LOAD_CHART_DIR ?= $(CHART_DIR)
+
+# Extra images required by e2e tests but not referenced by the chart itself:
+#   postgres:16        external-DB scenario (tests/e2e/start_external_postgres.sh)
+#   nginx:1.30-alpine  trusted-CA scenario (tests/e2e/test_02_trusted_ca.py)
+KIND_EXTRA_IMAGES ?= postgres:16 nginx:1.30-alpine
 
 
 UNAME_S := $(shell uname -s)
@@ -434,9 +440,15 @@ pytest-docker:
 	  -o log_cli_format='%(asctime)s %(levelname)s %(name)s: %(message)s' \
 	  -o log_cli_date_format='%H:%M:%S'
 
-kind-load-images: $(CRANE) ## Pull and load current chart images into kind (slow; skipped if KIND_IMAGES="")
+kind-load-images: $(CRANE) $(HELM) ## Pull and load current chart images into kind (slow)
 	@$(MAKE) kind-fix-kubeconfig
 	@set -euo pipefail; \
+	chart_images=$$($(HELM) template kasm $(KIND_LOAD_CHART_DIR) \
+		--set publicAddr=kind.kasm.local \
+		--set certificate.secretName=kasm-tls \
+		| awk '/^[[:space:]]*image:[[:space:]]/{print $$2}' \
+		| sort -u); \
+	images="$$chart_images $(KIND_EXTRA_IMAGES)"; \
 	load_image_archive() { \
 		local archive="$$1"; \
 		local image="$$2"; \
@@ -454,7 +466,7 @@ kind-load-images: $(CRANE) ## Pull and load current chart images into kind (slow
 			docker exec -i "$$node" ctr -n k8s.io images import - < "$$archive"; \
 		done; \
 	}; \
-	for image in $(KIND_IMAGES); do \
+	for image in $$images; do \
 		echo "Loading image $$image into kind cluster"; \
 		tmp_tar=$$(mktemp /tmp/kind-image-XXXXXX.tar); \
 		if ! $(CRANE) pull --platform linux/$(ARCH) $$image $$tmp_tar; then \
@@ -576,11 +588,11 @@ extract-old-chart: ## Extract OLD_CHART_BRANCH chart to .e2e-old-chart/
 
 # Pre-load the previous-version chart's images into kind so the Phase 1
 # install can use imagePullPolicy=Never (matching the rest of the e2e
-# suite).  Reuses kind-load-images by overriding KIND_IMAGES so the same
+# suite).  Reuses kind-load-images by overriding KIND_LOAD_CHART_DIR so the
 # pull/import logic stays in one place.
 kind-load-old-images: extract-old-chart ## Load OLD_CHART_BRANCH images into kind for upgrade tests
 	@$(MAKE) kind-load-images \
-	  KIND_IMAGES="$$(python3 tests/e2e/list_kind_images.py $(OLD_CHART_VALUES))"
+	  KIND_LOAD_CHART_DIR="$(OLD_CHART_HOST_DIR)/charts/kasm"
 
 e2e-upgrade-included: kind-prep build-pytest kind-load-old-images ## Upgrade from 1.18.1 with included DB StatefulSet
 	$(MAKE) pytest-docker E2E_SCENARIO=e2e-upgrade-included \
