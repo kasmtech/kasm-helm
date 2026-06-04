@@ -103,8 +103,12 @@ ingress:
   annotations: {}
   labels: {}
 
-# route -- Configure an OpenShift Route for your Kasm deployment. 
-# 
+# route -- Configure an OpenShift Route for your Kasm deployment.
+#
+# With kasmZones set, one Route is rendered per zone (plus a primary Route
+# for publicAddr). The TLS cert must cover publicAddr and every zone's
+# proxyAddress; route.* settings apply to all Routes.
+#
 route:
   # route.enabled -- Set the enabled value to `true` to use a pre-defined Route service to expose Kasm
   enabled: false
