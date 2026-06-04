@@ -249,7 +249,8 @@ database:
   image:
     registry: docker.io
     repository: kasmweb/postgres
-    tag: develop
+    # database.image.tag -- Tag for this component's image. Leave empty to fall back to the chart-wide `useImageTags`.
+    tag: ""
   # Configure the Storage for the Kasm DB StatefulSet
   #
   storage:
@@ -396,7 +397,8 @@ components:
     image:
       registry: docker.io
       repository: kasmweb/proxy
-      tag: develop
+      # components.proxy.image.tag -- Tag for this component's image. Leave empty to fall back to the chart-wide `useImageTags`.
+      tag: ""
     # components.proxy.replicas -- Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset (default).
     replicas: 0
     # components.proxy.annotations -- Custom annotations to add to the Kasm Proxy Deployment
@@ -445,7 +447,8 @@ components:
     image:
       registry: docker.io
       repository: kasmweb/api
-      tag: develop
+      # components.api.image.tag -- Tag for this component's image. Leave empty to fall back to the chart-wide `useImageTags`.
+      tag: ""
     # components.api.replicas -- Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset (default).
     replicas: 0
     # components.api.annotations -- Custom annotations to add to the Kasm api Deployment
@@ -494,7 +497,8 @@ components:
     image:
       registry: docker.io
       repository: kasmweb/manager
-      tag: develop
+      # components.manager.image.tag -- Tag for this component's image. Leave empty to fall back to the chart-wide `useImageTags`.
+      tag: ""
     # components.manager.replicas -- Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset (default).
     replicas: 0
     # components.manager.annotations -- Custom annotations to add to the Kasm Manager Deployment
@@ -543,7 +547,8 @@ components:
     image:
       registry: docker.io
       repository: kasmweb/kasm-guac
-      tag: develop
+      # components.guac.image.tag -- Tag for this component's image. Leave empty to fall back to the chart-wide `useImageTags`.
+      tag: ""
     # components.guac.enabled -- Use this setting to enable/disable deployment of the Kasm Guacamole web RDP service - 
     # [Kasm Guac Service](https://docs.kasm.com/docs/latest/guide/connection_proxies#guacamole-guac).
     #
@@ -610,7 +615,8 @@ components:
     image:
       registry: docker.io
       repository: kasmweb/rdp-gateway
-      tag: develop
+      # components.rdpGateway.image.tag -- Tag for this component's image. Leave empty to fall back to the chart-wide `useImageTags`.
+      tag: ""
     # components.rdpGateway.enabled -- Use this setting to enable/disable deployment of the Kasm RDP Gateway service - 
     # [Kasm RDP Gateway](https://docs.kasm.com/docs/latest/guide/connection_proxies#rdp-gateway).
     #
@@ -674,7 +680,8 @@ components:
     image:
       registry: docker.io
       repository: kasmweb/rdp-https-gateway
-      tag: develop
+      # components.rdpHttpsGateway.image.tag -- Tag for this component's image. Leave empty to fall back to the chart-wide `useImageTags`.
+      tag: ""
     # components.rdpHttpsGateway.enabled -- Use this setting to enable/disable deployment of the Kasm RDP HTTPS Gateway service.
     # This service allows users to use native RDP clients via HTTPS connections rather than exposing 3389 - 
     # [Kasm RDP HTTPS Gateway](https://docs.kasm.com/docs/latest/guide/connection_proxies#rdp-https-gateway).
@@ -726,6 +733,15 @@ components:
 ####################################
 # Extra Kubernetes config settings #
 ####################################
+
+# useImageTags -- Chart-wide image tag used when a component's `image.tag` is empty. Per-component tag wins if set.
+# To override the tag for a single component, see `components.<x>.image.tag` (or `database.image.tag`).
+# Examples:
+#   "1.19.0-rolling"             rolling tag, receives ongoing bug-fix updates within 1.19.x
+#   "1.19.0"                     frozen point-in-time tag
+#   "1.19.0-rolling-2026-06-02"  date-locked rolling tag, pins a specific rolling build
+#
+useImageTags: "1.19.0-rolling"
 
 # imagePullPolicy -- Configure global image pull policy
 #
