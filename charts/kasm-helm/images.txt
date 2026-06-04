@@ -1,7 +1,7 @@
-kasmweb/api:develop
-kasmweb/manager:develop
-kasmweb/postgres:develop
-kasmweb/proxy:develop
-kasmweb/kasm-guac:develop
-kasmweb/rdp-gateway:develop
-kasmweb/rdp-https-gateway:develop
+kasmweb/api:1.19.0-rolling
+kasmweb/manager:1.19.0-rolling
+kasmweb/postgres:1.19.0-rolling
+kasmweb/proxy:1.19.0-rolling
+kasmweb/kasm-guac:1.19.0-rolling
+kasmweb/rdp-gateway:1.19.0-rolling
+kasmweb/rdp-https-gateway:1.19.0-rolling
