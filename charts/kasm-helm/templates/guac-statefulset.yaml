@@ -203,6 +203,9 @@ spec:
           {{- toYaml . | nindent 8 }}
         {{- end }}
         {{- include "kasm.trustedCaVolumes" . | nindent 8 }}
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Delete
+    whenScaled: Retain
   volumeClaimTemplates:
     - metadata:
         name: tmp-data
