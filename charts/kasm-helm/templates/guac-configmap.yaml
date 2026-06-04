@@ -1,0 +1,193 @@
+{{/*
+Nginx configuration ConfigMaps for the Guac StatefulSet nginx sidecar.
+
+guac-settings  — mounted at /etc/nginx/conf.d/ — contains:
+  compress.conf, logging.conf, upstream_kasm_guac.conf, orchestrator.conf
+
+guac-services  — mounted at /etc/nginx/conf.d/services.d/ — contains:
+  kasmguac.conf with all guac location blocks routing to kasm_guac upstream
+*/}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $serviceKeepalive := 16 -}}
+{{- if .Values.components.guac.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  {{- include "kasm.metadata" (dict "context" . "component" "guac-settings" "resource" "configMap" "include" "all") | indent 2 }}
+data:
+  upstream_kasm_guac.conf: |
+    upstream kasm_guac {
+      keepalive {{ $serviceKeepalive }};
+      server 127.0.0.1:{{ $constants.guac.port }};
+    }
+
+    upstream kasm_guac_backend {
+      zone kasm_guac_zone 512k;
+      {{- range $port := $constants.guac.ports }}
+      {{ printf "server 127.0.0.1:%d;" (int $port) }}
+      {{- end }}
+    }
+
+  orchestrator.conf: |
+    server {
+      listen {{ $constants.guac.nginxPort }};
+      server_name ubuntu-base;
+
+      include /etc/nginx/conf.d/services.d/*.conf;
+
+      client_max_body_size 1G;
+      server_tokens off;
+
+      proxy_intercept_errors on;
+      error_page 500 = @internal_error;
+      location @internal_error {
+        default_type "text/html";
+        return 500 "<H1>Internal Error</H1>";
+      }
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  {{- include "kasm.metadata" (dict "context" . "component" "guac-services" "resource" "configMap" "include" "all") | indent 2 }}
+data:
+  kasmguac.conf: |
+    location /guac_connect/vnc/ {
+      proxy_http_version      1.1;
+      proxy_set_header        Host $host;
+      proxy_set_header        Upgrade $http_upgrade;
+      proxy_set_header        Connection "upgrade";
+      proxy_set_header        X-Real-IP $remote_addr;
+      proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header        X-Forwarded-Proto $scheme;
+      proxy_pass              http://kasm_guac/;
+      proxy_read_timeout      1800s;
+      proxy_send_timeout      1800s;
+      proxy_connect_timeout   1800s;
+      proxy_buffering         off;
+      client_max_body_size    1G;
+      expires                 4h;
+      add_header              Strict-Transport-Security "max-age=63072000" always;
+      add_header              Cache-Control "private";
+    }
+
+    location /guac_connect/vnc/vnc.htmlguaclite {
+      proxy_http_version      1.1;
+      proxy_set_header        Host $host;
+      proxy_set_header        Upgrade $http_upgrade;
+      proxy_set_header        Connection "upgrade";
+      proxy_set_header        X-Real-IP $remote_addr;
+      proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header        X-Forwarded-Proto $scheme;
+      proxy_pass              http://kasm_guac_backend/vnc.htmlguaclite$is_args$args;
+      proxy_read_timeout      1800s;
+      proxy_send_timeout      1800s;
+      proxy_connect_timeout   1800s;
+      proxy_buffering         off;
+      client_max_body_size    1G;
+      expires                 4h;
+      add_header              Cache-Control "private";
+      add_header              Strict-Transport-Security "max-age=63072000" always;
+      add_header              X-Content-Type-Options 'nosniff';
+    }
+
+    location /vm_connect {
+      internal;
+      proxy_pass              http://kasm_guac/vm_connect;
+      proxy_pass_request_body off;
+      proxy_set_header        Content-Length '';
+      proxy_set_header        X-Original-URI $request_uri;
+      proxy_http_version      1.1;
+      proxy_set_header        Connection "";
+    }
+
+    location /guac_connect/uploads/ {
+      auth_request            /vm_connect;
+      auth_request_set        $connect_hostname     $upstream_http_connect_hostname;
+      auth_request_set        $connect_port         $upstream_http_connect_port;
+      auth_request_set        $connect_path         $upstream_http_connect_path;
+      auth_request_set        $connect_auth         $upstream_http_connect_auth;
+      proxy_http_version      1.1;
+      proxy_set_header        Host $host;
+      proxy_set_header        Upgrade $http_upgrade;
+      proxy_set_header        Connection "upgrade";
+      proxy_set_header        X-Real-IP $remote_addr;
+      proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header        X-Forwarded-Proto $scheme;
+      proxy_set_header        Authorization "Bearer ${connect_auth}";
+      rewrite                 ^/guac_connect/uploads/(.*) /$1 break;
+      proxy_pass              https://$connect_hostname:$connect_port;
+      proxy_read_timeout      1800s;
+      proxy_send_timeout      1800s;
+      proxy_connect_timeout   1800s;
+      proxy_buffering         off;
+      client_max_body_size    1G;
+      expires                 4h;
+      add_header              Cache-Control "private";
+      add_header              Strict-Transport-Security "max-age=63072000" always;
+    }
+
+    location /guac_connect/downloads/ {
+      auth_request            /vm_connect;
+      auth_request_set        $connect_hostname     $upstream_http_connect_hostname;
+      auth_request_set        $connect_port         $upstream_http_connect_port;
+      auth_request_set        $connect_path         $upstream_http_connect_path;
+      auth_request_set        $connect_auth         $upstream_http_connect_auth;
+      proxy_http_version      1.1;
+      proxy_set_header        Host $host;
+      proxy_set_header        Upgrade $http_upgrade;
+      proxy_set_header        Connection "upgrade";
+      proxy_set_header        X-Real-IP $remote_addr;
+      proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header        X-Forwarded-Proto $scheme;
+      proxy_set_header        Authorization "Bearer ${connect_auth}";
+      rewrite                 ^/guac_connect/downloads/(.*) /$1 break;
+      proxy_pass              https://$connect_hostname:$connect_port;
+      proxy_read_timeout      1800s;
+      proxy_send_timeout      1800s;
+      proxy_connect_timeout   1800s;
+      proxy_buffering         off;
+      client_max_body_size    1G;
+      expires                 4h;
+      add_header              Strict-Transport-Security "max-age=63072000" always;
+      add_header              Cache-Control "private";
+    }
+
+    location /guac_connect/api/ {
+      auth_request            /vm_connect;
+      auth_request_set        $connect_hostname     $upstream_http_connect_hostname;
+      auth_request_set        $connect_port         $upstream_http_connect_port;
+      auth_request_set        $connect_path         $upstream_http_connect_path;
+      auth_request_set        $connect_auth         $upstream_http_connect_auth;
+      proxy_http_version      1.1;
+      proxy_set_header        Host $host;
+      proxy_set_header        Upgrade $http_upgrade;
+      proxy_set_header        Connection "upgrade";
+      proxy_set_header        X-Real-IP $remote_addr;
+      proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header        X-Forwarded-Proto $scheme;
+      proxy_set_header        Authorization "Bearer ${connect_auth}";
+      rewrite                 ^/guac_connect/api/(.*) /$1 break;
+      proxy_pass              https://$connect_hostname:$connect_port;
+      proxy_read_timeout      1800s;
+      proxy_send_timeout      1800s;
+      proxy_connect_timeout   1800s;
+      proxy_buffering         off;
+      client_max_body_size    1G;
+      expires                 4h;
+      add_header              Strict-Transport-Security "max-age=63072000" always;
+      add_header              Cache-Control "private";
+    }
+
+    location /guac_login {
+      proxy_pass http://kasm_guac/guac_login;
+    }
+
+    location /guac/__healthcheck {
+      proxy_pass http://kasm_guac/__healthcheck;
+    }
+
+    location /guac/vm_disconnect {
+      proxy_pass http://kasm_guac/vm_disconnect;
+    }
+{{- end }}

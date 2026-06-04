@@ -109,7 +109,14 @@ CLOUD_PROVIDER_KIND_LOG ?= $(CURDIR)/.kind/cloud-provider-kind.log
 
 .PHONY: tools lint render kubeconform kyverno unittest test build-pytest kind-up kind-down kind-recreate kind-ensure kind-load-images kind-load-old-images kind-clean-namespace kind-prep pytest-docker e2e e2e-basic e2e-trustedca e2e-multizone e2e-externaldb e2e-backup e2e-backup-pss e2e-pss e2e-upgrade e2e-upgrade-included e2e-upgrade-standalone e2e-settle extract-old-chart clean
 
-tools: $(HELM) $(KUBECONFORM) $(KYVERNO) $(KIND) $(KUBECTL) $(CLOUD_PROVIDER_KIND) $(CRANE) helm-unittest
+help: ## Show available targets
+	@awk 'BEGIN {FS = ":.*## "; printf "\nUsage: make \033[36m<target>\033[0m\n"} \
+	  /^[[:alnum:]_-]+:.*## / {printf "  \033[36m%-30s\033[0m %s\n", $$1, $$2} \
+	  /^##@/ {printf "\n\033[1m%s\033[0m\n", substr($$0, 5)}' $(MAKEFILE_LIST)
+
+##@ Tooling
+
+tools: $(HELM) $(KUBECONFORM) $(KYVERNO) $(KIND) $(KUBECTL) $(CLOUD_PROVIDER_KIND) $(CRANE) helm-unittest ## Install all pinned tooling into bin/
 
 $(BIN_DIR):
 	@mkdir -p $(BIN_DIR)
@@ -227,10 +234,12 @@ helm-unittest: $(HELM)
 	cp -R "$$src_dir" "$(HELM_PLUGINS_DIR)/helm-unittest" && \
 	rm -rf $$tmp_dir
 
-lint: $(HELM)
+##@ Static Analysis
+
+lint: $(HELM) ## Lint the primary Helm chart
 	$(HELM) lint $(CHART_DIR)
-about:blank#blocked
-render: $(HELM)
+
+render: $(HELM) ## Render all test scenario values to .rendered/
 	@mkdir -p .rendered
 	@set -euo pipefail; \
 	  for values_file in $(TEST_VALUES_DIR)/*.yaml; do \
@@ -239,14 +248,14 @@ render: $(HELM)
 	    $(HELM) template kasm-test $(CHART_DIR) -n kasm-test -f $$values_file > .rendered/$$scenario.yaml; \
 	  done
 
-kubeconform: tools render
+kubeconform: tools render ## Validate rendered manifests against Kubernetes schemas
 	@set -euo pipefail; \
 	  for rendered_manifest in .rendered/*.yaml; do \
 	    echo "kubeconform $$rendered_manifest"; \
 	    $(KUBECONFORM) -strict -ignore-missing-schemas -summary $$rendered_manifest; \
 	  done
 
-kyverno: tools render
+kyverno: tools render ## Apply Kyverno policies against rendered manifests
 	@set -euo pipefail; \
 	  policies="$(KYN_POLICIES)"; \
 	  for rendered_manifest in .rendered/*.yaml; do \
@@ -254,12 +263,14 @@ kyverno: tools render
 	    $(KYVERNO) apply $$policies -r $$rendered_manifest; \
 	  done
 
-unittest: tools
+unittest: tools ## Run helm-unittest test suites
 	HELM_PLUGINS="$(HELM_PLUGINS_DIR)" $(HELM) unittest $(CHART_DIR)
 
-test: lint kubeconform kyverno unittest
+test: lint kubeconform kyverno unittest ## Run full static suite: lint + kubeconform + kyverno + unittest
 
-kind-up: tools $(CURDIR)/.kind
+##@ Kind Cluster
+
+kind-up: tools $(CURDIR)/.kind ## Create the kind cluster
 	@# Ensure the "kind" docker network has a user-configured subnet.
 	@# Required by start_external_postgres.sh's --ip pinning (used by
 	@# the standalone-DB upgrade test) — Docker rejects --ip on networks
@@ -305,7 +316,7 @@ kind-up: tools $(CURDIR)/.kind
 	grep -n "server:" $(KIND_KUBECONFIG) || true; \
 	$(KUBECTL) --kubeconfig $(KIND_KUBECONFIG) cluster-info
 
-kind-down:
+kind-down: ## Destroy the kind cluster
 	@if [ -f $(KIND) ]; then \
 		if $(KIND) get clusters 2>/dev/null | grep -q "^$(KIND_CLUSTER_NAME)"; then \
 			if [ -f "$(CLOUD_PROVIDER_KIND_PID_FILE)" ]; then \
@@ -317,11 +328,11 @@ kind-down:
 		fi; \
 	fi
 
-kind-recreate:
+kind-recreate: ## Destroy and recreate the kind cluster
 	$(MAKE) kind-down
 	$(MAKE) kind-up
 
-kind-ensure: tools $(CURDIR)/.kind
+kind-ensure: tools $(CURDIR)/.kind ## Create kind cluster if it does not exist
 	@set -euo pipefail; \
 	if $(KIND) get clusters | grep -q "^$(KIND_CLUSTER_NAME)$$"; then \
 		echo "Kind cluster '$(KIND_CLUSTER_NAME)' already exists"; \
@@ -330,7 +341,7 @@ kind-ensure: tools $(CURDIR)/.kind
 		$(MAKE) kind-up; \
 	fi
 
-build-pytest:
+build-pytest: ## Build the pytest e2e Docker image
 	docker build \
 	  -t $(PYTEST_IMAGE) \
 	  -f tests/e2e/Dockerfile \
@@ -343,6 +354,14 @@ pytest-docker:
 	  docker_ip=$$(getent hosts docker | awk '{print $$1}' | head -n1); \
 	  if [ -n "$$docker_ip" ]; then \
 	    add_host_arg="--add-host=kind.kasm.local:$$docker_ip"; \
+	  fi; \
+	fi; \
+	sock_args=""; \
+	if [ -n "$(E2E_DOCKER_SOCK)" ]; then \
+	  sock_args="-v /var/run/docker.sock:/var/run/docker.sock"; \
+	  if [ -e /var/run/docker.sock ]; then \
+	    sock_gid=$$(stat -c '%g' /var/run/docker.sock); \
+	    sock_args="$$sock_args --group-add $$sock_gid"; \
 	  fi; \
 	fi; \
 	docker run --rm $$add_host_arg \
@@ -367,7 +386,7 @@ pytest-docker:
 	  -v $(CURDIR)/tests/e2e/pytest.ini:/e2e/pytest.ini:ro \
 	  -v $(CURDIR)/tests/e2e:/e2e \
 	  $(if $(E2E_OLD_CHART_HOST_DIR),-v $(E2E_OLD_CHART_HOST_DIR):/old-chart:ro -e E2E_OLD_CHART_DIR=/old-chart) \
-	  $(if $(E2E_DOCKER_SOCK),-v /var/run/docker.sock:/var/run/docker.sock) \
+	  $$sock_args \
 	  $(PYTEST_IMAGE) $(PYTEST_ARGS) \
 	  -m e2e -q \
 	  -p no:cacheprovider \
@@ -376,7 +395,7 @@ pytest-docker:
 	  -o log_cli_format='%(asctime)s %(levelname)s %(name)s: %(message)s' \
 	  -o log_cli_date_format='%H:%M:%S'
 
-kind-load-images: $(CRANE)
+kind-load-images: $(CRANE) ## Pull and load current chart images into kind (slow; skipped if KIND_IMAGES="")
 	@$(MAKE) kind-fix-kubeconfig
 	@set -euo pipefail; \
 	load_image_archive() { \
@@ -410,7 +429,7 @@ kind-load-images: $(CRANE)
 		rm -f $$tmp_tar; \
 	done
 
-kind-clean-namespace:
+kind-clean-namespace: ## Delete E2E_NAMESPACE from kind and wait for removal
 	@$(MAKE) kind-fix-kubeconfig
 	@# Delete PVCs explicitly before the namespace.  Namespace deletion
 	@# cascades to PVCs, but we've seen postgres-init flakes when stale
@@ -424,16 +443,18 @@ kind-clean-namespace:
 	$(KUBECTL) --kubeconfig $(KIND_KUBECONFIG) delete namespace $(E2E_NAMESPACE) --ignore-not-found
 	$(KUBECTL) --kubeconfig $(KIND_KUBECONFIG) wait --for=delete namespace/$(E2E_NAMESPACE) --timeout=300s || true
 
-kind-prep: kind-ensure kind-load-images kind-clean-namespace
+kind-prep: kind-ensure kind-load-images kind-clean-namespace ## Prepare kind for a scenario: ensure cluster, load images, clean namespace
 
 # Pause between scenarios in the umbrella target so the cluster has
 # time to clean up the previous namespace before the next install starts.
 # Reduces back-to-back flakes (see E2E_SCENARIO_SETTLE_SECONDS).
-e2e-settle:
+##@ End-to-End Tests
+
+e2e-settle: ## Pause between scenarios to let cluster state settle
 	@echo "[e2e] settling for $(E2E_SCENARIO_SETTLE_SECONDS)s before next scenario..."
 	@sleep $(E2E_SCENARIO_SETTLE_SECONDS)
 
-e2e:
+e2e: ## Run all e2e scenarios sequentially (requires kind cluster)
 	$(MAKE) e2e-basic E2E_NAMESPACE=kasm-e2e-basic
 	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-basic
 	$(MAKE) e2e-settle
@@ -466,13 +487,13 @@ e2e:
 	@./tests/e2e/stop_external_postgres.sh
 	@rm -rf $(OLD_CHART_HOST_DIR)
 
-e2e-basic: kind-prep build-pytest
+e2e-basic: kind-prep build-pytest ## Basic install and login page verification
 	$(MAKE) pytest-docker E2E_SCENARIO=e2e-basic PYTEST_ARGS="test_01_basic_deploy.py"
 
-e2e-trustedca: kind-prep build-pytest
+e2e-trustedca: kind-prep build-pytest ## Install with custom CA bundle
 	$(MAKE) pytest-docker E2E_SCENARIO=e2e-trustedca PYTEST_ARGS="-m e2e -q test_02_trusted_ca.py"
 
-e2e-multizone: kind-prep build-pytest
+e2e-multizone: kind-prep build-pytest ## Multi-zone topology with ingress-nginx
 	@export PATH="$(BIN_DIR):$$PATH" && \
 	export KUBECONFIG=$(KIND_KUBECONFIG) && \
 	export CLOUD_PROVIDER_KIND=$(CLOUD_PROVIDER_KIND) && \
@@ -486,7 +507,7 @@ e2e-multizone: kind-prep build-pytest
 # when pytest fails — without the trap, a failed run leaves the postgres
 # container behind and (when running locally or on a runner that reuses
 # dind) the next invocation collides with stale data on its volume.
-e2e-externaldb: kind-prep build-pytest
+e2e-externaldb: kind-prep build-pytest ## Install against an external standalone Postgres
 	@set -e; \
 	./tests/e2e/stop_external_postgres.sh; \
 	trap './tests/e2e/stop_external_postgres.sh' EXIT; \
@@ -494,13 +515,15 @@ e2e-externaldb: kind-prep build-pytest
 	export EXTERNAL_DB_PASSWORD=$${EXTERNAL_DB_PASSWORD:-postgres}; \
 	$(MAKE) pytest-docker E2E_SCENARIO=e2e-externaldb PYTEST_ARGS="-m e2e -q test_04_external_db.py"
 
-e2e-backup: kind-prep build-pytest
+e2e-backup: kind-prep build-pytest ## DB backup CronJob test
 	$(MAKE) pytest-docker E2E_SCENARIO=e2e-backup PYTEST_ARGS="-m e2e -q test_07_db_backup.py"
 
-e2e-backup-pss: kind-prep build-pytest
+e2e-backup-pss: kind-prep build-pytest ## DB backup under Pod Security Standards restricted
 	$(MAKE) pytest-docker E2E_SCENARIO=e2e-backup-pss PYTEST_ARGS="-m e2e -q test_08_db_backup_restricted.py"
 
-extract-old-chart:
+##@ Upgrade Helpers
+
+extract-old-chart: ## Extract OLD_CHART_BRANCH chart to .e2e-old-chart/
 	@rm -rf $(OLD_CHART_HOST_DIR)
 	@mkdir -p $(OLD_CHART_HOST_DIR)
 	@# GitLab CI shallow-clones only the current ref, so origin/$(OLD_CHART_BRANCH)
@@ -516,11 +539,11 @@ extract-old-chart:
 # install can use imagePullPolicy=Never (matching the rest of the e2e
 # suite).  Reuses kind-load-images by overriding KIND_IMAGES so the same
 # pull/import logic stays in one place.
-kind-load-old-images: extract-old-chart
+kind-load-old-images: extract-old-chart ## Load OLD_CHART_BRANCH images into kind for upgrade tests
 	@$(MAKE) kind-load-images \
 	  KIND_IMAGES="$$(python3 tests/e2e/list_kind_images.py $(OLD_CHART_VALUES))"
 
-e2e-upgrade-included: kind-prep build-pytest kind-load-old-images
+e2e-upgrade-included: kind-prep build-pytest kind-load-old-images ## Upgrade from 1.18.1 with included DB StatefulSet
 	$(MAKE) pytest-docker E2E_SCENARIO=e2e-upgrade-included \
 	  E2E_OLD_CHART_HOST_DIR=$(OLD_CHART_HOST_DIR) \
 	  PYTEST_ARGS="-m e2e -q test_09_db_upgrade.py::test_db_upgrade_included_db"
@@ -528,7 +551,7 @@ e2e-upgrade-included: kind-prep build-pytest kind-load-old-images
 # Same EXIT trap as e2e-externaldb: the postgres-14 container started for
 # the upgrade-from-14 scenario must be torn down on any pytest failure
 # so the next run starts from a clean external DB.
-e2e-upgrade-standalone: kind-prep build-pytest kind-load-old-images
+e2e-upgrade-standalone: kind-prep build-pytest kind-load-old-images ## Upgrade from 1.18.1 with external Postgres 14→16 swap
 	@set -e; \
 	./tests/e2e/stop_external_postgres.sh; \
 	trap './tests/e2e/stop_external_postgres.sh' EXIT; \
@@ -544,12 +567,14 @@ e2e-upgrade-standalone: kind-prep build-pytest kind-load-old-images
 	  E2E_DOCKER_SOCK=true \
 	  PYTEST_ARGS="-m e2e -q test_09_db_upgrade.py::test_db_upgrade_standalone_db"
 
-e2e-upgrade: e2e-upgrade-included e2e-upgrade-standalone
+e2e-upgrade: e2e-upgrade-included e2e-upgrade-standalone ## Run both upgrade e2e tests
 
-e2e-pss: kind-prep build-pytest
+e2e-pss: kind-prep build-pytest ## Pod Security Standards restricted namespace test
 	$(MAKE) pytest-docker E2E_SCENARIO=e2e-pss PYTEST_ARGS="-m e2e -q test_06_pod_security_standards.py"
 
-clean: kind-down
+##@ Maintenance
+
+clean: kind-down ## Remove build artifacts, tooling, rendered output, and kind cluster
 	@rm -rf .rendered; \
 	rm -rf $(BIN_DIR); \
 	rm -rf __pycache__; \

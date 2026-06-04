@@ -2,9 +2,9 @@ suite: per-component deployment specifics (manager/guac/rdp)
 
 templates:
   - templates/manager-deployment.yaml
-  - templates/guac-deployment.yaml
+  - templates/guac-statefulset.yaml
   - templates/rdp-gateway-deployment.yaml
-  - templates/rdp-https-gateway-deployment.yaml
+  - templates/rdp-https-gateway-statefulset.yaml
 
 tests:
   # ---------- manager ----------
@@ -119,7 +119,7 @@ tests:
 
   # ---------- guac ----------
   - it: guac is not rendered when components.guac.enabled=false
-    template: templates/guac-deployment.yaml
+    template: templates/guac-statefulset.yaml
     set:
       components:
         guac:
@@ -129,14 +129,14 @@ tests:
           count: 0
 
   - it: guac exposes container port 3000
-    template: templates/guac-deployment.yaml
+    template: templates/guac-statefulset.yaml
     asserts:
       - equal:
           path: spec.template.spec.containers[0].ports[0].containerPort
           value: 3000
 
-  - it: guac wires API_PORT and SERVER_PORT to proxy http port
-    template: templates/guac-deployment.yaml
+  - it: guac wires API_PORT to proxy http port and SERVER_PORT to nginx sidecar port
+    template: templates/guac-statefulset.yaml
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
@@ -147,10 +147,10 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: SERVER_PORT
-            value: "8080"
+            value: "9000"
 
   - it: guac uses primary zone in multizone deployments
-    template: templates/guac-deployment.yaml
+    template: templates/guac-statefulset.yaml
     values:
       - ../../../tests/values/multizone-config.yaml
     asserts:
@@ -203,7 +203,7 @@ tests:
 
   # ---------- rdp https gateway ----------
   - it: rdp https gateway is not rendered when disabled
-    template: templates/rdp-https-gateway-deployment.yaml
+    template: templates/rdp-https-gateway-statefulset.yaml
     set:
       components:
         rdpHttpsGateway:
@@ -213,17 +213,33 @@ tests:
           count: 0
 
   - it: rdp https gateway exposes container port 9443
-    template: templates/rdp-https-gateway-deployment.yaml
+    template: templates/rdp-https-gateway-statefulset.yaml
     asserts:
       - equal:
           path: spec.template.spec.containers[0].ports[0].containerPort
           value: 9443
 
-  - it: rdp https gateway wires SERVER_PORT env to 9443
-    template: templates/rdp-https-gateway-deployment.yaml
+  - it: rdp https gateway wires SERVER_PORT env to the nginx sidecar port
+    template: templates/rdp-https-gateway-statefulset.yaml
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
             name: SERVER_PORT
-            value: "9443"
+            value: "9002"
+
+  - it: rdp gateway has nginx sidecar as containers[1] on the nginx port
+    template: templates/rdp-gateway-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].ports[0].containerPort
+          value: 9001
+
+  - it: rdp https gateway has nginx sidecar as containers[1] on the nginx port
+    template: templates/rdp-https-gateway-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].ports[0].containerPort
+          value: 9002

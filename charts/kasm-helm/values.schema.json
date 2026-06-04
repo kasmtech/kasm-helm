@@ -287,6 +287,11 @@
               "title": "labels",
               "type": "object"
             },
+            "replicas": {
+              "description": "Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset.",
+              "title": "replicas",
+              "type": "integer"
+            },
             "resources": {
               "additionalProperties": true,
               "description": "Manually configure the Kasm api Deployment resources. This overrides the pre-defined `deploymentSize` values.",
@@ -316,6 +321,11 @@
               "description": "Custom annotations to add to the Kasm Guac Deployment",
               "title": "annotations",
               "type": "object"
+            },
+            "guacClusterSize": {
+              "description": "Set the number of `guacd` processes to run in each Guacamole pod",
+              "title": "guacClusterSize",
+              "type": "integer"
             },
             "enabled": {
               "default": true,
@@ -378,11 +388,33 @@
               "title": "labels",
               "type": "object"
             },
+            "replicas": {
+              "description": "Configure the number of Guacamole pod replicas to deploy",
+              "title": "replicas",
+              "type": "integer"
+            },
             "resources": {
               "additionalProperties": true,
               "description": "Manually configure the Kasm Guac Deployment resources. This overrides the pre-defined `deploymentSize` values.",
               "title": "resources",
               "type": "object"
+            },
+            "nginxSidecar": {
+              "additionalProperties": false,
+              "description": "Configuration for the nginx sidecar container.",
+              "properties": {
+                "resources": {
+                  "additionalProperties": true,
+                  "description": "Manually configure resources for the nginx sidecar container. Leave empty to use the chart default.",
+                  "title": "resources",
+                  "type": "object"
+                }
+              },
+              "title": "nginxSidecar",
+              "type": "object",
+              "required": [
+                "resources"
+              ]
             },
             "recordingData": {
               "additionalProperties": false,
@@ -414,6 +446,7 @@
             "enabled",
             "annotations",
             "resources",
+            "nginxSidecar",
             "labels",
             "extraVolumes",
             "extraVolumeMounts",
@@ -486,6 +519,11 @@
               "description": "Custom labels to add to the Kasm Manager Deployment",
               "title": "labels",
               "type": "object"
+            },
+            "replicas": {
+              "description": "Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset.",
+              "title": "replicas",
+              "type": "integer"
             },
             "resources": {
               "additionalProperties": true,
@@ -569,6 +607,11 @@
               "description": "Custom labels to add to the Kasm Proxy Deployment",
               "title": "labels",
               "type": "object"
+            },
+            "replicas": {
+              "description": "Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset.",
+              "title": "replicas",
+              "type": "integer"
             },
             "resources": {
               "additionalProperties": true,
@@ -665,11 +708,34 @@
               "title": "labels",
               "type": "object"
             },
+            "replicas": {
+              "description": "Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset (which is 1 for rdp-gateway). Multi-replica rdp-gateway is not supported in this release.",
+              "title": "replicas",
+              "type": "integer",
+              "maximum": 1
+            },
             "resources": {
               "additionalProperties": true,
               "description": "Manually configure the Kasm RDP Gateway Deployment resources. This overrides the pre-defined `deploymentSize` values.",
               "title": "resources",
               "type": "object"
+            },
+            "nginxSidecar": {
+              "additionalProperties": false,
+              "description": "Configuration for the nginx sidecar container.",
+              "properties": {
+                "resources": {
+                  "additionalProperties": true,
+                  "description": "Manually configure resources for the nginx sidecar container. Leave empty to use the chart default.",
+                  "title": "resources",
+                  "type": "object"
+                }
+              },
+              "title": "nginxSidecar",
+              "type": "object",
+              "required": [
+                "resources"
+              ]
             }
           },
           "title": "rdpGateway",
@@ -679,6 +745,7 @@
             "enabled",
             "annotations",
             "resources",
+            "nginxSidecar",
             "labels",
             "extraVolumes",
             "extraVolumeMounts",
@@ -755,11 +822,33 @@
               "title": "labels",
               "type": "object"
             },
+            "replicas": {
+              "description": "Configure the number of RDP HTTPS Gateway Pod replicas to deploy",
+              "title": "replicas",
+              "type": "integer"
+            },
             "resources": {
               "additionalProperties": true,
               "description": "Manually configure the Kasm RDP HTTPS Gateway Deployment resources. This overrides the pre-defined `deploymentSize` values.",
               "title": "resources",
               "type": "object"
+            },
+            "nginxSidecar": {
+              "additionalProperties": false,
+              "description": "Configuration for the nginx sidecar container.",
+              "properties": {
+                "resources": {
+                  "additionalProperties": true,
+                  "description": "Manually configure resources for the nginx sidecar container. Leave empty to use the chart default.",
+                  "title": "resources",
+                  "type": "object"
+                }
+              },
+              "title": "nginxSidecar",
+              "type": "object",
+              "required": [
+                "resources"
+              ]
             }
           },
           "title": "rdpHttpsGateway",
@@ -769,6 +858,7 @@
             "enabled",
             "annotations",
             "resources",
+            "nginxSidecar",
             "labels",
             "extraVolumes",
             "extraVolumeMounts",
@@ -1152,13 +1242,21 @@
         },
         "type": {
           "default": "LoadBalancer",
-          "description": "The Kubernetes Service type to use for the direct RDP Gateway service. This is only applicable if `directRdpService.enabled` is set to true. The default is ClusterIP, but you can set it to NodePort or LoadBalancer depending on your needs and cluster capabilities.",
+          "description": "The Kubernetes Service type to use for the direct RDP Gateway service. Allowed values are LoadBalancer or NodePort. The RDP Gateway speaks raw TCP, so any cloud load balancer backing this Service must be a Layer 4 / TCP type (e.g. NLB on AWS, not ALB).",
           "title": "type",
           "type": "string",
           "enum": [
             "NodePort",
             "LoadBalancer"
           ]
+        },
+        "loadBalancerPort": {
+          "default": 3389,
+          "description": "The external port exposed by the directRdpService Service when `directRdpService.type` is LoadBalancer. Defaults to 3389. Has no effect when `directRdpService.type` is NodePort.",
+          "title": "loadBalancerPort",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
         },
         "annotations": {
           "additionalProperties": true,

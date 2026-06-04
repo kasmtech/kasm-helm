@@ -2,7 +2,13 @@
 Deploy the RDP Gateway if .Values.components.rdpGateway.enabled set to true
 */}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
-{{- $rdpGatewayReplicas := include "replicas.preset" (dict "node" $constants.rdpGateway.component "size" .Values.deploymentSize) -}}
+{{- $rdpGatewayReplicas := ternary .Values.components.rdpGateway.replicas (include "replicas.preset" (dict "node" $constants.rdpGateway.component "size" .Values.deploymentSize)) (gt (int .Values.components.rdpGateway.replicas) 0) -}}
+{{/*
+  Multi-replica rdp-gateway is not supported in this release.
+*/}}
+{{- if gt (int $rdpGatewayReplicas) 1 -}}
+  {{- fail "components.rdpGateway.replicas must be 1. Multi-replica rdp-gateway is not supported in this release." -}}
+{{- end -}}
 {{- $merged := fromYaml (include "kasm.mergedValues" (dict "root" . "componentName" "rdpGateway")) -}}
 {{- $zoneName := "default" -}}
 {{- $serverName := $constants.rdpGateway.svc -}}
@@ -53,6 +59,18 @@ spec:
         {{- with $merged.extraInitContainers }}
           {{- toYaml . | nindent 8 }}
         {{- end }}
+        - name: {{ printf "%s-rdp-gateway-nginx-conf-init" .Release.Name }}
+          image: {{ $constants.proxy.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          command: ["/bin/sh", "-c", "cp /tmp/nginx-conf-src/* /etc/nginx/conf.d/"]
+          {{- include "kasm.securityContext" (list . 1000 "container") | nindent 10 }}
+          resources: {{- include "resources.preset" (dict "node" "nginx-conf-init" "size" .Values.deploymentSize) | nindent 12 }}
+          volumeMounts:
+            - name: kasm-rdp-gateway-nginx-settings-src
+              mountPath: /tmp/nginx-conf-src
+              readOnly: true
+            - name: rdp-gateway-nginx-conf-d
+              mountPath: /etc/nginx/conf.d
       containers:
         - name: {{ include "kasm.name" (list $ "rdpGateway" "container") }}
           image: {{ $constants.rdpGateway.image }}
@@ -94,7 +112,7 @@ spec:
             - name: PROXY_PORT
               value: "3389"
             - name: SERVER_PORT
-              value: {{ $constants.rdpGateway.port | quote }}
+              value: {{ $constants.rdpGateway.nginxPort | quote }}
             - name: SERVER_THREADS
               value: "10"
             - name: SESSION_WATCH_INTERVAL
@@ -146,6 +164,41 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           {{- include "kasm.trustedCaVolumeMounts" . | nindent 12 }}
+        - name: {{ printf "%s-rdp-gateway-nginx" .Release.Name }}
+          image: {{ $constants.proxy.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          ports:
+            - name: rdp-gw-nginx-pt
+              containerPort: {{ $constants.rdpGateway.nginxPort }}
+              protocol: TCP
+          volumeMounts:
+            - name: kasm-proxy-base-config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+            - name: rdp-gateway-nginx-conf-d
+              mountPath: /etc/nginx/conf.d
+            - name: kasm-rdp-gateway-nginx-services
+              mountPath: /etc/nginx/conf.d/services.d
+            - name: kasm-rdp-gateway-nginx-data
+              mountPath: /var/cache/nginx
+            - name: kasm-rdp-gateway-nginx-data
+              mountPath: /var/log/nginx
+            - name: kasm-rdp-gateway-nginx-data
+              mountPath: /run
+          {{- if .Values.applyHealthChecks }}
+          livenessProbe:
+            {{- include "health.tcp" (dict "portName" "rdp-gw-nginx-pt") | indent 12 }}
+          {{- end }}
+          {{- if .Values.applyHealthChecks }}
+          readinessProbe:
+            {{- include "health.tcp" (dict "portName" "rdp-gw-nginx-pt") | indent 12 }}
+          {{- end }}
+          {{- if .Values.components.rdpGateway.nginxSidecar.resources }}
+          resources: {{- toYaml .Values.components.rdpGateway.nginxSidecar.resources | nindent 12 }}
+          {{- else }}
+          resources: {{- include "resources.preset" (dict "node" "nginx-sidecar" "size" .Values.deploymentSize) | nindent 12 }}
+          {{- end }}
+          {{- include "kasm.securityContext" (list . 1000 "container") | nindent 10 }}
         {{- with $merged.extraContainers }}
           {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -167,6 +220,25 @@ spec:
               - key: rdpproxy.ini
                 path: rdpproxy.ini
         {{- end }}
+        - name: kasm-proxy-base-config
+          configMap:
+            name: {{ include "kasm.name" (list $ "proxy-base") }}
+        - name: kasm-rdp-gateway-nginx-settings-src
+          projected:
+            sources:
+              - configMap:
+                  name: {{ include "kasm.name" (list $ "nginx-shared") }}
+              - configMap:
+                  name: {{ include "kasm.name" (list $ "rdp-gateway-settings") }}
+        - name: rdp-gateway-nginx-conf-d
+          emptyDir:
+            sizeLimit: 10Mi
+        - name: kasm-rdp-gateway-nginx-services
+          configMap:
+            name: {{ include "kasm.name" (list $ "rdp-gateway-services") }}
+        - name: kasm-rdp-gateway-nginx-data
+          emptyDir:
+            sizeLimit: 100Mi
         {{- with $merged.volumes }}
           {{- toYaml . | nindent 8 }}
         {{- end }}

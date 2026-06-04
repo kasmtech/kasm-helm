@@ -3,7 +3,10 @@ suite: configmap content rendering
 templates:
   - templates/db-configmap.yaml
   - templates/rdp-gateway-configmap.yaml
+  - templates/rdp-gateway-nginx-configmap.yaml
+  - templates/rdp-https-gateway-configmap.yaml
   - templates/proxy-configmaps.yaml
+  - templates/proxy-deployment.yaml
 
 tests:
   # ---------- db-configmap ----------
@@ -71,6 +74,96 @@ tests:
       - matchRegex:
           path: data["passthrough.app.config.yaml"]
           pattern: "rdp-gateway:"
+
+  # ---------- rdp-gateway-nginx-configmap (settings + services) ----------
+  - it: rdp gateway nginx settings configmap defines a kasm_guac upstream pointing at the guac Service
+    template: templates/rdp-gateway-nginx-configmap.yaml
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - matchRegex:
+          path: data["upstream_kasm_rdp_gateway.conf"]
+          pattern: 'upstream kasm_guac \{'
+      - matchRegex:
+          path: data["upstream_kasm_rdp_gateway.conf"]
+          pattern: 'server RELEASE-NAME-guac-default:9000;'
+
+  - it: rdp gateway nginx services configmap defines /guac/vm_disconnect location proxying to kasm_guac
+    template: templates/rdp-gateway-nginx-configmap.yaml
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - matchRegex:
+          path: data["rdp_gateway.conf"]
+          pattern: 'location /guac/vm_disconnect'
+      - matchRegex:
+          path: data["rdp_gateway.conf"]
+          pattern: 'proxy_pass\s+http://kasm_guac/guac/vm_disconnect;'
+
+  # The proxy pod's wait-for-rdp-gateway init container probes
+  # http://<rdp-gateway-svc>:<nginxPort>/__healthcheck — so the sidecar MUST
+  # expose that location and route it to the rdp_gateway upstream (the
+  # app on 127.0.0.1:5555). Without this, proxy stays in Init forever and the
+  # 5555 app port has to be put back on the Service, which is what we're
+  # trying to avoid.
+  - it: rdp gateway nginx services configmap exposes /__healthcheck proxying to the rdp_gateway upstream
+    template: templates/rdp-gateway-nginx-configmap.yaml
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - matchRegex:
+          path: data["rdp_gateway.conf"]
+          pattern: 'location = /__healthcheck'
+      - matchRegex:
+          path: data["rdp_gateway.conf"]
+          pattern: 'proxy_pass\s+http://rdp_gateway/__healthcheck;'
+
+  # Lock in that the proxy waits for rdp-gateway through its nginx sidecar
+  # (nginxPort=9001), not the Tornado app port (5555). Flipping this back to
+  # :5555 would either require putting 5555 back on the Service (publishing it
+  # to any LoadBalancer/NodePort under directRdpService=true) or hang proxy
+  # forever — the exact regression that caused this fix.
+  - it: proxy wait-for-rdp-gateway init container probes the nginx sidecar port (not the app)
+    template: templates/proxy-deployment.yaml
+    asserts:
+      # Init container order in proxy-deployment.yaml is api, manager, guac,
+      # rdp-gateway — so initContainers[3] is the rdp-gateway waiter. The
+      # args[0] is the inline shell script that runs `while ! curl <url>`.
+      # Pinning the rendered URL catches any drift in port (must be 9001 = the
+      # nginx sidecar, NOT 5555 = the app), scheme, or healthcheck path.
+      - matchRegex:
+          path: spec.template.spec.initContainers[3].args[0]
+          pattern: 'curl "http://RELEASE-NAME-rdp-gateway-default:9001/__healthcheck"'
+
+  # ---------- rdp-https-gateway-configmap (settings + services) ----------
+  - it: rdp https gateway settings configmap defines a kasm_guac upstream pointing at the guac Service
+    template: templates/rdp-https-gateway-configmap.yaml
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - matchRegex:
+          path: data["upstream_kasm_rdp_https_gateway.conf"]
+          pattern: 'upstream kasm_guac \{'
+      - matchRegex:
+          path: data["upstream_kasm_rdp_https_gateway.conf"]
+          pattern: 'server RELEASE-NAME-guac-default:9000;'
+
+  - it: rdp https gateway services configmap defines /guac/vm_disconnect location proxying to kasm_guac
+    template: templates/rdp-https-gateway-configmap.yaml
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - matchRegex:
+          path: data["rdp_https_gateway.conf"]
+          pattern: 'location /guac/vm_disconnect'
+      - matchRegex:
+          path: data["rdp_https_gateway.conf"]
+          pattern: 'proxy_pass\s+http://kasm_guac/guac/vm_disconnect;'
 
   # ---------- proxy configmaps ----------
   - it: proxy configmaps render at least one ConfigMap document

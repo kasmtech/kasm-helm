@@ -3,12 +3,12 @@ templates:
   - templates/guac-service.yaml
   - templates/rdp-gateway-service.yaml
   - templates/rdp-https-gateway-service.yaml
-  - templates/guac-deployment.yaml
+  - templates/guac-statefulset.yaml
   - templates/rdp-gateway-deployment.yaml
-  - templates/rdp-https-gateway-deployment.yaml
+  - templates/rdp-https-gateway-statefulset.yaml
 
 tests:
-  - it: does not render optional services or deployments when disabled
+  - it: does not render optional services or statefulsets when disabled
     set:
       components:
         guac:
@@ -21,7 +21,7 @@ tests:
       - hasDocuments:
           count: 0
 
-  - it: renders guac service when enabled
+  - it: renders guac service as headless when enabled
     template: templates/guac-service.yaml
     set:
       components:
@@ -32,9 +32,12 @@ tests:
           count: 1
       - isKind:
           of: Service
+      - equal:
+          path: spec.clusterIP
+          value: None
 
-  - it: renders guac deployment when enabled
-    template: templates/guac-deployment.yaml
+  - it: renders guac statefulset when enabled
+    template: templates/guac-statefulset.yaml
     set:
       components:
         guac:
@@ -43,7 +46,7 @@ tests:
       - hasDocuments:
           count: 1
       - isKind:
-          of: Deployment
+          of: StatefulSet
 
   - it: renders rdp gateway service when enabled
     template: templates/rdp-gateway-service.yaml
@@ -81,8 +84,8 @@ tests:
       - isKind:
           of: Service
 
-  - it: renders rdp HTTPS gateway deployment when enabled
-    template: templates/rdp-https-gateway-deployment.yaml
+  - it: renders rdp HTTPS gateway statefulset when enabled
+    template: templates/rdp-https-gateway-statefulset.yaml
     set:
       components:
         rdpHttpsGateway:
@@ -91,4 +94,4 @@ tests:
       - hasDocuments:
           count: 1
       - isKind:
-          of: Deployment
+          of: StatefulSet

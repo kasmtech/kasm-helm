@@ -103,30 +103,90 @@ tests:
           path: spec.ports[0].targetPort
           value: proxy-pt-https
 
-  - it: guac Service exposes the primary port plus four extra ports
+  - it: guac Service is headless and exposes only the nginx sidecar port 9000
     template: templates/guac-service.yaml
     asserts:
       - equal:
+          path: spec.clusterIP
+          value: None
+      - equal:
           path: spec.ports[0].port
-          value: 3000
-      - equal:
-          path: spec.ports[1].port
-          value: 3001
-      - equal:
-          path: spec.ports[2].port
-          value: 3002
-      - equal:
-          path: spec.ports[3].port
-          value: 3003
-      - equal:
-          path: spec.ports[4].port
-          value: 3004
+          value: 9000
+      - notExists:
+          path: spec.ports[1]
 
   - it: rdp gateway Service is rendered when component enabled (default)
     template: templates/rdp-gateway-service.yaml
     asserts:
       - isKind:
           of: Service
+
+  - it: rdp gateway Service is ClusterIP by default and exposes nginx :9001 + RDP :3389 (5555 stays intra-pod)
+    template: templates/rdp-gateway-service.yaml
+    asserts:
+      - equal:
+          path: spec.type
+          value: ClusterIP
+      - equal:
+          path: spec.ports[0].port
+          value: 9001
+      - equal:
+          path: spec.ports[0].targetPort
+          value: 9001
+      - equal:
+          path: spec.ports[1].port
+          value: 3389
+      - equal:
+          path: spec.ports[1].targetPort
+          value: 3389
+      # The app port (5555) must NOT appear on the Service. Cross-pod
+      # consumers (notably the proxy wait-for-rdp-gateway init container) talk
+      # to the nginx sidecar on 9001 which proxies /__healthcheck through to
+      # the app on localhost. Putting 5555 on the Service publishes the app
+      # port to any LoadBalancer/NodePort exposure (directRdpService=true) and
+      # bypasses the sidecar contract — both regressions we don't want.
+      - notExists:
+          path: spec.ports[2]
+
+  - it: rdp gateway Service becomes LoadBalancer when directRdpService.enabled=true
+    template: templates/rdp-gateway-service.yaml
+    set:
+      directRdpService:
+        enabled: true
+        rdpAccessURL: rdp.example.com
+        type: LoadBalancer
+    asserts:
+      - equal:
+          path: spec.type
+          value: LoadBalancer
+
+  - it: rdp gateway Service becomes NodePort when directRdpService.type=NodePort
+    template: templates/rdp-gateway-service.yaml
+    set:
+      directRdpService:
+        enabled: true
+        rdpAccessURL: rdp.example.com
+        type: NodePort
+    asserts:
+      - equal:
+          path: spec.type
+          value: NodePort
+
+  - it: rdp gateway Service public RDP port is configurable via directRdpService.loadBalancerPort
+    template: templates/rdp-gateway-service.yaml
+    set:
+      directRdpService:
+        enabled: true
+        rdpAccessURL: rdp.example.com
+        type: LoadBalancer
+        loadBalancerPort: 443
+    asserts:
+      - equal:
+          path: spec.ports[1].port
+          value: 443
+      - equal:
+          path: spec.ports[1].targetPort
+          value: 3389
 
   - it: rdp https gateway Service is rendered when component enabled (default)
     template: templates/rdp-https-gateway-service.yaml

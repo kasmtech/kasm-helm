@@ -1,4 +1,8 @@
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $zoneName := "default" -}}
+{{- if .Values.kasmZones }}
+  {{- $zoneName = (index .Values.kasmZones 0).name -}}
+{{- end }}
 CHART NAME: {{ .Chart.Name }}
 CHART VERSION: {{ .Chart.Version }}
 APP VERSION: {{ .Chart.AppVersion }}
@@ -9,7 +13,7 @@ To log into your Kasm deployment use the information below:
 
 Kasm URL:                                   https://{{ .Values.publicAddr }}
 External Agent Kasm Upstream Auth Address:  https://{{ .Values.publicAddr }}
-KubeVirt Kasm Upstream Auth Address:        {{ printf "%s.%s.svc.%s" $constants.proxy.svc .Release.Namespace (.Values.clusterDomain | default "--seeK8sAdminForClusterDomain--") }}
+KubeVirt Kasm Upstream Auth Address:        {{ printf "%s-%s.%s.svc.%s" $constants.proxy.svc (include "kasm.zoneName" $zoneName) .Release.Namespace (.Values.clusterDomain | default "--seeK8sAdminForClusterDomain--") }}
 Kasm Admin User:                            admin@kasm.local
 Kasm Un-privileged User:                    user@kasm.local
 

@@ -1,13 +1,13 @@
 suite: kasm zones logic tests
 templates:
-  - templates/guac-deployment.yaml
+  - templates/guac-statefulset.yaml
   - templates/proxy-deployment.yaml
   - templates/proxy-configmaps.yaml
   - templates/manager-deployment.yaml
 
 tests:
   - it: injects primary zone into guac deployment
-    template: templates/guac-deployment.yaml
+    template: templates/guac-statefulset.yaml
     values:
       - ../../../tests/values/multizone-config.yaml
     asserts:

@@ -1,0 +1,242 @@
+suite: rdp https gateway statefulset
+
+templates:
+  - templates/rdp-https-gateway-statefulset.yaml
+  - templates/rdp-https-gateway-service.yaml
+
+tests:
+  - it: renders a StatefulSet when rdpHttpsGateway is enabled
+    template: templates/rdp-https-gateway-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: StatefulSet
+
+  - it: serviceName matches the rdp-https-gateway service constant
+    template: templates/rdp-https-gateway-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - equal:
+          path: spec.serviceName
+          value: RELEASE-NAME-rdp-https-gateway-default
+
+  - it: SERVER_HOSTNAME is the full pod FQDN
+    template: templates/rdp-https-gateway-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SERVER_HOSTNAME
+            value: "$(HOSTNAME).RELEASE-NAME-rdp-https-gateway-default.$(POD_NAMESPACE).svc.cluster.local"
+
+  - it: HOSTNAME is injected via downward API for env var substitution
+    template: templates/rdp-https-gateway-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: HOSTNAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+
+  - it: POD_NAMESPACE is injected via downward API
+    template: templates/rdp-https-gateway-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+
+  - it: uses updateStrategy not strategy
+    template: templates/rdp-https-gateway-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - exists:
+          path: spec.updateStrategy
+      - notExists:
+          path: spec.strategy
+
+  - it: has rdp-https-gateway container as containers[0]
+    template: templates/rdp-https-gateway-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: RELEASE-NAME-rdp-https-gateway
+
+  - it: has nginx sidecar as containers[1]
+    template: templates/rdp-https-gateway-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: RELEASE-NAME-rdp-https-gateway-nginx
+
+  - it: nginx sidecar exposes the rdp-tls-ngnx-pt port on 9002
+    template: templates/rdp-https-gateway-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].ports
+          content:
+            name: rdp-tls-ngnx-pt
+            containerPort: 9002
+            protocol: TCP
+
+  - it: SERVER_PORT on the main container points at the nginx sidecar port 9002
+    template: templates/rdp-https-gateway-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SERVER_PORT
+            value: "9002"
+
+  - it: nginx conf init container populates conf.d from the settings source
+    template: templates/rdp-https-gateway-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: RELEASE-NAME-rdp-https-gateway-nginx-conf-init
+
+  - it: nginx sidecar mounts the conf.d emptyDir populated by the init container
+    template: templates/rdp-https-gateway-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].volumeMounts
+          content:
+            name: rdp-https-gateway-nginx-conf-d
+            mountPath: /etc/nginx/conf.d
+
+  - it: nginx sidecar mounts the services configmap at conf.d/services.d
+    template: templates/rdp-https-gateway-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].volumeMounts
+          content:
+            name: kasm-rdp-https-gateway-nginx-services
+            mountPath: /etc/nginx/conf.d/services.d
+
+  - it: nginx sidecar mounts proxy-base nginx.conf via subPath
+    template: templates/rdp-https-gateway-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].volumeMounts
+          content:
+            name: kasm-proxy-base-config
+            mountPath: /etc/nginx/nginx.conf
+            subPath: nginx.conf
+
+  - it: nginx sidecar uses the chart's default resource preset by default
+    template: templates/rdp-https-gateway-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].resources.requests.cpu
+          value: 200m
+      - equal:
+          path: spec.template.spec.containers[1].resources.requests.memory
+          value: 128Mi
+      - equal:
+          path: spec.template.spec.containers[1].resources.limits.cpu
+          value: 200m
+      - equal:
+          path: spec.template.spec.containers[1].resources.limits.memory
+          value: 128Mi
+
+  - it: nginx-conf-init uses the chart's default resource preset
+    template: templates/rdp-https-gateway-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[1].resources.requests.cpu
+          value: 100m
+      - equal:
+          path: spec.template.spec.initContainers[1].resources.requests.memory
+          value: 64Mi
+      - equal:
+          path: spec.template.spec.initContainers[1].resources.limits.cpu
+          value: 100m
+      - equal:
+          path: spec.template.spec.initContainers[1].resources.limits.memory
+          value: 64Mi
+
+  - it: components.rdpHttpsGateway.nginxSidecar.resources overrides the preset
+    template: templates/rdp-https-gateway-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      components:
+        rdpHttpsGateway:
+          nginxSidecar:
+            resources:
+              requests:
+                cpu: 25m
+                memory: 64Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].resources.requests.cpu
+          value: 25m
+      - equal:
+          path: spec.template.spec.containers[1].resources.requests.memory
+          value: 64Mi
+      - notExists:
+          path: spec.template.spec.containers[1].resources.limits
+
+  - it: does not render when rdpHttpsGateway is disabled
+    template: templates/rdp-https-gateway-statefulset.yaml
+    set:
+      components:
+        rdpHttpsGateway:
+          enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: rdp-https-gateway service is headless
+    template: templates/rdp-https-gateway-service.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - equal:
+          path: spec.clusterIP
+          value: None
+
+  - it: rdp-https-gateway service name is unchanged
+    template: templates/rdp-https-gateway-service.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-rdp-https-gateway-default

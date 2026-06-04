@@ -6,7 +6,7 @@ templates:
   - templates/manager-deployment.yaml
   - templates/db-statefulset.yaml
   - templates/rdp-gateway-deployment.yaml
-  - templates/rdp-https-gateway-deployment.yaml
+  - templates/rdp-https-gateway-statefulset.yaml
 tests:
   - it: renders an OpenShift Route when enabled
     template: templates/route.yaml
@@ -39,7 +39,7 @@ tests:
       - templates/manager-deployment.yaml
       - templates/db-statefulset.yaml
       - templates/rdp-gateway-deployment.yaml
-      - templates/rdp-https-gateway-deployment.yaml
+      - templates/rdp-https-gateway-statefulset.yaml
     values:
       - ../../../tests/values/route-openshift.yaml
     asserts:

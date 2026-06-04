@@ -1,42 +1,28 @@
-suite: guac recordings PVC
+suite: guac recording storage
 
 templates:
-  - templates/guac-recordings-pvc.yaml
-  - templates/guac-deployment.yaml
+  - templates/guac-statefulset.yaml
 
 tests:
-  - it: renders the PVC by default when guac is enabled
-    template: templates/guac-recordings-pvc.yaml
+  - it: recording storage is a volumeClaimTemplate named tmp-data
+    values:
+      - ../../../tests/values/components-all.yaml
     asserts:
-      - hasDocuments:
-          count: 1
       - equal:
-          path: kind
-          value: PersistentVolumeClaim
+          path: spec.volumeClaimTemplates[0].metadata.name
+          value: tmp-data
       - equal:
-          path: metadata.name
-          value: RELEASE-NAME-guac-recordings
-      - equal:
-          path: spec.accessModes[0]
+          path: spec.volumeClaimTemplates[0].spec.accessModes[0]
           value: ReadWriteOnce
       - equal:
-          path: spec.resources.requests.storage
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
           value: 10Gi
       - notExists:
-          path: spec.storageClassName
+          path: spec.volumeClaimTemplates[0].spec.storageClassName
 
-  - it: does not render the PVC when guac is disabled
-    template: templates/guac-recordings-pvc.yaml
-    set:
-      components:
-        guac:
-          enabled: false
-    asserts:
-      - hasDocuments:
-          count: 0
-
-  - it: honors pvcSize override
-    template: templates/guac-recordings-pvc.yaml
+  - it: pvcSize override is reflected in the volumeClaimTemplate
+    values:
+      - ../../../tests/values/components-all.yaml
     set:
       components:
         guac:
@@ -44,11 +30,12 @@ tests:
             pvcSize: 25
     asserts:
       - equal:
-          path: spec.resources.requests.storage
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
           value: 25Gi
 
-  - it: honors storageClassName override
-    template: templates/guac-recordings-pvc.yaml
+  - it: storageClassName override is reflected in the volumeClaimTemplate
+    values:
+      - ../../../tests/values/components-all.yaml
     set:
       components:
         guac:
@@ -56,17 +43,17 @@ tests:
             storageClassName: fast-ssd
     asserts:
       - equal:
-          path: spec.storageClassName
+          path: spec.volumeClaimTemplates[0].spec.storageClassName
           value: fast-ssd
 
-  - it: guac deployment mounts the PVC at /tmp via tmp-data
-    template: templates/guac-deployment.yaml
+  - it: guac container mounts the tmp-data claim at /tmp
+    values:
+      - ../../../tests/values/components-all.yaml
     asserts:
-      - equal:
-          path: spec.template.spec.volumes[?(@.name=="tmp-data")].persistentVolumeClaim.claimName
-          value: RELEASE-NAME-guac-recordings
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: tmp-data
+            mountPath: /tmp
       - notExists:
-          path: spec.template.spec.volumes[?(@.name=="tmp-data")].emptyDir
-      - equal:
-          path: spec.template.spec.containers[0].volumeMounts[?(@.name=="tmp-data")].mountPath
-          value: /tmp
+          path: spec.template.spec.volumes[?(@.name=="tmp-data")]

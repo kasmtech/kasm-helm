@@ -1,5 +1,7 @@
 {{/*
-Deploy the Guac if .Values.components.guac.enabled set to true
+Headless Service for Guac StatefulSet. clusterIP: None provides per-pod DNS records.
+The service exposes only port 9000 (the nginx sidecar). Ports 3000-3004 are
+internal to the pod and accessed via the kasm_guac upstream.
 */}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- $zoneName := "default" -}}
@@ -12,15 +14,11 @@ kind: Service
 metadata:
   {{- include "kasm.metadata" (dict "context" . "component" "guac" "resource" "service" "zone" $zoneName "include" "all") | indent 2 }}
 spec:
+  clusterIP: None
   selector:
-    {{- include "kasm.metadata" (dict "context" . "component" "guac" "resource" "service" "include" "match") | indent 6 }}
+    {{- include "kasm.metadata" (dict "context" . "component" "guac" "resource" "service" "zone" $zoneName "include" "match") | indent 4 }}
   ports:
-    - name: {{ printf "%s-svc-%s" $constants.guac.svc ($constants.guac.port | toString) }}
+    - name: {{ printf "%s-svc-%s" $constants.guac.svc ($constants.guac.nginxPort | toString) }}
       protocol: TCP
-      port: {{ $constants.guac.port }}
-    {{- range $constants.guac.ports }}
-    - name: {{ printf "%s-svc-%s" $constants.guac.svc (. | toString) }}
-      protocol: TCP
-      port: {{ . }}
-    {{- end }}
+      port: {{ $constants.guac.nginxPort }}
 {{- end }}

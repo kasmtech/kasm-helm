@@ -1,0 +1,87 @@
+{{/*
+Shared nginx ConfigMap containing content common to both the proxy and guac nginx instances.
+Mounted at /etc/nginx/conf.d/ alongside component-specific configs via projected volumes.
+
+Contains:
+  compress.conf         — gzip settings
+  logging.conf          — json_combined log format
+  orchestrator_maps.conf — shared nginx map blocks for x_forwarded_proto, ports, etc.
+*/}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  {{- include "kasm.metadata" (dict "context" . "component" "nginx-shared" "resource" "configMap" "include" "all") | indent 2 }}
+data:
+  compress.conf: |
+    gzip on;
+    gzip_disable "MSIE [1-6]\.(?!.*SV1)";
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 9;
+    gzip_types text/plain text/css application/javascript application/x-javascript text/xml application/xml application/xml+rss text/javascript image/x-icon image/vnd.microsoft.icon image/bmp image/svg+xml;
+
+  logging.conf: |
+    log_format json_combined escape=json
+      '{'
+        '"upstream_response_length": "$upstream_response_length",'
+        '"body_bytes_sent": "$body_bytes_sent",'
+        '"server_addr": "$server_addr",'
+        '"server_port": "$server_port",'
+        '"request_method": "$request_method",'
+        '"http_referer": "$http_referer",'
+        '"http_user_agent": "$http_user_agent",'
+        '"http_x_forwarded_for": "$http_x_forwarded_for",'
+        '"http_x_header": "$http_x_header",'
+        '"nginx_version": "$nginx_version",'
+        '"server_protocol": "$server_protocol",'
+        '"request":"$request",'
+        '"request_length": "$request_length",'
+        '"request_time": "$request_time",'
+        '"upstream_response_time": "$upstream_response_time",'
+        '"request_host":"$host",'
+        '"server_name": "$server_name",'
+        '"remote_addr": "$remote_addr",'
+        '"realip_remote_addr": "$realip_remote_addr",'
+        '"http_status": "$status",'
+        '"time_local":"$time_local",'
+        '"time_iso8601":"$time_iso8601",'
+        '"msec":"$msec",'
+        '"upstream_addr": "$upstream_addr",'
+        '"upstream_connect_time": "$upstream_connect_time",'
+        '"upstream_response_time": "$upstream_response_time",'
+        '"upstream_status": "$upstream_status",'
+        '"uri": "$uri",'
+        '"query_string": "$query_string",'
+        '"remote_user": "$remote_user",'
+        '"cookie_username": "$cookie_username",'
+        '"upstream_header_time": "$upstream_header_time"'
+      '}';
+
+  orchestrator.conf: |
+    # Nginx doesn't have a built in variable for the original request port. $server_port is only the port that nginx is listening on. It doesn't even take into account docker port mapping.
+    # We will try this to get around that limitation. Taken from: https://stackoverflow.com/a/77354255
+    
+    # Check if a X-Forwarded-Proto header (set by reverse-proxy) is already present. If not take the scheme used to call our nginx server.
+      map $http_x_forwarded_proto $x_forwarded_proto {
+      default $http_x_forwarded_proto;
+      ""      $scheme; # Note that if the reverse-proxy does not add a X-Forwarded-Proto header, it may be incorrect if the protocol used by the reverse proxy is not the same as the one on which your nginx server is listening. In this case you have no solution than harcode the correct value.
+    }
+    
+    # Set the default port of each scheme/protocol (80 for http, 443 for https)
+      map $x_forwarded_proto $default_http_port {
+      default 443;
+      "https" 443;
+    }
+    
+    # Extract the real port of the client request url (unfortunately nginx has no variable to get this info)
+      map $http_host $real_request_port {
+      default                 $default_http_port; # If port not explicitly defined in url take the default one associated to the calling scheme/protocol (80 for http, 443 for https)
+      "~^[^\:]+:(?<p>\d+)$"   $p;
+    }
+    
+    # Check if a X-Forwarded-Port header (set by reverse-proxy) is already present. If not take the port from the client request url
+      map $http_x_forwarded_port $x_forwarded_port {
+      default $http_x_forwarded_port;
+      ""      $real_request_port;
+    }

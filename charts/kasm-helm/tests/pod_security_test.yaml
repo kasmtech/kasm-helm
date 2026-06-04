@@ -6,11 +6,11 @@ templates:
   - templates/db-statefulset.yaml
   - templates/db-upgrade-backup-job.yaml
   - templates/db-upgrade-job.yaml
-  - templates/guac-deployment.yaml
+  - templates/guac-statefulset.yaml
   - templates/manager-deployment.yaml
   - templates/proxy-deployment.yaml
   - templates/rdp-gateway-deployment.yaml
-  - templates/rdp-https-gateway-deployment.yaml
+  - templates/rdp-https-gateway-statefulset.yaml
 
 tests:
   - it: hardens core workload pod templates and main containers when security is enabled
@@ -86,9 +86,9 @@ tests:
 
   - it: hardens optional component deployments and their first init container
     templates:
-      - templates/guac-deployment.yaml
+      - templates/guac-statefulset.yaml
       - templates/rdp-gateway-deployment.yaml
-      - templates/rdp-https-gateway-deployment.yaml
+      - templates/rdp-https-gateway-statefulset.yaml
     values:
       - ../../../tests/values/components-all.yaml
     set:
@@ -353,4 +353,34 @@ tests:
           value: ALL
       - equal:
           path: spec.template.spec.initContainers[0].securityContext.seccompProfile.type
+          value: RuntimeDefault
+
+  - it: hardens the guac nginx sidecar container
+    template: templates/guac-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      ingress:
+        enabled: false
+      dbManagement:
+        initialize: false
+        backupCron:
+          enabled: false
+        upgrade:
+          enable: false
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[1].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.containers[1].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[1].securityContext.capabilities.drop[0]
+          value: ALL
+      - equal:
+          path: spec.template.spec.containers[1].securityContext.seccompProfile.type
           value: RuntimeDefault

@@ -1,13 +1,14 @@
 {{/*
-Deploy the RDP Gateway if .Values.components.rdpGateway.enabled set to true
-*/}}
+  Deploy the RDP Gateway if .Values.components.rdpGateway.enabled set to true
+  */}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- $type := "ClusterIP" -}}
 {{- if and .Values.directRdpService.enabled (or (eq .Values.directRdpService.type "NodePort") (eq .Values.directRdpService.type "LoadBalancer")) -}}
   {{- $type = .Values.directRdpService.type -}}
 {{- else if .Values.directRdpService.enabled -}}
   {{- fail "The RDP service type is not valid. Please set it to either NodePort or LoadBalancer." -}}
 {{- end -}}
-{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $publicPort := .Values.directRdpService.loadBalancerPort | default 3389 -}}
 {{- $rdpPort := 3389 -}}
 {{- $zoneName := "default" -}}
 {{- if .Values.kasmZones }}
@@ -23,10 +24,18 @@ spec:
   selector:
     {{- include "kasm.metadata" (dict "context" . "component" "rdpGateway" "resource" "service" "zone" $zoneName "include" "match") | indent 4 }}
   ports:
-    - name: {{ printf "%s-svc-%s" $constants.rdpGateway.svc ($constants.rdpGateway.port | toString) }}
+    # The app port (5555) is intentionally NOT exposed on the Service.
+    # All cross-pod traffic — including the proxy pod's wait-for-rdp-gateway
+    # init container — goes through the nginx sidecar on nginxPort, which
+    # proxies /__healthcheck (and other paths) to the app on 127.0.0.1:5555.
+    # The pod's own readinessProbe/livenessProbe still hit 5555 directly
+    # because they run as kubelet → 127.0.0.1, not over the Service.
+    - name: {{ printf "%s-svc-%s" $constants.rdpGateway.svc ($constants.rdpGateway.nginxPort | toString) }}
       protocol: TCP
-      port: {{ $constants.rdpGateway.port }}
-    - name: {{ printf "%s-svc-%s" $constants.rdpGateway.svc ($rdpPort | toString) }}
+      port: {{ $constants.rdpGateway.nginxPort }}
+      targetPort: {{ $constants.rdpGateway.nginxPort }}
+    - name: {{ printf "%s-svc-%s" $constants.rdpGateway.svc ($publicPort | toString) }}
       protocol: TCP
-      port: {{ $rdpPort }}
+      port: {{ $publicPort }}
+      targetPort: {{ $rdpPort }}
 {{- end }}

@@ -146,7 +146,14 @@ spec:
 
     apply_nginx_trust()
 
-    # Install Kasm with trusted CA enabled and CA injected as configmap data
+    # Install Kasm with trusted CA enabled and CA injected as configmap data.
+    # Lower per-component resource requests so all pods (api, manager, proxy,
+    # guac + nginx sidecar, rdpGateway + nginx sidecar, rdpHttpsGateway +
+    # nginx sidecar, bundled db) fit on the single-node kind cluster in
+    # gitlab runner.
+    low_resources = {"requests": {"cpu": "50m", "memory": "256Mi"}}
+    low_resources_proxy = {"requests": {"cpu": "50m", "memory": "128Mi"}}
+    low_resources_gw = {"requests": {"cpu": "25m", "memory": "128Mi"}}
     values_path = temp_workdir / "values.yaml"
     values_obj = {
         "deploymentSize": "small",
@@ -159,6 +166,14 @@ spec:
             "caCerts": {
                 "kasm-e2e-ca.crt": ca_pem,
             },
+        },
+        "components": {
+            "api": {"resources": low_resources},
+            "manager": {"resources": low_resources},
+            "proxy": {"resources": low_resources_proxy},
+            "guac": {"resources": low_resources},
+            "rdpGateway": {"resources": low_resources_gw},
+            "rdpHttpsGateway": {"resources": low_resources_gw},
         },
     }
     values_path.write_text(yaml.safe_dump(values_obj, sort_keys=False))

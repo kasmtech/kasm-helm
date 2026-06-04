@@ -6,19 +6,19 @@ api:
   component: api
   svc: {{ printf "%s-api" .Release.Name }}
   portName: api-pt
-  image: {{ printf "%s/%s:%s" .Values.components.api.image.registry .Values.components.api.image.repository .Values.components.api.image.tag }}
+  image: {{ printf "%s/%s:%s" .Values.components.api.image.registry .Values.components.api.image.repository (default .Chart.AppVersion .Values.components.api.image.tag) }}
   port: 8080
 manager:
   component: manager
   svc: {{ printf "%s-manager" .Release.Name }}
   portName: manager-pt
-  image: {{ printf "%s/%s:%s" .Values.components.manager.image.registry .Values.components.manager.image.repository .Values.components.manager.image.tag }}
+  image: {{ printf "%s/%s:%s" .Values.components.manager.image.registry .Values.components.manager.image.repository (default .Chart.AppVersion .Values.components.manager.image.tag) }}
   port: 8181
 proxy:
   component: proxy
   svc: {{ printf "%s-proxy" .Release.Name }}
   portName: proxy-pt
-  image: {{ printf "%s/%s:%s" .Values.components.proxy.image.registry .Values.components.proxy.image.repository .Values.components.proxy.image.tag }}
+  image: {{ printf "%s/%s:%s" .Values.components.proxy.image.registry .Values.components.proxy.image.repository (default .Chart.AppVersion .Values.components.proxy.image.tag) }}
   http: 8080
   https: 8443
   extHttps: 443
@@ -26,32 +26,35 @@ db:
   component: db
   svc: {{ if .Values.database.standalone }}{{- .Values.database.hostname }}{{ else }}{{- printf "%s-db" .Release.Name }}{{ end }}
   portName: db-pt
-  image: {{ printf "%s/%s:%s" .Values.database.image.registry .Values.database.image.repository .Values.database.image.tag }}
+  image: {{ printf "%s/%s:%s" .Values.database.image.registry .Values.database.image.repository (default .Chart.AppVersion .Values.database.image.tag) }}
   port: {{ .Values.database.port }}
 guac:
   component: guac
   svc: {{ if .Values.kasmZones }}{{ printf "%s-guac-%s" .Release.Name (include "kasm.zoneName" (index .Values.kasmZones 0).name) }}{{ else }}{{ printf "%s-guac-default" .Release.Name }}{{ end }}
   portName: guac-pt
   name: {{ if .Values.kasmZones }}{{ printf "%s-guac-%s" .Release.Name (include "kasm.zoneName" (index .Values.kasmZones 0).name) }}{{ else }}{{ printf "%s-guac-default" .Release.Name }}{{ end }}
-  image: {{ printf "%s/%s:%s" .Values.components.guac.image.registry .Values.components.guac.image.repository .Values.components.guac.image.tag }}
+  image: {{ printf "%s/%s:%s" .Values.components.guac.image.registry .Values.components.guac.image.repository (default .Chart.AppVersion .Values.components.guac.image.tag) }}
   port: 3000
+  nginxPort: 9000
   ports:
-    - 3001
-    - 3002
-    - 3003
-    - 3004
+    {{- $clusterSize := ternary .Values.components.guac.guacClusterSize (include "resources.preset" (dict "node" "guac-processes" "size" .Values.deploymentSize "context" .Values)) (gt (int .Values.components.guac.guacClusterSize) 0) }}
+    {{- range $idx := until (int $clusterSize) }}
+    - {{ printf "300%d" (add $idx 1) }}
+    {{- end }}
 rdpGateway:
   component: rdp-gateway
   svc: {{ if .Values.kasmZones }}{{ printf "%s-rdp-gateway-%s" .Release.Name (include "kasm.zoneName" (index .Values.kasmZones 0).name) }}{{ else }}{{ printf "%s-rdp-gateway-default" .Release.Name }}{{ end }}
   portName: rdp-gw-pt
-  image: {{ printf "%s/%s:%s" .Values.components.rdpGateway.image.registry .Values.components.rdpGateway.image.repository .Values.components.rdpGateway.image.tag }}
+  image: {{ printf "%s/%s:%s" .Values.components.rdpGateway.image.registry .Values.components.rdpGateway.image.repository (default .Chart.AppVersion .Values.components.rdpGateway.image.tag) }}
   port: 5555
+  nginxPort: 9001
 rdpHttpsGateway:
   component: rdp-https-gateway
   svc: {{ if .Values.kasmZones }}{{ printf "%s-rdp-https-gateway-%s" .Release.Name (include "kasm.zoneName" (index .Values.kasmZones 0).name) }}{{ else }}{{ printf "%s-rdp-https-gateway-default" .Release.Name }}{{ end }}
   portName: rdp-https-gw-pt
-  image: {{ printf "%s/%s:%s" .Values.components.rdpHttpsGateway.image.registry .Values.components.rdpHttpsGateway.image.repository .Values.components.rdpHttpsGateway.image.tag }}
+  image: {{ printf "%s/%s:%s" .Values.components.rdpHttpsGateway.image.registry .Values.components.rdpHttpsGateway.image.repository (default .Chart.AppVersion .Values.components.rdpHttpsGateway.image.tag) }}
   port: 9443
+  nginxPort: 9002
 {{- end }}
 
 {{/*
@@ -731,8 +734,8 @@ successThreshold: 1
   )
   "guac" (dict
     "small" 1
-    "medium" 1
-    "large" 1
+    "medium" 2
+    "large" 3
   )
   "rdp-gateway" (dict
     "small" 1
@@ -741,8 +744,8 @@ successThreshold: 1
   )
   "rdp-https-gateway" (dict
     "small" 1
-    "medium" 1
-    "large" 1
+    "medium" 2
+    "large" 3
   )
 -}}
 
@@ -825,6 +828,7 @@ successThreshold: 1
         "limits" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
       )
     )
+    "guac-processes" (dict "small" 4 "medium" 6 "large" 8)
     "guac" (dict
       "small" (dict 
         "requests" (dict "cpu" "1000m" "memory" "512Mi" "ephemeral-storage" "50Mi")
@@ -854,17 +858,45 @@ successThreshold: 1
       )
     )
     "rdp-https-gateway" (dict
-      "small" (dict 
+      "small" (dict
         "requests" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "50Mi")
         "limits" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
       )
-      "medium" (dict 
+      "medium" (dict
         "requests" (dict "cpu" "1000m" "memory" "512Mi" "ephemeral-storage" "50Mi")
         "limits" (dict "cpu" "1000m" "memory" "512Mi" "ephemeral-storage" "2Gi")
       )
-      "large" (dict 
+      "large" (dict
         "requests" (dict "cpu" "1500m" "memory" "512Mi" "ephemeral-storage" "50Mi")
         "limits" (dict "cpu" "1500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
+      )
+    )
+    "nginx-sidecar" (dict
+      "small" (dict
+        "requests" (dict "cpu" "200m" "memory" "128Mi")
+        "limits" (dict "cpu" "200m" "memory" "128Mi")
+      )
+      "medium" (dict
+        "requests" (dict "cpu" "200m" "memory" "128Mi")
+        "limits" (dict "cpu" "200m" "memory" "128Mi")
+      )
+      "large" (dict
+        "requests" (dict "cpu" "200m" "memory" "128Mi")
+        "limits" (dict "cpu" "200m" "memory" "128Mi")
+      )
+    )
+    "nginx-conf-init" (dict
+      "small" (dict
+        "requests" (dict "cpu" "100m" "memory" "64Mi")
+        "limits" (dict "cpu" "100m" "memory" "64Mi")
+      )
+      "medium" (dict
+        "requests" (dict "cpu" "100m" "memory" "64Mi")
+        "limits" (dict "cpu" "100m" "memory" "64Mi")
+      )
+      "large" (dict
+        "requests" (dict "cpu" "100m" "memory" "64Mi")
+        "limits" (dict "cpu" "100m" "memory" "64Mi")
       )
     )
   }}
