@@ -1211,6 +1211,12 @@
         "initJobTTLSecondsAfterFinished"
       ]
     },
+    "useImageTags": {
+      "default": "",
+      "description": "Chart-wide default image tag applied to every Kasm component image when a per-component `image.tag` is empty. Per-component `image.tag` (when set) overrides this. If both this and the per-component tag are empty, template rendering fails. Examples: `1.19.0-rolling`, `1.19.0`, `1.19.0-rolling-2026-06-02`.",
+      "title": "useImageTags",
+      "type": "string"
+    },
     "deploymentSize": {
       "default": "small",
       "description": "Define the estimated size of the Kasm deployment in expected session load.  small  = Up to 10-15 sessions  medium = Up to 25-30 sessions  large  = Up to 50+ sessions",

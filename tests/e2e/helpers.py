@@ -97,7 +97,13 @@ def get_api_image() -> str:
         with open(values_path) as f:
             v = yaml.safe_load(f)
         api = v["components"]["api"]
-        return f"{api['image']['repository']}:{api['image']['tag']}"
+        # Mirror the chart's helper precedence: per-component image.tag wins
+        # if set; otherwise fall back to the chart-wide useImageTags. If both
+        # are empty fall through to the env-var/default fallback below.
+        tag = api["image"].get("tag") or v.get("useImageTags") or ""
+        if not tag:
+            raise ValueError("api.image.tag and useImageTags are both empty")
+        return f"{api['image']['repository']}:{tag}"
     except Exception:
         tag = os.environ.get("KASM_TAG", "develop")
         return f"kasmweb/api:{tag}"
