@@ -8,6 +8,7 @@ stages:
   - build
   - deploy
   - validate
+  - docs_check
   # E2E scenarios are split across three sequential stages instead of
   # one 9-way parallel matrix.  Running 9 kind clusters + DinD daemons
   # concurrently on the shared ``oci-fixed-amd`` runner pool created
@@ -135,6 +136,29 @@ validate:
     - apt-get install -y --no-install-recommends bash curl make git ca-certificates
   script:
     - make test
+  rules:
+    - if: $CI_COMMIT_BRANCH
+      when: on_success
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: on_success
+    - if: $CI_PIPELINE_SOURCE == "web"
+      when: manual
+
+# Verify charts/kasm-helm/README.md is in sync with values.yaml + README.md.gotmpl.
+# Runs in its own stage AFTER `validate` so unit-test / lint / kubeconform /
+# kyverno results are visible regardless of README drift state — a dev with a
+# stale README still sees whether their substantive changes pass. README
+# failure still skips e2e (docs_check sits before the e2e_* stages). Mirrors
+# the `validate` job's rule shape so it runs on every branch push (not just
+# MR pipelines) — gives devs fast local-branch feedback on README drift.
+readme-check:
+  stage: docs_check
+  image: python:3.12-bookworm
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends bash curl make ca-certificates
+  script:
+    - make readme-check
   rules:
     - if: $CI_COMMIT_BRANCH
       when: on_success
