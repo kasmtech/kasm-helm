@@ -28,6 +28,13 @@ def test_chart_installs_in_restricted_namespace_and_rejects_noncompliant_pods(
 
     apply_restricted_pod_security(namespace)
 
+    # Lower per-component resource requests so all pods (api, manager, proxy,
+    # guac + nginx sidecar, rdpGateway + nginx sidecar, rdpHttpsGateway +
+    # nginx sidecar, bundled db, and the manual db-backup job) fit on the
+    # single-node kind cluster in gitlab runner.
+    low_resources = {"requests": {"cpu": "50m", "memory": "256Mi"}}
+    low_resources_proxy = {"requests": {"cpu": "50m", "memory": "128Mi"}}
+    low_resources_gw = {"requests": {"cpu": "25m", "memory": "128Mi"}}
     values_obj = {
         "deploymentSize": "small",
         "publicAddr": "kasm.example.com",
@@ -44,14 +51,20 @@ def test_chart_installs_in_restricted_namespace_and_rejects_noncompliant_pods(
             "enabled": False,
         },
         "components": {
+            "api": {"resources": low_resources},
+            "manager": {"resources": low_resources},
+            "proxy": {"resources": low_resources_proxy},
             "guac": {
                 "enabled": True,
+                "resources": low_resources,
             },
             "rdpGateway": {
                 "enabled": True,
+                "resources": low_resources_gw,
             },
             "rdpHttpsGateway": {
                 "enabled": True,
+                "resources": low_resources_gw,
             },
         },
         "dbManagement": {

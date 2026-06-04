@@ -68,9 +68,14 @@ directRdpService:
   #
   rdpAccessURL: ""
   # directRdpService.type -- The service type to use for the RDP Gateway service if `directRdpService.enabled` is set to true.
-  # Allowed values are LoadBalancer or NodePort.
+  # Allowed values are LoadBalancer or NodePort. The RDP Gateway speaks raw TCP, so any cloud load balancer backing this
+  # Service must be a Layer 4 / TCP type (e.g. NLB on AWS, not ALB).
   #
   type: LoadBalancer
+  # directRdpService.loadBalancerPort -- The external port exposed by the directRdpService Service when
+  # `directRdpService.type` is LoadBalancer. Defaults to 3389. Has no effect when `directRdpService.type` is NodePort.
+  #
+  loadBalancerPort: 3389
   # directRdpService.annotations -- Custom annotations to add to the RDP Gateway Service. This only applies if `directRdpService.enabled`
   # is set to true. If you use the annotations below to deploy a load balancer in your cloud provider, you must ensure the load balancer
   # type supports RDP. This typically requires using a Network Load Balancer type that supports TCP load balancing, and not a HTTP/HTTPS
@@ -388,6 +393,8 @@ components:
       registry: docker.io
       repository: kasmweb/proxy
       tag: develop
+    # components.proxy.replicas -- Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset (default).
+    replicas: 0
     # components.proxy.annotations -- Custom annotations to add to the Kasm Proxy Deployment
     annotations: {}
     # components.proxy.resources -- Manually configure the Kasm Proxy Deployment resources. This overrides the pre-defined `deploymentSize` values.
@@ -435,6 +442,8 @@ components:
       registry: docker.io
       repository: kasmweb/api
       tag: develop
+    # components.api.replicas -- Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset (default).
+    replicas: 0
     # components.api.annotations -- Custom annotations to add to the Kasm api Deployment
     annotations: {}
     # components.api.resources -- Manually configure the Kasm api Deployment resources. This overrides the pre-defined `deploymentSize` values.
@@ -482,6 +491,8 @@ components:
       registry: docker.io
       repository: kasmweb/manager
       tag: develop
+    # components.manager.replicas -- Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset (default).
+    replicas: 0
     # components.manager.annotations -- Custom annotations to add to the Kasm Manager Deployment
     annotations: {}
     # components.manager.resources -- Manually configure the Kasm Manager Deployment resources. This overrides the pre-defined `deploymentSize` values.
@@ -533,10 +544,19 @@ components:
     # [Kasm Guac Service](https://docs.kasm.com/docs/latest/guide/connection_proxies#guacamole-guac).
     #
     enabled: true
+    # components.guac.guacClusterSize -- Override the Cluster Size count set by deploymentSize. Use this value to set the number of `guacd`
+    # processes running in the Guacamole pod. Set to 0 to use deploymentSize preset (default).
+    guacClusterSize: 0
+    # components.guac.replicas -- Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset (default).
+    replicas: 0
     # components.guac.annotations -- Custom annotations to add to the Kasm Guac Deployment
     annotations: {}
     # components.guac.resources -- Manually configure the Kasm Guac Deployment resources. This overrides the pre-defined `deploymentSize` values.
     resources: {}
+    # components.guac.nginxSidecar -- Configuration for the nginx sidecar container.
+    nginxSidecar:
+      # components.guac.nginxSidecar.resources -- Manually configure resources for the nginx sidecar container. Leave empty to use the chart default.
+      resources: {}
     # components.guac.labels -- Custom labels to add to the Kasm Guac Deployment
     labels: {}
     # components.guac.extraVolumes -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
@@ -591,10 +611,19 @@ components:
     # [Kasm RDP Gateway](https://docs.kasm.com/docs/latest/guide/connection_proxies#rdp-gateway).
     #
     enabled: true
+    # components.rdpGateway.replicas -- Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset (default).
+    #
+    # NOTE: must be 0 (preset) or 1. Multi-replica rdp-gateway is not supported
+    # in this release.
+    replicas: 0
     # components.rdpGateway.annotations -- Custom annotations to add to the Kasm RDP Gateway Deployment
     annotations: {}
     # components.rdpGateway.resources -- Manually configure the Kasm RDP Gateway Deployment resources. This overrides the pre-defined `deploymentSize` values.
     resources: {}
+    # components.rdpGateway.nginxSidecar -- Configuration for the nginx sidecar container.
+    nginxSidecar:
+      # components.rdpGateway.nginxSidecar.resources -- Manually configure resources for the nginx sidecar container. Leave empty to use the chart default.
+      resources: {}
     # components.rdpGateway.labels -- Custom labels to add to the Kasm RDP Gateway Deployment
     labels: {}
     # components.rdpGateway.extraVolumes -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
@@ -647,10 +676,16 @@ components:
     # [Kasm RDP HTTPS Gateway](https://docs.kasm.com/docs/latest/guide/connection_proxies#rdp-https-gateway).
     #
     enabled: true
+    # components.rdpHttpsGateway.replicas -- Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset (default).
+    replicas: 0
     # components.rdpHttpsGateway.annotations -- Custom annotations to add to the Kasm RDP HTTPS Gateway Deployment
     annotations: {}
     # components.rdpHttpsGateway.resources -- Manually configure the Kasm RDP HTTPS Gateway Deployment resources. This overrides the pre-defined `deploymentSize` values.
     resources: {}
+    # components.rdpHttpsGateway.nginxSidecar -- Configuration for the nginx sidecar container.
+    nginxSidecar:
+      # components.rdpHttpsGateway.nginxSidecar.resources -- Manually configure resources for the nginx sidecar container. Leave empty to use the chart default.
+      resources: {}
     # components.rdpHttpsGateway.labels -- Custom labels to add to the Kasm RDP HTTPS Gateway Deployment
     labels: {}
     # components.rdpHttpsGateway.extraVolumes -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things

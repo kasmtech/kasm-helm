@@ -5,7 +5,7 @@ templates:
   - templates/ingress.yaml
   - templates/proxy-deployment.yaml
   - templates/rdp-gateway-deployment.yaml
-  - templates/rdp-https-gateway-deployment.yaml
+  - templates/rdp-https-gateway-statefulset.yaml
 
 tests:
   # ---------- TLS source variations ----------
@@ -82,7 +82,7 @@ tests:
               secretName: my-custom-tls
 
   - it: rdp https gateway deployment mounts user-provided secretName for TLS
-    template: templates/rdp-https-gateway-deployment.yaml
+    template: templates/rdp-https-gateway-statefulset.yaml
     set:
       certificate:
         secretName: my-custom-tls

@@ -88,5 +88,5 @@ data:
     lc_numeric = 'en_US.utf8'
     lc_time = 'en_US.utf8'
     default_text_search_config = 'pg_catalog.english'
-    idle_in_transaction_session_timeout = 30000
+    idle_in_transaction_session_timeout = 300000
 {{- end }}

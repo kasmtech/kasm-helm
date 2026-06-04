@@ -40,6 +40,12 @@ def run_backup_upgrade_and_cron_flow(
     manual_job_name = f"{release_name}-db-backup-manual"
     backup_mount_path = "/backups"
 
+    # Lower per-component resource requests so all pods (api, manager, proxy,
+    # bundled db, db-init job, manual db-backup job) fit on the single-node
+    # kind cluster in gitlab runner. guac / rdpGateway / rdpHttpsGateway are
+    # disabled below so they don't render and don't need overrides.
+    low_resources = {"requests": {"cpu": "50m", "memory": "256Mi"}}
+    low_resources_proxy = {"requests": {"cpu": "50m", "memory": "128Mi"}}
     base_values = {
         "deploymentSize": "small",
         "publicAddr": "kasm.example.com",
@@ -56,6 +62,9 @@ def run_backup_upgrade_and_cron_flow(
             "enabled": False,
         },
         "components": {
+            "api": {"resources": low_resources},
+            "manager": {"resources": low_resources},
+            "proxy": {"resources": low_resources_proxy},
             "guac": {
                 "enabled": False,
             },

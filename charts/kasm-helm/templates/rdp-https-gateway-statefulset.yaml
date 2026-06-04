@@ -1,8 +1,9 @@
 {{/*
-Deploy the RDP HTTPS Gateway if .Values.kasmApp.servicesToDeploy.rdpHttpsGateway.deploy set to true
+Deploy the RDP HTTPS Gateway StatefulSet if .Values.components.rdpHttpsGateway.enabled is true.
+Each pod receives a stable per-pod DNS name via the headless service.
 */}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
-{{- $rdpHttpsGatewayReplicas := include "replicas.preset" (dict "node" $constants.rdpHttpsGateway.component "size" .Values.deploymentSize) -}}
+{{- $rdpHttpsGatewayReplicas := ternary .Values.components.rdpHttpsGateway.replicas (include "replicas.preset" (dict "node" $constants.rdpHttpsGateway.component "size" .Values.deploymentSize)) (gt (int .Values.components.rdpHttpsGateway.replicas) 0) -}}
 {{- $merged := fromYaml (include "kasm.mergedValues" (dict "root" . "componentName" "rdpHttpsGateway")) -}}
 {{- $zoneName := "default" -}}
 {{- if .Values.kasmZones }}
@@ -10,16 +11,14 @@ Deploy the RDP HTTPS Gateway if .Values.kasmApp.servicesToDeploy.rdpHttpsGateway
 {{- end }}
 {{- if .Values.components.rdpHttpsGateway.enabled }}
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
-  {{- include "kasm.metadata" (dict "context" . "component" "rdpHttpsGateway" "resource" "deployment" "zone" $zoneName "include" "all") | indent 2 }}
+  {{- include "kasm.metadata" (dict "context" . "component" "rdpHttpsGateway" "resource" "statefulSet" "zone" $zoneName "include" "all") | indent 2 }}
 spec:
   replicas: {{ $rdpHttpsGatewayReplicas }}
-  strategy:
+  serviceName: {{ $constants.rdpHttpsGateway.svc }}
+  updateStrategy:
     type: RollingUpdate
-    rollingUpdate:
-      maxUnavailable: 1
-      maxSurge: {{ add1 $rdpHttpsGatewayReplicas }}
   selector:
     matchLabels:
       {{- include "kasm.metadata" (dict "context" . "component" "rdpHttpsGateway" "resource" "deployment" "zone" $zoneName "include" "match") | indent 6 }}
@@ -47,6 +46,18 @@ spec:
         {{- with $merged.extraInitContainers }}
           {{- toYaml . | nindent 8 }}
         {{- end }}
+        - name: {{ printf "%s-rdp-https-gateway-nginx-conf-init" .Release.Name }}
+          image: {{ $constants.rdpHttpsGateway.image }}
+          imagePullPolicy: {{ $.Values.imagePullPolicy }}
+          command: ["/bin/sh", "-c", "cp /tmp/nginx-conf-src/* /etc/nginx/conf.d/"]
+          {{- include "kasm.securityContext" (list . 1000 "container") | nindent 10 }}
+          resources: {{- include "resources.preset" (dict "node" "nginx-conf-init" "size" $.Values.deploymentSize) | nindent 12 }}
+          volumeMounts:
+            - name: kasm-rdp-https-gateway-nginx-settings-src
+              mountPath: /tmp/nginx-conf-src
+              readOnly: true
+            - name: rdp-https-gateway-nginx-conf-d
+              mountPath: /etc/nginx/conf.d
       containers:
         - name: {{ include "kasm.name" (list . "rdpHttpsGateway" "container") }}
           image: {{ $constants.rdpHttpsGateway.image }}
@@ -65,8 +76,16 @@ spec:
                 secretKeyRef:
                   name: {{ .Release.Name }}-secrets
                   key: service-token
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: HOSTNAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
             - name: SERVER_HOSTNAME
-              value: {{ $constants.rdpHttpsGateway.svc }}
+              value: "$(HOSTNAME).{{ $constants.rdpHttpsGateway.svc }}.$(POD_NAMESPACE).svc.cluster.local"
             - name: KASM_EPHEMERAL
               value: "true"
             - name: API_SCHEMA
@@ -88,7 +107,7 @@ spec:
             - name: PROXY_PORT
               value: "3389"
             - name: SERVER_PORT
-              value: {{ $constants.rdpHttpsGateway.port | quote }}
+              value: {{ $constants.rdpHttpsGateway.nginxPort | quote }}
             - name: SERVER_THREADS
               value: "10"
             - name: SESSION_WATCH_INTERVAL
@@ -103,11 +122,11 @@ spec:
               protocol: TCP
           {{- if $.Values.applyHealthChecks }}
           livenessProbe:
-            {{- include "health.tcp" (dict "portName" $constants.rdpHttpsGateway.portName ) | indent 12 }}
+            {{- include "health.tcp" (dict "portName" $constants.rdpHttpsGateway.portName) | indent 12 }}
           {{- end }}
           {{- if $.Values.applyHealthChecks }}
           readinessProbe:
-            {{- include "health.https" (dict "path" "/rdp-https-gateway/__healthcheck" "portName" $constants.rdpHttpsGateway.portName ) | indent 12 }}
+            {{- include "health.https" (dict "path" "/rdp-https-gateway/__healthcheck" "portName" $constants.rdpHttpsGateway.portName) | indent 12 }}
           {{- end }}
           {{- if $.Values.components.rdpHttpsGateway.resources }}
           resources: {{- toYaml $.Values.components.rdpHttpsGateway.resources | nindent 12 }}
@@ -130,6 +149,49 @@ spec:
               {{- toYaml . | nindent 12 }}
             {{- end }}
             {{- include "kasm.trustedCaVolumeMounts" . | nindent 12 }}
+        - name: {{ printf "%s-rdp-https-gateway-nginx" .Release.Name }}
+          image: {{ $constants.proxy.image }}
+          imagePullPolicy: {{ $.Values.imagePullPolicy }}
+          ports:
+            - name: rdp-tls-ngnx-pt
+              containerPort: {{ $constants.rdpHttpsGateway.nginxPort }}
+              protocol: TCP
+          volumeMounts:
+            - name: kasm-proxy-base-config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+            - name: rdp-https-gateway-nginx-conf-d
+              mountPath: /etc/nginx/conf.d
+            - name: kasm-rdp-https-gateway-nginx-services
+              mountPath: /etc/nginx/conf.d/services.d
+            - name: kasm-rdp-https-gateway-nginx-data
+              mountPath: /var/cache/nginx
+            - name: kasm-rdp-https-gateway-nginx-data
+              mountPath: /var/log/nginx
+            - name: kasm-rdp-https-gateway-nginx-data
+              mountPath: /run
+            - name: kasm-rdp-https-gateway-cert
+              mountPath: /etc/nginx/ssl/tls.crt
+              subPath: tls.crt
+              readOnly: true
+            - name: kasm-rdp-https-gateway-cert
+              mountPath: /etc/nginx/ssl/tls.key
+              subPath: tls.key
+              readOnly: true
+          {{- if $.Values.applyHealthChecks }}
+          livenessProbe:
+            {{- include "health.tcp" (dict "portName" "rdp-tls-ngnx-pt") | indent 12 }}
+          {{- end }}
+          {{- if $.Values.applyHealthChecks }}
+          readinessProbe:
+            {{- include "health.tcp" (dict "portName" "rdp-tls-ngnx-pt") | indent 12 }}
+          {{- end }}
+          {{- if $.Values.components.rdpHttpsGateway.nginxSidecar.resources }}
+          resources: {{- toYaml $.Values.components.rdpHttpsGateway.nginxSidecar.resources | nindent 12 }}
+          {{- else }}
+          resources: {{- include "resources.preset" (dict "node" "nginx-sidecar" "size" $.Values.deploymentSize) | nindent 12 }}
+          {{- end }}
+          {{- include "kasm.securityContext" (list . 1000 "container") | nindent 10 }}
         {{- with $merged.extraContainers }}
           {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -140,6 +202,25 @@ spec:
         - name: kasm-rdp-https-gateway-data
           emptyDir:
             sizeLimit: 150Mi
+        - name: kasm-proxy-base-config
+          configMap:
+            name: {{ include "kasm.name" (list . "proxy-base") }}
+        - name: kasm-rdp-https-gateway-nginx-settings-src
+          projected:
+            sources:
+              - configMap:
+                  name: {{ include "kasm.name" (list . "nginx-shared") }}
+              - configMap:
+                  name: {{ include "kasm.name" (list . "rdp-https-gateway-settings") }}
+        - name: rdp-https-gateway-nginx-conf-d
+          emptyDir:
+            sizeLimit: 10Mi
+        - name: kasm-rdp-https-gateway-nginx-services
+          configMap:
+            name: {{ include "kasm.name" (list . "rdp-https-gateway-services") }}
+        - name: kasm-rdp-https-gateway-nginx-data
+          emptyDir:
+            sizeLimit: 100Mi
         {{- with $merged.volumes }}
           {{- toYaml . | nindent 8 }}
         {{- end }}

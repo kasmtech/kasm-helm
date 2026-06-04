@@ -7,6 +7,10 @@ templates:
   - templates/proxy-deployment.yaml
   - templates/proxy-service.yaml
   - templates/proxy-service-external.yaml
+  - templates/guac-statefulset.yaml
+  - templates/guac-service.yaml
+  - templates/rdp-https-gateway-statefulset.yaml
+  - templates/rdp-https-gateway-service.yaml
 
 tests:
   - it: api selectors are identical
@@ -107,3 +111,55 @@ tests:
       - equal:
           path: spec.template.metadata.labels["app.kubernetes.io/name"]
           value: RELEASE-NAME-proxy-default
+
+  - it: guac statefulset selector labels match the headless service selector
+    template: templates/guac-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/component"]
+          value: guac
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/name"]
+          value: RELEASE-NAME-guac-default
+
+  - it: guac headless service selector matches guac pod labels
+    template: templates/guac-service.yaml
+    asserts:
+      - equal:
+          path: spec.selector["app.kubernetes.io/component"]
+          value: guac
+      - equal:
+          path: spec.selector["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+      - equal:
+          path: spec.selector["app.kubernetes.io/name"]
+          value: RELEASE-NAME-guac-default
+
+  - it: rdp-https-gateway statefulset selector labels are consistent
+    template: templates/rdp-https-gateway-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/component"]
+          value: rdp-https-gateway
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+
+  - it: rdp-https-gateway headless service selector matches pod labels
+    template: templates/rdp-https-gateway-service.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - equal:
+          path: spec.selector["app.kubernetes.io/component"]
+          value: rdp-https-gateway
+      - equal:
+          path: spec.selector["app.kubernetes.io/instance"]
+          value: RELEASE-NAME

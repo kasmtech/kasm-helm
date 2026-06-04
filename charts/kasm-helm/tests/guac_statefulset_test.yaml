@@ -1,0 +1,290 @@
+suite: guac statefulset
+
+templates:
+  - templates/guac-statefulset.yaml
+  - templates/guac-service.yaml
+
+tests:
+  - it: renders a StatefulSet (not a Deployment) when guac is enabled
+    template: templates/guac-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: StatefulSet
+
+  - it: serviceName matches the guac service constant
+    template: templates/guac-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - equal:
+          path: spec.serviceName
+          value: RELEASE-NAME-guac-default
+
+  - it: has guac container as containers[0]
+    template: templates/guac-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: RELEASE-NAME-guac
+
+  - it: has nginx sidecar as containers[1]
+    template: templates/guac-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: RELEASE-NAME-guac-nginx
+
+  - it: nginx sidecar exposes port 9000
+    template: templates/guac-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].ports
+          content:
+            name: guac-nginx-pt
+            containerPort: 9000
+            protocol: TCP
+
+  - it: SERVER_PORT is the nginx port 9000
+    template: templates/guac-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SERVER_PORT
+            value: "9000"
+
+  - it: SERVER_ADDRESS is the full pod FQDN
+    template: templates/guac-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SERVER_ADDRESS
+            value: "$(HOSTNAME).RELEASE-NAME-guac-default.$(POD_NAMESPACE).svc.cluster.local"
+
+  - it: HOSTNAME is injected via downward API for env var substitution
+    template: templates/guac-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: HOSTNAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+
+  - it: POD_NAMESPACE is injected via downward API
+    template: templates/guac-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+
+  - it: tmp-data is a volumeClaimTemplate with ReadWriteOnce
+    template: templates/guac-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].metadata.name
+          value: tmp-data
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.accessModes[0]
+          value: ReadWriteOnce
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
+          value: 10Gi
+
+  - it: guac container mounts tmp-data at /tmp
+    template: templates/guac-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: tmp-data
+            mountPath: /tmp
+
+  - it: nginx sidecar mounts guac-settings-config at conf.d
+    template: templates/guac-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].volumeMounts
+          content:
+            name: guac-nginx-conf-d
+            mountPath: /etc/nginx/conf.d
+
+  - it: nginx conf init container populates conf.d from the settings source
+    template: templates/guac-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: RELEASE-NAME-guac-nginx-conf-init
+
+  - it: nginx sidecar mounts guac-services-config at services.d
+    template: templates/guac-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].volumeMounts
+          content:
+            name: kasm-guac-services-config
+            mountPath: /etc/nginx/conf.d/services.d
+
+  - it: nginx sidecar mounts proxy-base nginx.conf via subPath
+    template: templates/guac-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].volumeMounts
+          content:
+            name: kasm-proxy-base-config
+            mountPath: /etc/nginx/nginx.conf
+            subPath: nginx.conf
+
+  - it: nginx sidecar uses the chart's default resource preset by default
+    template: templates/guac-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].resources.requests.cpu
+          value: 200m
+      - equal:
+          path: spec.template.spec.containers[1].resources.requests.memory
+          value: 128Mi
+      - equal:
+          path: spec.template.spec.containers[1].resources.limits.cpu
+          value: 200m
+      - equal:
+          path: spec.template.spec.containers[1].resources.limits.memory
+          value: 128Mi
+
+  - it: nginx-conf-init uses the chart's default resource preset
+    template: templates/guac-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[1].resources.requests.cpu
+          value: 100m
+      - equal:
+          path: spec.template.spec.initContainers[1].resources.requests.memory
+          value: 64Mi
+      - equal:
+          path: spec.template.spec.initContainers[1].resources.limits.cpu
+          value: 100m
+      - equal:
+          path: spec.template.spec.initContainers[1].resources.limits.memory
+          value: 64Mi
+
+  - it: components.guac.nginxSidecar.resources overrides the preset
+    template: templates/guac-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      components:
+        guac:
+          nginxSidecar:
+            resources:
+              requests:
+                cpu: 25m
+                memory: 64Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].resources.requests.cpu
+          value: 25m
+      - equal:
+          path: spec.template.spec.containers[1].resources.requests.memory
+          value: 64Mi
+      - notExists:
+          path: spec.template.spec.containers[1].resources.limits
+
+  - it: does not render when guac is disabled
+    template: templates/guac-statefulset.yaml
+    set:
+      components:
+        guac:
+          enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: pvcSize override is honored in volumeClaimTemplate
+    template: templates/guac-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      components:
+        guac:
+          recordingData:
+            pvcSize: 25
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
+          value: 25Gi
+
+  - it: storageClassName override is honored in volumeClaimTemplate
+    template: templates/guac-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      components:
+        guac:
+          recordingData:
+            storageClassName: fast-ssd
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.storageClassName
+          value: fast-ssd
+
+  - it: guac service is headless with clusterIP None
+    template: templates/guac-service.yaml
+    asserts:
+      - equal:
+          path: spec.clusterIP
+          value: None
+
+  - it: guac service exposes port 9000
+    template: templates/guac-service.yaml
+    asserts:
+      - equal:
+          path: spec.ports[0].port
+          value: 9000
+
+  - it: guac service does not expose additional ports
+    template: templates/guac-service.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - notExists:
+          path: spec.ports[1]

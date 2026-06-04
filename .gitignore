@@ -38,3 +38,12 @@ build/
 .DS_Store
 Thumbs.db
 charts/kasm-helm/values-test.yaml
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
+.beads/
+.claude/
+AGENTS.md
+CLAUDE.md

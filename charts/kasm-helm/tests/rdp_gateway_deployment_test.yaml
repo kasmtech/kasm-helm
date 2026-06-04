@@ -1,0 +1,188 @@
+suite: rdp gateway deployment
+
+templates:
+  - templates/rdp-gateway-deployment.yaml
+
+tests:
+  # Lock in the cap on rdp-gateway replicas. There are two enforcement layers:
+  #   1. JSON schema (values.schema.json: maximum: 1) — fails first when present
+  #   2. Template-time fail in rdp-gateway-deployment.yaml — safety net if the
+  #      schema check is bypassed (e.g. helm-unittest with --disable-schema or
+  #      a future schema simplification).
+  # In helm-unittest's normal config the schema fires first, so we anchor on
+  # that error message. See the long-form comment in rdp-gateway-deployment.yaml
+  # for the api-side reasoning.
+  - it: refuses replicas > 1 (schema or template, whichever fires first)
+    template: templates/rdp-gateway-deployment.yaml
+    set:
+      components:
+        rdpGateway:
+          replicas: 2
+    asserts:
+      - failedTemplate:
+          errorPattern: "(maximum: got 2|components.rdpGateway.replicas must be 1)"
+
+  - it: replicas=1 renders normally
+    template: templates/rdp-gateway-deployment.yaml
+    set:
+      components:
+        rdpGateway:
+          replicas: 1
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 1
+
+  - it: replicas=0 (preset) yields 1 regardless of deploymentSize=large
+    template: templates/rdp-gateway-deployment.yaml
+    set:
+      deploymentSize: large
+      components:
+        rdpGateway:
+          replicas: 0
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 1
+
+  - it: has rdp-gateway container as containers[0]
+    template: templates/rdp-gateway-deployment.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: RELEASE-NAME-rdp-gateway
+
+  - it: has nginx sidecar as containers[1]
+    template: templates/rdp-gateway-deployment.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: RELEASE-NAME-rdp-gateway-nginx
+
+  - it: nginx sidecar exposes the rdp-gw-nginx-pt port on 9001
+    template: templates/rdp-gateway-deployment.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].ports
+          content:
+            name: rdp-gw-nginx-pt
+            containerPort: 9001
+            protocol: TCP
+
+  - it: SERVER_PORT on the main container points at the nginx sidecar port 9001
+    template: templates/rdp-gateway-deployment.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SERVER_PORT
+            value: "9001"
+
+  - it: nginx conf init container populates conf.d from the settings source
+    template: templates/rdp-gateway-deployment.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: RELEASE-NAME-rdp-gateway-nginx-conf-init
+
+  - it: nginx sidecar mounts the conf.d emptyDir populated by the init container
+    template: templates/rdp-gateway-deployment.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].volumeMounts
+          content:
+            name: rdp-gateway-nginx-conf-d
+            mountPath: /etc/nginx/conf.d
+
+  - it: nginx sidecar mounts the services configmap at conf.d/services.d
+    template: templates/rdp-gateway-deployment.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].volumeMounts
+          content:
+            name: kasm-rdp-gateway-nginx-services
+            mountPath: /etc/nginx/conf.d/services.d
+
+  - it: nginx sidecar mounts proxy-base nginx.conf via subPath
+    template: templates/rdp-gateway-deployment.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].volumeMounts
+          content:
+            name: kasm-proxy-base-config
+            mountPath: /etc/nginx/nginx.conf
+            subPath: nginx.conf
+
+  - it: nginx sidecar uses the chart's default resource preset by default
+    template: templates/rdp-gateway-deployment.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].resources.requests.cpu
+          value: 200m
+      - equal:
+          path: spec.template.spec.containers[1].resources.requests.memory
+          value: 128Mi
+      - equal:
+          path: spec.template.spec.containers[1].resources.limits.cpu
+          value: 200m
+      - equal:
+          path: spec.template.spec.containers[1].resources.limits.memory
+          value: 128Mi
+
+  - it: nginx-conf-init uses the chart's default resource preset
+    template: templates/rdp-gateway-deployment.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[1].resources.requests.cpu
+          value: 100m
+      - equal:
+          path: spec.template.spec.initContainers[1].resources.requests.memory
+          value: 64Mi
+      - equal:
+          path: spec.template.spec.initContainers[1].resources.limits.cpu
+          value: 100m
+      - equal:
+          path: spec.template.spec.initContainers[1].resources.limits.memory
+          value: 64Mi
+
+  - it: components.rdpGateway.nginxSidecar.resources overrides the preset
+    template: templates/rdp-gateway-deployment.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      components:
+        rdpGateway:
+          nginxSidecar:
+            resources:
+              requests:
+                cpu: 25m
+                memory: 64Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].resources.requests.cpu
+          value: 25m
+      - equal:
+          path: spec.template.spec.containers[1].resources.requests.memory
+          value: 64Mi
+      - notExists:
+          path: spec.template.spec.containers[1].resources.limits

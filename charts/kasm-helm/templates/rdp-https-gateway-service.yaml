@@ -1,5 +1,6 @@
 {{/*
-Deploy the Redis if .Values.components.rdpHttpsGateway.enabled set to true
+Headless Service for RDP HTTPS Gateway StatefulSet.
+clusterIP: None provides per-pod DNS records for stable SERVER_HOSTNAME values.
 */}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- $zoneName := "default" -}}
@@ -12,6 +13,7 @@ kind: Service
 metadata:
   {{- include "kasm.metadata" (dict "context" . "component" "rdpHttpsGateway" "resource" "service" "zone" $zoneName "include" "all") | nindent 2 }}
 spec:
+  clusterIP: None
   selector:
     {{- include "kasm.metadata" (dict "context" . "component" "rdpHttpsGateway" "resource" "service" "zone" $zoneName "include" "match") | nindent 4 }}
   ports:
