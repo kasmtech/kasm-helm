@@ -117,6 +117,49 @@ tests:
       - notExists:
           path: spec.template.spec.imagePullSecrets
 
+  - it: manager wires KASM_MANAGER_UPDATE_TIMER + KASM_MANAGER_SUPPORT_BUNDLE_TIMER from defaults
+    template: templates/manager-deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KASM_MANAGER_UPDATE_TIMER
+            value: "86400"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KASM_MANAGER_SUPPORT_BUNDLE_TIMER
+            value: "60"
+
+  - it: manager honors custom updateTimer and supportBundleTimer overrides
+    template: templates/manager-deployment.yaml
+    set:
+      components:
+        manager:
+          updateTimer: 3600
+          supportBundleTimer: 30
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KASM_MANAGER_UPDATE_TIMER
+            value: "3600"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KASM_MANAGER_SUPPORT_BUNDLE_TIMER
+            value: "30"
+
+  - it: schema rejects non-integer updateTimer
+    template: templates/manager-deployment.yaml
+    set:
+      components:
+        manager:
+          updateTimer: "not-a-number"
+    asserts:
+      - failedTemplate:
+          errorPattern: "updateTimer.*integer|got string"
+
   # ---------- guac ----------
   - it: guac is not rendered when components.guac.enabled=false
     template: templates/guac-statefulset.yaml
