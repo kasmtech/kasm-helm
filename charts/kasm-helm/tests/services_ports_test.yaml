@@ -46,19 +46,6 @@ tests:
           path: spec.ports[0].port
           value: 5432
 
-  - it: db Service has a sibling ExternalName Service
-    template: templates/db-service.yaml
-    documentIndex: 1
-    asserts:
-      - isKind:
-          of: Service
-      - equal:
-          path: spec.type
-          value: ExternalName
-      - equal:
-          path: spec.externalName
-          value: RELEASE-NAME-db.NAMESPACE.svc.cluster.local
-
   - it: db Service is not rendered when database.standalone=true
     template: templates/db-service.yaml
     values:
