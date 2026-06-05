@@ -530,6 +530,18 @@
               "description": "Manually configure the Kasm Manager Deployment resources. This overrides the pre-defined `deploymentSize` values.",
               "title": "resources",
               "type": "object"
+            },
+            "updateTimer": {
+              "description": "Configures the delay (in seconds) between checking for updates, when automatic updates are enabled. Default value is 86400s, which equals 24 hours.",
+              "title": "updateTimer",
+              "type": "integer",
+              "default": 86400
+            },
+            "supportBundleTimer": {
+              "description": "Configures the batching interval (in seconds) for generating support bundles. This value determines how often the system checks for support bundle completion and expiration. Default value is 60s.",
+              "title": "supportBundleTimer",
+              "type": "integer",
+              "default": 60
             }
           },
           "title": "manager",
