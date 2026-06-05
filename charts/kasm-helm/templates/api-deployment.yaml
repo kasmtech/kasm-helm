@@ -63,6 +63,7 @@ spec:
               value: "20"
             - name: KASM_DB_SSL
               value: "true"
+            {{- include "kasm.trustedCaEnv" $ | nindent 12 }}
             - name: "SERVER_ZONE_NAME"
               value: {{ $zone.name | quote }}
             - name: "KASM_EPHEMERAL"

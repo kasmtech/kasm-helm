@@ -1103,3 +1103,16 @@ Dedup rules:
   mountPath: /etc/ssl/certs
 {{- end }}
 {{- end }}
+
+{{/*
+  Env vars so Python (requests/certifi) and other tooling use the trust store
+  built by trusted-ca-init, not the bundled certifi CA file alone.
+*/}}
+{{- define "kasm.trustedCaEnv" -}}
+{{- if .Values.trustedCaBundle.enabled -}}
+- name: SSL_CERT_FILE
+  value: /etc/ssl/certs/ca-certificates.crt
+- name: REQUESTS_CA_BUNDLE
+  value: /etc/ssl/certs/ca-certificates.crt
+{{- end }}
+{{- end }}
