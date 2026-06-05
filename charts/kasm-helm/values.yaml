@@ -537,6 +537,13 @@ components:
     #    image: busybox
     #    command: [/bin/sh, -c, 'echo "Hello world"']
     extraInitContainers: []
+    # components.manager.updateTimer -- Configures the delay (in seconds) between checking for updates, when automatic updates are enabled.
+    #  Default value is 86400, which equals 24 hours.
+    updateTimer: 86400
+    # components.manager.supportBundleTimer -- Configures the batching interval (in seconds) for generating support bundles. 
+    #  This value determines how often the system checks for support bundle completion and expiration.
+    #  Default value is 60s.
+    supportBundleTimer: 60
 
   # Configuration settings for the Kasm Guac RDP service
   #

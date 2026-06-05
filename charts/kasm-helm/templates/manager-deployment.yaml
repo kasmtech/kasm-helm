@@ -87,6 +87,10 @@ spec:
               value: "http"
             - name: "MANAGER_ID"
               value: "auto"
+            - name: KASM_MANAGER_UPDATE_TIMER
+              value: {{ $.Values.components.manager.updateTimer | quote }}
+            - name: KASM_MANAGER_SUPPORT_BUNDLE_TIMER
+              value: {{ $.Values.components.manager.supportBundleTimer | quote }}
           ports:
             - name: {{ printf "zn%s-%s" ($idx | toString) $constants.manager.portName }}
               containerPort: {{ $constants.manager.port }}
