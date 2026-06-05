@@ -15,12 +15,4 @@ spec:
     - name: {{ printf "%s-svc-%s" $constants.db.svc ($constants.db.port | toString) }}
       protocol: TCP
       port: {{ $constants.db.port }}
----
-apiVersion: v1
-kind: Service
-metadata:
-  {{- include "kasm.metadata" (dict "context" . "component" "db" "resource" "external-name" "name" "db" "include" "all") | indent 2 }}
-spec:
-  type: ExternalName
-  externalName: {{ printf "%s-%s.%s.svc.cluster.local" .Release.Name "db" .Release.Namespace }}
 {{- end }}
