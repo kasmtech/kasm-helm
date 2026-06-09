@@ -35,6 +35,11 @@ tests:
           content:
             name: POSTGRES_USER
             value: kasmapp
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: PGSSLMODE
+            value: require
 
   - it: api deployment "ready" propagates custom database.kasmDbName and database.kasmDbUser
     template: templates/api-deployment.yaml

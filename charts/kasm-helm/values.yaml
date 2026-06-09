@@ -215,6 +215,17 @@ database:
   # database.port -- The port Kasm will use to connect to the PostgreSQL DB server
   #
   port: 5432
+  # database.sslMode -- libpq sslmode (PGSSLMODE) for API/Manager PostgreSQL clients (psycopg2).
+  # The bundled DB uses cert-manager self-signed TLS; with trustedCaBundle enabled the system CA
+  # store is replaced by custom CAs that may not include the DB signing CA. "require" encrypts
+  # without verifying the server certificate. Use verify-ca or verify-full with database.sslRootCert
+  # for external databases signed by a known CA.
+  #
+  sslMode: require
+  # database.sslRootCert -- Container path for PGSSLROOTCERT when sslMode is verify-ca or verify-full.
+  # Leave empty to auto-mount certificate.secretName (bundled DB) at /etc/ssl/certs/kasm-db-root.crt.
+  #
+  sslRootCert: ""
   # database.kasmDbName -- The name of the database where Kasm is to be initialized and that Kasm services are to connect
   #
   kasmDbName: kasm

@@ -635,6 +635,7 @@ successThreshold: 1
           name: {{ $context.Release.Name }}-secrets
           key: "db-password"
         {{- end }}
+    {{- include "kasm.dbSslEnv" $context | nindent 4 }}
     {{- end }}
   command:
     - /bin/bash
@@ -1101,6 +1102,47 @@ Dedup rules:
   readOnly: true
 - name: etc-ssl-certs
   mountPath: /etc/ssl/certs
+{{- end }}
+{{- end }}
+
+{{/*
+  libpq sslmode for psycopg2/psql. Prevents verification failures when trustedCaBundle
+  replaces /etc/ssl/certs with a CA set that does not include the bundled DB cert issuer.
+*/}}
+{{- define "kasm.dbSslEnv" -}}
+{{- $mode := default "require" .Values.database.sslMode -}}
+- name: PGSSLMODE
+  value: {{ $mode | quote }}
+{{- $needsRootCert := or (eq $mode "verify-ca") (eq $mode "verify-full") -}}
+{{- if $needsRootCert }}
+{{- $rootCert := default "/etc/ssl/certs/kasm-db-root.crt" .Values.database.sslRootCert -}}
+- name: PGSSLROOTCERT
+  value: {{ $rootCert | quote }}
+{{- end }}
+{{- end }}
+
+{{/*
+  Mount the Kasm TLS secret for PGSSLROOTCERT when database ssl verification is enabled.
+*/}}
+{{- define "kasm.dbSslRootCertVolume" -}}
+{{- $mode := default "require" .Values.database.sslMode -}}
+{{- $needsRootCert := or (eq $mode "verify-ca") (eq $mode "verify-full") -}}
+{{- if and $needsRootCert (not .Values.database.sslRootCert) -}}
+- name: kasm-db-root-cert
+  secret:
+    secretName: {{ .Values.certificate.secretName | default (include "kasm.name" (list . "cert-manager" "secret")) }}
+    defaultMode: 0o644
+{{- end }}
+{{- end }}
+
+{{- define "kasm.dbSslRootCertVolumeMount" -}}
+{{- $mode := default "require" .Values.database.sslMode -}}
+{{- $needsRootCert := or (eq $mode "verify-ca") (eq $mode "verify-full") -}}
+{{- if and $needsRootCert (not .Values.database.sslRootCert) -}}
+- name: kasm-db-root-cert
+  mountPath: /etc/ssl/certs/kasm-db-root.crt
+  subPath: tls.crt
+  readOnly: true
 {{- end }}
 {{- end }}
 

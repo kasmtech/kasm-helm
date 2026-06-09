@@ -77,6 +77,7 @@ spec:
               value: "20"
             - name: KASM_DB_SSL
               value: "true"
+            {{- include "kasm.dbSslEnv" $ | nindent 12 }}
             {{- include "kasm.trustedCaEnv" $ | nindent 12 }}
             - name: "KASM_EPHEMERAL"
               value: "true"
@@ -117,6 +118,7 @@ spec:
               {{- toYaml . | nindent 12 }}
             {{- end }}
             {{- include "kasm.trustedCaVolumeMounts" $ | nindent 12 }}
+            {{- include "kasm.dbSslRootCertVolumeMount" $ | nindent 12 }}
         {{- with $merged.extraContainers }}
           {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -128,4 +130,5 @@ spec:
           {{- toYaml . | nindent 8 }}
         {{- end }}
         {{- include "kasm.trustedCaVolumes" $ | nindent 8 }}
+        {{- include "kasm.dbSslRootCertVolume" $ | nindent 8 }}
 {{- end }}

@@ -63,6 +63,7 @@ spec:
               value: "20"
             - name: KASM_DB_SSL
               value: "true"
+            {{- include "kasm.dbSslEnv" $ | nindent 12 }}
             {{- include "kasm.trustedCaEnv" $ | nindent 12 }}
             - name: "SERVER_ZONE_NAME"
               value: {{ $zone.name | quote }}
@@ -99,6 +100,7 @@ spec:
               {{- toYaml . | nindent 12 }}
             {{- end }}
             {{- include "kasm.trustedCaVolumeMounts" $ | nindent 12 }}
+            {{- include "kasm.dbSslRootCertVolumeMount" $ | nindent 12 }}
           {{- if $.Values.applyHealthChecks }}
           livenessProbe:
             {{- include "health.tcp" (dict "portName" $constants.api.portName ) | indent 12 }}
@@ -118,10 +120,9 @@ spec:
         - name: tmp-data
           emptyDir:
             sizeLimit: 256Mi
-      {{- if or $.Values.trustedCaBundle.enabled $merged.volumes }}
         {{- with $merged.volumes }}
           {{- toYaml . | nindent 8 }}
         {{- end }}
         {{- include "kasm.trustedCaVolumes" $ | nindent 8 }}
-      {{- end }}
+        {{- include "kasm.dbSslRootCertVolume" $ | nindent 8 }}
 {{- end }}
