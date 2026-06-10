@@ -49,6 +49,10 @@ spec:
           image: {{ $constants.api.image }}
           imagePullPolicy: {{ $.Values.imagePullPolicy }}
           env:
+            - name: DATABASE_POOL_RECYCLE
+              value: "60"
+            - name: DATABASE_POOL_PRE_PING
+              value: "true"
             - name: POSTGRES_HOST
               value: {{ $constants.db.svc | quote }}
             - name: POSTGRES_PORT
