@@ -995,6 +995,26 @@
           "title": "port",
           "type": "integer"
         },
+        "sslMode": {
+          "default": "require",
+          "description": "libpq sslmode (PGSSLMODE) for API/Manager PostgreSQL clients (psycopg2). Use require for bundled DB with cert-manager self-signed TLS; use verify-ca or verify-full with sslRootCert for external databases signed by a known CA.",
+          "enum": [
+            "disable",
+            "allow",
+            "prefer",
+            "require",
+            "verify-ca",
+            "verify-full"
+          ],
+          "title": "sslMode",
+          "type": "string"
+        },
+        "sslRootCert": {
+          "default": "",
+          "description": "Container path for PGSSLROOTCERT when sslMode is verify-ca or verify-full. Leave empty to auto-mount certificate.secretName at /etc/ssl/certs/kasm-db-root.crt.",
+          "title": "sslRootCert",
+          "type": "string"
+        },
         "postgresMasterUser": {
           "additionalProperties": false,
           "description": "An object defining the PostgreSQL DB Master user and the Kubernetes secret and key values for the Master DB password. These credentials are only used by the `db-init-job` to create the `kasmDbName` database, the `kasmDbUser` user account, set permissions for the user account, and initialize and pre-seed the Kasm Database.",

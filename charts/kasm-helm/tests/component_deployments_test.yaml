@@ -53,6 +53,34 @@ tests:
                 name: RELEASE-NAME-secrets
                 key: db-password
 
+  - it: manager sets PGSSLMODE=require for bundled DB SSL clients
+    template: templates/manager-deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: PGSSLMODE
+            value: require
+
+  - it: manager honors database.sslMode override
+    template: templates/manager-deployment.yaml
+    set:
+      database:
+        sslMode: verify-ca
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: PGSSLMODE
+            value: verify-ca
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: PGSSLROOTCERT
+            value: /etc/ssl/certs/kasm-db-root.crt
+      - exists:
+          path: spec.template.spec.volumes[?(@.name=="kasm-db-root-cert")]
+
   - it: manager uses external kasmDbSecret when provided
     template: templates/manager-deployment.yaml
     set:
