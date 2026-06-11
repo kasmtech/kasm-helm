@@ -58,6 +58,8 @@ spec:
               value: "60"
             - name: DATABASE_POOL_PRE_PING
               value: "true"
+            - name: PGOPTIONS
+              value: "-c tcp_keepalives_idle=30 -c tcp_keepalives_interval=10 -c tcp_keepalives_count=3"
             - name: POSTGRES_HOST
               value: {{ $constants.db.svc | quote }}
             - name: POSTGRES_PORT
