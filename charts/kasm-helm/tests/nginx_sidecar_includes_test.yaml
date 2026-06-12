@@ -1,0 +1,125 @@
+suite: nginx sidecar shared include mounts
+# Guards the KASM-8567 nginx refactor. Two regressions this locks down:
+#   1. Every sidecar must subPath-mount the shared compress.conf, logging.conf
+#      and orchestrator.conf at /etc/nginx/ (nginx.conf includes these before the
+#      conf.d/*.conf glob). rdp-https-gateway shipped MISSING these in an interim
+#      commit and only a CI CrashLoop caught it — a unit assert would have.
+#   2. The proxy must NOT subPath-mount health.conf at /etc/nginx/conf.d/health.conf
+#      from the settings ConfigMap (that key lives in proxy-services, so the
+#      subPath mounted an empty directory -> nginx 'pread() health.conf failed
+#      (21: Is a directory)' CrashLoop). health.conf must arrive via the
+#      services.d directory mount instead.
+templates:
+  - templates/proxy-deployment.yaml
+  - templates/guac-statefulset.yaml
+  - templates/rdp-gateway-deployment.yaml
+  - templates/rdp-https-gateway-statefulset.yaml
+
+tests:
+  - it: proxy nginx mounts shared compress/logging/orchestrator at /etc/nginx
+    template: templates/proxy-deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          any: true
+          content:
+            mountPath: /etc/nginx/compress.conf
+            subPath: compress.conf
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          any: true
+          content:
+            mountPath: /etc/nginx/logging.conf
+            subPath: logging.conf
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          any: true
+          content:
+            mountPath: /etc/nginx/orchestrator.conf
+            subPath: orchestrator.conf
+
+  - it: proxy nginx delivers services config via services.d and does NOT subPath health.conf at conf.d top level
+    template: templates/proxy-deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          any: true
+          content:
+            mountPath: /etc/nginx/conf.d/services.d
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          any: true
+          content:
+            mountPath: /etc/nginx/conf.d/health.conf
+
+  - it: guac nginx sidecar mounts shared compress/logging/orchestrator at /etc/nginx
+    template: templates/guac-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].volumeMounts
+          any: true
+          content:
+            mountPath: /etc/nginx/compress.conf
+            subPath: compress.conf
+      - contains:
+          path: spec.template.spec.containers[1].volumeMounts
+          any: true
+          content:
+            mountPath: /etc/nginx/logging.conf
+            subPath: logging.conf
+      - contains:
+          path: spec.template.spec.containers[1].volumeMounts
+          any: true
+          content:
+            mountPath: /etc/nginx/orchestrator.conf
+            subPath: orchestrator.conf
+
+  - it: rdp-gateway nginx sidecar mounts shared compress/logging/orchestrator at /etc/nginx
+    template: templates/rdp-gateway-deployment.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].volumeMounts
+          any: true
+          content:
+            mountPath: /etc/nginx/compress.conf
+            subPath: compress.conf
+      - contains:
+          path: spec.template.spec.containers[1].volumeMounts
+          any: true
+          content:
+            mountPath: /etc/nginx/logging.conf
+            subPath: logging.conf
+      - contains:
+          path: spec.template.spec.containers[1].volumeMounts
+          any: true
+          content:
+            mountPath: /etc/nginx/orchestrator.conf
+            subPath: orchestrator.conf
+
+  - it: rdp-https-gateway nginx sidecar mounts shared compress/logging/orchestrator at /etc/nginx
+    template: templates/rdp-https-gateway-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].volumeMounts
+          any: true
+          content:
+            mountPath: /etc/nginx/compress.conf
+            subPath: compress.conf
+      - contains:
+          path: spec.template.spec.containers[1].volumeMounts
+          any: true
+          content:
+            mountPath: /etc/nginx/logging.conf
+            subPath: logging.conf
+      - contains:
+          path: spec.template.spec.containers[1].volumeMounts
+          any: true
+          content:
+            mountPath: /etc/nginx/orchestrator.conf
+            subPath: orchestrator.conf

@@ -32,10 +32,8 @@ spec:
       restartPolicy: OnFailure
       {{- include "kasm.securityContext" (list . 1000 "pod") | nindent 6 }}
       initContainers:
+        {{- include "kasm.trustedCaInit" (list . "api") | nindent 8 }}
         {{- include "kasm.dbIsReady" (dict "context" . "function" "version") | nindent 8 }}
-        {{- if .Values.trustedCaBundle.enabled }}
-          {{- include "kasm.trustedCaInit" (list . "api") | nindent 8 }}
-        {{- end }}
       containers:
         - name: {{ include "kasm.name" (list . "dbUpgrade" "container") }}
           image: {{ $constants.api.image }}
@@ -55,6 +53,7 @@ spec:
               value: {{ .Values.database.kasmDbUser }}
             - name: OLD_DB_BACKUP_FILENAME
               value: {{ .Values.dbManagement.upgrade.oldDbBackupFileName }}
+            {{- include "kasm.trustedCaEnv" $ | nindent 12 }}
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -90,9 +89,7 @@ spec:
               mountPath: /tmp
             - name: kasm-db-dump
               mountPath: /data/kasm-db-dump
-          {{- if .Values.trustedCaBundle.enabled }}
             {{- include "kasm.trustedCaVolumeMounts" . | nindent 12 }}
-          {{- end }}
       volumes:
         - name: kasm-db-dump
           {{- if .Values.dbManagement.upgrade.skipBackupAndRestore }}
@@ -104,7 +101,5 @@ spec:
         - name: tmp-data
           emptyDir:
             sizeLimit: 256Mi
-      {{- if $.Values.trustedCaBundle.enabled }}
         {{- include "kasm.trustedCaVolumes" . | nindent 8 }}
-      {{- end }}
 {{- end }}
