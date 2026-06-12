@@ -1,12 +1,12 @@
 suite: guac nginx configmaps
 
 templates:
-  - templates/guac-configmap.yaml
+  - templates/guac-nginx-configmap.yaml
   - templates/nginx-shared-configmap.yaml
 
 tests:
   - it: renders two ConfigMaps when guac is enabled
-    template: templates/guac-configmap.yaml
+    template: templates/guac-nginx-configmap.yaml
     values:
       - ../../../tests/values/components-all.yaml
     asserts:
@@ -14,7 +14,7 @@ tests:
           count: 2
 
   - it: first document is guac-settings ConfigMap
-    template: templates/guac-configmap.yaml
+    template: templates/guac-nginx-configmap.yaml
     documentIndex: 0
     values:
       - ../../../tests/values/components-all.yaml
@@ -23,10 +23,10 @@ tests:
           of: ConfigMap
       - equal:
           path: metadata.name
-          value: RELEASE-NAME-guac-settings
+          value: RELEASE-NAME-guac-nginx-settings
 
   - it: guac-settings has orchestrator.conf listening on 9000
-    template: templates/guac-configmap.yaml
+    template: templates/guac-nginx-configmap.yaml
     documentIndex: 0
     values:
       - ../../../tests/values/components-all.yaml
@@ -36,7 +36,7 @@ tests:
           pattern: "listen 9000"
 
   - it: guac-settings has upstream_kasm_guac.conf with localhost servers
-    template: templates/guac-configmap.yaml
+    template: templates/guac-nginx-configmap.yaml
     documentIndex: 0
     values:
       - ../../../tests/values/components-all.yaml
@@ -49,7 +49,7 @@ tests:
           pattern: "server 127\\.0\\.0\\.1:3004"
 
   - it: second document is guac-services ConfigMap
-    template: templates/guac-configmap.yaml
+    template: templates/guac-nginx-configmap.yaml
     documentIndex: 1
     values:
       - ../../../tests/values/components-all.yaml
@@ -61,7 +61,7 @@ tests:
           value: RELEASE-NAME-guac-services
 
   - it: guac-services has kasmguac.conf referencing kasm_guac upstream
-    template: templates/guac-configmap.yaml
+    template: templates/guac-nginx-configmap.yaml
     documentIndex: 1
     values:
       - ../../../tests/values/components-all.yaml
@@ -71,7 +71,7 @@ tests:
           pattern: "kasm_guac"
 
   - it: kasmguac.conf does not reference the guac service name directly
-    template: templates/guac-configmap.yaml
+    template: templates/guac-nginx-configmap.yaml
     documentIndex: 1
     values:
       - ../../../tests/values/components-all.yaml
@@ -81,7 +81,7 @@ tests:
           pattern: "RELEASE-NAME-guac"
 
   - it: does not render when guac is disabled
-    template: templates/guac-configmap.yaml
+    template: templates/guac-nginx-configmap.yaml
     set:
       components:
         guac:
@@ -124,7 +124,7 @@ tests:
           pattern: "real_request_port"
 
   - it: guac-settings does not contain compress.conf or logging.conf
-    template: templates/guac-configmap.yaml
+    template: templates/guac-nginx-configmap.yaml
     documentIndex: 0
     values:
       - ../../../tests/values/components-all.yaml

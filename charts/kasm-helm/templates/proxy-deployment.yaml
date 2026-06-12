@@ -37,9 +37,7 @@ spec:
       affinity: {{ toYaml . | nindent 8 }}
       {{- end }}
       initContainers:
-        {{- if $.Values.trustedCaBundle.enabled }}
-          {{- include "kasm.trustedCaInit" (list $ "proxy") | nindent 8 }}
-        {{- end }}
+        {{- include "kasm.trustedCaInit" (list $ "proxy") | nindent 8 }}
         {{- include "kasm.initContainer" (dict "context" $ "serviceName" (printf "%s-%s" $constants.api.svc (include "kasm.zoneName" $zone.name)) "servicePort" $constants.api.port "path" "/api/__healthcheck" "schema" "http" "image" $constants.api.image "component" "api") | nindent 8 }}
         {{- include "kasm.initContainer" (dict "context" $ "serviceName" (printf "%s-%s" $constants.manager.svc (include "kasm.zoneName" $zone.name)) "servicePort" $constants.manager.port "path" "/__healthcheck" "schema" "http" "image" $constants.api.image "component" "manager") | nindent 8 }}
         {{- if $.Values.components.guac.enabled }}
@@ -75,13 +73,22 @@ spec:
             - name: kasm-proxy-cert
               mountPath: /etc/ssl/private/kasm_nginx.key
               subPath: tls.key
+            - name: kasm-proxy-shared-config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+            - name: kasm-proxy-shared-config
+              mountPath: /etc/nginx/compress.conf
+              subPath: compress.conf
+            - name: kasm-proxy-shared-config
+              mountPath: /etc/nginx/logging.conf
+              subPath: logging.conf
+            - name: kasm-proxy-shared-config
+              mountPath: /etc/nginx/orchestrator.conf
+              subPath: orchestrator.conf
             - name: kasm-proxy-settings-config
               mountPath: /etc/nginx/conf.d
             - name: kasm-proxy-services-config
               mountPath: /etc/nginx/conf.d/services.d
-            - name: kasm-proxy-base-config
-              mountPath: /etc/nginx/nginx.conf
-              subPath: nginx.conf
             - name: kasm-proxy-data
               mountPath: /var/cache/nginx
             - name: kasm-proxy-data
@@ -114,16 +121,12 @@ spec:
         - name: kasm-proxy-cert
           secret:
             secretName: {{ $.Values.certificate.secretName | default (include "kasm.name" (list $ "cert-manager" "secret")) }}
-        - name: kasm-proxy-base-config
+        - name: kasm-proxy-shared-config
           configMap:
-            name: {{ include "kasm.name" (list $ "proxy-base" "configmap") }}
+            name: {{ include "kasm.name" (list $ "nginx-shared") }}
         - name: kasm-proxy-settings-config
-          projected:
-            sources:
-              - configMap:
-                  name: {{ include "kasm.name" (list $ "nginx-shared") }}
-              - configMap:
-                  name: {{ include "kasm.name" (list $ "proxy-settings" "" $zone.name) }}
+          configMap:
+            name: {{ include "kasm.name" (list $ "proxy-settings" "" $zone.name) }}
         - name: kasm-proxy-services-config
           configMap:
             name: {{ include "kasm.name" (list $ "proxy-services" "configmap") }}

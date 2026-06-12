@@ -13,20 +13,15 @@ rdp-gateway-services  — mounted at /etc/nginx/conf.d/services.d/ — contains:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  {{- include "kasm.metadata" (dict "context" . "component" "rdp-https-gateway-settings" "resource" "configMap" "include" "all") | indent 2 }}
+  {{- include "kasm.metadata" (dict "context" . "component" "rdp-https-gateway-nginx-settings" "resource" "configMap" "include" "all") | indent 2 }}
 data:
+  resolver.conf: |
+    resolver 127.0.0.11 valid=10s ipv6=off;
+
   upstream_kasm_rdp_https_gateway.conf: |
     upstream kasm_rdp_https_gateway {
       keepalive {{ $serviceKeepalive }};
       server 127.0.0.1:{{ $constants.rdpHttpsGateway.port }};
-    }
-
-    # kasm_guac upstream points at the in-cluster guac Service. It is used by
-    # the /guac/vm_disconnect location below to forward session-disconnect calls
-    # from the Kasm api to the guac pod (see the location block for why).
-    upstream kasm_guac {
-      keepalive {{ $serviceKeepalive }};
-      server {{ $constants.guac.svc }}:{{ $constants.guac.nginxPort }};
     }
 
   orchestrator.conf: |
@@ -36,6 +31,11 @@ data:
 
       ssl_certificate     /etc/nginx/ssl/tls.crt;
       ssl_certificate_key /etc/nginx/ssl/tls.key;
+      ssl_protocols TLSv1.2 TLSv1.3;
+      ssl_prefer_server_ciphers   off;
+      ssl_ciphers "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384";
+      ssl_stapling on;
+      ssl_stapling_verify on;
 
       include /etc/nginx/conf.d/services.d/*.conf;
 
@@ -53,7 +53,7 @@ data:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  {{- include "kasm.metadata" (dict "context" . "component" "rdp-https-gateway-services" "resource" "configMap" "include" "all") | indent 2 }}
+  {{- include "kasm.metadata" (dict "context" . "component" "rdp-https-gateway-nginx-services" "resource" "configMap" "include" "all") | indent 2 }}
 data:
   rdp_https_gateway.conf: |
     location /rdp-https-gateway/ {
@@ -67,23 +67,6 @@ data:
 
       proxy_pass          https://kasm_rdp_https_gateway;
       proxy_ssl_verify    off;
-    }
-
-    # Workaround for KASM-8502.
-    #
-    # The Kasm api's ProviderManager (api_server/provider_manager.py ~line 2500)
-    # unconditionally POSTs to /guac/vm_disconnect on whichever connection_proxy
-    # owns the kasm, without checking whether the target is actually Guac. The
-    # logic predates the rdp-gateway and rdp-https-gateway components, so for
-    # those two it ends up calling a path their Tornado handler does not
-    # tolerate (it currently raises KeyError: 'Content-Type').
-    #
-    # Until the backend logic is fixed, forward the call cross-pod to Guac,
-    # which has a working /guac/vm_disconnect handler. The session will already
-    # have been torn down on the gateway side when the client disconnected, so
-    # the api notification is mostly bookkeeping.
-    location /guac/vm_disconnect {
-      proxy_pass          http://kasm_guac/guac/vm_disconnect;
     }
 
     location /remoteDesktopGateway {
@@ -117,5 +100,9 @@ data:
       # Timeout settings
       proxy_read_timeout 3600s;
       proxy_send_timeout 3600s;
+    }
+    
+    location /guac/vm_disconnect {
+      return 200;
     }
 {{- end }}

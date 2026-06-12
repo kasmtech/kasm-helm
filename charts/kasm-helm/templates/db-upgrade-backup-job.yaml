@@ -76,6 +76,7 @@ spec:
               value: {{ .Values.database.kasmDbUser }}
             - name: OLD_DB_BACKUP_FILENAME
               value: {{ .Values.dbManagement.upgrade.oldDbBackupFileName }}
+            {{- include "kasm.trustedCaEnv" $ | nindent 12 }}
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:

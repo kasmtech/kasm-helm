@@ -4,7 +4,7 @@ templates:
   - templates/db-configmap.yaml
   - templates/rdp-gateway-configmap.yaml
   - templates/rdp-gateway-nginx-configmap.yaml
-  - templates/rdp-https-gateway-configmap.yaml
+  - templates/rdp-https-gateway-nginx-configmap.yaml
   - templates/proxy-configmaps.yaml
   - templates/proxy-deployment.yaml
 
@@ -76,7 +76,7 @@ tests:
           pattern: "rdp-gateway:"
 
   # ---------- rdp-gateway-nginx-configmap (settings + services) ----------
-  - it: rdp gateway nginx settings configmap defines a kasm_guac upstream pointing at the guac Service
+  - it: rdp gateway nginx settings configmap defines a local upstream for rdp_gateway
     template: templates/rdp-gateway-nginx-configmap.yaml
     documentIndex: 0
     asserts:
@@ -84,12 +84,12 @@ tests:
           of: ConfigMap
       - matchRegex:
           path: data["upstream_kasm_rdp_gateway.conf"]
-          pattern: 'upstream kasm_guac \{'
+          pattern: 'upstream rdp_gateway \{'
       - matchRegex:
           path: data["upstream_kasm_rdp_gateway.conf"]
-          pattern: 'server RELEASE-NAME-guac-default:9000;'
+          pattern: 'server 127\.0\.0\.1:'
 
-  - it: rdp gateway nginx services configmap defines /guac/vm_disconnect location proxying to kasm_guac
+  - it: rdp gateway nginx services configmap proxies rdp-gateway locations to rdp_gateway upstream
     template: templates/rdp-gateway-nginx-configmap.yaml
     documentIndex: 1
     asserts:
@@ -97,10 +97,25 @@ tests:
           of: ConfigMap
       - matchRegex:
           path: data["rdp_gateway.conf"]
-          pattern: 'location /guac/vm_disconnect'
+          pattern: 'location /rdp-gateway/'
       - matchRegex:
           path: data["rdp_gateway.conf"]
-          pattern: 'proxy_pass\s+http://kasm_guac/guac/vm_disconnect;'
+          pattern: 'proxy_pass\s+http://rdp_gateway/'
+
+  # KASM-8502: the Kasm api unconditionally POSTs /guac/vm_disconnect to whichever
+  # connection_proxy owns the kasm. For the rdp-gateway that path used to be
+  # cross-proxied to guac (which raised KeyError: 'Content-Type'); it now short-
+  # circuits to 200. Lock that in so the cross-pod proxy_pass workaround can't creep back.
+  - it: rdp gateway nginx services configmap short-circuits /guac/vm_disconnect to 200
+    template: templates/rdp-gateway-nginx-configmap.yaml
+    documentIndex: 1
+    asserts:
+      - matchRegex:
+          path: data["rdp_gateway.conf"]
+          pattern: 'location /guac/vm_disconnect \{\s*return 200;'
+      - notMatchRegex:
+          path: data["rdp_gateway.conf"]
+          pattern: 'proxy_pass\s+http://kasm_guac'
 
   # The proxy pod's wait-for-rdp-gateway init container probes
   # http://<rdp-gateway-svc>:<nginxPort>/__healthcheck — so the sidecar MUST
@@ -138,39 +153,52 @@ tests:
           path: spec.template.spec.initContainers[3].args[0]
           pattern: 'curl "http://RELEASE-NAME-rdp-gateway-default:9001/__healthcheck"'
 
-  # ---------- rdp-https-gateway-configmap (settings + services) ----------
-  - it: rdp https gateway settings configmap defines a kasm_guac upstream pointing at the guac Service
-    template: templates/rdp-https-gateway-configmap.yaml
+  # ---------- rdp-https-gateway-nginx-configmap (settings + services) ----------
+  - it: rdp https gateway settings configmap defines a local upstream for kasm_rdp_https_gateway
+    template: templates/rdp-https-gateway-nginx-configmap.yaml
     documentIndex: 0
     asserts:
       - isKind:
           of: ConfigMap
       - matchRegex:
           path: data["upstream_kasm_rdp_https_gateway.conf"]
-          pattern: 'upstream kasm_guac \{'
+          pattern: 'upstream kasm_rdp_https_gateway \{'
       - matchRegex:
           path: data["upstream_kasm_rdp_https_gateway.conf"]
-          pattern: 'server RELEASE-NAME-guac-default:9000;'
+          pattern: 'server 127\.0\.0\.1:'
 
-  - it: rdp https gateway services configmap defines /guac/vm_disconnect location proxying to kasm_guac
-    template: templates/rdp-https-gateway-configmap.yaml
+  - it: rdp https gateway services configmap proxies rdp-https-gateway and remoteDesktopGateway locations
+    template: templates/rdp-https-gateway-nginx-configmap.yaml
     documentIndex: 1
     asserts:
       - isKind:
           of: ConfigMap
       - matchRegex:
           path: data["rdp_https_gateway.conf"]
-          pattern: 'location /guac/vm_disconnect'
+          pattern: 'location /rdp-https-gateway/'
       - matchRegex:
           path: data["rdp_https_gateway.conf"]
-          pattern: 'proxy_pass\s+http://kasm_guac/guac/vm_disconnect;'
+          pattern: 'proxy_pass\s+https://kasm_rdp_https_gateway;'
+
+  # KASM-8502 (same rationale as rdp-gateway): the rdp-https-gateway must answer
+  # /guac/vm_disconnect with 200 rather than cross-proxying to guac.
+  - it: rdp https gateway services configmap short-circuits /guac/vm_disconnect to 200
+    template: templates/rdp-https-gateway-nginx-configmap.yaml
+    documentIndex: 1
+    asserts:
+      - matchRegex:
+          path: data["rdp_https_gateway.conf"]
+          pattern: 'location /guac/vm_disconnect \{\s*return 200;'
+      - notMatchRegex:
+          path: data["rdp_https_gateway.conf"]
+          pattern: 'proxy_pass\s+http://kasm_guac'
 
   # ---------- proxy configmaps ----------
   - it: proxy configmaps render at least one ConfigMap document
     template: templates/proxy-configmaps.yaml
     asserts:
       - hasDocuments:
-          count: 3
+          count: 2
 
   - it: proxy configmaps all have kind ConfigMap
     template: templates/proxy-configmaps.yaml
@@ -185,4 +213,4 @@ tests:
       - ../../../tests/values/multizone-config.yaml
     asserts:
       - hasDocuments:
-          count: 4
+          count: 3

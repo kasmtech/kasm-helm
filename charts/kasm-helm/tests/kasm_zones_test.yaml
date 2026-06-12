@@ -14,11 +14,11 @@ tests:
       - exists:
           path: spec.template.spec.containers[*].env[?(@.name=="ZONE" && @.value=="zonea")]
 
-  - it: preverify renders 3 proxy configmaps by default
+  - it: preverify renders 2 proxy configmaps by default
     template: templates/proxy-configmaps.yaml
     asserts:
       - hasDocuments:
-          count: 3
+          count: 2
       - isKind:
           of: ConfigMap
 
@@ -28,15 +28,15 @@ tests:
       - ../../../tests/values/multizone-config.yaml
     asserts:
       - hasDocuments:
-          count: 4
+          count: 3
       - matchRegex:
           path: metadata.name
           pattern: ".*zonea.*"
-        documentIndex: 1
+        documentIndex: 0
       - matchRegex:
           path: metadata.name
           pattern: ".*zoneb.*"
-        documentIndex: 2
+        documentIndex: 1
 
   - it: renders a proxy deployment per zone and includes zone slug in name
     template: templates/proxy-deployment.yaml
@@ -64,23 +64,23 @@ tests:
           proxyAddress: zone1.example.com
     asserts:
       - hasDocuments:
-          count: 3
+          count: 2
       - matchRegex:
           path: data["upstream_api.conf"]
           pattern: 'server RELEASE-NAME-api-my-zone-1:'
-        documentIndex: 1
+        documentIndex: 0
       - matchRegex:
           path: data["upstream_manager.conf"]
           pattern: 'server RELEASE-NAME-manager-my-zone-1:'
-        documentIndex: 1
+        documentIndex: 0
       - notMatchRegex:
           path: data["upstream_api.conf"]
           pattern: '(My_Zone|my_zone)'
-        documentIndex: 1
+        documentIndex: 0
       - notMatchRegex:
           path: data["upstream_manager.conf"]
           pattern: '(My_Zone|my_zone)'
-        documentIndex: 1
+        documentIndex: 0
 
   - it: normalizes non-alphanumeric zone names in manager api-is-ready init container
     template: templates/manager-deployment.yaml
