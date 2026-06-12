@@ -40,25 +40,11 @@ spec:
       affinity: {{ toYaml . | nindent 8 }}
       {{- end }}
       initContainers:
-        {{- if .Values.trustedCaBundle.enabled }}
-          {{- include "kasm.trustedCaInit" (list . "guac") | nindent 8 }}
-        {{- end }}
+        {{- include "kasm.trustedCaInit" (list . "guac") | nindent 8 }}
         {{- include "kasm.initContainer" (dict "context" . "serviceName" (printf "%s-%s" $constants.api.svc (include "kasm.zoneName" $zoneName)) "servicePort" ($constants.api.port) "path" "/api/__healthcheck" "schema" "http" "image" ($constants.api.image) "component" "api") | nindent 8 }}
         {{- with $merged.extraInitContainers }}
           {{- toYaml . | nindent 8 }}
         {{- end }}
-        - name: {{ printf "%s-guac-nginx-conf-init" .Release.Name }}
-          image: {{ $constants.proxy.image }}
-          imagePullPolicy: {{ .Values.imagePullPolicy }}
-          command: ["/bin/sh", "-c", "cp /tmp/nginx-conf-src/* /etc/nginx/conf.d/"]
-          {{- include "kasm.securityContext" (list . 1000 "container") | nindent 10 }}
-          resources: {{- include "resources.preset" (dict "node" "nginx-conf-init" "size" .Values.deploymentSize) | nindent 12 }}
-          volumeMounts:
-            - name: kasm-guac-settings-src
-              mountPath: /tmp/nginx-conf-src
-              readOnly: true
-            - name: guac-nginx-conf-d
-              mountPath: /etc/nginx/conf.d
       containers:
         - name: {{ include "kasm.name" (list . "guac" "container") }}
           image: {{ $constants.guac.image }}
@@ -143,10 +129,19 @@ spec:
               containerPort: {{ $constants.guac.nginxPort }}
               protocol: TCP
           volumeMounts:
-            - name: kasm-proxy-base-config
+            - name: kasm-guac-nginx-shared
               mountPath: /etc/nginx/nginx.conf
               subPath: nginx.conf
-            - name: guac-nginx-conf-d
+            - name: kasm-guac-nginx-shared
+              mountPath: /etc/nginx/compress.conf
+              subPath: compress.conf
+            - name: kasm-guac-nginx-shared
+              mountPath: /etc/nginx/logging.conf
+              subPath: logging.conf
+            - name: kasm-guac-nginx-shared
+              mountPath: /etc/nginx/orchestrator.conf
+              subPath: orchestrator.conf
+            - name: kasm-guac-nginx-settings
               mountPath: /etc/nginx/conf.d
             - name: kasm-guac-services-config
               mountPath: /etc/nginx/conf.d/services.d
@@ -156,6 +151,7 @@ spec:
               mountPath: /var/log/nginx
             - name: guac-nginx-data
               mountPath: /run
+            {{- include "kasm.trustedCaVolumeMounts" . | nindent 12 }}
           {{- if .Values.applyHealthChecks }}
           livenessProbe:
             {{- include "health.tcp" (dict "portName" "guac-nginx-pt") | indent 12 }}
@@ -180,19 +176,12 @@ spec:
         - name: kasm-guac-data
           emptyDir:
             sizeLimit: 256Mi
-        - name: kasm-proxy-base-config
+        - name: kasm-guac-nginx-shared
           configMap:
-            name: {{ include "kasm.name" (list . "proxy-base") }}
-        - name: kasm-guac-settings-src
-          projected:
-            sources:
-              - configMap:
-                  name: {{ include "kasm.name" (list . "nginx-shared") }}
-              - configMap:
-                  name: {{ include "kasm.name" (list . "guac-settings") }}
-        - name: guac-nginx-conf-d
-          emptyDir:
-            sizeLimit: 10Mi
+            name: {{ include "kasm.name" (list . "nginx-shared") }}
+        - name: kasm-guac-nginx-settings
+          configMap:
+            name: {{ include "kasm.name" (list . "guac-nginx-settings") }}
         - name: kasm-guac-services-config
           configMap:
             name: {{ include "kasm.name" (list . "guac-services") }}

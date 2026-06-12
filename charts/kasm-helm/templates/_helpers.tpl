@@ -1054,6 +1054,7 @@ Dedup rules:
 {{- if eq $component "db" -}}
   {{- $uidGid = 70 -}}
 {{- end -}}
+{{- if $context.Values.trustedCaBundle.enabled -}}
 - name: trusted-ca-init
   image: {{ printf "%s/%s:%s" $context.Values.components.api.image.registry $context.Values.components.api.image.repository (include "kasm.imageTag" (list $context $context.Values.components.api.image.tag "api")) }}
   imagePullPolicy: {{ $context.Values.imagePullPolicy }}
@@ -1076,6 +1077,7 @@ Dedup rules:
       readOnly: true
     - name: etc-ssl-certs
       mountPath: /etc/ssl/certs
+{{- end -}}
 {{- end -}}
 
 {{- define "kasm.trustedCaVolumes" -}}
@@ -1101,5 +1103,18 @@ Dedup rules:
   readOnly: true
 - name: etc-ssl-certs
   mountPath: /etc/ssl/certs
+{{- end }}
+{{- end }}
+
+{{/*
+  Env vars so Python (requests/certifi) and other tooling use the trust store
+  built by trusted-ca-init, not the bundled certifi CA file alone.
+*/}}
+{{- define "kasm.trustedCaEnv" -}}
+{{- if .Values.trustedCaBundle.enabled -}}
+- name: SSL_CERT_FILE
+  value: /etc/ssl/certs/ca-certificates.crt
+- name: REQUESTS_CA_BUNDLE
+  value: /etc/ssl/certs/ca-certificates.crt
 {{- end }}
 {{- end }}

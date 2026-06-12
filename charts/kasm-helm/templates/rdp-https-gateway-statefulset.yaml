@@ -39,25 +39,11 @@ spec:
       {{- end }}
       {{- include "kasm.securityContext" (list . 1000 "pod") | nindent 6 }}
       initContainers:
-        {{- if .Values.trustedCaBundle.enabled }}
-          {{- include "kasm.trustedCaInit" (list . "rdpHttpsGw") | nindent 8 }}
-        {{- end }}
+        {{- include "kasm.trustedCaInit" (list . "rdpHttpsGw") | nindent 8 }}
         {{- include "kasm.initContainer" (dict "context" $ "serviceName" (printf "%s-%s" $constants.api.svc (include "kasm.zoneName" $zoneName)) "servicePort" $constants.api.port "path" "/api/__healthcheck" "schema" "http" "image" $constants.api.image "component" "api") | nindent 8 }}
         {{- with $merged.extraInitContainers }}
           {{- toYaml . | nindent 8 }}
         {{- end }}
-        - name: {{ printf "%s-rdp-https-gateway-nginx-conf-init" .Release.Name }}
-          image: {{ $constants.rdpHttpsGateway.image }}
-          imagePullPolicy: {{ $.Values.imagePullPolicy }}
-          command: ["/bin/sh", "-c", "cp /tmp/nginx-conf-src/* /etc/nginx/conf.d/"]
-          {{- include "kasm.securityContext" (list . 1000 "container") | nindent 10 }}
-          resources: {{- include "resources.preset" (dict "node" "nginx-conf-init" "size" $.Values.deploymentSize) | nindent 12 }}
-          volumeMounts:
-            - name: kasm-rdp-https-gateway-nginx-settings-src
-              mountPath: /tmp/nginx-conf-src
-              readOnly: true
-            - name: rdp-https-gateway-nginx-conf-d
-              mountPath: /etc/nginx/conf.d
       containers:
         - name: {{ include "kasm.name" (list . "rdpHttpsGateway" "container") }}
           image: {{ $constants.rdpHttpsGateway.image }}
@@ -157,10 +143,19 @@ spec:
               containerPort: {{ $constants.rdpHttpsGateway.nginxPort }}
               protocol: TCP
           volumeMounts:
-            - name: kasm-proxy-base-config
+            - name: kasm-rdp-https-gateway-nginx-shared
               mountPath: /etc/nginx/nginx.conf
               subPath: nginx.conf
-            - name: rdp-https-gateway-nginx-conf-d
+            - name: kasm-rdp-https-gateway-nginx-shared
+              mountPath: /etc/nginx/compress.conf
+              subPath: compress.conf
+            - name: kasm-rdp-https-gateway-nginx-shared
+              mountPath: /etc/nginx/logging.conf
+              subPath: logging.conf
+            - name: kasm-rdp-https-gateway-nginx-shared
+              mountPath: /etc/nginx/orchestrator.conf
+              subPath: orchestrator.conf
+            - name: kasm-rdp-https-gateway-nginx-settings
               mountPath: /etc/nginx/conf.d
             - name: kasm-rdp-https-gateway-nginx-services
               mountPath: /etc/nginx/conf.d/services.d
@@ -178,6 +173,7 @@ spec:
               mountPath: /etc/nginx/ssl/tls.key
               subPath: tls.key
               readOnly: true
+            {{- include "kasm.trustedCaVolumeMounts" . | nindent 12 }}
           {{- if $.Values.applyHealthChecks }}
           livenessProbe:
             {{- include "health.tcp" (dict "portName" "rdp-tls-ngnx-pt") | indent 12 }}
@@ -202,22 +198,15 @@ spec:
         - name: kasm-rdp-https-gateway-data
           emptyDir:
             sizeLimit: 150Mi
-        - name: kasm-proxy-base-config
+        - name: kasm-rdp-https-gateway-nginx-shared
           configMap:
-            name: {{ include "kasm.name" (list . "proxy-base") }}
-        - name: kasm-rdp-https-gateway-nginx-settings-src
-          projected:
-            sources:
-              - configMap:
-                  name: {{ include "kasm.name" (list . "nginx-shared") }}
-              - configMap:
-                  name: {{ include "kasm.name" (list . "rdp-https-gateway-settings") }}
-        - name: rdp-https-gateway-nginx-conf-d
-          emptyDir:
-            sizeLimit: 10Mi
+            name: {{ include "kasm.name" (list $ "nginx-shared") }}
+        - name: kasm-rdp-https-gateway-nginx-settings
+          configMap:
+            name: {{ include "kasm.name" (list $ "rdp-https-gateway-nginx-settings") }}
         - name: kasm-rdp-https-gateway-nginx-services
           configMap:
-            name: {{ include "kasm.name" (list . "rdp-https-gateway-services") }}
+            name: {{ include "kasm.name" (list . "rdp-https-gateway-nginx-services") }}
         - name: kasm-rdp-https-gateway-nginx-data
           emptyDir:
             sizeLimit: 100Mi

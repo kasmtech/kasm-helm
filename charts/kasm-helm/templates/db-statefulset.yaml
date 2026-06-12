@@ -35,9 +35,7 @@ spec:
       {{- include "kasm.securityContext" (list . 70 "pod") | nindent 6 }}
       {{- if or .Values.trustedCaBundle.enabled $merged.extraInitContainers }}
       initContainers:
-        {{- if .Values.trustedCaBundle.enabled }}
-          {{- include "kasm.trustedCaInit" (list . "db") | nindent 8 }}
-        {{- end }}
+        {{- include "kasm.trustedCaInit" (list . "db") | nindent 8 }}
         {{- with $merged.extraInitContainers }}
           {{- toYaml . | nindent 8 }}
         {{- end }}

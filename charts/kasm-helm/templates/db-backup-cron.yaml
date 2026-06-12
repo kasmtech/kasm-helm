@@ -33,9 +33,7 @@ spec:
           restartPolicy: OnFailure
           {{- include "kasm.securityContext" (list . 1000 "pod") | nindent 10 }}
           initContainers:
-            {{- if .Values.trustedCaBundle.enabled }}
-              {{- include "kasm.trustedCaInit" (list . "api") | nindent 12 }}
-            {{- end }}
+            {{- include "kasm.trustedCaInit" (list . "api") | nindent 12 }}
             {{- include "kasm.dbIsReady" (dict "context" . "function" "ready") | nindent 12 }}
           containers:
             - name: {{ include "kasm.name" (list . "dbBackup" "container") }}
@@ -50,6 +48,7 @@ spec:
                   value: {{ .Values.database.kasmDbName }}
                 - name: POSTGRES_USER
                   value: {{ .Values.database.kasmDbUser }}
+                {{- include "kasm.trustedCaEnv" $ | nindent 16 }}
                 - name: PGPASSWORD
                   valueFrom:
                     secretKeyRef:
@@ -79,9 +78,7 @@ spec:
                   readOnly: false
                 - name: tmp-data
                   mountPath: /tmp
-              {{- if .Values.trustedCaBundle.enabled }}
                 {{- include "kasm.trustedCaVolumeMounts" . | nindent 16 }}
-              {{- end }}
           volumes:
             - name: db-backup-dir
               persistentVolumeClaim:
@@ -89,7 +86,5 @@ spec:
             - name: tmp-data
               emptyDir:
                 sizeLimit: 256Mi
-          {{- if $.Values.trustedCaBundle.enabled }}
             {{- include "kasm.trustedCaVolumes" . | nindent 12 }}
-          {{- end }}
 {{- end }}

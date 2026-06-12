@@ -13,8 +13,11 @@ guac-services  — mounted at /etc/nginx/conf.d/services.d/ — contains:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  {{- include "kasm.metadata" (dict "context" . "component" "guac-settings" "resource" "configMap" "include" "all") | indent 2 }}
+  {{- include "kasm.metadata" (dict "context" . "component" "guac-nginx-settings" "resource" "configMap" "include" "all") | indent 2 }}
 data:
+  resolver.conf: |
+    resolver 127.0.0.11 valid=10s ipv6=off;
+
   upstream_kasm_guac.conf: |
     upstream kasm_guac {
       keepalive {{ $serviceKeepalive }};

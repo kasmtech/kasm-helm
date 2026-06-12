@@ -3,39 +3,6 @@ Deploy Kasm Proxy Service .Values.components.api service definition
 */}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- $serviceKeepalive := 16 -}}
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  {{- include "kasm.metadata" (dict "context" $ "component" "proxy-base" "resource" "configMap" "include" "all") | indent 2 }}
-data:
-  nginx.conf: |
-    user  nginx;
-    worker_processes {{ include "resources.preset" (dict "node" "proxy-processes" "size" $.Values.deploymentSize) }};
-
-    error_log  /var/log/nginx/error.log notice;
-    pid        /var/run/nginx.pid;
-
-    events {
-      worker_connections  1024;
-    }
-
-    http {
-      include       /etc/nginx/mime.types;
-      default_type  application/octet-stream;
-
-      log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
-                        '$status $body_bytes_sent "$http_referer" '
-                        '"$http_user_agent" "$http_x_forwarded_for"';
-
-      access_log  /var/log/nginx/access.log  main;
-
-      sendfile        on;
-
-      keepalive_timeout  65;
-
-      include /etc/nginx/conf.d/*.conf;
-    }
-
 {{- range $idx, $zone := (.Values.kasmZones | default (list (dict "name" "default"))) }}
 ---
 apiVersion: v1
@@ -43,6 +10,9 @@ kind: ConfigMap
 metadata:
   {{- include "kasm.metadata" (dict "context" $ "component" "proxy-settings" "resource" "configMap" "zone" $zone.name "include" "all") | indent 2 }}
 data:
+  resolver.conf: |
+    resolver 127.0.0.11 valid=10s ipv6=off;
+
   listener.conf: |
     server {
       listen {{ $constants.proxy.https }} ssl;
@@ -110,11 +80,22 @@ kind: ConfigMap
 metadata:
   {{- include "kasm.metadata" (dict "context" $ "component" "proxy-services" "resource" "configMap" "include" "all") | indent 2 }}
 data:
+  health.conf: |
+    location = /health {
+      default_type application/json;
+      if (-f /opt/kasm/current/tmp/manager/kasm_manager_draining) {
+        add_header Retry-After "30" always;
+        add_header Cache-Control "no-store" always;
+        return 503 '{"status": "disabled"}';
+      }
+      return 200 '{"status": "ok"}';
+    }
+
   closest.conf: |
     location /checkvalid {
-    return 200 'ok';
-    add_header Access-Control-Allow-Origin *;
-    add_header Content-Type text/plain;
+      return 200 'ok';
+      add_header Access-Control-Allow-Origin *;
+      add_header Content-Type text/plain;
     }
 
   admin_api.conf: |

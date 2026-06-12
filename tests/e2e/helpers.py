@@ -1025,8 +1025,18 @@ def wait_for_cronjob_jobs_succeeded(
     )
 
 
-def exec_in_pod(namespace: str, pod_name: str, exec_args: list[str]) -> CommandResult:
-    return kubectl(["exec", pod_name, "--"] + exec_args, namespace=namespace)
+def exec_in_pod(
+    namespace: str,
+    pod_name: str,
+    exec_args: list[str],
+    *,
+    container: Optional[str] = None,
+) -> CommandResult:
+    cmd = ["exec", pod_name]
+    if container:
+        cmd.extend(["-c", container])
+    cmd.append("--")
+    return kubectl(cmd + exec_args, namespace=namespace)
 
 
 def curl_from_pod(
