@@ -32,8 +32,8 @@ spec:
       restartPolicy: OnFailure
       {{- include "kasm.securityContext" (list . 1000 "pod") | nindent 6 }}
       initContainers:
-        {{- include "kasm.dbIsReady" (dict "context" . "function" "version") | nindent 8 }}
         {{- include "kasm.trustedCaInit" (list . "api") | nindent 8 }}
+        {{- include "kasm.dbIsReady" (dict "context" . "function" "version") | nindent 8 }}
       containers:
         - name: {{ include "kasm.name" (list . "dbUpgrade" "container") }}
           image: {{ $constants.api.image }}
