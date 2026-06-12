@@ -13,20 +13,15 @@ rdp-gateway-services  — mounted at /etc/nginx/conf.d/services.d/ — contains:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  {{- include "kasm.metadata" (dict "context" . "component" "rdp-gateway-settings" "resource" "configMap" "include" "all") | indent 2 }}
+  {{- include "kasm.metadata" (dict "context" . "component" "rdp-gateway-nginx-settings" "resource" "configMap" "include" "all") | indent 2 }}
 data:
+  resolver.conf: |
+    resolver 127.0.0.11 valid=10s ipv6=off;
+
   upstream_kasm_rdp_gateway.conf: |
     upstream rdp_gateway {
       keepalive {{ $serviceKeepalive }};
       server 127.0.0.1:{{ $constants.rdpGateway.port }};
-    }
-
-    # kasm_guac upstream points at the in-cluster guac Service. It is used by
-    # the /guac/vm_disconnect location below to forward session-disconnect calls
-    # from the Kasm api to the guac pod (see the location block for why).
-    upstream kasm_guac {
-      keepalive {{ $serviceKeepalive }};
-      server {{ $constants.guac.svc }}:{{ $constants.guac.nginxPort }};
     }
 
   orchestrator.conf: |
@@ -50,7 +45,7 @@ data:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  {{- include "kasm.metadata" (dict "context" . "component" "rdp-gateway-services" "resource" "configMap" "include" "all") | indent 2 }}
+  {{- include "kasm.metadata" (dict "context" . "component" "rdp-gateway-nginx-services" "resource" "configMap" "include" "all") | indent 2 }}
 data:
   rdp_gateway.conf: |
     # In-cluster readiness probe entry point. The proxy pod's wait-for-rdp-gateway
@@ -62,6 +57,10 @@ data:
     location = /__healthcheck {
       access_log off;
       proxy_pass http://rdp_gateway/__healthcheck;
+    }
+
+    location /guac/vm_disconnect {
+      return 200;
     }
 
     location /rdp-gateway/ {
@@ -76,20 +75,4 @@ data:
       proxy_pass      http://rdp_gateway/;
     }
 
-    # Workaround for KASM-8502.
-    #
-    # The Kasm api's ProviderManager (api_server/provider_manager.py ~line 2500)
-    # unconditionally POSTs to /guac/vm_disconnect on whichever connection_proxy
-    # owns the kasm, without checking whether the target is actually Guac. The
-    # logic predates the rdp-gateway and rdp-https-gateway components, so for
-    # those two it ends up calling a path their Tornado handler does not
-    # tolerate (it currently raises KeyError: 'Content-Type').
-    #
-    # Until the backend logic is fixed, forward the call cross-pod to Guac,
-    # which has a working /guac/vm_disconnect handler. The session will already
-    # have been torn down on the gateway side when the client disconnected, so
-    # the api notification is mostly bookkeeping.
-    location /guac/vm_disconnect {
-      proxy_pass      http://kasm_guac/guac/vm_disconnect;
-    }
 {{- end }}

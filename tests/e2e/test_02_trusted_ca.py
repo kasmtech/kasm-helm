@@ -192,19 +192,123 @@ spec:
     assert status_code == 200
     assert_login_page(body)
 
-    # Verify trusted-ca-init ran successfully by checking init container termination code in proxy pod
-    init_status = exec_in_pod(
-        namespace,
-        proxy_pod,
-        ["sh", "-lc", "cat /proc/1/cgroup >/dev/null; echo ok"],
-    )
-    assert init_status.returncode == 0
+    release = e2e_config.release_name
 
-    # The real point: curl WITHOUT -k to our nginx server using CA-trusted cert
-    curl_result = exec_in_pod(
-        namespace,
-        proxy_pod,
-        ["curl", "-sS", "--max-time", "20", f"https://{server_dns_name}:443/"],
+    # Verify trusted-ca-init actually completed on every workload that gets it.
+    # Reads the real initContainerStatuses exitCode rather than merely proving we
+    # can exec into the pod (the previous check ran a no-op in the main container
+    # and asserted nothing about the init container).
+    for component in ("proxy", "api", "manager", "guac", "rdp-gateway", "rdp-https-gateway"):
+        pod = get_first_pod_by_selector(namespace, f"app.kubernetes.io/component={component}")
+        status = kubectl(
+            [
+                "get",
+                "pod",
+                pod,
+                "-o",
+                "jsonpath={range .status.initContainerStatuses[?(@.name=='trusted-ca-init')]}"
+                "{.state.terminated.exitCode}{end}",
+            ],
+            namespace=namespace,
+        )
+        assert status.stdout.strip() == "0", (
+            f"trusted-ca-init did not complete successfully on {component} pod {pod}: "
+            f"exitCode={status.stdout.strip()!r}"
+        )
+
+    # The real point: each runtime must trust our CA-signed nginx server when
+    # connecting WITHOUT -k. Cover the OpenSSL-based stacks (curl). (component
+    # label, app container name) — None uses the pod's default container.
+    #   proxy             — nginx / OpenSSL
+    #   guac              — C/C++ OpenSSL
+    #   rdp-gateway       — Go crypto/tls (reads /etc/ssl/certs/ca-certificates.crt)
+    #   rdp-https-gateway — C/C++ OpenSSL / Redemption
+    openssl_curl_targets = [
+        ("proxy", None),
+        ("guac", f"{release}-guac"),
+        ("rdp-gateway", f"{release}-rdp-gateway"),
+        ("rdp-https-gateway", f"{release}-rdp-https-gateway"),
+    ]
+    for component, container in openssl_curl_targets:
+        pod = get_first_pod_by_selector(namespace, f"app.kubernetes.io/component={component}")
+        result = exec_in_pod(
+            namespace,
+            pod,
+            ["curl", "-sS", "--max-time", "20", f"https://{server_dns_name}:443/"],
+            container=container,
+        )
+        assert result.returncode == 0 and "ok" in result.stdout, (
+            f"{component} CA trust check (curl) failed.\n"
+            f"stdout: {result.stdout}\n"
+            f"stderr: {result.stderr}"
+        )
+
+    # Python trust: the original customer bug was requests/certifi not honoring
+    # the OS trust store. trustedCaEnv sets SSL_CERT_FILE (read by urllib via
+    # ssl.create_default_context) AND REQUESTS_CA_BUNDLE (read by requests) — so
+    # exercise BOTH, and on api AND manager (both get the env; the prior test
+    # only covered api+urllib).
+    for component in ("api", "manager"):
+        pod = get_first_pod_by_selector(namespace, f"app.kubernetes.io/component={component}")
+        urllib_result = exec_in_pod(
+            namespace,
+            pod,
+            [
+                "python3",
+                "-c",
+                "import urllib.request; "
+                f"r = urllib.request.urlopen('https://{server_dns_name}:443/', timeout=20); "
+                "assert r.status == 200, r.status",
+            ],
+        )
+        assert urllib_result.returncode == 0, (
+            f"{component} Python urllib (SSL_CERT_FILE) trust check failed.\n"
+            f"stdout: {urllib_result.stdout}\n"
+            f"stderr: {urllib_result.stderr}"
+        )
+        requests_result = exec_in_pod(
+            namespace,
+            pod,
+            [
+                "python3",
+                "-c",
+                "import requests; "
+                f"r = requests.get('https://{server_dns_name}:443/', timeout=20); "
+                "assert r.status_code == 200, r.status_code",
+            ],
+        )
+        assert requests_result.returncode == 0, (
+            f"{component} Python requests (REQUESTS_CA_BUNDLE) trust check failed.\n"
+            f"stdout: {requests_result.stdout}\n"
+            f"stderr: {requests_result.stderr}"
+        )
+
+    # Negative control: with the CA env unset, verification MUST fail. Without
+    # this, the positive checks above could pass for the wrong reason (e.g. the
+    # cert being acceptable via some other path) and we'd never know the injected
+    # CA is what makes trust work. The script signals via stdout and always exits
+    # 0 — exec_in_pod runs kubectl with check=True, so a non-zero process exit
+    # (e.g. the expected SSLError) would raise CommandError before we could
+    # inspect the result.
+    negative_control_script = (
+        "import requests\n"
+        "try:\n"
+        f"    requests.get('https://{server_dns_name}:443/', timeout=20)\n"
+        "    print('UNEXPECTED_NO_SSL_ERROR')\n"
+        "except requests.exceptions.SSLError:\n"
+        "    print('EXPECTED_SSL_ERROR')\n"
+        "except Exception as exc:\n"
+        "    print('UNEXPECTED_ERROR:' + type(exc).__name__)\n"
     )
-    assert curl_result.returncode == 0
-    assert "ok" in curl_result.stdout
+    api_pod = get_first_pod_by_selector(namespace, "app.kubernetes.io/component=api")
+    negative_result = exec_in_pod(
+        namespace,
+        api_pod,
+        ["env", "-u", "REQUESTS_CA_BUNDLE", "-u", "SSL_CERT_FILE", "python3", "-c", negative_control_script],
+    )
+    assert "EXPECTED_SSL_ERROR" in negative_result.stdout, (
+        "Negative control failed: a request without the injected CA should raise "
+        "requests.exceptions.SSLError.\n"
+        f"stdout: {negative_result.stdout}\n"
+        f"stderr: {negative_result.stderr}"
+    )

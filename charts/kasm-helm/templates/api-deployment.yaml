@@ -37,9 +37,7 @@ spec:
       affinity: {{ toYaml . | nindent 8 }}
       {{- end }}
       initContainers:
-        {{- if $.Values.trustedCaBundle.enabled }}
-          {{- include "kasm.trustedCaInit" (list $ "api") | nindent 8 }}
-        {{- end }}
+        {{- include "kasm.trustedCaInit" (list $ "api") | nindent 8 }}
         {{- include "kasm.dbIsReady" (dict "context" $ "function" "ready") | nindent 8 }}
         {{- with $merged.extraInitContainers }}
           {{- toYaml . | nindent 8 }}
@@ -49,6 +47,8 @@ spec:
           image: {{ $constants.api.image }}
           imagePullPolicy: {{ $.Values.imagePullPolicy }}
           env:
+            - name: PYTHONWARNINGS
+              value: "ignore:datetime.datetime.utcnow:DeprecationWarning"
             - name: POSTGRES_HOST
               value: {{ $constants.db.svc | quote }}
             - name: POSTGRES_PORT
@@ -63,6 +63,7 @@ spec:
               value: "20"
             - name: KASM_DB_SSL
               value: "true"
+            {{- include "kasm.trustedCaEnv" $ | nindent 12 }}
             - name: "SERVER_ZONE_NAME"
               value: {{ $zone.name | quote }}
             - name: "KASM_EPHEMERAL"
@@ -117,10 +118,8 @@ spec:
         - name: tmp-data
           emptyDir:
             sizeLimit: 256Mi
-      {{- if or $.Values.trustedCaBundle.enabled $merged.volumes }}
-        {{- with $merged.volumes }}
-          {{- toYaml . | nindent 8 }}
-        {{- end }}
-        {{- include "kasm.trustedCaVolumes" $ | nindent 8 }}
+      {{- with $merged.volumes }}
+        {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- include "kasm.trustedCaVolumes" $ | nindent 8 }}
 {{- end }}

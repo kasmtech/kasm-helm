@@ -128,7 +128,7 @@ tests:
             name: tmp-data
             mountPath: /tmp
 
-  - it: nginx sidecar mounts guac-settings-config at conf.d
+  - it: nginx sidecar mounts guac-nginx-settings configmap at /etc/nginx/conf.d
     template: templates/guac-statefulset.yaml
     values:
       - ../../../tests/values/components-all.yaml
@@ -136,17 +136,8 @@ tests:
       - contains:
           path: spec.template.spec.containers[1].volumeMounts
           content:
-            name: guac-nginx-conf-d
+            name: kasm-guac-nginx-settings
             mountPath: /etc/nginx/conf.d
-
-  - it: nginx conf init container populates conf.d from the settings source
-    template: templates/guac-statefulset.yaml
-    values:
-      - ../../../tests/values/components-all.yaml
-    asserts:
-      - equal:
-          path: spec.template.spec.initContainers[1].name
-          value: RELEASE-NAME-guac-nginx-conf-init
 
   - it: nginx sidecar mounts guac-services-config at services.d
     template: templates/guac-statefulset.yaml
@@ -159,7 +150,7 @@ tests:
             name: kasm-guac-services-config
             mountPath: /etc/nginx/conf.d/services.d
 
-  - it: nginx sidecar mounts proxy-base nginx.conf via subPath
+  - it: nginx sidecar mounts nginx-shared configmap nginx.conf via subPath
     template: templates/guac-statefulset.yaml
     values:
       - ../../../tests/values/components-all.yaml
@@ -167,7 +158,7 @@ tests:
       - contains:
           path: spec.template.spec.containers[1].volumeMounts
           content:
-            name: kasm-proxy-base-config
+            name: kasm-guac-nginx-shared
             mountPath: /etc/nginx/nginx.conf
             subPath: nginx.conf
 
@@ -188,24 +179,6 @@ tests:
       - equal:
           path: spec.template.spec.containers[1].resources.limits.memory
           value: 128Mi
-
-  - it: nginx-conf-init uses the chart's default resource preset
-    template: templates/guac-statefulset.yaml
-    values:
-      - ../../../tests/values/components-all.yaml
-    asserts:
-      - equal:
-          path: spec.template.spec.initContainers[1].resources.requests.cpu
-          value: 100m
-      - equal:
-          path: spec.template.spec.initContainers[1].resources.requests.memory
-          value: 64Mi
-      - equal:
-          path: spec.template.spec.initContainers[1].resources.limits.cpu
-          value: 100m
-      - equal:
-          path: spec.template.spec.initContainers[1].resources.limits.memory
-          value: 64Mi
 
   - it: components.guac.nginxSidecar.resources overrides the preset
     template: templates/guac-statefulset.yaml

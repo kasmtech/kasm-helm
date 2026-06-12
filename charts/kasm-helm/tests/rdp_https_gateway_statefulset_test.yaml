@@ -112,16 +112,7 @@ tests:
             name: SERVER_PORT
             value: "9002"
 
-  - it: nginx conf init container populates conf.d from the settings source
-    template: templates/rdp-https-gateway-statefulset.yaml
-    values:
-      - ../../../tests/values/components-all.yaml
-    asserts:
-      - equal:
-          path: spec.template.spec.initContainers[1].name
-          value: RELEASE-NAME-rdp-https-gateway-nginx-conf-init
-
-  - it: nginx sidecar mounts the conf.d emptyDir populated by the init container
+  - it: nginx sidecar mounts settings configmap at /etc/nginx/conf.d
     template: templates/rdp-https-gateway-statefulset.yaml
     values:
       - ../../../tests/values/components-all.yaml
@@ -129,7 +120,7 @@ tests:
       - contains:
           path: spec.template.spec.containers[1].volumeMounts
           content:
-            name: rdp-https-gateway-nginx-conf-d
+            name: kasm-rdp-https-gateway-nginx-settings
             mountPath: /etc/nginx/conf.d
 
   - it: nginx sidecar mounts the services configmap at conf.d/services.d
@@ -143,7 +134,7 @@ tests:
             name: kasm-rdp-https-gateway-nginx-services
             mountPath: /etc/nginx/conf.d/services.d
 
-  - it: nginx sidecar mounts proxy-base nginx.conf via subPath
+  - it: nginx sidecar mounts nginx-shared nginx.conf via subPath
     template: templates/rdp-https-gateway-statefulset.yaml
     values:
       - ../../../tests/values/components-all.yaml
@@ -151,7 +142,7 @@ tests:
       - contains:
           path: spec.template.spec.containers[1].volumeMounts
           content:
-            name: kasm-proxy-base-config
+            name: kasm-rdp-https-gateway-nginx-shared
             mountPath: /etc/nginx/nginx.conf
             subPath: nginx.conf
 
@@ -172,24 +163,6 @@ tests:
       - equal:
           path: spec.template.spec.containers[1].resources.limits.memory
           value: 128Mi
-
-  - it: nginx-conf-init uses the chart's default resource preset
-    template: templates/rdp-https-gateway-statefulset.yaml
-    values:
-      - ../../../tests/values/components-all.yaml
-    asserts:
-      - equal:
-          path: spec.template.spec.initContainers[1].resources.requests.cpu
-          value: 100m
-      - equal:
-          path: spec.template.spec.initContainers[1].resources.requests.memory
-          value: 64Mi
-      - equal:
-          path: spec.template.spec.initContainers[1].resources.limits.cpu
-          value: 100m
-      - equal:
-          path: spec.template.spec.initContainers[1].resources.limits.memory
-          value: 64Mi
 
   - it: components.rdpHttpsGateway.nginxSidecar.resources overrides the preset
     template: templates/rdp-https-gateway-statefulset.yaml
