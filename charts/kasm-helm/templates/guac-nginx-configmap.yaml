@@ -186,11 +186,12 @@ data:
       proxy_pass http://kasm_guac/guac_login;
     }
 
-    location /guac/__healthcheck {
-      proxy_pass http://kasm_guac/__healthcheck;
-    }
-
-    location /guac/vm_disconnect {
-      proxy_pass http://kasm_guac/vm_disconnect;
+    # Wildcard for control-plane calls the manager makes to the guac app under
+    # the /guac/ prefix (e.g. /guac/__healthcheck, /guac/vm_disconnect, and the
+    # support-bundle collect endpoint /guac/api/v1/support_bundle_request). The
+    # trailing slash on proxy_pass strips the /guac/ prefix so the app sees the
+    # route it registered (server.js registers /api/v1/support_bundle_request).
+    location /guac/ {
+      proxy_pass http://kasm_guac/;
     }
 {{- end }}
