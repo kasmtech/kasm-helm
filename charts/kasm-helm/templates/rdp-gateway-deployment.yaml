@@ -81,16 +81,22 @@ spec:
               value: "true"
             - name: API_SCHEMA
               value: http
+            {{/*
+              Connection proxies must reach the manager's /manager_api/ endpoint
+              (support-bundle uploads) as well as /api/ (registration/heartbeat).
+              Only the kasm-proxy nginx service serves both on one port, so point
+              the API endpoint at it rather than the api (CherryPy) service.
+            */}}
             - name: API_HOSTNAME
             {{- if .Values.kasmZones }}
               {{- with index .Values.kasmZones 0 }}
-              value: {{ printf "%s-%s" $constants.api.svc (include "kasm.zoneName" .name) | quote }}
+              value: {{ printf "%s-%s" $constants.proxy.svc (include "kasm.zoneName" .name) | quote }}
               {{- end }}
             {{- else }}
-              value: {{ printf "%s-%s" $constants.api.svc "default" | quote }}
+              value: {{ printf "%s-%s" $constants.proxy.svc "default" | quote }}
             {{- end }}
             - name: API_PORT
-              value: {{ $constants.api.port | quote }}
+              value: {{ $constants.proxy.http | quote }}
             - name: API_REFRESH_INTERVAL
               value: "30"
             - name: SERVER_ID
