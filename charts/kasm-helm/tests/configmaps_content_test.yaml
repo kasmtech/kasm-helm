@@ -161,7 +161,7 @@ tests:
           pattern: 'location /rdp-https-gateway/'
       - matchRegex:
           path: data["rdp_https_gateway.conf"]
-          pattern: 'proxy_pass\s+https://kasm_rdp_https_gateway;'
+          pattern: 'proxy_pass\s+https://127\.0\.0\.1:9443;'
 
   # KASM-8502 (same rationale as rdp-gateway): the rdp-https-gateway must answer
   # /guac/vm_disconnect with 200 rather than cross-proxying to guac.

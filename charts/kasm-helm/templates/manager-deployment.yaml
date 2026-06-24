@@ -98,11 +98,9 @@ spec:
               protocol: TCP
           {{- if $.Values.applyHealthChecks }}
           livenessProbe:
-            {{- include "health.tcp" (dict "portName" (printf "zn%s-%s" ($idx | toString) $constants.manager.portName) ) | indent 12 }}
-          {{- end }}
-          {{- if $.Values.applyHealthChecks }}
+            {{- include "health.probe" (dict "root" $ "component" "manager" "probeType" "livenessProbe" "type" "tcp" "portName" (printf "zn%s-%s" ($idx | toString) $constants.manager.portName)) | nindent 12 }}
           readinessProbe:
-            {{- include "health.http" (dict "path" "/__healthcheck" "portName" (printf "zn%s-%s" ($idx | toString) $constants.manager.portName) ) | indent 12 }}
+            {{- include "health.probe" (dict "root" $ "component" "manager" "probeType" "readinessProbe" "type" "http" "path" "/__healthcheck" "portName" (printf "zn%s-%s" ($idx | toString) $constants.manager.portName)) | nindent 12 }}
           {{- end }}
           {{- if $.Values.components.manager.resources }}
           resources: {{- toYaml $.Values.components.manager.resources | nindent 12 }}

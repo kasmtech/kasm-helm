@@ -271,6 +271,22 @@ database:
   annotations: {}
   # database.resources -- Manually configure the Kasm DB StatefulSet resources. This overrides the pre-defined `deploymentSize` values.
   resources: {}
+  # database.healthCheckTiming -- Override the pod's default healthcheck timing values for liveness and/or readiness probes.
+  #  Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only
+  #  the timeoutSeconds value of the livenessProbe.
+  #  Example:
+  #    healthCheckTiming:
+  #      livenessProbe:
+  #        timeoutSeconds: 10
+  #        initialDelaySeconds: 20
+  #        periodSeconds: 60
+  #        failureThreshold: 5
+  #      readinessProbe:
+  #        periodSeconds: 60
+  #        successThreshold: 3
+  healthCheckTiming:
+    livenessProbe: {}
+    readinessProbe: {}
   # database.labels -- Custom labels to add to the Kasm DB StatefulSet
   labels: {}
   # database.extraVolumes -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
@@ -313,6 +329,8 @@ dbManagement:
   # dbManagement.initJobTTLSecondsAfterFinished -- The time in seconds the DB initialization job remains after successful completion.
   #
   initJobTTLSecondsAfterFinished: 300
+  # dbManagement.dbConnectionTimeout -- The time in seconds to wait for the DB to respond to initContainer connection attempts.
+  dbConnectionTimeout: 10
   # Use this to manage Kasm DB Schema and data upgrade operations
   #
   upgrade:
@@ -401,6 +419,22 @@ components:
       tag: ""
     # components.proxy.replicas -- Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset (default).
     replicas: 0
+    # components.proxy.healthCheckTiming -- Override the pod's default healthcheck timing values for liveness and/or readiness probes.
+    #  Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only
+    #  the timeoutSeconds value of the livenessProbe.
+    #  Example:
+    #    healthCheckTiming:
+    #      livenessProbe:
+    #        timeoutSeconds: 10
+    #        initialDelaySeconds: 20
+    #        periodSeconds: 60
+    #        failureThreshold: 5
+    #      readinessProbe:
+    #        periodSeconds: 60
+    #        successThreshold: 3
+    healthCheckTiming:
+      livenessProbe: {}
+      readinessProbe: {}
     # components.proxy.annotations -- Custom annotations to add to the Kasm Proxy Deployment
     annotations: {}
     # components.proxy.resources -- Manually configure the Kasm Proxy Deployment resources. This overrides the pre-defined `deploymentSize` values.
@@ -451,6 +485,22 @@ components:
       tag: ""
     # components.api.replicas -- Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset (default).
     replicas: 0
+    # components.api.healthCheckTiming -- Override the pod's default healthcheck timing values for liveness and/or readiness probes.
+    #  Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only
+    #  the timeoutSeconds value of the livenessProbe.
+    #  Example:
+    #    healthCheckTiming:
+    #      livenessProbe:
+    #        timeoutSeconds: 10
+    #        initialDelaySeconds: 20
+    #        periodSeconds: 60
+    #        failureThreshold: 5
+    #      readinessProbe:
+    #        periodSeconds: 60
+    #        successThreshold: 3
+    healthCheckTiming:
+      livenessProbe: {}
+      readinessProbe: {}
     # components.api.annotations -- Custom annotations to add to the Kasm api Deployment
     annotations: {}
     # components.api.resources -- Manually configure the Kasm api Deployment resources. This overrides the pre-defined `deploymentSize` values.
@@ -501,6 +551,22 @@ components:
       tag: ""
     # components.manager.replicas -- Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset (default).
     replicas: 0
+    # components.manager.healthCheckTiming -- Override the pod's default healthcheck timing values for liveness and/or readiness probes.
+    #  Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only
+    #  the timeoutSeconds value of the livenessProbe.
+    #  Example:
+    #    healthCheckTiming:
+    #      livenessProbe:
+    #        timeoutSeconds: 10
+    #        initialDelaySeconds: 20
+    #        periodSeconds: 60
+    #        failureThreshold: 5
+    #      readinessProbe:
+    #        periodSeconds: 60
+    #        successThreshold: 3
+    healthCheckTiming:
+      livenessProbe: {}
+      readinessProbe: {}
     # components.manager.annotations -- Custom annotations to add to the Kasm Manager Deployment
     annotations: {}
     # components.manager.resources -- Manually configure the Kasm Manager Deployment resources. This overrides the pre-defined `deploymentSize` values.
@@ -565,6 +631,22 @@ components:
     guacClusterSize: 0
     # components.guac.replicas -- Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset (default).
     replicas: 0
+    # components.guac.healthCheckTiming -- Override the pod's default healthcheck timing values for liveness and/or readiness probes.
+    #  Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only
+    #  the timeoutSeconds value of the livenessProbe.
+    #  Example:
+    #    healthCheckTiming:
+    #      livenessProbe:
+    #        timeoutSeconds: 10
+    #        initialDelaySeconds: 20
+    #        periodSeconds: 60
+    #        failureThreshold: 5
+    #      readinessProbe:
+    #        periodSeconds: 60
+    #        successThreshold: 3
+    healthCheckTiming:
+      livenessProbe: {}
+      readinessProbe: {}
     # components.guac.annotations -- Custom annotations to add to the Kasm Guac Deployment
     annotations: {}
     # components.guac.resources -- Manually configure the Kasm Guac Deployment resources. This overrides the pre-defined `deploymentSize` values.
@@ -573,6 +655,22 @@ components:
     nginxSidecar:
       # components.guac.nginxSidecar.resources -- Manually configure resources for the nginx sidecar container. Leave empty to use the chart default.
       resources: {}
+      # components.guac.nginxSidecar.healthCheckTiming -- Override the pod's default healthcheck timing values for liveness and/or readiness probes.
+      #  Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only
+      #  the timeoutSeconds value of the livenessProbe.
+      #  Example:
+      #    healthCheckTiming:
+      #      livenessProbe:
+      #        timeoutSeconds: 10
+      #        initialDelaySeconds: 20
+      #        periodSeconds: 60
+      #        failureThreshold: 5
+      #      readinessProbe:
+      #        periodSeconds: 60
+      #        successThreshold: 3
+      healthCheckTiming:
+        livenessProbe: {}
+        readinessProbe: {}
     # components.guac.labels -- Custom labels to add to the Kasm Guac Deployment
     labels: {}
     # components.guac.extraVolumes -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
@@ -633,6 +731,22 @@ components:
     # NOTE: must be 0 (preset) or 1. Multi-replica rdp-gateway is not supported
     # in this release.
     replicas: 0
+    # components.rdpGateway.healthCheckTiming -- Override the pod's default healthcheck timing values for liveness and/or readiness probes.
+    #  Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only
+    #  the timeoutSeconds value of the livenessProbe.
+    #  Example:
+    #    healthCheckTiming:
+    #      livenessProbe:
+    #        timeoutSeconds: 10
+    #        initialDelaySeconds: 20
+    #        periodSeconds: 60
+    #        failureThreshold: 5
+    #      readinessProbe:
+    #        periodSeconds: 60
+    #        successThreshold: 3
+    healthCheckTiming:
+      livenessProbe: {}
+      readinessProbe: {}
     # components.rdpGateway.annotations -- Custom annotations to add to the Kasm RDP Gateway Deployment
     annotations: {}
     # components.rdpGateway.resources -- Manually configure the Kasm RDP Gateway Deployment resources. This overrides the pre-defined `deploymentSize` values.
@@ -641,6 +755,22 @@ components:
     nginxSidecar:
       # components.rdpGateway.nginxSidecar.resources -- Manually configure resources for the nginx sidecar container. Leave empty to use the chart default.
       resources: {}
+      # components.rdpGateway.nginxSidecar.healthCheckTiming -- Override the pod's default healthcheck timing values for liveness and/or readiness probes.
+      #  Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only
+      #  the timeoutSeconds value of the livenessProbe.
+      #  Example:
+      #    healthCheckTiming:
+      #      livenessProbe:
+      #        timeoutSeconds: 10
+      #        initialDelaySeconds: 20
+      #        periodSeconds: 60
+      #        failureThreshold: 5
+      #      readinessProbe:
+      #        periodSeconds: 60
+      #        successThreshold: 3
+      healthCheckTiming:
+        livenessProbe: {}
+        readinessProbe: {}
     # components.rdpGateway.labels -- Custom labels to add to the Kasm RDP Gateway Deployment
     labels: {}
     # components.rdpGateway.extraVolumes -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
@@ -696,6 +826,22 @@ components:
     enabled: true
     # components.rdpHttpsGateway.replicas -- Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset (default).
     replicas: 0
+    # components.rdpHttpsGateway.healthCheckTiming -- Override the pod's default healthcheck timing values for liveness and/or readiness probes.
+    #  Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only
+    #  the timeoutSeconds value of the livenessProbe.
+    #  Example:
+    #    healthCheckTiming:
+    #      livenessProbe:
+    #        timeoutSeconds: 10
+    #        initialDelaySeconds: 20
+    #        periodSeconds: 60
+    #        failureThreshold: 5
+    #      readinessProbe:
+    #        periodSeconds: 60
+    #        successThreshold: 3
+    healthCheckTiming:
+      livenessProbe: {}
+      readinessProbe: {}
     # components.rdpHttpsGateway.annotations -- Custom annotations to add to the Kasm RDP HTTPS Gateway Deployment
     annotations: {}
     # components.rdpHttpsGateway.resources -- Manually configure the Kasm RDP HTTPS Gateway Deployment resources. This overrides the pre-defined `deploymentSize` values.
@@ -704,6 +850,22 @@ components:
     nginxSidecar:
       # components.rdpHttpsGateway.nginxSidecar.resources -- Manually configure resources for the nginx sidecar container. Leave empty to use the chart default.
       resources: {}
+      # components.rdpHttpsGateway.nginxSidecar.healthCheckTiming -- Override the pod's default healthcheck timing values for liveness and/or readiness probes.
+      #  Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only
+      #  the timeoutSeconds value of the livenessProbe.
+      #  Example:
+      #    healthCheckTiming:
+      #      livenessProbe:
+      #        timeoutSeconds: 10
+      #        initialDelaySeconds: 20
+      #        periodSeconds: 60
+      #        failureThreshold: 5
+      #      readinessProbe:
+      #        periodSeconds: 60
+      #        successThreshold: 3
+      healthCheckTiming:
+        livenessProbe: {}
+        readinessProbe: {}
     # components.rdpHttpsGateway.labels -- Custom labels to add to the Kasm RDP HTTPS Gateway Deployment
     labels: {}
     # components.rdpHttpsGateway.extraVolumes -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things

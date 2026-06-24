@@ -32,10 +32,15 @@ LOGGER = logging.getLogger("e2e")
 _MIN_PUBLIC_TABLE_COUNT = 5
 
 # Short polling window to absorb a race between Job-Completed and our
-# query catching up.  No Job retry from here — that's a 1.18.1 chart bug;
-# CI re-run handles flakes.
+# query catching up.  If tables are still empty after this window, the
+# 1.18.1 startup.sh silently failed; Phase 1 is retried up to
+# _PHASE1_MAX_ATTEMPTS times before the test is declared a failure.
 _VERIFY_TIMEOUT_SECONDS = 30
 _VERIFY_POLL_SECONDS = 5
+
+# Number of attempts for the full Phase 1 install when _verify_db_init
+# detects the 1.18.1 silent-failure mode.
+_PHASE1_MAX_ATTEMPTS = 3
 
 # ---------------------------------------------------------------------------
 # Old-version chart discovery
@@ -102,6 +107,24 @@ def _helm_install_chart(
         "--set", "imagePullPolicy=Never",
         "-f", str(values_file),
     ])
+
+
+def _helm_uninstall_phase1(*, e2e_config: E2EConfig, namespace: str) -> None:
+    """Tear down a failed Phase 1 install so it can be retried cleanly.
+
+    Uninstalls the Helm release and waits for all pods to terminate.
+    PVCs are left in place (the DB StatefulSet PVC retains data across
+    chart uninstalls by default, but a fresh install will re-use it and
+    the db-init job will re-seed it).
+    """
+    LOGGER.info("[upgrade] tearing down failed Phase 1 install for retry")
+    try:
+        helm(["uninstall", e2e_config.release_name, "-n", namespace, "--wait", "--timeout", "5m"])
+    except Exception as exc:
+        LOGGER.warning("[upgrade] helm uninstall returned non-zero (continuing): %s", exc)
+    # Delete any PVCs so the next install starts with a fresh DB volume.
+    kubectl(["delete", "pvc", "--all", "-n", namespace, "--ignore-not-found", "--wait=true", "--timeout=60s"])
+    LOGGER.info("[upgrade] Phase 1 teardown complete")
 
 
 # ---------------------------------------------------------------------------
@@ -382,9 +405,13 @@ def run_upgrade_flow(
 
     # -----------------------------------------------------------------------
     # Phase 1: Install previous version (extracted by ``make extract-old-chart``)
+    #
+    # Wrapped in a retry loop because 1.18.1's startup.sh swallows transient
+    # sqlalchemy/DNS errors under CPU pressure and exits 0 without seeding the
+    # DB.  When _verify_db_init detects that silent failure we uninstall,
+    # delete the PVC so the next install gets a clean volume, and retry.
     # -----------------------------------------------------------------------
     old_chart_dir = find_old_chart_dir()
-    LOGGER.info("[upgrade] phase 1 — installing previous chart from %s", old_chart_dir)
 
     initial_values = {
         **base_values,
@@ -398,28 +425,46 @@ def run_upgrade_flow(
     initial_values_path = temp_workdir / "initial-values.yaml"
     initial_values_path.write_text(yaml.safe_dump(initial_values, sort_keys=False))
 
-    _helm_install_chart(
-        e2e_config=e2e_config,
-        namespace=namespace,
-        chart_dir=old_chart_dir,
-        values_file=initial_values_path,
-    )
-
-    # 1.18.1 names the init job differently from 1.19.
-    wait_for_job_succeeded(
-        namespace,
-        job_name=init_job_name_118,
-        timeout_seconds=360,
-    )
-    # Catch the 1.18.1 silent-failure mode (see _verify_db_init).
-    # Skipped for standalone — no in-cluster db pod to exec into.
-    if not standalone_db:
-        _verify_db_init(
-            namespace,
-            release_name=release_name,
-            job_name=init_job_name_118,
-            work_dir=temp_workdir,
+    for phase1_attempt in range(1, _PHASE1_MAX_ATTEMPTS + 1):
+        LOGGER.info(
+            "[upgrade] phase 1 — installing previous chart from %s (attempt %d/%d)",
+            old_chart_dir, phase1_attempt, _PHASE1_MAX_ATTEMPTS,
         )
+        _helm_install_chart(
+            e2e_config=e2e_config,
+            namespace=namespace,
+            chart_dir=old_chart_dir,
+            values_file=initial_values_path,
+        )
+
+        # 1.18.1 names the init job differently from 1.19.
+        wait_for_job_succeeded(
+            namespace,
+            job_name=init_job_name_118,
+            timeout_seconds=360,
+        )
+        # Catch the 1.18.1 silent-failure mode (see _verify_db_init).
+        # Skipped for standalone — no in-cluster db pod to exec into.
+        if not standalone_db:
+            try:
+                _verify_db_init(
+                    namespace,
+                    release_name=release_name,
+                    job_name=init_job_name_118,
+                    work_dir=temp_workdir,
+                )
+            except AssertionError as exc:
+                if phase1_attempt < _PHASE1_MAX_ATTEMPTS:
+                    LOGGER.warning(
+                        "[upgrade] phase 1 attempt %d/%d failed db-init verification, "
+                        "retrying: %s",
+                        phase1_attempt, _PHASE1_MAX_ATTEMPTS, exc,
+                    )
+                    _helm_uninstall_phase1(e2e_config=e2e_config, namespace=namespace)
+                    continue
+                raise
+        break
+
     wait_for_rollouts_complete(namespace, timeout_seconds=1200)
     wait_for_pods_ready(namespace, timeout_seconds=1200, progress=True)
 

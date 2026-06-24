@@ -108,17 +108,11 @@ spec:
               value: "30"
             - name: FORWARD_LOGS
               value: "true"
-          ports:
-            - name: {{ $constants.rdpHttpsGateway.portName }}
-              containerPort: {{ $constants.rdpHttpsGateway.port }}
-              protocol: TCP
           {{- if $.Values.applyHealthChecks }}
           livenessProbe:
-            {{- include "health.tcp" (dict "portName" $constants.rdpHttpsGateway.portName) | indent 12 }}
-          {{- end }}
-          {{- if $.Values.applyHealthChecks }}
+            {{- include "health.probe" (dict "root" $ "component" "rdpHttpsGateway" "probeType" "livenessProbe" "type" "tcp" "port" $constants.rdpHttpsGateway.port) | nindent 12 }}
           readinessProbe:
-            {{- include "health.https" (dict "path" "/rdp-https-gateway/__healthcheck" "portName" $constants.rdpHttpsGateway.portName) | indent 12 }}
+            {{- include "health.probe" (dict "root" $ "component" "rdpHttpsGateway" "probeType" "readinessProbe" "type" "tcp" "port" $constants.rdpHttpsGateway.port) | nindent 12 }}
           {{- end }}
           {{- if $.Values.components.rdpHttpsGateway.resources }}
           resources: {{- toYaml $.Values.components.rdpHttpsGateway.resources | nindent 12 }}
@@ -167,7 +161,7 @@ spec:
               mountPath: /etc/nginx/conf.d/services.d
             - name: kasm-rdp-https-gateway-nginx-data
               mountPath: /var/cache/nginx
-            - name: kasm-rdp-https-gateway-nginx-data
+            - name: kasm-rdp-https-gateway-nginx-log-tmp
               mountPath: /var/log/nginx
             - name: kasm-rdp-https-gateway-nginx-data
               mountPath: /run
@@ -182,11 +176,9 @@ spec:
             {{- include "kasm.trustedCaVolumeMounts" . | nindent 12 }}
           {{- if $.Values.applyHealthChecks }}
           livenessProbe:
-            {{- include "health.tcp" (dict "portName" "rdp-tls-ngnx-pt") | indent 12 }}
-          {{- end }}
-          {{- if $.Values.applyHealthChecks }}
+            {{- include "health.probe" (dict "root" $ "component" "rdpHttpsGateway" "timingScope" "nginxSidecar" "probeType" "livenessProbe" "type" "tcp" "portName" "rdp-tls-ngnx-pt") | nindent 12 }}
           readinessProbe:
-            {{- include "health.tcp" (dict "portName" "rdp-tls-ngnx-pt") | indent 12 }}
+            {{- include "health.probe" (dict "root" $ "component" "rdpHttpsGateway" "timingScope" "nginxSidecar" "probeType" "readinessProbe" "type" "tcp" "portName" "rdp-tls-ngnx-pt") | nindent 12 }}
           {{- end }}
           {{- if $.Values.components.rdpHttpsGateway.nginxSidecar.resources }}
           resources: {{- toYaml $.Values.components.rdpHttpsGateway.nginxSidecar.resources | nindent 12 }}
@@ -216,6 +208,9 @@ spec:
         - name: kasm-rdp-https-gateway-nginx-data
           emptyDir:
             sizeLimit: 100Mi
+        - name: kasm-rdp-https-gateway-nginx-log-tmp
+          emptyDir:
+            sizeLimit: 1Gi
         {{- with $merged.volumes }}
           {{- toYaml . | nindent 8 }}
         {{- end }}

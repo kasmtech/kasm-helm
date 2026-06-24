@@ -63,7 +63,7 @@ spec:
               value: "20"
             - name: KASM_DB_SSL
               value: "true"
-            {{- include "kasm.trustedCaEnv" $ | nindent 12 }}
+            {{- include "kasm.trustedCaEnv" $ | indent 12 }}
             - name: "SERVER_ZONE_NAME"
               value: {{ $zone.name | quote }}
             - name: "KASM_EPHEMERAL"
@@ -101,9 +101,9 @@ spec:
             {{- include "kasm.trustedCaVolumeMounts" $ | nindent 12 }}
           {{- if $.Values.applyHealthChecks }}
           livenessProbe:
-            {{- include "health.tcp" (dict "portName" $constants.api.portName ) | indent 12 }}
+            {{- include "health.probe" (dict "root" $ "component" "api" "probeType" "livenessProbe" "type" "tcp" "portName" $constants.api.portName) | nindent 12 }}
           readinessProbe:
-            {{- include "health.http" (dict "path" "/api/__healthcheck" "portName" $constants.api.portName ) | indent 12 }}
+            {{- include "health.probe" (dict "root" $ "component" "api" "probeType" "readinessProbe" "type" "http" "path" "/api/__healthcheck" "portName" $constants.api.portName) | nindent 12 }}
           {{- end }}
           {{- if $.Values.components.api.resources }}
           resources: {{- toYaml $.Values.components.api.resources | nindent 12 }}

@@ -3,6 +3,8 @@ templates:
   - templates/api-deployment.yaml
   - templates/db-statefulset.yaml
   - templates/proxy-deployment.yaml
+  - templates/guac-statefulset.yaml
+  - templates/rdp-gateway-deployment.yaml
 
 tests:
   - it: adds probes when applyHealthChecks=true
@@ -31,3 +33,274 @@ tests:
           path: spec.template.spec.containers[0].livenessProbe
       - notExists:
           path: spec.template.spec.containers[0].readinessProbe
+
+  # ---------- default timing values ----------
+  - it: api liveness probe uses default timing when no override is set
+    template: templates/api-deployment.yaml
+    set:
+      applyHealthChecks: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.timeoutSeconds
+          value: 5
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.initialDelaySeconds
+          value: 10
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.periodSeconds
+          value: 30
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.failureThreshold
+          value: 3
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.successThreshold
+          value: 1
+
+  - it: api readiness probe uses default timing when no override is set
+    template: templates/api-deployment.yaml
+    set:
+      applyHealthChecks: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.timeoutSeconds
+          value: 5
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.periodSeconds
+          value: 30
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.failureThreshold
+          value: 3
+
+  - it: db liveness probe uses default timing when no override is set
+    template: templates/db-statefulset.yaml
+    set:
+      applyHealthChecks: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.timeoutSeconds
+          value: 5
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.periodSeconds
+          value: 30
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.failureThreshold
+          value: 3
+
+  # ---------- per-component liveness timing overrides ----------
+  - it: api liveness probe honors component-level timeoutSeconds override
+    template: templates/api-deployment.yaml
+    set:
+      applyHealthChecks: true
+      components:
+        api:
+          healthCheckTiming:
+            livenessProbe:
+              timeoutSeconds: 20
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.timeoutSeconds
+          value: 20
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.periodSeconds
+          value: 30
+
+  - it: api liveness override does not bleed into readiness probe
+    template: templates/api-deployment.yaml
+    set:
+      applyHealthChecks: true
+      components:
+        api:
+          healthCheckTiming:
+            livenessProbe:
+              timeoutSeconds: 60
+              periodSeconds: 120
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.timeoutSeconds
+          value: 60
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.timeoutSeconds
+          value: 5
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.periodSeconds
+          value: 30
+
+  # ---------- per-component readiness timing overrides ----------
+  - it: api readiness probe honors component-level periodSeconds override
+    template: templates/api-deployment.yaml
+    set:
+      applyHealthChecks: true
+      components:
+        api:
+          healthCheckTiming:
+            readinessProbe:
+              periodSeconds: 60
+              failureThreshold: 5
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.periodSeconds
+          value: 60
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.failureThreshold
+          value: 5
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.periodSeconds
+          value: 30
+
+  # ---------- proxy component timing ----------
+  - it: proxy liveness probe honors component-level initialDelaySeconds override
+    template: templates/proxy-deployment.yaml
+    set:
+      applyHealthChecks: true
+      components:
+        proxy:
+          healthCheckTiming:
+            livenessProbe:
+              initialDelaySeconds: 30
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.initialDelaySeconds
+          value: 30
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.timeoutSeconds
+          value: 5
+
+  # ---------- db component timing ----------
+  - it: db liveness probe honors database-level failureThreshold override
+    template: templates/db-statefulset.yaml
+    set:
+      applyHealthChecks: true
+      database:
+        healthCheckTiming:
+          livenessProbe:
+            failureThreshold: 10
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.failureThreshold
+          value: 10
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.periodSeconds
+          value: 30
+
+  - it: db readiness probe honors database-level successThreshold override
+    template: templates/db-statefulset.yaml
+    set:
+      applyHealthChecks: true
+      database:
+        healthCheckTiming:
+          readinessProbe:
+            successThreshold: 3
+            periodSeconds: 45
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.successThreshold
+          value: 3
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.periodSeconds
+          value: 45
+
+  # ---------- nginxSidecar timingScope ----------
+  - it: guac nginxSidecar liveness probe uses default timing when no override is set
+    template: templates/guac-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      applyHealthChecks: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].livenessProbe.timeoutSeconds
+          value: 5
+      - equal:
+          path: spec.template.spec.containers[1].livenessProbe.periodSeconds
+          value: 30
+
+  - it: guac nginxSidecar liveness probe honors nginxSidecar-scoped override
+    template: templates/guac-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      applyHealthChecks: true
+      components:
+        guac:
+          nginxSidecar:
+            healthCheckTiming:
+              livenessProbe:
+                timeoutSeconds: 15
+                periodSeconds: 60
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].livenessProbe.timeoutSeconds
+          value: 15
+      - equal:
+          path: spec.template.spec.containers[1].livenessProbe.periodSeconds
+          value: 60
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.timeoutSeconds
+          value: 5
+
+  - it: guac nginxSidecar readiness probe honors nginxSidecar-scoped override
+    template: templates/guac-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      applyHealthChecks: true
+      components:
+        guac:
+          nginxSidecar:
+            healthCheckTiming:
+              readinessProbe:
+                initialDelaySeconds: 20
+                failureThreshold: 6
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].readinessProbe.initialDelaySeconds
+          value: 20
+      - equal:
+          path: spec.template.spec.containers[1].readinessProbe.failureThreshold
+          value: 6
+      - equal:
+          path: spec.template.spec.containers[1].readinessProbe.timeoutSeconds
+          value: 5
+
+  - it: guac component-level override does not affect nginxSidecar probe
+    template: templates/guac-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      applyHealthChecks: true
+      components:
+        guac:
+          healthCheckTiming:
+            livenessProbe:
+              periodSeconds: 90
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.periodSeconds
+          value: 90
+      - equal:
+          path: spec.template.spec.containers[1].livenessProbe.periodSeconds
+          value: 30
+
+  - it: rdp-gateway nginxSidecar readiness probe honors nginxSidecar-scoped override
+    template: templates/rdp-gateway-deployment.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      applyHealthChecks: true
+      components:
+        rdpGateway:
+          nginxSidecar:
+            healthCheckTiming:
+              readinessProbe:
+                timeoutSeconds: 10
+                periodSeconds: 45
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].readinessProbe.timeoutSeconds
+          value: 10
+      - equal:
+          path: spec.template.spec.containers[1].readinessProbe.periodSeconds
+          value: 45
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.timeoutSeconds
+          value: 5

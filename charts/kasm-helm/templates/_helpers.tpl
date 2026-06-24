@@ -79,7 +79,7 @@ rdpGateway:
 rdpHttpsGateway:
   component: rdp-https-gateway
   svc: {{ if .Values.kasmZones }}{{ printf "%s-rdp-https-gateway-%s" .Release.Name (include "kasm.zoneName" (index .Values.kasmZones 0).name) }}{{ else }}{{ printf "%s-rdp-https-gateway-default" .Release.Name }}{{ end }}
-  portName: rdp-https-gw-pt
+  portName: rdp-tls-ngnx-pt
   image: {{ printf "%s/%s:%s" .Values.components.rdpHttpsGateway.image.registry .Values.components.rdpHttpsGateway.image.repository (include "kasm.imageTag" (list . .Values.components.rdpHttpsGateway.image.tag "rdpHttpsGateway")) }}
   port: 9443
   nginxPort: 9002
@@ -419,86 +419,141 @@ securityContext:
 {{- end -}}
 
 {{/*
-  HTTP Healthcheck template
-  Example usage:
-    {{- include "health.http" (dict "path" "healthcheck-path" "portName" "service-port-name") }}
-*/}}
-{{- define "health.http" }}
-  {{- if and (hasKey . "path") (hasKey . "portName") }}
-httpGet:
-  path: {{ .path }}
-  port: {{ .portName }}
-timeoutSeconds: 5
-initialDelaySeconds: 10
-periodSeconds: 30
-failureThreshold: 3
-successThreshold: 1
-  {{- else }}
-    {{- printf "ERROR: Invalid or non-existent key. Allowed values are %s" "path, portName" | fail}}
-  {{- end }}
-{{- end }}
+  Consolidated Kubernetes health probe helper.
 
-{{/*
-  HTTPS Healthcheck template
-  Example usage:
-    {{- include "health.https" (dict "path" "healthcheck-path" "portName" "service-port-name") }}
+  This helper renders one Kubernetes probe block using a chart-developer-selected
+  probe implementation type while resolving admin-configurable probe timing from
+  values.yaml.
+
+  Required args:
+    root: Root chart context. Usually pass $.
+    component: Component selector used to locate healthCheckTiming in values.yaml. Standard components resolve from:
+                .Values.components.<component>.healthCheckTiming. The database component is special-cased: component: db
+                resolves from: .Values.database.healthCheckTiming
+    probeType: Probe timing selector under healthCheckTiming. Expected values: livenessProbe, readinessProbe type: Kubernetes
+              probe implementation type. Allowed values: http, https, tcp, command
+
+  Optional args:
+    timingScope: Optional sub-selector for components with multiple containers and container-specific health check timing. When
+                supplied, timing resolves from: .Values.components.<component>.<timingScope>.healthCheckTiming.<probeType>
+                Example timingScope selectors: nginxSidecar
+
+  Probe-specific args:
+    For type: http or https 
+      path: HTTP path used by httpGet.
+      portName or port: Named or numeric container port used by httpGet.
+    For type: tcp
+      portName or port: Named or numeric container port used by tcpSocket.
+    For type: command
+      command: Either a string command rendered as: /bin/sh -c "<command>" Or a list rendered directly as the exec command array.
+  
+  Timing resolution order:
+    If component == "db":
+        .Values.database.healthCheckTiming.<probeType>
+    Else if container is supplied:
+        .Values.components.<component>.healthCheckTiming.<container>.<probeType>
+    Else:
+        .Values.components.<component>.healthCheckTiming.<probeType>
+
+  Timing defaults used when values are omitted:
+    timeoutSeconds: 5
+    initialDelaySeconds: 10
+    periodSeconds: 30
+    failureThreshold: 3
+    successThreshold: 1
+
+  Example, standard single-container component:
+    livenessProbe:
+      {{- include "health.probe" (dict
+            "root" $
+            "component" "api"
+            "probeType" "livenessProbe"
+            "type" "http"
+            "path" "/healthz"
+            "portName" "api"
+          ) | nindent 6 }}
 */}}
-{{- define "health.https" }}
-  {{- if and (hasKey . "path") (hasKey . "portName") }}
+{{- define "health.probe" -}}
+{{- $root := required "health.probe requires root" .root -}}
+{{- $componentName := required "health.probe requires component" .component -}}
+{{- $probeType := required "health.probe requires probeType" .probeType -}}
+{{- $probeKind := required "health.probe requires type: http, https, tcp, or command" .type | lower -}}
+
+{{- $healthCheckParent := dict -}}
+
+{{- if eq $componentName "db" -}}
+  {{- $healthCheckParent = get $root.Values "database" | default dict -}}
+{{- else -}}
+  {{- $components := get $root.Values "components" | default dict -}}
+  {{- $component := get $components $componentName | default dict -}}
+
+  {{- if hasKey . "timingScope" -}}
+    {{- $timingScope := .timingScope -}}
+    {{- $healthCheckParent = get $component $timingScope | default dict -}}
+  {{- else -}}
+    {{- $healthCheckParent = $component -}}
+  {{- end -}}
+{{- end -}}
+
+{{- $healthCheckTiming := get $healthCheckParent "healthCheckTiming" | default dict -}}
+{{- $timing := get $healthCheckTiming $probeType | default dict -}}
+
+{{- $timeoutSeconds := get $timing "timeoutSeconds" | default 5 -}}
+{{- $initialDelaySeconds := get $timing "initialDelaySeconds" | default 10 -}}
+{{- $periodSeconds := get $timing "periodSeconds" | default 30 -}}
+{{- $failureThreshold := get $timing "failureThreshold" | default 3 -}}
+{{- $successThreshold := get $timing "successThreshold" | default 1 -}}
+
+{{- if or (eq $probeKind "http") (eq $probeKind "https") -}}
+{{- $path := required "health.probe type http/https requires path" .path -}}
+{{- $port := "" -}}
+{{- if hasKey . "port" -}}
+  {{- $port = .port -}}
+{{- else if hasKey . "portName" -}}
+  {{- $port = .portName -}}
+{{- else -}}
+  {{- fail "health.probe type http/https requires port or portName" -}}
+{{- end -}}
 httpGet:
-  path: {{ .path }}
-  port: {{ .portName }}
+  path: {{ $path | quote }}
+  port: {{ $port }}
+{{- if eq $probeKind "https" }}
   scheme: HTTPS
-timeoutSeconds: 5
-initialDelaySeconds: 10
-periodSeconds: 30
-failureThreshold: 3
-successThreshold: 1
-  {{- else }}
-    {{- printf "ERROR: Invalid or non-existent key. Allowed values are %s" "path, portName" | fail}}
-  {{- end }}
 {{- end }}
 
-{{/*
-  TCP Healthcheck template
-  Example usage:
-    {{- include "health.tcp" (dict "portName" "service-port-name") }}
-*/}}
-{{- define "health.tcp" }}
-  {{- if hasKey . "portName" }}
+{{- else if eq $probeKind "tcp" -}}
+{{- $port := "" -}}
+{{- if hasKey . "port" -}}
+  {{- $port = .port -}}
+{{- else if hasKey . "portName" -}}
+  {{- $port = .portName -}}
+{{- else -}}
+  {{- fail "health.probe type tcp requires port or portName" -}}
+{{- end -}}
 tcpSocket:
-  port: {{ .portName }}
-timeoutSeconds: 5
-initialDelaySeconds: 10
-periodSeconds: 30
-failureThreshold: 3
-successThreshold: 1
-  {{- else }}
-    {{- printf "ERROR: Invalid or non-existent key. Allowed values are %s" "portName" | fail}}
-  {{- end }}
-{{- end }}
+  port: {{ $port }}
 
-{{/*
-  Command-based Healthcheck template
-  Example usage:
-    {{- include "health.command" (dict "command" "healthcheck-command") }}
-*/}}
-{{- define "health.command" }}
-  {{- if hasKey . "command" }}
+{{- else if eq $probeKind "command" -}}
+{{- $command := required "health.probe type command requires command" .command -}}
 exec:
   command:
+{{- if kindIs "slice" $command }}
+{{ toYaml $command | nindent 4 }}
+{{- else }}
     - /bin/sh
     - -c
-    - {{ .command }}
-timeoutSeconds: 5
-initialDelaySeconds: 10
-periodSeconds: 30
-failureThreshold: 3
-successThreshold: 1
-  {{- else }}
-    {{- printf "ERROR: Invalid or non-existent key. Allowed values are %s" "command" | fail}}
-  {{- end }}
+    - {{ $command | quote }}
 {{- end }}
+
+{{- else -}}
+{{- fail (printf "health.probe received unsupported type %q. Allowed values: http, https, tcp, command" $probeKind) -}}
+{{- end }}
+timeoutSeconds: {{ $timeoutSeconds }}
+initialDelaySeconds: {{ $initialDelaySeconds }}
+periodSeconds: {{ $periodSeconds }}
+failureThreshold: {{ $failureThreshold }}
+successThreshold: {{ $successThreshold }}
+{{- end -}}
 
 {{/*
   Init container used to wait for upstream services before attempting to start the primary pod container
@@ -608,6 +663,7 @@ successThreshold: 1
 {{- $initMounts := get $merged "initMounts" -}}
 {{- $hasInitMounts := and (not $isBackup) $initMounts -}}
 {{- $needsVolumeMounts := or $needsTmpDir $hasTrustedCaBundle $hasInitMounts -}}
+{{- $connectionTimeout := $context.Values.dbManagement.dbConnectionTimeout -}}
 
 - name: {{ $containerName }}
   image: {{ $constants.api.image }}
@@ -642,17 +698,17 @@ successThreshold: 1
   args:
     - |
       {{- if $isInit }}
-      while ! pg_isready -h "${POSTGRES_HOST}" -p "${POSTGRES_PORT}" -t 10; do
+      while ! pg_isready -h "${POSTGRES_HOST}" -p "${POSTGRES_PORT}" -t {{ $connectionTimeout }}; do
         echo "Waiting for DB..."
         sleep 5
       done
       {{- else if $isBackup }}
-      while ! pg_isready -h "${POSTGRES_HOST}" -p "${POSTGRES_PORT}" -t 10; do
+      while ! pg_isready -h "${POSTGRES_HOST}" -p "${POSTGRES_PORT}" -t {{ $connectionTimeout }}; do
         echo "Waiting for DB..."
         sleep 5
       done
       {{- else if $isVersion }}
-      while ! pg_isready -h "${POSTGRES_HOST}" -p "${POSTGRES_PORT}" -t 10; do
+      while ! pg_isready -h "${POSTGRES_HOST}" -p "${POSTGRES_PORT}" -t {{ $connectionTimeout }}; do
         echo "Waiting for DB..."
         sleep 5
       done
@@ -664,13 +720,13 @@ successThreshold: 1
       echo "Waiting for PostgreSQL ${TARGET_MAJOR}.x (If you are using external DB, you can start upgrading your DB now.)..."
 
       while true; do
-        if ! pg_isready -h "${POSTGRES_HOST}" -p "${POSTGRES_PORT}" -t 5 >/dev/null 2>&1; then
+        if ! pg_isready -h "${POSTGRES_HOST}" -p "${POSTGRES_PORT}" -t {{ $connectionTimeout }} >/dev/null 2>&1; then
           echo "DB not reachable yet... waiting"
           sleep "${SLEEP}"
           continue
         fi
 
-        VERNUM=$(psql \
+        VERNUM=$(PGCONNECT_TIMEOUT={{ $connectionTimeout }} psql \
           -h "${POSTGRES_HOST}" \
           -p "${POSTGRES_PORT}" \
           -U "${POSTGRES_USER}" \
@@ -694,9 +750,9 @@ successThreshold: 1
         fi
       done
       {{- else if $isReady }}
-      while [ ! $(PGPASSWORD="${POSTGRES_PASSWORD}" psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -p "${POSTGRES_PORT}" -h "${POSTGRES_HOST}" -t -c "select zone_id from zones" 2>/dev/null | wc -l) -ge 2 ]; do
+      while [ ! $(PGCONNECT_TIMEOUT={{ $connectionTimeout }} PGPASSWORD="${POSTGRES_PASSWORD}" psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -p "${POSTGRES_PORT}" -h "${POSTGRES_HOST}" -t -c "select zone_id from zones" 2>/dev/null | wc -l) -ge 2 ]; do
         echo "Waiting for DB to initialize..."
-        sleep 30
+        sleep 5
       done
 
       cp /src/api_server/data/migration/alembic.ini /tmp/alembic.ini
@@ -805,11 +861,11 @@ successThreshold: 1
       )
       "medium" (dict 
         "requests" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
+        "limits" (dict "cpu" "500m" "memory" "1Gi" "ephemeral-storage" "2Gi")
       )
       "large" (dict 
         "requests" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
+        "limits" (dict "cpu" "500m" "memory" "1Gi" "ephemeral-storage" "2Gi")
       )
     )
     "proxy-processes" (dict "small" 2 "medium" 6 "large" 12)
@@ -831,44 +887,44 @@ successThreshold: 1
     "api" (dict
       "small" (dict 
         "requests" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
+        "limits" (dict "cpu" "500m" "memory" "1Gi" "ephemeral-storage" "2Gi")
       )
       "medium" (dict 
         "requests" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
+        "limits" (dict "cpu" "500m" "memory" "1Gi" "ephemeral-storage" "2Gi")
       )
       "large" (dict 
-        "requests" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
+        "requests" (dict "cpu" "500m" "memory" "1Gi" "ephemeral-storage" "50Mi")
+        "limits" (dict "cpu" "500m" "memory" "2Gi" "ephemeral-storage" "2Gi")
       )
     )
     "manager" (dict
       "small" (dict 
         "requests" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
+        "limits" (dict "cpu" "500m" "memory" "1Gi" "ephemeral-storage" "2Gi")
       )
       "medium" (dict 
         "requests" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
+        "limits" (dict "cpu" "500m" "memory" "1Gi" "ephemeral-storage" "2Gi")
       )
       "large" (dict 
-        "requests" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
+        "requests" (dict "cpu" "500m" "memory" "1Gi" "ephemeral-storage" "50Mi")
+        "limits" (dict "cpu" "500m" "memory" "2Gi" "ephemeral-storage" "2Gi")
       )
     )
     "guac-processes" (dict "small" 4 "medium" 6 "large" 8)
     "guac" (dict
       "small" (dict 
         "requests" (dict "cpu" "1000m" "memory" "512Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "1000m" "memory" "512Mi" "ephemeral-storage" "2Gi")
+        "limits" (dict "cpu" "1000m" "memory" "1Gi" "ephemeral-storage" "2Gi")
       )
       "medium" (dict 
         "requests" (dict "cpu" "1500m" "memory" "512Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "1500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
+        "limits" (dict "cpu" "1500m" "memory" "2Gi" "ephemeral-storage" "2Gi")
       )
       "large" (dict 
-        "requests" (dict "cpu" "2000m" "memory" "512Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "2000m" "memory" "512Mi" "ephemeral-storage" "2Gi")
+        "requests" (dict "cpu" "2000m" "memory" "1Gi" "ephemeral-storage" "50Mi")
+        "limits" (dict "cpu" "2000m" "memory" "4Gi" "ephemeral-storage" "2Gi")
       )
     )
     "rdp-gateway" (dict
@@ -901,16 +957,16 @@ successThreshold: 1
     )
     "nginx-sidecar" (dict
       "small" (dict
-        "requests" (dict "cpu" "200m" "memory" "128Mi")
-        "limits" (dict "cpu" "200m" "memory" "128Mi")
+        "requests" (dict "cpu" "500m" "memory" "256Mi")
+        "limits" (dict "cpu" "500m" "memory" "256Mi")
       )
       "medium" (dict
-        "requests" (dict "cpu" "200m" "memory" "128Mi")
-        "limits" (dict "cpu" "200m" "memory" "128Mi")
+        "requests" (dict "cpu" "500m" "memory" "384Mi")
+        "limits" (dict "cpu" "500m" "memory" "384Mi")
       )
       "large" (dict
-        "requests" (dict "cpu" "200m" "memory" "128Mi")
-        "limits" (dict "cpu" "200m" "memory" "128Mi")
+        "requests" (dict "cpu" "1000m" "memory" "512Mi")
+        "limits" (dict "cpu" "1000m" "memory" "512Mi")
       )
     )
     "nginx-conf-init" (dict
@@ -1051,12 +1107,13 @@ Dedup rules:
 {{- $context := index . 0 -}}
 {{- $component := index . 1 -}}
 {{- $uidGid := 1000 -}}
+{{- $constants := include "kasm.constants" $context | fromYaml -}}
 {{- if eq $component "db" -}}
   {{- $uidGid = 70 -}}
 {{- end -}}
 {{- if $context.Values.trustedCaBundle.enabled -}}
 - name: trusted-ca-init
-  image: {{ printf "%s/%s:%s" $context.Values.components.api.image.registry $context.Values.components.api.image.repository (include "kasm.imageTag" (list $context $context.Values.components.api.image.tag "api")) }}
+  image: {{ $constants.api.image }}
   imagePullPolicy: {{ $context.Values.imagePullPolicy }}
   {{- include "kasm.securityContext" (list $context $uidGid "container") | nindent 2 }}
   command:
@@ -1111,7 +1168,7 @@ Dedup rules:
   built by trusted-ca-init, not the bundled certifi CA file alone.
 */}}
 {{- define "kasm.trustedCaEnv" -}}
-{{- if .Values.trustedCaBundle.enabled -}}
+{{- if .Values.trustedCaBundle.enabled }}
 - name: SSL_CERT_FILE
   value: /etc/ssl/certs/ca-certificates.crt
 - name: REQUESTS_CA_BUNDLE

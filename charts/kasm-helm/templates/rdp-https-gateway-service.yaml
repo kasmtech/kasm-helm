@@ -17,7 +17,7 @@ spec:
   selector:
     {{- include "kasm.metadata" (dict "context" . "component" "rdpHttpsGateway" "resource" "service" "zone" $zoneName "include" "match") | nindent 4 }}
   ports:
-    - name: {{ printf "%s-svc-%s" $constants.rdpHttpsGateway.svc ($constants.rdpHttpsGateway.port | toString) }}
+    - name: {{ printf "%s-svc-%s" $constants.rdpHttpsGateway.svc ($constants.rdpHttpsGateway.nginxPort | toString) }}
       protocol: TCP
-      port: {{ $constants.rdpHttpsGateway.port }}
+      port: {{ $constants.rdpHttpsGateway.nginxPort }}
 {{- end }}

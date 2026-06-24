@@ -79,9 +79,9 @@ spec:
             - name: kasm-proxy-data
               mountPath: /var/cache/nginx
             - name: kasm-proxy-data
-              mountPath: /var/log/external/nginx
-            - name: kasm-proxy-data
               mountPath: /run
+            - name: kasm-proxy-log-tmp
+              mountPath: /var/log/nginx
             {{- with $merged.containerMounts }}
               {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -95,11 +95,9 @@ spec:
               protocol: TCP
           {{- if $.Values.applyHealthChecks }}
           livenessProbe:
-            {{- include "health.tcp" (dict "portName" (print $constants.proxy.portName "-http") ) | indent 12 }}
-          {{- end }}
-          {{- if $.Values.applyHealthChecks }}
+            {{- include "health.probe" (dict "root" $ "component" "proxy" "probeType" "livenessProbe" "type" "tcp" "portName" (printf "%s-http" $constants.proxy.portName)) | nindent 12 }}
           readinessProbe:
-            {{- include "health.command" (dict "command" "nginx -t") | indent 12 }}
+            {{- include "health.probe" (dict "root" $ "component" "proxy" "probeType" "readinessProbe" "type" "command" "command" "nginx -t") | nindent 12 }}
           {{- end }}
         {{- with $merged.extraContainers }}
           {{- toYaml . | nindent 8 }}
@@ -118,6 +116,9 @@ spec:
           configMap:
             name: {{ include "kasm.name" (list $ "proxy-services" "configmap") }}
         - name: kasm-proxy-data
+          emptyDir:
+            sizeLimit: 1Gi
+        - name: kasm-proxy-log-tmp
           emptyDir:
             sizeLimit: 1Gi
         {{- with $merged.volumes }}

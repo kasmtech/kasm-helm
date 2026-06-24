@@ -66,11 +66,9 @@ spec:
               protocol: TCP
           {{- if .Values.applyHealthChecks }}
           livenessProbe:
-            {{- include "health.command" (dict "command" (printf "pg_isready --port=%s -t 10" ($constants.db.port | toString))) | indent 12 }}
-          {{- end }}
-          {{- if .Values.applyHealthChecks }}
+            {{- include "health.probe" (dict "root" $ "component" "db" "probeType" "livenessProbe" "type" "command" "command" (printf "pg_isready --port=%s -t 10" ($constants.db.port | toString))) | nindent 12 }}
           readinessProbe:
-            {{- include "health.command" (dict "command" "psql -d ${POSTGRES_DB} -U ${POSTGRES_USER} -c 'SELECT 1' || exit 1") | indent 12 }}
+            {{- include "health.probe" (dict "root" $ "component" "db" "probeType" "readinessProbe" "type" "command" "command" "psql -d ${POSTGRES_DB} -U ${POSTGRES_USER} -c 'SELECT 1' || exit 1") | nindent 12 }}
           {{- end }}
           {{- if .Values.database.resources }}
           resources: {{- toYaml .Values.database.resources | nindent 12 }}

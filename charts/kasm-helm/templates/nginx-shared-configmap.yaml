@@ -89,6 +89,9 @@ data:
         '"cookie_username": "$cookie_username",'
         '"upstream_header_time": "$upstream_header_time"'
       '}';
+      access_log /var/log/nginx/access_json.log json_combined ;
+      error_log  /var/log/nginx/error.log warn;
+
 
   orchestrator.conf: |
     # Nginx doesn't have a built in variable for the original request port. $server_port is only the port that nginx is listening on. It doesn't even take into account docker port mapping.

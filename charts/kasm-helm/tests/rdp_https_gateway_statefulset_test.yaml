@@ -153,16 +153,16 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[1].resources.requests.cpu
-          value: 200m
+          value: 500m
       - equal:
           path: spec.template.spec.containers[1].resources.requests.memory
-          value: 128Mi
+          value: 256Mi
       - equal:
           path: spec.template.spec.containers[1].resources.limits.cpu
-          value: 200m
+          value: 500m
       - equal:
           path: spec.template.spec.containers[1].resources.limits.memory
-          value: 128Mi
+          value: 256Mi
 
   - it: components.rdpHttpsGateway.nginxSidecar.resources overrides the preset
     template: templates/rdp-https-gateway-statefulset.yaml
