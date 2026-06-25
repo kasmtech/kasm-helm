@@ -29,8 +29,6 @@ data:
       include /etc/nginx/conf.d/services.d/*.conf;
       include /etc/nginx/conf.d/containers.d/*.conf;
 
-      access_log /dev/stdout main;
-
       client_max_body_size 1G;
       server_tokens off;
 
@@ -50,8 +48,6 @@ data:
 
       include /etc/nginx/conf.d/services.d/*.conf;
       include /etc/nginx/conf.d/containers.d/*.conf;
-
-      access_log /dev/stdout main;
 
       client_max_body_size 1G;
       server_tokens off;

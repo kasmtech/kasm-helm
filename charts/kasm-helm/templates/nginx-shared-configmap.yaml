@@ -32,7 +32,7 @@ data:
                         '$status $body_bytes_sent "$http_referer" '
                         '"$http_user_agent" "$http_x_forwarded_for"';
 
-      access_log  /dev/stdout  main;
+      access_log  /var/log/nginx/access.log.  main;
 
       sendfile        on;
 
@@ -90,7 +90,7 @@ data:
         '"cookie_username": "$cookie_username",'
         '"upstream_header_time": "$upstream_header_time"'
       '}';
-      access_log /var/log/nginx/access_json.log json_combined ;
+      access_log /dev/stdout json_combined ;
       error_log  /var/log/nginx/error.log warn;
 
 
