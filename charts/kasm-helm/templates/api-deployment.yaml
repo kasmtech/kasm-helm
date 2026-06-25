@@ -78,7 +78,7 @@ spec:
               another NGINX proxy
             */}}
             - name: SERVER_INTERNAL_SCHEMA
-              value: {{ if eq $idx 0 }}"http"{{ else }}"https"{{ end }}
+              value: "https"
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:

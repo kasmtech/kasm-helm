@@ -85,7 +85,7 @@ spec:
             - name: SERVER_HOSTNAME
               value: {{ printf "%s-%s" $constants.manager.svc (include "kasm.zoneName" $zone.name) | quote }}
             - name: SERVER_INTERNAL_SCHEMA
-              value: "http"
+              value: "https"
             - name: "MANAGER_ID"
               value: "auto"
             - name: KASM_MANAGER_UPDATE_TIMER

@@ -17,7 +17,7 @@ data:
     user  nginx;
     worker_processes {{ include "resources.preset" (dict "node" "proxy-processes" "size" $.Values.deploymentSize) }};
 
-    error_log  /var/log/nginx/error.log notice;
+    error_log  stderr notice;
     pid        /var/run/nginx.pid;
 
     events {
@@ -32,7 +32,7 @@ data:
                         '$status $body_bytes_sent "$http_referer" '
                         '"$http_user_agent" "$http_x_forwarded_for"';
 
-      access_log  /var/log/nginx/access.log  main;
+      access_log  /dev/stdout  main;
 
       sendfile        on;
 
@@ -43,6 +43,7 @@ data:
       include /etc/nginx/orchestrator.conf;
 
       include /etc/nginx/conf.d/*.conf;
+      include /etc/nginx/services.d/*.conf;
     }
 
   compress.conf: |

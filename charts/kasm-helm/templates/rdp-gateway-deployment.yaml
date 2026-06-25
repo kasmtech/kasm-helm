@@ -80,7 +80,7 @@ spec:
             - name: KASM_EPHEMERAL
               value: "true"
             - name: API_SCHEMA
-              value: http
+              value: "http"
             {{/*
               Connection proxies must reach the manager's /manager_api/ endpoint
               (support-bundle uploads) as well as /api/ (registration/heartbeat).
@@ -184,12 +184,20 @@ spec:
               mountPath: /run
             - name: kasm-rdp-gateway-nginx-log-tmp
               mountPath: /var/log/nginx
+            - name: kasm-rdp-gateway-cert
+              mountPath: /etc/nginx/ssl/tls.crt
+              subPath: tls.crt
+              readOnly: true
+            - name: kasm-rdp-gateway-cert
+              mountPath: /etc/nginx/ssl/tls.key
+              subPath: tls.key
+              readOnly: true
             {{- include "kasm.trustedCaVolumeMounts" . | nindent 12 }}
           {{- if .Values.applyHealthChecks }}
           livenessProbe:
             {{- include "health.probe" (dict "root" $ "component" "rdpGateway" "timingScope" "nginxSidecar" "probeType" "livenessProbe" "type" "tcp" "portName" "rdp-gw-nginx-pt") | nindent 12 }}
           readinessProbe:
-            {{- include "health.probe" (dict "root" $ "component" "rdpGateway" "timingScope" "nginxSidecar" "probeType" "readinessProbe" "type" "http" "path" "/__healthcheck" "portName" "rdp-gw-nginx-pt") | nindent 12 }}
+            {{- include "health.probe" (dict "root" $ "component" "rdpGateway" "timingScope" "nginxSidecar" "probeType" "readinessProbe" "type" "https" "path" "/__healthcheck" "portName" "rdp-gw-nginx-pt") | nindent 12 }}
           {{- end }}
           {{- if .Values.components.rdpGateway.nginxSidecar.resources }}
           resources: {{- toYaml .Values.components.rdpGateway.nginxSidecar.resources | nindent 12 }}
