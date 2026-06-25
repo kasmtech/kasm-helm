@@ -325,10 +325,10 @@ changelog: ## Generate or refresh the [Unreleased] scaffold in CHANGELOG.md (ann
 changelog-llm: tools ## Generate CHANGELOG.md entries via Claude Code CLI with rendered helm diffs (requires `claude` in PATH)
 	python3 scripts/changelog-draft.py --use-llm $(CHANGELOG_ARGS)
 
-changelog-console: ## Preview scaffold output to stdout without writing to CHANGELOG.md
+changelog-console: ## Print full resulting CHANGELOG.md to stdout without writing to disk (safe preview)
 	python3 scripts/changelog-draft.py --dry-run $(CHANGELOG_ARGS)
 
-changelog-console-llm: tools ## Preview Claude Code CLI output to stdout without writing to CHANGELOG.md (requires `claude` in PATH)
+changelog-console-llm: tools ## Print full resulting CHANGELOG.md via Claude Code CLI to stdout without writing to disk (requires `claude` in PATH)
 	python3 scripts/changelog-draft.py --use-llm --dry-run $(CHANGELOG_ARGS)
 
 # Fails (non-zero exit) if CHANGELOG.md has not changed relative to BASE_BRANCH
