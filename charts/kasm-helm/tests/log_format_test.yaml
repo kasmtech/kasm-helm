@@ -1,0 +1,123 @@
+suite: logFormat rendering
+
+templates:
+  - templates/api-app-configmap.yaml
+  - templates/manager-app-configmap.yaml
+  - templates/rdp-gateway-configmap.yaml
+  - templates/nginx-shared-configmap.yaml
+  - templates/db-configmap.yaml
+
+tests:
+
+  # ---------- api-app-configmap ----------
+  - it: api-app-configmap is not rendered when logFormat is log (default)
+    template: templates/api-app-configmap.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: api-app-configmap is rendered when logFormat is json
+    template: templates/api-app-configmap.yaml
+    set:
+      logFormat: json
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ConfigMap
+
+  - it: api-app-configmap stream handler uses pythonjsonlogger formatter
+    template: templates/api-app-configmap.yaml
+    set:
+      logFormat: json
+    asserts:
+      - matchRegex:
+          path: data["api.app.config.yaml"]
+          pattern: "formatter: pythonjsonlogger"
+
+  # ---------- manager-app-configmap ----------
+  - it: manager-app-configmap is not rendered when logFormat is log (default)
+    template: templates/manager-app-configmap.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: manager-app-configmap is rendered when logFormat is json
+    template: templates/manager-app-configmap.yaml
+    set:
+      logFormat: json
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ConfigMap
+
+  - it: manager-app-configmap stream handler uses pythonjsonlogger formatter
+    template: templates/manager-app-configmap.yaml
+    set:
+      logFormat: json
+    asserts:
+      - matchRegex:
+          path: data["api.app.config.yaml"]
+          pattern: "formatter: pythonjsonlogger"
+
+  # ---------- rdp-gateway-configmap ----------
+  # The configmap always contains both formatter *definitions* (pythonjsonlogger
+  # and standard). Only the stream handler's formatter: assignment is controlled
+  # by logFormat. Tests verify which value the stream handler uses.
+  - it: rdp-gateway configmap stream handler uses standard formatter by default
+    template: templates/rdp-gateway-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["passthrough.app.config.yaml"]
+          pattern: "formatter: standard"
+
+  - it: rdp-gateway configmap stream handler uses pythonjsonlogger formatter when logFormat is json
+    template: templates/rdp-gateway-configmap.yaml
+    set:
+      logFormat: json
+    asserts:
+      - matchRegex:
+          path: data["passthrough.app.config.yaml"]
+          pattern: "formatter: pythonjsonlogger"
+
+  # ---------- nginx-shared-configmap ----------
+  # The access_log switching lives in data["logging.conf"], not data["nginx.conf"].
+  - it: nginx shared configmap uses main access log format by default
+    template: templates/nginx-shared-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["logging.conf"]
+          pattern: "access_log /dev/stdout main"
+      - notMatchRegex:
+          path: data["logging.conf"]
+          pattern: "access_log /dev/stdout json_combined"
+
+  - it: nginx shared configmap uses json_combined access log format when logFormat is json
+    template: templates/nginx-shared-configmap.yaml
+    set:
+      logFormat: json
+    asserts:
+      - matchRegex:
+          path: data["logging.conf"]
+          pattern: "access_log /dev/stdout json_combined"
+      - notMatchRegex:
+          path: data["logging.conf"]
+          pattern: "access_log /dev/stdout main"
+
+  # ---------- db-configmap ----------
+  - it: db configmap uses syslog log_destination by default
+    template: templates/db-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["postgresql.conf"]
+          pattern: "log_destination = 'stderr,syslog'"
+
+  - it: db configmap uses jsonlog log_destination when logFormat is json
+    template: templates/db-configmap.yaml
+    set:
+      logFormat: json
+    asserts:
+      - matchRegex:
+          path: data["postgresql.conf"]
+          pattern: "log_destination = 'stderr,jsonlog'"

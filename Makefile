@@ -117,7 +117,7 @@ CRANE_ARCH := $(subst amd64,x86_64,$(ARCH))
 CLOUD_PROVIDER_KIND_PID_FILE ?= $(CURDIR)/.kind/cloud-provider-kind.pid
 CLOUD_PROVIDER_KIND_LOG ?= $(CURDIR)/.kind/cloud-provider-kind.log
 
-.PHONY: tools lint render kubeconform kyverno unittest readme readme-check changelog changelog-llm changelog-console changelog-console-llm changelog-check docs test build-pytest kind-up kind-down kind-recreate kind-ensure kind-load-images kind-load-old-images kind-clean-namespace kind-prep pytest-docker e2e e2e-basic e2e-trustedca e2e-multizone e2e-externaldb e2e-backup e2e-backup-pss e2e-pss e2e-upgrade e2e-upgrade-included e2e-upgrade-standalone e2e-settle extract-old-chart clean
+.PHONY: tools lint render kubeconform kyverno unittest readme readme-check changelog changelog-llm changelog-console changelog-console-llm changelog-check docs test build-pytest kind-up kind-down kind-recreate kind-ensure kind-load-images kind-load-old-images kind-clean-namespace kind-prep pytest-docker e2e e2e-basic e2e-trustedca e2e-multizone e2e-externaldb e2e-backup e2e-backup-pss e2e-pss e2e-json-logging e2e-upgrade e2e-upgrade-included e2e-upgrade-standalone e2e-settle extract-old-chart clean
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*## "; printf "\nUsage: make \033[36m<target>\033[0m\n"} \
@@ -569,6 +569,9 @@ e2e: ## Run all e2e scenarios sequentially (requires kind cluster)
 	$(MAKE) e2e-pss E2E_NAMESPACE=kasm-e2e-pss
 	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-pss
 	$(MAKE) e2e-settle
+	$(MAKE) e2e-json-logging E2E_NAMESPACE=kasm-e2e-json-logging
+	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-json-logging
+	$(MAKE) e2e-settle
 	$(MAKE) e2e-upgrade-included E2E_NAMESPACE=kasm-e2e-upgrade-included
 	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-upgrade-included
 	$(MAKE) e2e-settle
@@ -664,6 +667,9 @@ e2e-upgrade: e2e-upgrade-included e2e-upgrade-standalone ## Run both upgrade e2e
 
 e2e-pss: kind-prep build-pytest ## Pod Security Standards restricted namespace test
 	$(MAKE) pytest-docker E2E_SCENARIO=e2e-pss PYTEST_ARGS="-m e2e -q test_06_pod_security_standards.py"
+
+e2e-json-logging: kind-prep build-pytest ## Verify all non-Guac pods emit JSON logs when logFormat=json
+	$(MAKE) pytest-docker E2E_SCENARIO=e2e-json-logging PYTEST_ARGS="-m e2e -q test_10_json_logging.py"
 
 ##@ Maintenance
 

@@ -286,6 +286,7 @@ e2e_group_a:
           - e2e-basic
           - e2e-multizone
           - e2e-upgrade-included
+          - e2e-json-logging
 
 # Group B: one heavy (upgrade-standalone) + one medium (backup) +
 # one light (trustedca).  Standalone-DB upgrade and backup both touch

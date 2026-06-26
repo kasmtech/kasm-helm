@@ -83,13 +83,7 @@ spec:
               the API endpoint at it rather than the api (CherryPy) service.
             */}}
             - name: API_HOSTNAME
-            {{- if .Values.kasmZones }}
-              {{- with index .Values.kasmZones 0 }}
-              value: {{ printf "%s-%s" $constants.proxy.svc (include "kasm.zoneName" .name) | quote }}
-              {{- end }}
-            {{- else }}
-              value: {{ printf "%s-%s" $constants.proxy.svc "default" | quote }}
-            {{- end }}
+              value: {{ printf "%s-%s" $constants.proxy.svc $zoneName | quote }}
             - name: API_PORT
               value: {{ $constants.proxy.http | quote }}
             - name: API_REFRESH_INTERVAL
@@ -112,7 +106,7 @@ spec:
           livenessProbe:
             {{- include "health.probe" (dict "root" $ "component" "rdpHttpsGateway" "probeType" "livenessProbe" "type" "tcp" "port" $constants.rdpHttpsGateway.port) | nindent 12 }}
           readinessProbe:
-            {{- include "health.probe" (dict "root" $ "component" "rdpHttpsGateway" "probeType" "readinessProbe" "type" "tcp" "port" $constants.rdpHttpsGateway.port) | nindent 12 }}
+            {{- include "health.probe" (dict "root" $ "component" "rdpHttpsGateway" "probeType" "readinessProbe" "type" "https" "path" "/rdp-https-gateway/__healthcheck" "port" $constants.rdpHttpsGateway.port) | nindent 12 }}
           {{- end }}
           {{- if $.Values.components.rdpHttpsGateway.resources }}
           resources: {{- toYaml $.Values.components.rdpHttpsGateway.resources | nindent 12 }}
@@ -131,6 +125,11 @@ spec:
               mountPath: /opt/kasm/current/log
             - name: kasm-rdp-https-gateway-data
               mountPath: /tmp
+            {{- if eq $.Values.logFormat "json" }}
+            - name: kasm-rdp-https-gateway-app-config
+              mountPath: /opt/rdpgw/conf/rdp_https_gateway.app.config.yaml
+              subPath: rdp_https_gateway.app.config.yaml
+            {{- end }}
             {{- with $merged.containerMounts }}
               {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -178,7 +177,7 @@ spec:
           livenessProbe:
             {{- include "health.probe" (dict "root" $ "component" "rdpHttpsGateway" "timingScope" "nginxSidecar" "probeType" "livenessProbe" "type" "tcp" "portName" "rdp-tls-ngnx-pt") | nindent 12 }}
           readinessProbe:
-            {{- include "health.probe" (dict "root" $ "component" "rdpHttpsGateway" "timingScope" "nginxSidecar" "probeType" "readinessProbe" "type" "tcp" "portName" "rdp-tls-ngnx-pt") | nindent 12 }}
+            {{- include "health.probe" (dict "root" $ "component" "rdpHttpsGateway" "probeType" "readinessProbe" "type" "https" "path" "/rdp-https-gateway/__healthcheck" "port" $constants.rdpHttpsGateway.port) | nindent 12 }}
           {{- end }}
           {{- if $.Values.components.rdpHttpsGateway.nginxSidecar.resources }}
           resources: {{- toYaml $.Values.components.rdpHttpsGateway.nginxSidecar.resources | nindent 12 }}
@@ -211,6 +210,11 @@ spec:
         - name: kasm-rdp-https-gateway-nginx-log-tmp
           emptyDir:
             sizeLimit: 1Gi
+        {{- if eq .Values.logFormat "json" }}
+        - name: kasm-rdp-https-gateway-app-config
+          configMap:
+            name: {{ include "kasm.name" (list $ "rdp-https-gateway-app-config") }}
+        {{- end}}
         {{- with $merged.volumes }}
           {{- toYaml . | nindent 8 }}
         {{- end }}

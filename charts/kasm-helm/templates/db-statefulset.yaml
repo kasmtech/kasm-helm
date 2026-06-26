@@ -44,6 +44,17 @@ spec:
         - name: {{ include "kasm.name" (list . "db" "container") }}
           image: {{ $constants.db.image }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
+          {{- if eq .Values.logFormat "json" }}
+          command:
+            - "/bin/bash"
+            - "-c"
+          args:
+            - |
+              mkdir -p /tmp/postgres
+              touch /tmp/postgres/postgresql.json
+              ln -sf /dev/stdout /tmp/postgres/postgresql.json
+              exec docker-entrypoint.sh postgres -c config_file=/var/lib/postgresql/conf/postgresql.conf -c hba_file=/var/lib/postgresql/conf/pg_hba.conf
+          {{- end }}
           env:
             - name: POSTGRES_DB
               value: {{ .Values.database.kasmDbName }}

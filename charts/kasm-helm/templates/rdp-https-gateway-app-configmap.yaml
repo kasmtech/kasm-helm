@@ -1,0 +1,48 @@
+{{/*
+Kasm DB configMaps containing pg_hba.conf and postgresql.conf files
+*/}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $zoneName := "default" -}}
+{{- if .Values.kasmZones }}
+  {{- $zoneName = (index .Values.kasmZones 0).name -}}
+{{- end }}
+{{- if .Values.components.rdpHttpsGateway.enabled }}
+{{- if eq .Values.logFormat "json" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  {{- include "kasm.metadata" (dict "context" . "component" "rdp-https-gateway-app-config" "resource" "configMap" "include" "all") | indent 2 }}
+data:
+  rdp_https_gateway.app.config.yaml: |
+    api:
+      auth_token: JWTTOKEN
+      public_jwt_cert: PUBLICCERT
+      hostnames: [ {{ printf "%s-%s" $constants.proxy.svc $zoneName | quote }} ]
+      port: {{ $constants.proxy.http }}
+      hostname_refresh_interval: 30
+      schema: http
+    rdp-gateway:
+      id: auto
+      registration_token: REGISTRATION_TOKEN
+      server_address: {{ .Values.publicAddr }}
+      server_port: {{ $constants.rdpHttpsGateway.port }}
+      zone: {{ $zoneName }}
+      keepalive_loop_interval: 30
+      ephemeral: true
+      kasm_delete_session_watch_interval: 60
+    logging:
+      console_level: "ERROR"
+      file_logging:
+        filename: "/dev/null"
+        level: "DEBUG"
+        backupCount: 20
+        maxMegaBytes: 10
+      json_file_logging:
+        filename: "/dev/stdout"
+        level: "DEBUG"
+        backupCount: 20
+        maxMegaBytes: 10
+      network_logging:
+        level: "DEBUG"
+{{- end }}
+{{- end }}

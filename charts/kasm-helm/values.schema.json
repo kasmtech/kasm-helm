@@ -2024,6 +2024,13 @@
       "title": "imagePullPolicy",
       "type": "string"
     },
+    "logFormat": {
+      "default": "log",
+      "description": "Kasm log format written to console. 'log' emits human-readable text; 'json' emits structured JSON suitable for log aggregation pipelines.",
+      "title": "logFormat",
+      "type": "string",
+      "enum": ["log", "json"]
+    },
     "imagePullSecrets": {
       "additionalProperties": false,
       "properties": {

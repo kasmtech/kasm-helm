@@ -6,7 +6,7 @@ Deploy the RDP Gateway Configmap if .Values.components.rdpGateway.enabled set to
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  {{- include "kasm.metadata" (dict "context" . "component" "rdpGateway" "resource" "configMap" "include" "all") | indent 2 }}
+  {{- include "kasm.metadata" (dict "context" . "component" "rdpGateway-app-config" "resource" "configMap" "include" "all") | indent 2 }}
 data:
   passthrough.app.config.yaml: |
     rdp-gateway:
@@ -55,7 +55,7 @@ data:
             maxBytes: 10485760
           stream:
             class: logging.StreamHandler
-            formatter: standard
+            formatter: {{ ternary "pythonjsonlogger" "standard" (eq .Values.logFormat "json") }}
             level: DEBUG
           syslog:
             class: logging.handlers.SysLogHandler

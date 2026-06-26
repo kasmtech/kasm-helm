@@ -217,7 +217,7 @@ spec:
             sizeLimit: 1Gi
         - name: kasm-rdp-gateway-config
           configMap:
-            name: {{ include "kasm.name" (list $ "rdpGateway" "configmap") }}
+            name: {{ include "kasm.name" (list $ "rdpGateway-app-config") }}
         {{- if .Values.components.rdpGateway.iniConfigMapName }}
         - name: kasm-rdp-gateway-ini
           configMap:

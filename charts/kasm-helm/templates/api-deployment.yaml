@@ -95,6 +95,11 @@ spec:
           volumeMounts:
             - name: tmp-data
               mountPath: /tmp
+            {{- if eq $.Values.logFormat "json" }}
+            - name: kasm-api-app-config
+              mountPath: /opt/kasm/current/conf/app/api/api.app.config.yaml
+              subPath: api.app.config.yaml
+            {{- end }}
             {{- with $merged.containerMounts }}
               {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -118,6 +123,11 @@ spec:
         - name: tmp-data
           emptyDir:
             sizeLimit: 256Mi
+        {{- if eq $.Values.logFormat "json" }}
+        - name: kasm-api-app-config
+          configMap:
+            name: {{ include "kasm.name" (list $ "api-app-config") }}
+        {{- end}}
       {{- with $merged.volumes }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
