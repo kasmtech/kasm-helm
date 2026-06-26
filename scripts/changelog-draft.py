@@ -284,10 +284,9 @@ def _render_fresh_section(buckets: dict) -> str:
     for cat in _CATEGORY_ORDER:
         if cat not in buckets:
             continue
-        lines.append(f"\n\n### {cat}\n")
+        lines.append(f"\n### {cat}\n\n")
         for entry in buckets[cat]:
-            lines.append(f"\n- {entry}")
-    lines.append("\n")
+            lines.append(f"- {entry}\n")
     return "".join(lines)
 
 
@@ -304,7 +303,7 @@ def _merge_into_existing(existing: str, new_buckets: dict) -> str:
             continue
 
         header = f"### {cat}"
-        entries_text = "".join(f"\n- {e}" for e in new_buckets[cat])
+        entries_text = "".join(f"- {e}\n" for e in new_buckets[cat])
 
         if header in result:
             # Find where the next category header (or end of section) begins
@@ -317,7 +316,7 @@ def _merge_into_existing(existing: str, new_buckets: dict) -> str:
                 insert_at = len(result)
             result = result[:insert_at] + entries_text + result[insert_at:]
         else:
-            result += f"\n\n{header}\n{entries_text}"
+            result += f"\n\n{header}\n\n{entries_text}"
 
     return result + "\n"
 
