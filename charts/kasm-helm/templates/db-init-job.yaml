@@ -47,7 +47,7 @@ spec:
               value: {{ .Values.database.kasmDbName }}
             - name: POSTGRES_USER
               value: {{ .Values.database.kasmDbUser }}
-            {{- include "kasm.trustedCaEnv" $ | nindent 12 }}
+            {{- include "kasm.trustedCaEnv" $ | indent 12 }}
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -99,7 +99,7 @@ spec:
 
                 for attempt in $(seq 1 12); do
                   zone_count=$(
-                    PGPASSWORD="${POSTGRES_PASSWORD}" \
+                    PGCONNECT_TIMEOUT={{ .Values.dbManagement.dbConnectionTimeout }} PGPASSWORD="${POSTGRES_PASSWORD}" \
                       psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -p "${POSTGRES_PORT}" -h "${POSTGRES_HOST}" \
                       -t -c "select zone_id from zones" 2>/dev/null | wc -l
                   )

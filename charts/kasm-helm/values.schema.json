@@ -234,13 +234,11 @@
             },
             "extraContainers": {
               "description": "Additional sidecar containers to run in the pod\nExample\n - name: sidecar-example\n   image: busybox\n   command: [/bin/sh, -c, 'echo \"Hello world\"']",
-
               "title": "extraContainers",
               "type": "array"
             },
             "extraInitContainers": {
               "description": "Additional sidecar containers to run in the pod\nExample\n - name: init-example\n   image: busybox\n   command: [/bin/sh, -c, 'echo \"Hello world\"']",
-
               "title": "extraInitContainers",
               "type": "array"
             },
@@ -253,6 +251,65 @@
               "description": "A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things\n like custom SSL certificates, config files, or data volumes to the Kasm API container\nExample:\n  extraVolumes:\n    - secret:\n        defaultMode: 420\n        secretName: kasm-custom-tls\n      name: pkichain",
               "title": "extraVolumes",
               "type": "array"
+            },
+            "healthCheckTiming": {
+              "description": "Override the pod's default healthcheck timing values for liveness and/or readiness probes.\n Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only\n the timeoutSeconds value of the livenessProbe.",
+              "title": "healthCheckTiming",
+              "type": "object",
+              "properties": {
+                "livenessProbe": {
+                  "title": "livenessProbe",
+                  "type": "object",
+                  "properties": {
+                    "timeoutSeconds": {
+                      "title": "timeoutSeconds",
+                      "type": "integer"
+                    },
+                    "initialDelaySeconds": {
+                      "title": "initialDelaySeconds",
+                      "type": "integer"
+                    },
+                    "periodSeconds": {
+                      "title": "periodSeconds",
+                      "type": "integer"
+                    },
+                    "failureThreshold": {
+                      "title": "failureThreshold",
+                      "type": "integer"
+                    },
+                    "successThreshold": {
+                      "title": "successThreshold",
+                      "type": "integer"
+                    }
+                  }
+                },
+                "readinessProbe": {
+                  "title": "livenessProbe",
+                  "type": "object",
+                  "properties": {
+                    "timeoutSeconds": {
+                      "title": "timeoutSeconds",
+                      "type": "integer"
+                    },
+                    "initialDelaySeconds": {
+                      "title": "initialDelaySeconds",
+                      "type": "integer"
+                    },
+                    "periodSeconds": {
+                      "title": "periodSeconds",
+                      "type": "integer"
+                    },
+                    "failureThreshold": {
+                      "title": "failureThreshold",
+                      "type": "integer"
+                    },
+                    "successThreshold": {
+                      "title": "successThreshold",
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
             },
             "image": {
               "additionalProperties": false,
@@ -306,6 +363,7 @@
             "annotations",
             "resources",
             "labels",
+            "healthCheckTiming",
             "extraVolumes",
             "extraVolumeMounts",
             "extraContainers",
@@ -335,7 +393,6 @@
             },
             "extraContainers": {
               "description": "Additional sidecar containers to run in the pod\nExample\n - name: sidecar-example\n   image: busybox\n   command: [/bin/sh, -c, 'echo \"Hello world\"']",
-
               "title": "extraContainers",
               "type": "array"
             },
@@ -351,9 +408,67 @@
             },
             "extraVolumes": {
               "description": "A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things\n like custom SSL certificates, config files, or data volumes to the Kasm Guac container\nExample:\n  extraVolumes:\n    - secret:\n        defaultMode: 420\n        secretName: kasm-custom-tls\n      name: pkichain",
-
               "title": "extraVolumes",
               "type": "array"
+            },
+            "healthCheckTiming": {
+              "description": "Override the pod's default healthcheck timing values for liveness and/or readiness probes.\n Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only\n the timeoutSeconds value of the livenessProbe.",
+              "title": "healthCheckTiming",
+              "type": "object",
+              "properties": {
+                "livenessProbe": {
+                  "title": "livenessProbe",
+                  "type": "object",
+                  "properties": {
+                    "timeoutSeconds": {
+                      "title": "timeoutSeconds",
+                      "type": "integer"
+                    },
+                    "initialDelaySeconds": {
+                      "title": "initialDelaySeconds",
+                      "type": "integer"
+                    },
+                    "periodSeconds": {
+                      "title": "periodSeconds",
+                      "type": "integer"
+                    },
+                    "failureThreshold": {
+                      "title": "failureThreshold",
+                      "type": "integer"
+                    },
+                    "successThreshold": {
+                      "title": "successThreshold",
+                      "type": "integer"
+                    }
+                  }
+                },
+                "readinessProbe": {
+                  "title": "livenessProbe",
+                  "type": "object",
+                  "properties": {
+                    "timeoutSeconds": {
+                      "title": "timeoutSeconds",
+                      "type": "integer"
+                    },
+                    "initialDelaySeconds": {
+                      "title": "initialDelaySeconds",
+                      "type": "integer"
+                    },
+                    "periodSeconds": {
+                      "title": "periodSeconds",
+                      "type": "integer"
+                    },
+                    "failureThreshold": {
+                      "title": "failureThreshold",
+                      "type": "integer"
+                    },
+                    "successThreshold": {
+                      "title": "successThreshold",
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
             },
             "image": {
               "additionalProperties": false,
@@ -408,12 +523,72 @@
                   "description": "Manually configure resources for the nginx sidecar container. Leave empty to use the chart default.",
                   "title": "resources",
                   "type": "object"
+                },
+                "healthCheckTiming": {
+                  "description": "Override the pod's default healthcheck timing values for liveness and/or readiness probes.\n Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only\n the timeoutSeconds value of the livenessProbe.",
+                  "title": "healthCheckTiming",
+                  "type": "object",
+                  "properties": {
+                    "livenessProbe": {
+                      "title": "livenessProbe",
+                      "type": "object",
+                      "properties": {
+                        "timeoutSeconds": {
+                          "title": "timeoutSeconds",
+                          "type": "integer"
+                        },
+                        "initialDelaySeconds": {
+                          "title": "initialDelaySeconds",
+                          "type": "integer"
+                        },
+                        "periodSeconds": {
+                          "title": "periodSeconds",
+                          "type": "integer"
+                        },
+                        "failureThreshold": {
+                          "title": "failureThreshold",
+                          "type": "integer"
+                        },
+                        "successThreshold": {
+                          "title": "successThreshold",
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    "readinessProbe": {
+                      "title": "livenessProbe",
+                      "type": "object",
+                      "properties": {
+                        "timeoutSeconds": {
+                          "title": "timeoutSeconds",
+                          "type": "integer"
+                        },
+                        "initialDelaySeconds": {
+                          "title": "initialDelaySeconds",
+                          "type": "integer"
+                        },
+                        "periodSeconds": {
+                          "title": "periodSeconds",
+                          "type": "integer"
+                        },
+                        "failureThreshold": {
+                          "title": "failureThreshold",
+                          "type": "integer"
+                        },
+                        "successThreshold": {
+                          "title": "successThreshold",
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
                 }
               },
               "title": "nginxSidecar",
               "type": "object",
               "required": [
-                "resources"
+                "resources",
+                "healthCheckTiming"
               ]
             },
             "recordingData": {
@@ -447,6 +622,7 @@
             "annotations",
             "resources",
             "nginxSidecar",
+            "healthCheckTiming",
             "labels",
             "extraVolumes",
             "extraVolumeMounts",
@@ -477,15 +653,72 @@
             },
             "extraVolumeMounts": {
               "description": "A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things\n like custom SSL certificates, config files, or data volumes Kasm Manager container\nExample: \n  extraVolumeMounts:\n    - mountPath: /etc/ssl/certs/ca-certificates.crt\n      name: pkichain\n      readOnly: true\n      subPath: ca.crt",
-
               "title": "extraVolumeMounts",
               "type": "array"
             },
             "extraVolumes": {
               "description": "A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things\n like custom SSL certificates, config files, or data volumes to the Kasm Manager container\nExample:\n  extraVolumes:\n    - secret:\n        defaultMode: 420\n        secretName: kasm-custom-tls\n      name: pkichain",
-
               "title": "extraVolumes",
               "type": "array"
+            },
+            "healthCheckTiming": {
+              "description": "Override the pod's default healthcheck timing values for liveness and/or readiness probes.\n Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only\n the timeoutSeconds value of the livenessProbe.",
+              "title": "healthCheckTiming",
+              "type": "object",
+              "properties": {
+                "livenessProbe": {
+                  "title": "livenessProbe",
+                  "type": "object",
+                  "properties": {
+                    "timeoutSeconds": {
+                      "title": "timeoutSeconds",
+                      "type": "integer"
+                    },
+                    "initialDelaySeconds": {
+                      "title": "initialDelaySeconds",
+                      "type": "integer"
+                    },
+                    "periodSeconds": {
+                      "title": "periodSeconds",
+                      "type": "integer"
+                    },
+                    "failureThreshold": {
+                      "title": "failureThreshold",
+                      "type": "integer"
+                    },
+                    "successThreshold": {
+                      "title": "successThreshold",
+                      "type": "integer"
+                    }
+                  }
+                },
+                "readinessProbe": {
+                  "title": "livenessProbe",
+                  "type": "object",
+                  "properties": {
+                    "timeoutSeconds": {
+                      "title": "timeoutSeconds",
+                      "type": "integer"
+                    },
+                    "initialDelaySeconds": {
+                      "title": "initialDelaySeconds",
+                      "type": "integer"
+                    },
+                    "periodSeconds": {
+                      "title": "periodSeconds",
+                      "type": "integer"
+                    },
+                    "failureThreshold": {
+                      "title": "failureThreshold",
+                      "type": "integer"
+                    },
+                    "successThreshold": {
+                      "title": "successThreshold",
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
             },
             "image": {
               "additionalProperties": false,
@@ -551,6 +784,7 @@
             "annotations",
             "resources",
             "labels",
+            "healthCheckTiming",
             "extraVolumes",
             "extraVolumeMounts",
             "extraContainers",
@@ -586,6 +820,65 @@
               "description": "components.proxy.extraVolumes -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things\n like custom SSL certificates, config files, or data volumes to the Kasm Proxy container\nExample:\n  extraVolumes:\n    - secret:\n        defaultMode: 420\n        secretName: kasm-custom-tls\n      name: pkichain",
               "title": "extraVolumes",
               "type": "array"
+            },
+            "healthCheckTiming": {
+              "description": "Override the pod's default healthcheck timing values for liveness and/or readiness probes.\n Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only\n the timeoutSeconds value of the livenessProbe.",
+              "title": "healthCheckTiming",
+              "type": "object",
+              "properties": {
+                "livenessProbe": {
+                  "title": "livenessProbe",
+                  "type": "object",
+                  "properties": {
+                    "timeoutSeconds": {
+                      "title": "timeoutSeconds",
+                      "type": "integer"
+                    },
+                    "initialDelaySeconds": {
+                      "title": "initialDelaySeconds",
+                      "type": "integer"
+                    },
+                    "periodSeconds": {
+                      "title": "periodSeconds",
+                      "type": "integer"
+                    },
+                    "failureThreshold": {
+                      "title": "failureThreshold",
+                      "type": "integer"
+                    },
+                    "successThreshold": {
+                      "title": "successThreshold",
+                      "type": "integer"
+                    }
+                  }
+                },
+                "readinessProbe": {
+                  "title": "livenessProbe",
+                  "type": "object",
+                  "properties": {
+                    "timeoutSeconds": {
+                      "title": "timeoutSeconds",
+                      "type": "integer"
+                    },
+                    "initialDelaySeconds": {
+                      "title": "initialDelaySeconds",
+                      "type": "integer"
+                    },
+                    "periodSeconds": {
+                      "title": "periodSeconds",
+                      "type": "integer"
+                    },
+                    "failureThreshold": {
+                      "title": "failureThreshold",
+                      "type": "integer"
+                    },
+                    "successThreshold": {
+                      "title": "successThreshold",
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
             },
             "image": {
               "additionalProperties": false,
@@ -639,6 +932,7 @@
             "annotations",
             "resources",
             "labels",
+            "healthCheckTiming",
             "extraVolumes",
             "extraVolumeMounts",
             "extraContainers",
@@ -686,6 +980,65 @@
               "description": "A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things\n like custom SSL certificates, config files, or data volumes to the Kasm RDP Gateway container\nExample:\n  extraVolumes:\n    - secret:\n        defaultMode: 420\n        secretName: kasm-custom-tls\n      name: pkichain",
               "title": "extraVolumes",
               "type": "array"
+            },
+            "healthCheckTiming": {
+              "description": "Override the pod's default healthcheck timing values for liveness and/or readiness probes.\n Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only\n the timeoutSeconds value of the livenessProbe.",
+              "title": "healthCheckTiming",
+              "type": "object",
+              "properties": {
+                "livenessProbe": {
+                  "title": "livenessProbe",
+                  "type": "object",
+                  "properties": {
+                    "timeoutSeconds": {
+                      "title": "timeoutSeconds",
+                      "type": "integer"
+                    },
+                    "initialDelaySeconds": {
+                      "title": "initialDelaySeconds",
+                      "type": "integer"
+                    },
+                    "periodSeconds": {
+                      "title": "periodSeconds",
+                      "type": "integer"
+                    },
+                    "failureThreshold": {
+                      "title": "failureThreshold",
+                      "type": "integer"
+                    },
+                    "successThreshold": {
+                      "title": "successThreshold",
+                      "type": "integer"
+                    }
+                  }
+                },
+                "readinessProbe": {
+                  "title": "livenessProbe",
+                  "type": "object",
+                  "properties": {
+                    "timeoutSeconds": {
+                      "title": "timeoutSeconds",
+                      "type": "integer"
+                    },
+                    "initialDelaySeconds": {
+                      "title": "initialDelaySeconds",
+                      "type": "integer"
+                    },
+                    "periodSeconds": {
+                      "title": "periodSeconds",
+                      "type": "integer"
+                    },
+                    "failureThreshold": {
+                      "title": "failureThreshold",
+                      "type": "integer"
+                    },
+                    "successThreshold": {
+                      "title": "successThreshold",
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
             },
             "image": {
               "additionalProperties": false,
@@ -741,12 +1094,72 @@
                   "description": "Manually configure resources for the nginx sidecar container. Leave empty to use the chart default.",
                   "title": "resources",
                   "type": "object"
+                },
+                "healthCheckTiming": {
+                  "description": "Override the pod's default healthcheck timing values for liveness and/or readiness probes.\n Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only\n the timeoutSeconds value of the livenessProbe.",
+                  "title": "healthCheckTiming",
+                  "type": "object",
+                  "properties": {
+                    "livenessProbe": {
+                      "title": "livenessProbe",
+                      "type": "object",
+                      "properties": {
+                        "timeoutSeconds": {
+                          "title": "timeoutSeconds",
+                          "type": "integer"
+                        },
+                        "initialDelaySeconds": {
+                          "title": "initialDelaySeconds",
+                          "type": "integer"
+                        },
+                        "periodSeconds": {
+                          "title": "periodSeconds",
+                          "type": "integer"
+                        },
+                        "failureThreshold": {
+                          "title": "failureThreshold",
+                          "type": "integer"
+                        },
+                        "successThreshold": {
+                          "title": "successThreshold",
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    "readinessProbe": {
+                      "title": "livenessProbe",
+                      "type": "object",
+                      "properties": {
+                        "timeoutSeconds": {
+                          "title": "timeoutSeconds",
+                          "type": "integer"
+                        },
+                        "initialDelaySeconds": {
+                          "title": "initialDelaySeconds",
+                          "type": "integer"
+                        },
+                        "periodSeconds": {
+                          "title": "periodSeconds",
+                          "type": "integer"
+                        },
+                        "failureThreshold": {
+                          "title": "failureThreshold",
+                          "type": "integer"
+                        },
+                        "successThreshold": {
+                          "title": "successThreshold",
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
                 }
               },
               "title": "nginxSidecar",
               "type": "object",
               "required": [
-                "resources"
+                "resources",
+                "healthCheckTiming"
               ]
             }
           },
@@ -758,6 +1171,7 @@
             "annotations",
             "resources",
             "nginxSidecar",
+            "healthCheckTiming",
             "labels",
             "extraVolumes",
             "extraVolumeMounts",
@@ -800,6 +1214,65 @@
               "description": "A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things\n like custom SSL certificates, config files, or data volumes to the Kasm RDP HTTPS Gateway container\nExample:\n  extraVolumes:\n    - secret:\n        defaultMode: 420\n        secretName: kasm-custom-tls\n      name: pkichain",
               "title": "extraVolumes",
               "type": "array"
+            },
+            "healthCheckTiming": {
+              "description": "Override the pod's default healthcheck timing values for liveness and/or readiness probes.\n Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only\n the timeoutSeconds value of the livenessProbe.",
+              "title": "healthCheckTiming",
+              "type": "object",
+              "properties": {
+                "livenessProbe": {
+                  "title": "livenessProbe",
+                  "type": "object",
+                  "properties": {
+                    "timeoutSeconds": {
+                      "title": "timeoutSeconds",
+                      "type": "integer"
+                    },
+                    "initialDelaySeconds": {
+                      "title": "initialDelaySeconds",
+                      "type": "integer"
+                    },
+                    "periodSeconds": {
+                      "title": "periodSeconds",
+                      "type": "integer"
+                    },
+                    "failureThreshold": {
+                      "title": "failureThreshold",
+                      "type": "integer"
+                    },
+                    "successThreshold": {
+                      "title": "successThreshold",
+                      "type": "integer"
+                    }
+                  }
+                },
+                "readinessProbe": {
+                  "title": "livenessProbe",
+                  "type": "object",
+                  "properties": {
+                    "timeoutSeconds": {
+                      "title": "timeoutSeconds",
+                      "type": "integer"
+                    },
+                    "initialDelaySeconds": {
+                      "title": "initialDelaySeconds",
+                      "type": "integer"
+                    },
+                    "periodSeconds": {
+                      "title": "periodSeconds",
+                      "type": "integer"
+                    },
+                    "failureThreshold": {
+                      "title": "failureThreshold",
+                      "type": "integer"
+                    },
+                    "successThreshold": {
+                      "title": "successThreshold",
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
             },
             "image": {
               "additionalProperties": false,
@@ -854,12 +1327,72 @@
                   "description": "Manually configure resources for the nginx sidecar container. Leave empty to use the chart default.",
                   "title": "resources",
                   "type": "object"
+                },
+                "healthCheckTiming": {
+                  "description": "Override the pod's default healthcheck timing values for liveness and/or readiness probes.\n Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only\n the timeoutSeconds value of the livenessProbe.",
+                  "title": "healthCheckTiming",
+                  "type": "object",
+                  "properties": {
+                    "livenessProbe": {
+                      "title": "livenessProbe",
+                      "type": "object",
+                      "properties": {
+                        "timeoutSeconds": {
+                          "title": "timeoutSeconds",
+                          "type": "integer"
+                        },
+                        "initialDelaySeconds": {
+                          "title": "initialDelaySeconds",
+                          "type": "integer"
+                        },
+                        "periodSeconds": {
+                          "title": "periodSeconds",
+                          "type": "integer"
+                        },
+                        "failureThreshold": {
+                          "title": "failureThreshold",
+                          "type": "integer"
+                        },
+                        "successThreshold": {
+                          "title": "successThreshold",
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    "readinessProbe": {
+                      "title": "livenessProbe",
+                      "type": "object",
+                      "properties": {
+                        "timeoutSeconds": {
+                          "title": "timeoutSeconds",
+                          "type": "integer"
+                        },
+                        "initialDelaySeconds": {
+                          "title": "initialDelaySeconds",
+                          "type": "integer"
+                        },
+                        "periodSeconds": {
+                          "title": "periodSeconds",
+                          "type": "integer"
+                        },
+                        "failureThreshold": {
+                          "title": "failureThreshold",
+                          "type": "integer"
+                        },
+                        "successThreshold": {
+                          "title": "successThreshold",
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
                 }
               },
               "title": "nginxSidecar",
               "type": "object",
               "required": [
-                "resources"
+                "resources",
+                "healthCheckTiming"
               ]
             }
           },
@@ -871,6 +1404,7 @@
             "annotations",
             "resources",
             "nginxSidecar",
+            "healthCheckTiming",
             "labels",
             "extraVolumes",
             "extraVolumeMounts",
@@ -925,6 +1459,65 @@
           "description": "The hostname of the external PostgreSQL server.  Only used when database.standalone is true.",
           "title": "hostname",
           "type": "string"
+        },
+        "healthCheckTiming": {
+          "description": "Override the pod's default healthcheck timing values for liveness and/or readiness probes.\n Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only\n the timeoutSeconds value of the livenessProbe.",
+          "title": "healthCheckTiming",
+          "type": "object",
+          "properties": {
+            "livenessProbe": {
+              "title": "livenessProbe",
+              "type": "object",
+              "properties": {
+                "timeoutSeconds": {
+                  "title": "timeoutSeconds",
+                  "type": "integer"
+                },
+                "initialDelaySeconds": {
+                  "title": "initialDelaySeconds",
+                  "type": "integer"
+                },
+                "periodSeconds": {
+                  "title": "periodSeconds",
+                  "type": "integer"
+                },
+                "failureThreshold": {
+                  "title": "failureThreshold",
+                  "type": "integer"
+                },
+                "successThreshold": {
+                  "title": "successThreshold",
+                  "type": "integer"
+                }
+              }
+            },
+            "readinessProbe": {
+              "title": "livenessProbe",
+              "type": "object",
+              "properties": {
+                "timeoutSeconds": {
+                  "title": "timeoutSeconds",
+                  "type": "integer"
+                },
+                "initialDelaySeconds": {
+                  "title": "initialDelaySeconds",
+                  "type": "integer"
+                },
+                "periodSeconds": {
+                  "title": "periodSeconds",
+                  "type": "integer"
+                },
+                "failureThreshold": {
+                  "title": "failureThreshold",
+                  "type": "integer"
+                },
+                "successThreshold": {
+                  "title": "successThreshold",
+                  "type": "integer"
+                }
+              }
+            }
+          }
         },
         "image": {
           "additionalProperties": false,
@@ -1086,6 +1679,7 @@
         "kasmDbUser",
         "kasmDbSecret",
         "postgresMasterUser",
+        "healthCheckTiming",
         "image",
         "storage",
         "annotations",
@@ -1164,6 +1758,12 @@
             "title": "initJobTTLSecondsAfterFinished",
             "type": "integer"
         },
+        "dbConnectionTimeout": {
+          "default": 10,
+          "description": "The time in seconds to wait for the DB to respond to initContainer connection attempts.",
+          "title": "dbConnectionTimeout",
+          "type": "integer"
+        },
         "upgrade": {
           "additionalProperties": false,
           "description": " ",
@@ -1220,7 +1820,8 @@
         "initialize",
         "upgrade",
         "backupCron",
-        "initJobTTLSecondsAfterFinished"
+        "initJobTTLSecondsAfterFinished",
+        "dbConnectionTimeout"
       ]
     },
     "useImageTags": {
@@ -1422,6 +2023,13 @@
       "description": "Configure global image pull policy ",
       "title": "imagePullPolicy",
       "type": "string"
+    },
+    "logFormat": {
+      "default": "log",
+      "description": "Kasm log format written to console. 'log' emits human-readable text; 'json' emits structured JSON suitable for log aggregation pipelines.",
+      "title": "logFormat",
+      "type": "string",
+      "enum": ["log", "json"]
     },
     "imagePullSecrets": {
       "additionalProperties": false,

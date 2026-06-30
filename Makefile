@@ -117,7 +117,7 @@ CRANE_ARCH := $(subst amd64,x86_64,$(ARCH))
 CLOUD_PROVIDER_KIND_PID_FILE ?= $(CURDIR)/.kind/cloud-provider-kind.pid
 CLOUD_PROVIDER_KIND_LOG ?= $(CURDIR)/.kind/cloud-provider-kind.log
 
-.PHONY: tools lint render kubeconform kyverno unittest readme readme-check test build-pytest kind-up kind-down kind-recreate kind-ensure kind-load-images kind-load-old-images kind-clean-namespace kind-prep pytest-docker e2e e2e-basic e2e-trustedca e2e-multizone e2e-externaldb e2e-backup e2e-backup-pss e2e-pss e2e-upgrade e2e-upgrade-included e2e-upgrade-standalone e2e-settle extract-old-chart clean
+.PHONY: tools lint render kubeconform kyverno unittest readme readme-check changelog changelog-llm changelog-console changelog-console-llm changelog-check docs test build-pytest kind-up kind-down kind-recreate kind-ensure kind-load-images kind-load-old-images kind-clean-namespace kind-prep pytest-docker e2e e2e-basic e2e-trustedca e2e-multizone e2e-externaldb e2e-backup e2e-backup-pss e2e-pss e2e-json-logging e2e-upgrade e2e-upgrade-included e2e-upgrade-standalone e2e-settle extract-old-chart clean
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*## "; printf "\nUsage: make \033[36m<target>\033[0m\n"} \
@@ -288,12 +288,20 @@ kyverno: tools render ## Apply Kyverno policies against rendered manifests
 unittest: tools ## Run helm-unittest test suites
 	HELM_PLUGINS="$(HELM_PLUGINS_DIR)" $(HELM) unittest $(CHART_DIR)
 
+test: lint kubeconform kyverno unittest ## Run full static suite: lint + kubeconform + kyverno + unittest
+
+##@ Docs
+
+# Optional extra arguments passed to changelog-draft.py. Override on the
+# command line: make changelog-llm CHANGELOG_ARGS="--model claude-sonnet-4-6"
+CHANGELOG_ARGS ?=
+
 readme: $(HELM_DOCS) ## Regenerate charts/kasm-helm/README.md from values.yaml + README.md.gotmpl
 	cd $(CHART_DIR) && $(HELM_DOCS)
 
 # Fails (non-zero exit) if the committed README is out of date with the chart's
 # values.yaml or README.md.gotmpl. Run `make readme` locally to fix. Wired into
-# `make test` so the GitLab CI validate job catches stale READMEs on every MR.
+# the GitLab CI docs-check job.
 readme-check: $(HELM_DOCS) ## Verify charts/kasm-helm/README.md is up to date (use `make readme` to regen)
 	@set -euo pipefail; \
 	tmp_dir=$$(mktemp -d); \
@@ -311,7 +319,41 @@ readme-check: $(HELM_DOCS) ## Verify charts/kasm-helm/README.md is up to date (u
 	  exit 1; \
 	fi
 
-test: lint kubeconform kyverno unittest ## Run full static suite: lint + kubeconform + kyverno + unittest
+changelog: ## Generate or refresh the [Unreleased] scaffold in CHANGELOG.md (annotated with affected components)
+	python3 scripts/changelog-draft.py $(CHANGELOG_ARGS)
+
+changelog-llm: tools ## Generate CHANGELOG.md entries via Claude Code CLI with rendered helm diffs (requires `claude` in PATH)
+	python3 scripts/changelog-draft.py --use-llm $(CHANGELOG_ARGS)
+
+changelog-console: ## Print full resulting CHANGELOG.md to stdout without writing to disk (safe preview)
+	python3 scripts/changelog-draft.py --dry-run $(CHANGELOG_ARGS)
+
+changelog-console-llm: tools ## Print full resulting CHANGELOG.md via Claude Code CLI to stdout without writing to disk (requires `claude` in PATH)
+	python3 scripts/changelog-draft.py --use-llm --dry-run $(CHANGELOG_ARGS)
+
+# Fails (non-zero exit) if CHANGELOG.md has not changed relative to BASE_BRANCH
+# (default: develop). Skips silently on develop and release/* branches.
+# Run `make changelog` locally to generate a scaffold, edit it, then commit.
+changelog-check: ## Verify CHANGELOG.md has been updated relative to BASE_BRANCH (default: develop)
+	@set -euo pipefail; \
+	branch="$${CI_COMMIT_REF_NAME:-$$(git rev-parse --abbrev-ref HEAD)}"; \
+	if [[ "$$branch" == "develop" || "$$branch" =~ ^release/ ]]; then \
+	  echo "Integration branch ($$branch) — skipping changelog check."; \
+	  exit 0; \
+	fi; \
+	base="$${BASE_BRANCH:-develop}"; \
+	git fetch origin "$$base" 2>/dev/null || true; \
+	if git diff --name-only "origin/$$base...HEAD" | grep -q "^charts/kasm-helm/CHANGELOG.md$$"; then \
+	  echo "CHANGELOG.md updated — check passed."; \
+	else \
+	  echo ""; \
+	  echo "ERROR: charts/kasm-helm/CHANGELOG.md has not been updated."; \
+	  echo "Run 'make changelog' to generate a draft, edit it, then commit."; \
+	  echo ""; \
+	  exit 1; \
+	fi
+
+docs: readme changelog ## Regenerate README.md and refresh the CHANGELOG.md scaffold
 
 ##@ Kind Cluster
 
@@ -527,6 +569,9 @@ e2e: ## Run all e2e scenarios sequentially (requires kind cluster)
 	$(MAKE) e2e-pss E2E_NAMESPACE=kasm-e2e-pss
 	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-pss
 	$(MAKE) e2e-settle
+	$(MAKE) e2e-json-logging E2E_NAMESPACE=kasm-e2e-json-logging
+	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-json-logging
+	$(MAKE) e2e-settle
 	$(MAKE) e2e-upgrade-included E2E_NAMESPACE=kasm-e2e-upgrade-included
 	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-upgrade-included
 	$(MAKE) e2e-settle
@@ -622,6 +667,9 @@ e2e-upgrade: e2e-upgrade-included e2e-upgrade-standalone ## Run both upgrade e2e
 
 e2e-pss: kind-prep build-pytest ## Pod Security Standards restricted namespace test
 	$(MAKE) pytest-docker E2E_SCENARIO=e2e-pss PYTEST_ARGS="-m e2e -q test_06_pod_security_standards.py"
+
+e2e-json-logging: kind-prep build-pytest ## Verify all non-Guac pods emit JSON logs when logFormat=json
+	$(MAKE) pytest-docker E2E_SCENARIO=e2e-json-logging PYTEST_ARGS="-m e2e -q test_10_json_logging.py"
 
 ##@ Maintenance
 

@@ -85,7 +85,7 @@ spec:
             - name: SERVER_HOSTNAME
               value: {{ printf "%s-%s" $constants.manager.svc (include "kasm.zoneName" $zone.name) | quote }}
             - name: SERVER_INTERNAL_SCHEMA
-              value: "http"
+              value: "https"
             - name: "MANAGER_ID"
               value: "auto"
             - name: KASM_MANAGER_UPDATE_TIMER
@@ -98,11 +98,9 @@ spec:
               protocol: TCP
           {{- if $.Values.applyHealthChecks }}
           livenessProbe:
-            {{- include "health.tcp" (dict "portName" (printf "zn%s-%s" ($idx | toString) $constants.manager.portName) ) | indent 12 }}
-          {{- end }}
-          {{- if $.Values.applyHealthChecks }}
+            {{- include "health.probe" (dict "root" $ "component" "manager" "probeType" "livenessProbe" "type" "tcp" "portName" (printf "zn%s-%s" ($idx | toString) $constants.manager.portName)) | nindent 12 }}
           readinessProbe:
-            {{- include "health.http" (dict "path" "/__healthcheck" "portName" (printf "zn%s-%s" ($idx | toString) $constants.manager.portName) ) | indent 12 }}
+            {{- include "health.probe" (dict "root" $ "component" "manager" "probeType" "readinessProbe" "type" "http" "path" "/__healthcheck" "portName" (printf "zn%s-%s" ($idx | toString) $constants.manager.portName)) | nindent 12 }}
           {{- end }}
           {{- if $.Values.components.manager.resources }}
           resources: {{- toYaml $.Values.components.manager.resources | nindent 12 }}
@@ -113,6 +111,11 @@ spec:
           volumeMounts:
             - name: tmp-data
               mountPath: /tmp
+            {{- if eq $.Values.logFormat "json" }}
+            - name: kasm-manager-app-config
+              mountPath: /opt/kasm/current/conf/app/api/api.app.config.yaml
+              subPath: api.app.config.yaml
+            {{- end }}
             {{- with $merged.containerMounts }}
               {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -124,6 +127,11 @@ spec:
         - name: tmp-data
           emptyDir:
             sizeLimit: 1Gi
+        {{- if eq $.Values.logFormat "json" }}
+        - name: kasm-manager-app-config
+          configMap:
+            name: {{ include "kasm.name" (list $ "manager-app-config") }}
+        {{- end}}
         {{- with $merged.volumes }}
           {{- toYaml . | nindent 8 }}
         {{- end }}

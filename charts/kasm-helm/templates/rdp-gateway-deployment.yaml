@@ -80,17 +80,23 @@ spec:
             - name: KASM_EPHEMERAL
               value: "true"
             - name: API_SCHEMA
-              value: http
+              value: "http"
+            {{/*
+              Connection proxies must reach the manager's /manager_api/ endpoint
+              (support-bundle uploads) as well as /api/ (registration/heartbeat).
+              Only the kasm-proxy nginx service serves both on one port, so point
+              the API endpoint at it rather than the api (CherryPy) service.
+            */}}
             - name: API_HOSTNAME
             {{- if .Values.kasmZones }}
               {{- with index .Values.kasmZones 0 }}
-              value: {{ printf "%s-%s" $constants.api.svc (include "kasm.zoneName" .name) | quote }}
+              value: {{ printf "%s-%s" $constants.proxy.svc (include "kasm.zoneName" .name) | quote }}
               {{- end }}
             {{- else }}
-              value: {{ printf "%s-%s" $constants.api.svc "default" | quote }}
+              value: {{ printf "%s-%s" $constants.proxy.svc "default" | quote }}
             {{- end }}
             - name: API_PORT
-              value: {{ $constants.api.port | quote }}
+              value: {{ $constants.proxy.http | quote }}
             - name: API_REFRESH_INTERVAL
               value: "30"
             - name: SERVER_ID
@@ -113,11 +119,9 @@ spec:
               protocol: TCP
           {{- if .Values.applyHealthChecks }}
           livenessProbe:
-            {{- include "health.tcp" (dict "portName" $constants.rdpGateway.portName ) | indent 12 }}
-          {{- end }}
-          {{- if .Values.applyHealthChecks }}
+            {{- include "health.probe" (dict "root" $ "component" "rdpGateway" "probeType" "livenessProbe" "type" "tcp" "portName" $constants.rdpGateway.portName) | nindent 12 }}
           readinessProbe:
-            {{- include "health.http" (dict "path" "/__healthcheck" "portName" $constants.rdpGateway.portName ) | indent 12 }}
+            {{- include "health.probe" (dict "root" $ "component" "rdpGateway" "probeType" "readinessProbe" "type" "http" "path" "/__healthcheck" "portName" $constants.rdpGateway.portName) | nindent 12 }}
           {{- end }}
           {{- if .Values.components.rdpGateway.resources }}
           resources: {{- toYaml .Values.components.rdpGateway.resources | nindent 12 }}
@@ -177,17 +181,23 @@ spec:
             - name: kasm-rdp-gateway-nginx-data
               mountPath: /var/cache/nginx
             - name: kasm-rdp-gateway-nginx-data
-              mountPath: /var/log/nginx
-            - name: kasm-rdp-gateway-nginx-data
               mountPath: /run
+            - name: kasm-rdp-gateway-nginx-log-tmp
+              mountPath: /var/log/nginx
+            - name: kasm-rdp-gateway-cert
+              mountPath: /etc/nginx/ssl/tls.crt
+              subPath: tls.crt
+              readOnly: true
+            - name: kasm-rdp-gateway-cert
+              mountPath: /etc/nginx/ssl/tls.key
+              subPath: tls.key
+              readOnly: true
             {{- include "kasm.trustedCaVolumeMounts" . | nindent 12 }}
           {{- if .Values.applyHealthChecks }}
           livenessProbe:
-            {{- include "health.tcp" (dict "portName" "rdp-gw-nginx-pt") | indent 12 }}
-          {{- end }}
-          {{- if .Values.applyHealthChecks }}
+            {{- include "health.probe" (dict "root" $ "component" "rdpGateway" "timingScope" "nginxSidecar" "probeType" "livenessProbe" "type" "tcp" "portName" "rdp-gw-nginx-pt") | nindent 12 }}
           readinessProbe:
-            {{- include "health.tcp" (dict "portName" "rdp-gw-nginx-pt") | indent 12 }}
+            {{- include "health.probe" (dict "root" $ "component" "rdpGateway" "timingScope" "nginxSidecar" "probeType" "readinessProbe" "type" "https" "path" "/__healthcheck" "portName" "rdp-gw-nginx-pt") | nindent 12 }}
           {{- end }}
           {{- if .Values.components.rdpGateway.nginxSidecar.resources }}
           resources: {{- toYaml .Values.components.rdpGateway.nginxSidecar.resources | nindent 12 }}
@@ -207,7 +217,7 @@ spec:
             sizeLimit: 1Gi
         - name: kasm-rdp-gateway-config
           configMap:
-            name: {{ include "kasm.name" (list $ "rdpGateway" "configmap") }}
+            name: {{ include "kasm.name" (list $ "rdpGateway-app-config") }}
         {{- if .Values.components.rdpGateway.iniConfigMapName }}
         - name: kasm-rdp-gateway-ini
           configMap:
@@ -228,6 +238,9 @@ spec:
         - name: kasm-rdp-gateway-nginx-data
           emptyDir:
             sizeLimit: 100Mi
+        - name: kasm-rdp-gateway-nginx-log-tmp
+          emptyDir:
+            sizeLimit: 1Gi
         {{- with $merged.volumes }}
           {{- toYaml . | nindent 8 }}
         {{- end }}

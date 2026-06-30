@@ -63,7 +63,7 @@ spec:
               value: "20"
             - name: KASM_DB_SSL
               value: "true"
-            {{- include "kasm.trustedCaEnv" $ | nindent 12 }}
+            {{- include "kasm.trustedCaEnv" $ | indent 12 }}
             - name: "SERVER_ZONE_NAME"
               value: {{ $zone.name | quote }}
             - name: "KASM_EPHEMERAL"
@@ -78,7 +78,7 @@ spec:
               another NGINX proxy
             */}}
             - name: SERVER_INTERNAL_SCHEMA
-              value: {{ if eq $idx 0 }}"http"{{ else }}"https"{{ end }}
+              value: "https"
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -95,15 +95,20 @@ spec:
           volumeMounts:
             - name: tmp-data
               mountPath: /tmp
+            {{- if eq $.Values.logFormat "json" }}
+            - name: kasm-api-app-config
+              mountPath: /opt/kasm/current/conf/app/api/api.app.config.yaml
+              subPath: api.app.config.yaml
+            {{- end }}
             {{- with $merged.containerMounts }}
               {{- toYaml . | nindent 12 }}
             {{- end }}
             {{- include "kasm.trustedCaVolumeMounts" $ | nindent 12 }}
           {{- if $.Values.applyHealthChecks }}
           livenessProbe:
-            {{- include "health.tcp" (dict "portName" $constants.api.portName ) | indent 12 }}
+            {{- include "health.probe" (dict "root" $ "component" "api" "probeType" "livenessProbe" "type" "tcp" "portName" $constants.api.portName) | nindent 12 }}
           readinessProbe:
-            {{- include "health.http" (dict "path" "/api/__healthcheck" "portName" $constants.api.portName ) | indent 12 }}
+            {{- include "health.probe" (dict "root" $ "component" "api" "probeType" "readinessProbe" "type" "http" "path" "/api/__healthcheck" "portName" $constants.api.portName) | nindent 12 }}
           {{- end }}
           {{- if $.Values.components.api.resources }}
           resources: {{- toYaml $.Values.components.api.resources | nindent 12 }}
@@ -118,6 +123,11 @@ spec:
         - name: tmp-data
           emptyDir:
             sizeLimit: 256Mi
+        {{- if eq $.Values.logFormat "json" }}
+        - name: kasm-api-app-config
+          configMap:
+            name: {{ include "kasm.name" (list $ "api-app-config") }}
+        {{- end}}
       {{- with $merged.volumes }}
         {{- toYaml . | nindent 8 }}
       {{- end }}

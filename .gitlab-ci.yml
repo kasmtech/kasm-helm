@@ -144,21 +144,31 @@ validate:
     - if: $CI_PIPELINE_SOURCE == "web"
       when: manual
 
-# Verify charts/kasm-helm/README.md is in sync with values.yaml + README.md.gotmpl.
-# Runs in its own stage AFTER `validate` so unit-test / lint / kubeconform /
-# kyverno results are visible regardless of README drift state — a dev with a
-# stale README still sees whether their substantive changes pass. README
-# failure still skips e2e (docs_check sits before the e2e_* stages). Mirrors
-# the `validate` job's rule shape so it runs on every branch push (not just
-# MR pipelines) — gives devs fast local-branch feedback on README drift.
-readme-check:
+# Two documentation checks run in parallel as a matrix in the docs_check stage:
+#
+#   readme   — verifies README.md is in sync with values.yaml + README.md.gotmpl
+#   changelog — verifies CHANGELOG.md has been updated relative to the target branch
+#
+# Both gate e2e (docs_check precedes all e2e_* stages) while keeping unit-test
+# and lint results visible regardless of docs drift state.  The changelog check
+# skips silently on develop and release/* — those are integration targets where
+# diffing against themselves is meaningless.
+docs-check:
   stage: docs_check
   image: python:3.12-bookworm
   before_script:
     - apt-get update
-    - apt-get install -y --no-install-recommends bash curl make ca-certificates
+    - apt-get install -y --no-install-recommends bash curl make git ca-certificates
+  parallel:
+    matrix:
+      - CHECK: [readme, changelog]
   script:
-    - make readme-check
+    - |
+      if [ "$CHECK" = "readme" ]; then
+        make readme-check
+      elif [ "$CHECK" = "changelog" ]; then
+        BASE_BRANCH="${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-develop}" make changelog-check
+      fi
   rules:
     - if: $CI_COMMIT_BRANCH
       when: on_success
@@ -276,6 +286,7 @@ e2e_group_a:
           - e2e-basic
           - e2e-multizone
           - e2e-upgrade-included
+          - e2e-json-logging
 
 # Group B: one heavy (upgrade-standalone) + one medium (backup) +
 # one light (trustedca).  Standalone-DB upgrade and backup both touch

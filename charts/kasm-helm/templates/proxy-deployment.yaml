@@ -40,19 +40,6 @@ spec:
         {{- include "kasm.trustedCaInit" (list $ "proxy") | nindent 8 }}
         {{- include "kasm.initContainer" (dict "context" $ "serviceName" (printf "%s-%s" $constants.api.svc (include "kasm.zoneName" $zone.name)) "servicePort" $constants.api.port "path" "/api/__healthcheck" "schema" "http" "image" $constants.api.image "component" "api") | nindent 8 }}
         {{- include "kasm.initContainer" (dict "context" $ "serviceName" (printf "%s-%s" $constants.manager.svc (include "kasm.zoneName" $zone.name)) "servicePort" $constants.manager.port "path" "/__healthcheck" "schema" "http" "image" $constants.api.image "component" "manager") | nindent 8 }}
-        {{- if $.Values.components.guac.enabled }}
-          {{- include "kasm.initContainer" (dict "context" $ "serviceName" $constants.guac.svc "servicePort" $constants.guac.nginxPort "path" "/guac/__healthcheck" "schema" "http" "image" $constants.api.image "component" "guac") | nindent 8 }}
-        {{- end }}
-        {{- if $.Values.components.rdpGateway.enabled }}
-          {{/*
-            Probe the rdp-gateway through its nginx sidecar (nginxPort = 9001),
-            not the app port (5555), so cross-pod traffic uses the same
-            front door as all other consumers. The sidecar's services.d config
-            exposes a /__healthcheck location that proxy_passes to the local
-            rdp_gateway upstream on 127.0.0.1:5555.
-          */}}
-          {{- include "kasm.initContainer" (dict "context" $ "serviceName" $constants.rdpGateway.svc "servicePort" $constants.rdpGateway.nginxPort "path" "/__healthcheck" "schema" "http" "image" $constants.api.image "component" "rdpGateway") | nindent 8 }}
-        {{- end }}
         {{- with $merged.extraInitContainers }}
           {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -92,9 +79,9 @@ spec:
             - name: kasm-proxy-data
               mountPath: /var/cache/nginx
             - name: kasm-proxy-data
-              mountPath: /var/log/external/nginx
-            - name: kasm-proxy-data
               mountPath: /run
+            - name: kasm-proxy-log-tmp
+              mountPath: /var/log/nginx
             {{- with $merged.containerMounts }}
               {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -108,11 +95,9 @@ spec:
               protocol: TCP
           {{- if $.Values.applyHealthChecks }}
           livenessProbe:
-            {{- include "health.tcp" (dict "portName" (print $constants.proxy.portName "-http") ) | indent 12 }}
-          {{- end }}
-          {{- if $.Values.applyHealthChecks }}
+            {{- include "health.probe" (dict "root" $ "component" "proxy" "probeType" "livenessProbe" "type" "tcp" "portName" (printf "%s-http" $constants.proxy.portName)) | nindent 12 }}
           readinessProbe:
-            {{- include "health.command" (dict "command" "nginx -t") | indent 12 }}
+            {{- include "health.probe" (dict "root" $ "component" "proxy" "probeType" "readinessProbe" "type" "command" "command" "nginx -t") | nindent 12 }}
           {{- end }}
         {{- with $merged.extraContainers }}
           {{- toYaml . | nindent 8 }}
@@ -131,6 +116,9 @@ spec:
           configMap:
             name: {{ include "kasm.name" (list $ "proxy-services" "configmap") }}
         - name: kasm-proxy-data
+          emptyDir:
+            sizeLimit: 1Gi
+        - name: kasm-proxy-log-tmp
           emptyDir:
             sizeLimit: 1Gi
         {{- with $merged.volumes }}

@@ -255,12 +255,11 @@ tests:
       - hasDocuments:
           count: 0
 
-  - it: rdp https gateway exposes container port 9443
+  - it: rdp https gateway main container exposes no ports (nginx sidecar handles ingress)
     template: templates/rdp-https-gateway-statefulset.yaml
     asserts:
-      - equal:
-          path: spec.template.spec.containers[0].ports[0].containerPort
-          value: 9443
+      - notExists:
+          path: spec.template.spec.containers[0].ports
 
   - it: rdp https gateway wires SERVER_PORT env to the nginx sidecar port
     template: templates/rdp-https-gateway-statefulset.yaml

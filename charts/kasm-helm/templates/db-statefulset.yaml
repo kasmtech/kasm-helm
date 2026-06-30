@@ -44,6 +44,17 @@ spec:
         - name: {{ include "kasm.name" (list . "db" "container") }}
           image: {{ $constants.db.image }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
+          {{- if eq .Values.logFormat "json" }}
+          command:
+            - "/bin/bash"
+            - "-c"
+          args:
+            - |
+              mkdir -p /tmp/postgres
+              touch /tmp/postgres/postgresql.json
+              ln -sf /dev/stdout /tmp/postgres/postgresql.json
+              exec docker-entrypoint.sh postgres -c config_file=/var/lib/postgresql/conf/postgresql.conf -c hba_file=/var/lib/postgresql/conf/pg_hba.conf
+          {{- end }}
           env:
             - name: POSTGRES_DB
               value: {{ .Values.database.kasmDbName }}
@@ -66,11 +77,9 @@ spec:
               protocol: TCP
           {{- if .Values.applyHealthChecks }}
           livenessProbe:
-            {{- include "health.command" (dict "command" (printf "pg_isready --port=%s -t 10" ($constants.db.port | toString))) | indent 12 }}
-          {{- end }}
-          {{- if .Values.applyHealthChecks }}
+            {{- include "health.probe" (dict "root" $ "component" "db" "probeType" "livenessProbe" "type" "command" "command" (printf "pg_isready --port=%s -t 10" ($constants.db.port | toString))) | nindent 12 }}
           readinessProbe:
-            {{- include "health.command" (dict "command" "psql -d ${POSTGRES_DB} -U ${POSTGRES_USER} -c 'SELECT 1' || exit 1") | indent 12 }}
+            {{- include "health.probe" (dict "root" $ "component" "db" "probeType" "readinessProbe" "type" "command" "command" "psql -d ${POSTGRES_DB} -U ${POSTGRES_USER} -c 'SELECT 1' || exit 1") | nindent 12 }}
           {{- end }}
           {{- if .Values.database.resources }}
           resources: {{- toYaml .Values.database.resources | nindent 12 }}

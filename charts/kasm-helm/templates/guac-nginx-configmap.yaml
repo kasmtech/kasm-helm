@@ -33,9 +33,14 @@ data:
 
   orchestrator.conf: |
     server {
-      listen {{ $constants.guac.nginxPort }};
+      listen {{ $constants.guac.nginxPort }} ssl;
       server_name ubuntu-base;
 
+      ssl_certificate     /etc/nginx/ssl/tls.crt;
+      ssl_certificate_key /etc/nginx/ssl/tls.key;
+      ssl_protocols TLSv1.2 TLSv1.3;
+      ssl_prefer_server_ciphers   off;
+      ssl_ciphers "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384";
       include /etc/nginx/conf.d/services.d/*.conf;
 
       client_max_body_size 1G;
@@ -186,11 +191,12 @@ data:
       proxy_pass http://kasm_guac/guac_login;
     }
 
-    location /guac/__healthcheck {
-      proxy_pass http://kasm_guac/__healthcheck;
-    }
-
-    location /guac/vm_disconnect {
-      proxy_pass http://kasm_guac/vm_disconnect;
+    # Wildcard for control-plane calls the manager makes to the guac app under
+    # the /guac/ prefix (e.g. /guac/__healthcheck, /guac/vm_disconnect, and the
+    # support-bundle collect endpoint /guac/api/v1/support_bundle_request). The
+    # trailing slash on proxy_pass strips the /guac/ prefix so the app sees the
+    # route it registered (server.js registers /api/v1/support_bundle_request).
+    location /guac/ {
+      proxy_pass http://kasm_guac/;
     }
 {{- end }}

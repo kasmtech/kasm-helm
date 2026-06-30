@@ -136,23 +136,6 @@ tests:
           path: data["rdp_gateway.conf"]
           pattern: 'proxy_pass\s+http://rdp_gateway/__healthcheck;'
 
-  # Lock in that the proxy waits for rdp-gateway through its nginx sidecar
-  # (nginxPort=9001), not the Tornado app port (5555). Flipping this back to
-  # :5555 would either require putting 5555 back on the Service (publishing it
-  # to any LoadBalancer/NodePort under directRdpService=true) or hang proxy
-  # forever — the exact regression that caused this fix.
-  - it: proxy wait-for-rdp-gateway init container probes the nginx sidecar port (not the app)
-    template: templates/proxy-deployment.yaml
-    asserts:
-      # Init container order in proxy-deployment.yaml is api, manager, guac,
-      # rdp-gateway — so initContainers[3] is the rdp-gateway waiter. The
-      # args[0] is the inline shell script that runs `while ! curl <url>`.
-      # Pinning the rendered URL catches any drift in port (must be 9001 = the
-      # nginx sidecar, NOT 5555 = the app), scheme, or healthcheck path.
-      - matchRegex:
-          path: spec.template.spec.initContainers[3].args[0]
-          pattern: 'curl "http://RELEASE-NAME-rdp-gateway-default:9001/__healthcheck"'
-
   # ---------- rdp-https-gateway-nginx-configmap (settings + services) ----------
   - it: rdp https gateway settings configmap defines a local upstream for kasm_rdp_https_gateway
     template: templates/rdp-https-gateway-nginx-configmap.yaml
@@ -178,7 +161,7 @@ tests:
           pattern: 'location /rdp-https-gateway/'
       - matchRegex:
           path: data["rdp_https_gateway.conf"]
-          pattern: 'proxy_pass\s+https://kasm_rdp_https_gateway;'
+          pattern: 'proxy_pass\s+https://127\.0\.0\.1:9443;'
 
   # KASM-8502 (same rationale as rdp-gateway): the rdp-https-gateway must answer
   # /guac/vm_disconnect with 200 rather than cross-proxying to guac.

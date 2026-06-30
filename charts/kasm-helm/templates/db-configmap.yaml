@@ -65,13 +65,15 @@ data:
     dynamic_shared_memory_type = posix
     max_wal_size = 1GB
     min_wal_size = 80MB
-    log_destination = 'stderr,syslog'
+    log_destination = 'stderr,{{ ternary "jsonlog" "syslog" (eq .Values.logFormat "json") }}'
     logging_collector = on
     log_directory = '/tmp/postgres'
-    log_filename = 'postgresql-%m-%d.log'
+    log_filename = '{{ ternary "postgresql" "postgresql-%m-%d.log" (eq .Values.logFormat "json") }}'
     log_file_mode = 0600
+    {{- if eq .Values.logFormat "log" }}
     log_rotation_age = 1d
     log_truncate_on_rotation = off
+    {{- end }}
     syslog_facility = 'LOCAL0'
     syslog_ident = 'postgres'
     log_connections = on

@@ -79,16 +79,22 @@ spec:
               value: {{ $constants.guac.nginxPort | quote }}
             - name: API_SCHEMA
               value: "http"
+            {{/*
+              Connection proxies must reach the manager's /manager_api/ endpoint
+              (support-bundle uploads) as well as /api/ (registration/heartbeat).
+              Only the kasm-proxy nginx service serves both on one port, so point
+              the API endpoint at it rather than the api (CherryPy) service.
+            */}}
             - name: API_HOSTNAME
             {{- if .Values.kasmZones }}
               {{- with index .Values.kasmZones 0 }}
-              value: {{ printf "%s-%s" $constants.api.svc (include "kasm.zoneName" .name) | quote }}
+              value: {{ printf "%s-%s" $constants.proxy.svc (include "kasm.zoneName" .name) | quote }}
               {{- end }}
             {{- else }}
-              value: {{ printf "%s-%s" $constants.api.svc "default" | quote }}
+              value: {{ printf "%s-%s" $constants.proxy.svc "default" | quote }}
             {{- end }}
             - name: API_PORT
-              value: {{ $constants.api.port | quote }}
+              value: {{ $constants.proxy.http | quote }}
             - name: KASM_EPHEMERAL
               value: "true"
           ports:
@@ -98,7 +104,7 @@ spec:
           volumeMounts:
             - name: tmp-data
               mountPath: /tmp
-            - name: guac-log-data
+            - name: kasm-guac-log-data
               mountPath: /opt/kasm/current/log
               readOnly: true
             - name: kasm-guac-data
@@ -109,11 +115,9 @@ spec:
             {{- end }}
           {{- if .Values.applyHealthChecks }}
           livenessProbe:
-            {{- include "health.tcp" (dict "portName" $constants.guac.portName) | indent 12 }}
-          {{- end }}
-          {{- if .Values.applyHealthChecks }}
+            {{- include "health.probe" (dict "root" $ "component" "guac" "probeType" "livenessProbe" "type" "tcp" "portName" $constants.guac.portName) | nindent 12 }}
           readinessProbe:
-            {{- include "health.http" (dict "path" "/__healthcheck" "portName" $constants.guac.portName) | indent 12 }}
+            {{- include "health.probe" (dict "root" $ "component" "guac" "probeType" "readinessProbe" "type" "http" "path" "/__healthcheck" "portName" $constants.guac.portName) | nindent 12 }}
           {{- end }}
           {{- if .Values.components.guac.resources }}
           resources: {{- toYaml .Values.components.guac.resources | nindent 12 }}
@@ -145,20 +149,26 @@ spec:
               mountPath: /etc/nginx/conf.d
             - name: kasm-guac-services-config
               mountPath: /etc/nginx/conf.d/services.d
-            - name: guac-nginx-data
+            - name: kasm-guac-nginx-data
               mountPath: /var/cache/nginx
-            - name: guac-nginx-data
-              mountPath: /var/log/nginx
-            - name: guac-nginx-data
+            - name: kasm-guac-nginx-data
               mountPath: /run
+            - name: kasm-guac-nginx-log-tmp
+              mountPath: /var/log/nginx
+            - name: kasm-guac-cert
+              mountPath: /etc/nginx/ssl/tls.crt
+              subPath: tls.crt
+              readOnly: true
+            - name: kasm-guac-cert
+              mountPath: /etc/nginx/ssl/tls.key
+              subPath: tls.key
+              readOnly: true
             {{- include "kasm.trustedCaVolumeMounts" . | nindent 12 }}
           {{- if .Values.applyHealthChecks }}
           livenessProbe:
-            {{- include "health.tcp" (dict "portName" "guac-nginx-pt") | indent 12 }}
-          {{- end }}
-          {{- if .Values.applyHealthChecks }}
+            {{- include "health.probe" (dict "root" $ "component" "guac" "timingScope" "nginxSidecar" "probeType" "livenessProbe" "type" "tcp" "portName" "guac-nginx-pt") | nindent 12 }}
           readinessProbe:
-            {{- include "health.http" (dict "path" "/guac/__healthcheck" "portName" "guac-nginx-pt") | indent 12 }}
+            {{- include "health.probe" (dict "root" $ "component" "guac" "timingScope" "nginxSidecar" "probeType" "readinessProbe" "type" "https" "path" "/guac/__healthcheck" "portName" "guac-nginx-pt") | nindent 12 }}
           {{- end }}
           {{- if .Values.components.guac.nginxSidecar.resources }}
           resources: {{- toYaml .Values.components.guac.nginxSidecar.resources | nindent 12 }}
@@ -170,7 +180,10 @@ spec:
           {{- toYaml . | nindent 8 }}
         {{- end }}
       volumes:
-        - name: guac-log-data
+        - name: kasm-guac-cert
+          secret:
+            secretName: {{ .Values.certificate.secretName | default (include "kasm.name" (list . "cert-manager" "secret")) }}
+        - name: kasm-guac-log-data
           emptyDir:
             sizeLimit: 1Mi
         - name: kasm-guac-data
@@ -185,9 +198,12 @@ spec:
         - name: kasm-guac-services-config
           configMap:
             name: {{ include "kasm.name" (list . "guac-services") }}
-        - name: guac-nginx-data
+        - name: kasm-guac-nginx-data
           emptyDir:
             sizeLimit: 100Mi
+        - name: kasm-guac-nginx-log-tmp
+          emptyDir:
+            sizeLimit: 1Gi
         {{- with $merged.volumes }}
           {{- toYaml . | nindent 8 }}
         {{- end }}
