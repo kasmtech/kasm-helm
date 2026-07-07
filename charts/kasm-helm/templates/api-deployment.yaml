@@ -79,6 +79,10 @@ spec:
             */}}
             - name: SERVER_INTERNAL_SCHEMA
               value: "https"
+            - name: KASM_THREAD_POOL
+              value: {{ $.Values.components.api.threadPool | quote }}
+            - name: KASM_THREAD_POOL_LOG_INTERVAL
+              value: {{ $.Values.components.api.threadPoolLogInterval | quote }}
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
