@@ -540,7 +540,13 @@ components:
     #    image: busybox
     #    command: [/bin/sh, -c, 'echo "Hello world"']
     extraInitContainers: []
-  
+    # components.api.threadPool -- Number of CherryPy worker threads for the API server.
+    #  Increase under high concurrency. Default is 20.
+    threadPool: 20
+    # components.api.threadPoolLogInterval -- Seconds between background logs of CherryPy thread-pool usage
+    #  (Threads/Active/Idle/Queue). Set to 0 to disable. Default is 0.
+    threadPoolLogInterval: 0
+
   # Configuration settings for the Kasm Manager service
   #
   manager:

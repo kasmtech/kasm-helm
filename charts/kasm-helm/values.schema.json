@@ -354,6 +354,18 @@
               "description": "Manually configure the Kasm api Deployment resources. This overrides the pre-defined `deploymentSize` values.",
               "title": "resources",
               "type": "object"
+            },
+            "threadPool": {
+              "description": "Number of CherryPy worker threads for the API server. Increase under high concurrency. Default is 20.",
+              "title": "threadPool",
+              "type": "integer",
+              "default": 20
+            },
+            "threadPoolLogInterval": {
+              "description": "Seconds between background logs of CherryPy thread-pool usage (Threads/Active/Idle/Queue). Set to 0 to disable. Default is 0.",
+              "title": "threadPoolLogInterval",
+              "type": "integer",
+              "default": 0
             }
           },
           "title": "api",

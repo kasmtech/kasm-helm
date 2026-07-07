@@ -1,12 +1,57 @@
-suite: per-component deployment specifics (manager/guac/rdp)
+suite: per-component deployment specifics (api/manager/guac/rdp)
 
 templates:
+  - templates/api-deployment.yaml
   - templates/manager-deployment.yaml
   - templates/guac-statefulset.yaml
   - templates/rdp-gateway-deployment.yaml
   - templates/rdp-https-gateway-statefulset.yaml
 
 tests:
+  # ---------- api ----------
+  - it: api wires KASM_THREAD_POOL + KASM_THREAD_POOL_LOG_INTERVAL from defaults
+    template: templates/api-deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KASM_THREAD_POOL
+            value: "20"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KASM_THREAD_POOL_LOG_INTERVAL
+            value: "0"
+
+  - it: api honors custom threadPool and threadPoolLogInterval overrides
+    template: templates/api-deployment.yaml
+    set:
+      components:
+        api:
+          threadPool: 50
+          threadPoolLogInterval: 30
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KASM_THREAD_POOL
+            value: "50"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KASM_THREAD_POOL_LOG_INTERVAL
+            value: "30"
+
+  - it: schema rejects non-integer threadPool
+    template: templates/api-deployment.yaml
+    set:
+      components:
+        api:
+          threadPool: "not-a-number"
+    asserts:
+      - failedTemplate:
+          errorPattern: "threadPool.*integer|got string"
+
   # ---------- manager ----------
   - it: manager builds image from registry/repository/tag
     template: templates/manager-deployment.yaml
