@@ -1,8 +1,8 @@
 # Kasm Workspaces on Kubernetes
 
-![Version: 1.1190.0-develop](https://img.shields.io/badge/Version-1.1190.0--develop-informational?style=flat-square) ![AppVersion: develop](https://img.shields.io/badge/AppVersion-develop-informational?style=flat-square) ![Type: Application](https://img.shields.io/badge/Type-application-informational?style=flat-square)
+![Version: 1.1200.0-develop](https://img.shields.io/badge/Version-1.1200.0--develop-informational?style=flat-square) ![AppVersion: develop](https://img.shields.io/badge/AppVersion-develop-informational?style=flat-square) ![Type: Application](https://img.shields.io/badge/Type-application-informational?style=flat-square)
 
-Kasm Workspaces core services can be deployed to Kubernetes using the [open-source Kasm Helm chart](https://github.com/kasmtech/kasm-helm), which will be Generally Available as of Kasm version 1.19.0 (the developer preview is available using chart version 1.1190.0-develop).
+Kasm Workspaces core services can be deployed to Kubernetes using the [open-source Kasm Helm chart](https://github.com/kasmtech/kasm-helm), which will be Generally Available as of Kasm version 1.19.0 (the developer preview is available using chart version 1.1200.0-develop).
 
 ## Live Demo
 
@@ -45,7 +45,7 @@ Install from the OCI registry (recommended):
 
 ```bash
 helm install kasm oci://registry-1.docker.io/kasmweb/kasm-helm \
-  --version 1.1190.0-develop \
+  --version 1.1200.0-develop \
   --namespace kasm --create-namespace \
   -f my-values.yaml
 ```
@@ -56,7 +56,7 @@ Or from the classic Helm repository:
 helm repo add kasmweb https://helm.kasm.com
 helm repo update
 helm install kasm kasmweb/kasm-helm \
-  --version 1.1190.0-develop \
+  --version 1.1200.0-develop \
   --namespace kasm --create-namespace \
   -f my-values.yaml
 ```
@@ -77,7 +77,7 @@ For the full values reference (cert-manager, external database, ingress, per-com
 
 ## Versioning
 
-Chart versions track Kasm Workspaces versions. The middle component of the chart version corresponds to the Kasm release — for example, chart **1.1181.0** matches Kasm Workspaces **1.18.1**. This branch (`1.1190.0-develop` / app `develop`) is the developer preview for the upcoming **1.19** release.
+Chart versions track Kasm Workspaces versions. The middle component of the chart version corresponds to the Kasm release — for example, chart **1.1181.0** matches Kasm Workspaces **1.18.1**. This branch (`1.1200.0-develop` / app `develop`) is the developer preview for the upcoming **1.20** release.
 
 | Branch | Purpose |
 | --- | --- |
