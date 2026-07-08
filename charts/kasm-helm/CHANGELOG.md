@@ -4,6 +4,8 @@ All notable changes to the kasm-helm chart are documented here.
 
 ## [Unreleased]
 
+## [1.1190.1] - 2026-07-07
+
 ### Added
 
 - **Per-component health check timing** — Liveness and readiness probe intervals, timeouts, and thresholds are now configurable independently for each component (API, Manager, Proxy, Guac, RDP Gateway, RDP HTTPS Gateway, and Database) via `components.<name>.healthCheckTiming` in `values.yaml`. <!-- hash:8669c368e2d89d70a8e3c8dae6951cd35d289469 -->
@@ -33,3 +35,7 @@ All notable changes to the kasm-helm chart are documented here.
 - The chart README has been substantially revised to cover the current deployment model, multi-zone topology, security context configuration, health check customization, and operational procedures. <!-- hash:f7e3d10c2bf3879e713f06c5634cf1f202b0c7ce -->
 - README updated to document the new `components.api.threadPool` and `components.api.threadPoolLogInterval` values. <!-- hash:31c4670e575bf94f156bbb226bfbe66f1cce55f8 -->
 
+
+## [1.1190.0] - 2026-06-12
+
+- Initial GA Helm Chart release
