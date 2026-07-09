@@ -296,13 +296,24 @@ test: lint kubeconform kyverno unittest ## Run full static suite: lint + kubecon
 # command line: make changelog-llm CHANGELOG_ARGS="--model claude-sonnet-4-6"
 CHANGELOG_ARGS ?=
 
-readme: $(HELM_DOCS) ## Regenerate charts/kasm-helm/README.md from values.yaml + README.md.gotmpl
+# Optional: bump the chart/app version everywhere before regenerating docs.
+# make readme CHART_VERSION=1.1190.2                  -> APP_VERSION derived as 1.19.0
+# make readme CHART_VERSION=1.1200.0-develop          -> APP_VERSION derived as develop
+# make readme CHART_VERSION=1.1190.2 APP_VERSION=x.y.z -> APP_VERSION forced, skipping derivation
+CHART_VERSION ?=
+APP_VERSION ?=
+
+readme: $(HELM_DOCS) ## Regenerate charts/kasm-helm/README.md (+ optionally bump CHART_VERSION/APP_VERSION everywhere)
+	@if [ -n "$(CHART_VERSION)" ]; then \
+	  python3 scripts/set_versions.py --chart-version "$(CHART_VERSION)" $(if $(APP_VERSION),--app-version "$(APP_VERSION)",); \
+	fi
 	cd $(CHART_DIR) && $(HELM_DOCS)
 
-# Fails (non-zero exit) if the committed README is out of date with the chart's
-# values.yaml or README.md.gotmpl. Run `make readme` locally to fix. Wired into
-# the GitLab CI docs-check job.
-readme-check: $(HELM_DOCS) ## Verify charts/kasm-helm/README.md is up to date (use `make readme` to regen)
+# Fails (non-zero exit) if the committed README.md files are out of date:
+#   - charts/kasm-helm/README.md vs. values.yaml + README.md.gotmpl (helm-docs)
+#   - README.md version badges/install snippets/"This branch" line vs. Chart.yaml
+# Run `make readme CHART_VERSION=...` locally to fix. Wired into the GitLab CI docs-check job.
+readme-check: $(HELM_DOCS) ## Verify both README.md files are up to date (use `make readme` to regen)
 	@set -euo pipefail; \
 	tmp_dir=$$(mktemp -d); \
 	trap 'rm -rf "$$tmp_dir"' EXIT; \
@@ -318,6 +329,7 @@ readme-check: $(HELM_DOCS) ## Verify charts/kasm-helm/README.md is up to date (u
 	  cp $$tmp_dir/README.md.before $(CHART_DIR)/README.md; \
 	  exit 1; \
 	fi
+	python3 scripts/set_versions.py --check
 
 changelog: ## Generate or refresh the [Unreleased] scaffold in CHANGELOG.md (annotated with affected components)
 	python3 scripts/changelog-draft.py $(CHANGELOG_ARGS)

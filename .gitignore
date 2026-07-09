@@ -45,5 +45,6 @@ charts/kasm-helm/values-test.yaml
 .beads-credential-key
 .beads/
 .claude/
+.claude-octopus/
 AGENTS.md
 CLAUDE.md

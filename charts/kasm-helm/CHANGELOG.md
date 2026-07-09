@@ -2,7 +2,11 @@
 
 All notable changes to the kasm-helm chart are documented here.
 
-## [Unreleased]
+## [1.1190.2] - 2026-07-08
+
+### Changed
+
+- Increased database keepalive intervals to prevent connections from being dropped during long-running Autoscaling queries and other extended operations; also consolidated statement and idle-transaction timeout settings into a single location. <!-- hash:c034e751e99eb1a9bf04063d0e2dff71ec681aa7 -->
 
 ## [1.1190.1] - 2026-07-07
 
