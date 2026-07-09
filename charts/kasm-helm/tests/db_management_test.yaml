@@ -118,10 +118,10 @@ tests:
           of: ConfigMap
       - matchRegex:
           path: data["postgresql.conf"]
-          pattern: 'statement_timeout = 900000'
+          pattern: 'statement_timeout = 1800000'
       - matchRegex:
           path: data["postgresql.conf"]
-          pattern: 'idle_in_transaction_session_timeout = 300000'
+          pattern: 'idle_in_transaction_session_timeout = 900000'
 
   - it: pre-upgrade backup pvc name strips dots from chart appVersion
     template: templates/db-upgrade-backup-job.yaml
