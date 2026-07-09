@@ -54,9 +54,11 @@ data:
     #
     max_connections = {{ include "resources.preset" (dict "node" "db-max-connections" "size" .Values.deploymentSize "context" .Values) | trim }}
     listen_addresses = '*'
-    tcp_keepalives_idle = 60
-    tcp_keepalives_interval = 10
-    tcp_keepalives_count = 3
+    tcp_keepalives_idle = 7200
+    tcp_keepalives_interval = 76
+    tcp_keepalives_count = 9
+    statement_timeout = 1800000
+    idle_in_transaction_session_timeout = 900000
     ssl = on
     ssl_cert_file = '/etc/ssl/certs/db_server.crt'
     ssl_key_file = '/etc/ssl/certs/db_server.key'
@@ -82,7 +84,6 @@ data:
     log_line_prefix = '< %m %a %u %d %r %p %i %e %s %c:>'
     log_timezone = 'UTC'
     client_min_messages = error
-    statement_timeout = 900000
     datestyle = 'iso, mdy'
     timezone = 'UTC'
     lc_messages = 'en_US.utf8'
@@ -90,5 +91,4 @@ data:
     lc_numeric = 'en_US.utf8'
     lc_time = 'en_US.utf8'
     default_text_search_config = 'pg_catalog.english'
-    idle_in_transaction_session_timeout = 300000
 {{- end }}
