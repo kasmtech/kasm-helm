@@ -74,6 +74,8 @@ tests:
   - it: db init job "init" init container is named db-is-ready and omits DB credential env vars
     template: templates/db-init-job.yaml
     set:
+      kasmConfig:
+        generatePreseed: false
       dbManagement:
         initialize: true
         upgrade:

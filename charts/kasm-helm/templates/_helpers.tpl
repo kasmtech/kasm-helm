@@ -58,9 +58,9 @@ db:
   port: {{ .Values.database.port }}
 guac:
   component: guac
-  svc: {{ if .Values.kasmZones }}{{ printf "%s-guac-%s" .Release.Name (include "kasm.zoneName" (index .Values.kasmZones 0).name) }}{{ else }}{{ printf "%s-guac-default" .Release.Name }}{{ end }}
+  svc: {{ if .Values.kasmZones }}{{ printf "%s-guac-%s" .Release.Name (include "kasm.zoneName" (include "kasm.primaryZone" . | fromYaml).name) }}{{ else }}{{ printf "%s-guac-default" .Release.Name }}{{ end }}
   portName: guac-pt
-  name: {{ if .Values.kasmZones }}{{ printf "%s-guac-%s" .Release.Name (include "kasm.zoneName" (index .Values.kasmZones 0).name) }}{{ else }}{{ printf "%s-guac-default" .Release.Name }}{{ end }}
+  name: {{ if .Values.kasmZones }}{{ printf "%s-guac-%s" .Release.Name (include "kasm.zoneName" (include "kasm.primaryZone" . | fromYaml).name) }}{{ else }}{{ printf "%s-guac-default" .Release.Name }}{{ end }}
   image: {{ printf "%s/%s:%s" .Values.components.guac.image.registry .Values.components.guac.image.repository (include "kasm.imageTag" (list . .Values.components.guac.image.tag "guac")) }}
   port: 3000
   nginxPort: 9000
@@ -71,14 +71,14 @@ guac:
     {{- end }}
 rdpGateway:
   component: rdp-gateway
-  svc: {{ if .Values.kasmZones }}{{ printf "%s-rdp-gateway-%s" .Release.Name (include "kasm.zoneName" (index .Values.kasmZones 0).name) }}{{ else }}{{ printf "%s-rdp-gateway-default" .Release.Name }}{{ end }}
+  svc: {{ if .Values.kasmZones }}{{ printf "%s-rdp-gateway-%s" .Release.Name (include "kasm.zoneName" (include "kasm.primaryZone" . | fromYaml).name) }}{{ else }}{{ printf "%s-rdp-gateway-default" .Release.Name }}{{ end }}
   portName: rdp-gw-pt
   image: {{ printf "%s/%s:%s" .Values.components.rdpGateway.image.registry .Values.components.rdpGateway.image.repository (include "kasm.imageTag" (list . .Values.components.rdpGateway.image.tag "rdpGateway")) }}
   port: 5555
   nginxPort: 9001
 rdpHttpsGateway:
   component: rdp-https-gateway
-  svc: {{ if .Values.kasmZones }}{{ printf "%s-rdp-https-gateway-%s" .Release.Name (include "kasm.zoneName" (index .Values.kasmZones 0).name) }}{{ else }}{{ printf "%s-rdp-https-gateway-default" .Release.Name }}{{ end }}
+  svc: {{ if .Values.kasmZones }}{{ printf "%s-rdp-https-gateway-%s" .Release.Name (include "kasm.zoneName" (include "kasm.primaryZone" . | fromYaml).name) }}{{ else }}{{ printf "%s-rdp-https-gateway-default" .Release.Name }}{{ end }}
   portName: rdp-tls-ngnx-pt
   image: {{ printf "%s/%s:%s" .Values.components.rdpHttpsGateway.image.registry .Values.components.rdpHttpsGateway.image.repository (include "kasm.imageTag" (list . .Values.components.rdpHttpsGateway.image.tag "rdpHttpsGateway")) }}
   port: 9443
@@ -92,6 +92,123 @@ rdpHttpsGateway:
 */}}
 {{- define "kasm.zoneName" -}}
 {{- regexReplaceAll "[^a-zA-Z0-9]+" . "-" | lower -}}
+{{- end -}}
+
+{{/*
+  Resolve a zone's proxy hostname. Prefers proxy_hostname; falls back to the
+  deprecated proxyAddress alias for backwards compatibility. Returns an empty
+  string if neither is set. If both are set, proxy_hostname wins (per values.yaml).
+*/}}
+{{- define "kasm.zoneProxyHostname" -}}
+{{- default .proxyAddress .proxy_hostname -}}
+{{- end -}}
+
+{{/*
+  Resolve a zone's proxy hostname for host-bearing resources (ingress, route,
+  certificate) that cannot render a valid entry with an empty string. Fails with a
+  descriptive error if the zone has neither proxy_hostname nor proxyAddress set.
+*/}}
+{{- define "kasm.zoneProxyHostnameRequired" -}}
+{{- $hostname := include "kasm.zoneProxyHostname" . -}}
+{{- if not $hostname -}}
+  {{- fail (printf "kasmZones[%s]: 'proxy_hostname' (or deprecated 'proxyAddress') must be set to generate an ingress/route/certificate hostname for this zone" (default "unnamed zone" .name)) -}}
+{{- end -}}
+{{- $hostname -}}
+{{- end -}}
+
+{{/*
+  Return user-configured Kasm zones from kasmZones only (no kasmConfig.zones fallback).
+  Normalizes each zone's `name` field, falling back to the deprecated `zone_name` alias
+  when `name` is not set, so following the schema's zone_name guidance does not produce
+  zones with an empty/nil name.
+*/}}
+{{- define "kasm.configuredZones" -}}
+{{- if .Values.kasmZones -}}
+  {{- $result := list -}}
+  {{- range $zone := .Values.kasmZones -}}
+    {{- $normalized := deepCopy $zone -}}
+    {{- $_ := set $normalized "name" (default $normalized.zone_name $normalized.name) -}}
+    {{- $result = append $result $normalized -}}
+  {{- end -}}
+  {{- toYaml $result -}}
+{{- else -}}
+  {{- toYaml list -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+  Return the effective Kasm zones, falling back to a single default zone when none configured.
+*/}}
+{{- define "kasm.zones" -}}
+{{- $zones := (include "kasm.configuredZones" . | fromYamlArray) | default list -}}
+{{- if $zones -}}
+  {{- toYaml $zones -}}
+{{- else -}}
+  {{- toYaml (list (dict "name" "default")) -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+  Return the primary zone as a YAML dict.
+  If exactly one zone has primary: true, that zone is used. If no zone has
+  primary: true, the first zone in kasmZones is treated as primary (per values.yaml).
+  Fails with a descriptive error if more than one zone has primary: true, since
+  that is ambiguous.
+  When kasmZones is not defined, returns the implicit default zone.
+*/}}
+{{- define "kasm.primaryZone" -}}
+{{- $configured := (include "kasm.configuredZones" . | fromYamlArray) | default list -}}
+{{- if $configured -}}
+  {{- $primaryZones := list -}}
+  {{- range $zone := $configured -}}
+    {{- if dig "primary" false $zone -}}
+      {{- $primaryZones = append $primaryZones $zone -}}
+    {{- end -}}
+  {{- end -}}
+  {{- if gt (len $primaryZones) 1 -}}
+    {{- fail (printf "kasmZones has %d zones marked 'primary: true'; at most one zone may be primary. Remove 'primary: true' from all but one zone." (len $primaryZones)) -}}
+  {{- else if eq (len $primaryZones) 1 -}}
+    {{- toYaml (first $primaryZones) -}}
+  {{- else -}}
+    {{- toYaml (first $configured) -}}
+  {{- end -}}
+{{- else -}}
+  {{- toYaml (dict "name" "default") -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+  Returns "true" if the given zone is in the primary region.
+  Args: list of (root context, zone dict).
+  A zone is in the primary region when:
+    - It IS the primary zone, OR
+    - It shares the same region_name as the primary zone (and region_name is non-empty).
+  When no zone has region_name set, only the primary zone itself is in the primary region.
+*/}}
+{{- define "kasm.isInPrimaryRegion" -}}
+{{- $root := index . 0 -}}
+{{- $zone := index . 1 -}}
+{{- $primaryZone := (include "kasm.primaryZone" $root | fromYaml) -}}
+{{- if eq $zone.name $primaryZone.name -}}
+true
+{{- else if and $primaryZone.region_name $zone.region_name (eq $zone.region_name $primaryZone.region_name) -}}
+true
+{{- end -}}
+{{- end -}}
+
+{{/*
+  Return a YAML array of zones that are in the primary region.
+  Guac, RDP Gateway, and RDP HTTPS Gateway are only deployed in primary-region zones.
+*/}}
+{{- define "kasm.primaryRegionZones" -}}
+{{- $zones := (include "kasm.zones" . | fromYamlArray) | default list -}}
+{{- $result := list -}}
+{{- range $zone := $zones -}}
+  {{- if include "kasm.isInPrimaryRegion" (list $ $zone) -}}
+    {{- $result = append $result $zone -}}
+  {{- end -}}
+{{- end -}}
+{{- toYaml $result -}}
 {{- end -}}
 
 {{/*
@@ -328,7 +445,7 @@ Where:
   ) -}}
 {{- end -}}
 
-{{- if (or (eq $component "secrets") (eq $component "image-pull")) -}}
+{{- if (or (eq $component "secrets") (eq $component "image-pull") (eq $component "db-preseed")) -}}
   {{- $annotations = merge $annotations (dict
       "helm.sh/hook" "pre-install,pre-upgrade"
     ) -}}
@@ -571,7 +688,14 @@ successThreshold: {{ $successThreshold }}
   {{- $component := .component -}}
   {{- $merged := fromYaml (include "kasm.mergedValues" (dict "root" $context "componentName"  $component)) -}}
 
-- name: {{ include "kasm.name" (list $context $service "is-ready")}}
+{{/*
+    Name from $component (a short identifier like "api" or "rdpGateway"), not $service.
+    $service is already a fully release-prefixed DNS name (e.g. "<release>-rdp-gateway-<zone>");
+    passing it to kasm.name would prepend the release name a second time and let kebabcase
+    mangle digit/letter boundaries in it (e.g. "e2e" -> "e-2e"), which can exceed the 63-char
+    Kubernetes name limit once the release name and zone name are both non-trivial.
+  */}}
+- name: {{ include "kasm.name" (list $context (printf "%s-is-ready" $component)) }}
   image: {{ $image }}
   imagePullPolicy: {{ $context.Values.imagePullPolicy }}
   {{- include "kasm.securityContext" (list $context 1000 "container") | nindent 2 }}

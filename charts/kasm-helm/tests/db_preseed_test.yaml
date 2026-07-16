@@ -1,0 +1,561 @@
+suite: db preseed secret generation
+templates:
+  - templates/db-preseed-secret.yaml
+
+tests:
+  - it: renders the db-preseed-secret when generatePreseed=true
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+    asserts:
+      - documentIndex: 1
+        equal:
+          path: metadata.name
+          value: RELEASE-NAME-db-preseed
+
+  - it: does not render db-preseed-secret when generatePreseed=false
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+      certificate.secretName: kasm-tls
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: empty groups renders as []
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "groups: \\[\\]"
+
+  - it: groups renders correctly with one group
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.groups:
+        - name: "Test Group"
+          description: "A test group"
+          priority: 500
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "name: \"Test Group\""
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "priority: 500"
+
+  - it: zones comes from kasmZones
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: my-zone
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "zone_name: my-zone"
+
+  - it: prefers proxy_hostname when a zone sets both proxyAddress and proxy_hostname
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: my-zone
+          proxyAddress: legacy.example.com
+          proxy_hostname: preferred.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'proxy_hostname: "preferred\.example\.com"'
+
+  - it: autoscale uses agent_memory_override_bytes
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.autoscale:
+        - autoscale_config_name: "Test Autoscale"
+          agent_memory_override_bytes: 4294967296
+          standby_memory_bytes: 2147483648
+          server_pool_id: "${uuid:server_pool_id:1}"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "agent_memory_override_bytes: 4294967296"
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "standby_memory_bytes: 2147483648"
+
+  - it: saml section key is saml_config
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "saml_config: \\[\\]"
+
+  - it: licenses section is absent
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+    asserts:
+      - documentIndex: 1
+        notMatchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "licenses:"
+
+  - it: filter_policies renders as [] when empty
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "filter_policies: \\[\\]"
+
+  - it: banners renders with correct fields
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.banners:
+        - name: "Test Banner"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "name: \"Test Banner\""
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "banner_id:"
+
+  - it: images use memory_bytes and uncompressed_size_bytes field names
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.images:
+        - name: "kasmweb/ubuntu-focal-desktop"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "memory_bytes:"
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "uncompressed_size_bytes:"
+      - documentIndex: 1
+        notMatchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "memory:"
+      - documentIndex: 1
+        notMatchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "uncompressed_size_mb:"
+
+  - it: zones include enable_rdp_direct_login
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "enable_rdp_direct_login:"
+
+  - it: built-in admin user (admin@kasm.local) has crypt_password token not static pw_hash
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: true
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+    asserts:
+      - documentIndex: 2
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'crypt_password: "\$\{crypt:password:2\}"'
+      - documentIndex: 2
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'crypt_salt: "\$\{crypt:salt:2\}"'
+
+  - it: image pool_name resolves server_pool_id from server_pools
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.server_pools:
+        - name: "primary-pool"
+          server_pool_id: "pool-uuid-001"
+      kasmConfig.config.images:
+        - name: "kasmweb/ubuntu-focal-desktop"
+          pool_name: "primary-pool"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "server_pool_id: pool-uuid-001"
+
+  - it: last_provision is a fixed sentinel and not the current time
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.autoscale:
+        - autoscale_config_name: "Test AS"
+          server_pool_id: "${uuid:server_pool_id:1}"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "last_provision: \"1970-01-01 00:00:00\""
+
+  - it: apiConfigs-only config emits the salts Secret
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.apiConfigs:
+        - name: "MyApi"
+          api_key: "MyApiKey"
+    asserts:
+      - hasDocuments:
+          count: 3
+      - documentIndex: 1
+        equal:
+          path: metadata.name
+          value: RELEASE-NAME-password-salts
+
+  - it: apiConfig api_id and group_permission_id use the startup.sh uuid token, not a real UUID
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmConfig.defaultApiUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.apiConfigs:
+        - name: "MyApi"
+          api_key: "MyApiKey"
+          permissions:
+            - autoscale_view
+    asserts:
+      - documentIndex: 2
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'api_id: "\$\{uuid:api_id:1\}"'
+      - documentIndex: 2
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'group_permission_id: "\$\{uuid:group_permission_id:1000\}"'
+
+  - it: multi-zone preseed renders zone entries for each zone
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: zone-a
+          proxyAddress: kasm.example.com
+          primary: true
+        - name: zone-b
+          proxyAddress: kasm-b.example.com
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "zone_name: zone-a"
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "zone_name: zone-b"
+
+  - it: autoscale referencing aws_config by name resolves aws_config_id
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.aws_configs:
+        - config_name: "my-aws"
+          aws_config_id: "aws-uuid-001"
+          aws_ec2_instance_type: "t3.medium"
+          aws_ec2_private_key: "ssh-rsa AAAA"
+          aws_ec2_public_key: "ssh-rsa AAAA"
+          aws_region: "us-east-1"
+      kasmConfig.config.autoscale:
+        - autoscale_config_name: "Test AS"
+          aws_config_name: "my-aws"
+          server_pool_id: "${uuid:server_pool_id:1}"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "aws_config_id: aws-uuid-001"
+
+  - it: defaultUsers creates admin@kasm.local and user@kasm.local records by default
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: true
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+    asserts:
+      - documentIndex: 2
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'username: "admin@kasm.local"'
+      - documentIndex: 2
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'username: "user@kasm.local"'
+
+  - it: adminUsername overrides admin@kasm.local with supplied value
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: true
+      kasmConfig.adminUsername: "system@kasm.local"
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+    asserts:
+      - documentIndex: 2
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'username: "system@kasm.local"'
+      - documentIndex: 2
+        notMatchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'username: "admin@kasm.local"'
+
+  - it: adminUsername override is treated as a non-built-in user, not the built-in admin@kasm.local
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: true
+      kasmConfig.adminUsername: "system@kasm.local"
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+    asserts:
+      # a generated password/salt is stored under a clean, username-derived key ("system-*"),
+      # matching the same convention as the other non-built-in default users (site-admin, workspace-admin)
+      - documentIndex: 0
+        exists:
+          path: data["system-password"]
+      - documentIndex: 1
+        exists:
+          path: data["system-salt"]
+      # admin-password only exists to back the true built-in admin@kasm.local account; it must not
+      # be generated at all once defaultUsers replaces it with a renamed, non-built-in admin account
+      - documentIndex: 0
+        notExists:
+          path: data["admin-password"]
+      # pw_hash/salt are computed from the generated password, not the built-in admin's empty-string hash
+      - documentIndex: 2
+        notMatchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'pw_hash: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"'
+
+  - it: defaultUsers alone does not create API config records
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: true
+      kasmConfig.defaultApiUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+    asserts:
+      - documentIndex: 2
+        notMatchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "KasmRWApiKey"
+      - documentIndex: 2
+        notMatchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "KcsReadApiKy"
+
+  - it: defaultApiUsers creates kasm_engineering_api and kcs_api records
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmConfig.defaultApiUsers: true
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+    asserts:
+      - hasDocuments:
+          count: 3
+      - documentIndex: 2
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "Kasm Engineering Automation"
+      - documentIndex: 2
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "Kasm Customer Support"
+
+  - it: defaultApiUsers false alone does not create API config records
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmConfig.defaultApiUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "api_configs: \\[\\]"

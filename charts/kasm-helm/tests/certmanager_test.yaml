@@ -41,3 +41,44 @@ tests:
       - contains:
           path: spec.dnsNames
           content: "*.kasm.example.com"
+
+  - it: falls back to the deprecated proxyAddress alias when proxy_hostname is unset
+    values:
+      - ../../../tests/values/certmanager.yaml
+    set:
+      certificate:
+        certManager:
+          addWildCard: false
+      kasmZones:
+        - name: zonea
+          primary: true
+          proxyAddress: legacy-a.example.com
+        - name: zoneb
+          proxy_hostname: preferred-b.example.com
+    asserts:
+      - contains:
+          path: spec.dnsNames
+          content: legacy-a.example.com
+      - contains:
+          path: spec.dnsNames
+          content: preferred-b.example.com
+
+  - it: prefers proxy_hostname when both proxyAddress and proxy_hostname are set on the same zone
+    values:
+      - ../../../tests/values/certmanager.yaml
+    set:
+      certificate:
+        certManager:
+          addWildCard: false
+      kasmZones:
+        - name: zonea
+          primary: true
+          proxyAddress: legacy-a.example.com
+          proxy_hostname: preferred-a.example.com
+    asserts:
+      - contains:
+          path: spec.dnsNames
+          content: preferred-a.example.com
+      - notContains:
+          path: spec.dnsNames
+          content: legacy-a.example.com

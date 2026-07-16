@@ -1,0 +1,623 @@
+suite: zone configuration — primary selection, region routing, resource fan-out
+templates:
+  - templates/guac-statefulset.yaml
+  - templates/guac-service.yaml
+  - templates/rdp-gateway-deployment.yaml
+  - templates/rdp-gateway-service.yaml
+  - templates/rdp-https-gateway-statefulset.yaml
+  - templates/rdp-https-gateway-service.yaml
+  - templates/api-deployment.yaml
+  - templates/proxy-deployment.yaml
+
+tests:
+
+  # ---------------------------------------------------------------------------
+  # Primary zone selection — primary at a non-first index
+  # ---------------------------------------------------------------------------
+
+  - it: uses the primary-flagged zone for guac statefulset when primary is not at index 0
+    template: templates/guac-statefulset.yaml
+    set:
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      kasmZones:
+        - name: zoneb
+          proxyAddress: zoneb.example.com
+        - name: zonea
+          proxyAddress: zonea.example.com
+          primary: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - matchRegex:
+          path: metadata.name
+          pattern: ".*zonea.*"
+      - notMatchRegex:
+          path: metadata.name
+          pattern: ".*zoneb.*"
+
+  - it: uses the first zone as primary for guac statefulset when no zone has primary true
+    template: templates/guac-statefulset.yaml
+    set:
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      kasmZones:
+        - name: zonea
+          proxyAddress: zonea.example.com
+        - name: zoneb
+          proxyAddress: zoneb.example.com
+    asserts:
+      - hasDocuments:
+          count: 1
+      - matchRegex:
+          path: metadata.name
+          pattern: ".*zonea.*"
+      - notMatchRegex:
+          path: metadata.name
+          pattern: ".*zoneb.*"
+
+  - it: uses the primary-flagged zone for rdp-gateway deployment when primary is not at index 0
+    template: templates/rdp-gateway-deployment.yaml
+    set:
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      kasmZones:
+        - name: zoneb
+          proxyAddress: zoneb.example.com
+        - name: zonea
+          proxyAddress: zonea.example.com
+          primary: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - matchRegex:
+          path: metadata.name
+          pattern: ".*zonea.*"
+      - notMatchRegex:
+          path: metadata.name
+          pattern: ".*zoneb.*"
+
+  - it: uses the primary-flagged zone for rdp-https-gateway when primary is not at index 0
+    template: templates/rdp-https-gateway-statefulset.yaml
+    set:
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      kasmZones:
+        - name: zoneb
+          proxyAddress: zoneb.example.com
+        - name: zonea
+          proxyAddress: zonea.example.com
+          primary: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - matchRegex:
+          path: metadata.name
+          pattern: ".*zonea.*"
+      - notMatchRegex:
+          path: metadata.name
+          pattern: ".*zoneb.*"
+
+  - it: deploys api for all zones regardless of primary position
+    template: templates/api-deployment.yaml
+    set:
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      kasmZones:
+        - name: zoneb
+          proxyAddress: zoneb.example.com
+        - name: zonea
+          proxyAddress: zonea.example.com
+          primary: true
+    asserts:
+      - hasDocuments:
+          count: 2
+      - matchRegex:
+          path: metadata.name
+          pattern: ".*zoneb.*"
+        documentIndex: 0
+      - matchRegex:
+          path: metadata.name
+          pattern: ".*zonea.*"
+        documentIndex: 1
+
+  - it: sets ZONE env var to the zone name in guac when primary is not at index 0
+    template: templates/guac-statefulset.yaml
+    set:
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      kasmZones:
+        - name: zoneb
+          proxyAddress: zoneb.example.com
+        - name: zonea
+          proxyAddress: zonea.example.com
+          primary: true
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[*].env[?(@.name=="ZONE" && @.value=="zonea")]
+
+  # ---------------------------------------------------------------------------
+  # Same region_name — full stack for every zone in the region
+  # ---------------------------------------------------------------------------
+
+  - it: deploys one guac statefulset per zone when both share region_name
+    template: templates/guac-statefulset.yaml
+    set:
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      kasmZones:
+        - name: zonea
+          proxyAddress: zonea.example.com
+          primary: true
+          region_name: us-east
+        - name: zoneb
+          proxyAddress: zoneb.example.com
+          region_name: us-east
+    asserts:
+      - hasDocuments:
+          count: 2
+      - matchRegex:
+          path: metadata.name
+          pattern: ".*zonea.*"
+        documentIndex: 0
+      - matchRegex:
+          path: metadata.name
+          pattern: ".*zoneb.*"
+        documentIndex: 1
+
+  - it: deploys one rdp-gateway deployment per zone when both share region_name
+    template: templates/rdp-gateway-deployment.yaml
+    set:
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      kasmZones:
+        - name: zonea
+          proxyAddress: zonea.example.com
+          primary: true
+          region_name: us-east
+        - name: zoneb
+          proxyAddress: zoneb.example.com
+          region_name: us-east
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: deploys one guac service per zone when both share region_name
+    template: templates/guac-service.yaml
+    set:
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      kasmZones:
+        - name: zonea
+          proxyAddress: zonea.example.com
+          primary: true
+          region_name: us-east
+        - name: zoneb
+          proxyAddress: zoneb.example.com
+          region_name: us-east
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: deploys one rdp-https-gateway statefulset per zone when both share region_name
+    template: templates/rdp-https-gateway-statefulset.yaml
+    set:
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      kasmZones:
+        - name: zonea
+          proxyAddress: zonea.example.com
+          primary: true
+          region_name: us-east
+        - name: zoneb
+          proxyAddress: zoneb.example.com
+          region_name: us-east
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  # ---------------------------------------------------------------------------
+  # Different region_name — guac/rdp only for primary region
+  # ---------------------------------------------------------------------------
+
+  - it: deploys only one guac statefulset when zones have different region_name
+    template: templates/guac-statefulset.yaml
+    set:
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      kasmZones:
+        - name: zonea
+          proxyAddress: zonea.example.com
+          primary: true
+          region_name: us-east
+        - name: zoneb
+          proxyAddress: zoneb.example.com
+          region_name: eu-west
+    asserts:
+      - hasDocuments:
+          count: 1
+      - matchRegex:
+          path: metadata.name
+          pattern: ".*zonea.*"
+
+  - it: deploys only one rdp-gateway deployment when zones have different region_name
+    template: templates/rdp-gateway-deployment.yaml
+    set:
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      kasmZones:
+        - name: zonea
+          proxyAddress: zonea.example.com
+          primary: true
+          region_name: us-east
+        - name: zoneb
+          proxyAddress: zoneb.example.com
+          region_name: eu-west
+    asserts:
+      - hasDocuments:
+          count: 1
+      - matchRegex:
+          path: metadata.name
+          pattern: ".*zonea.*"
+
+  - it: deploys only one rdp-https-gateway when zones have different region_name
+    template: templates/rdp-https-gateway-statefulset.yaml
+    set:
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      kasmZones:
+        - name: zonea
+          proxyAddress: zonea.example.com
+          primary: true
+          region_name: us-east
+        - name: zoneb
+          proxyAddress: zoneb.example.com
+          region_name: eu-west
+    asserts:
+      - hasDocuments:
+          count: 1
+      - matchRegex:
+          path: metadata.name
+          pattern: ".*zonea.*"
+
+  - it: deploys api for all zones when regions differ
+    template: templates/api-deployment.yaml
+    set:
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      kasmZones:
+        - name: zonea
+          proxyAddress: zonea.example.com
+          primary: true
+          region_name: us-east
+        - name: zoneb
+          proxyAddress: zoneb.example.com
+          region_name: eu-west
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: deploys proxy for all zones when regions differ
+    template: templates/proxy-deployment.yaml
+    set:
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      kasmZones:
+        - name: zonea
+          proxyAddress: zonea.example.com
+          primary: true
+          region_name: us-east
+        - name: zoneb
+          proxyAddress: zoneb.example.com
+          region_name: eu-west
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  # ---------------------------------------------------------------------------
+  # No region_name — full stack only for primary zone
+  # ---------------------------------------------------------------------------
+
+  - it: deploys only one guac statefulset when no zones have region_name
+    template: templates/guac-statefulset.yaml
+    set:
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      kasmZones:
+        - name: zonea
+          proxyAddress: zonea.example.com
+          primary: true
+        - name: zoneb
+          proxyAddress: zoneb.example.com
+    asserts:
+      - hasDocuments:
+          count: 1
+      - matchRegex:
+          path: metadata.name
+          pattern: ".*zonea.*"
+
+  - it: deploys only one rdp-gateway when no zones have region_name
+    template: templates/rdp-gateway-deployment.yaml
+    set:
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      kasmZones:
+        - name: zonea
+          proxyAddress: zonea.example.com
+          primary: true
+        - name: zoneb
+          proxyAddress: zoneb.example.com
+    asserts:
+      - hasDocuments:
+          count: 1
+      - matchRegex:
+          path: metadata.name
+          pattern: ".*zonea.*"
+
+  - it: deploys api for all zones when no zones have region_name
+    template: templates/api-deployment.yaml
+    set:
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      kasmZones:
+        - name: zonea
+          proxyAddress: zonea.example.com
+          primary: true
+        - name: zoneb
+          proxyAddress: zoneb.example.com
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  # ---------------------------------------------------------------------------
+  # SERVER_INTERNAL_SCHEMA routing by region
+  # ---------------------------------------------------------------------------
+
+  - it: sets SERVER_INTERNAL_SCHEMA=http for the primary region api and https for a different region
+    template: templates/api-deployment.yaml
+    set:
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      kasmZones:
+        - name: zonea
+          proxyAddress: zonea.example.com
+          primary: true
+          region_name: us-east
+        - name: zoneb
+          proxyAddress: zoneb.example.com
+          region_name: eu-west
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="SERVER_INTERNAL_SCHEMA" && @.value=="http")]
+        documentIndex: 0
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="SERVER_INTERNAL_SCHEMA" && @.value=="https")]
+        documentIndex: 1
+
+  - it: sets SERVER_INTERNAL_SCHEMA=http for all zones sharing the primary region_name
+    template: templates/api-deployment.yaml
+    set:
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      kasmZones:
+        - name: zonea
+          proxyAddress: zonea.example.com
+          primary: true
+          region_name: us-east
+        - name: zoneb
+          proxyAddress: zoneb.example.com
+          region_name: us-east
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="SERVER_INTERNAL_SCHEMA" && @.value=="http")]
+        documentIndex: 0
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="SERVER_INTERNAL_SCHEMA" && @.value=="http")]
+        documentIndex: 1
+
+  - it: sets SERVER_INTERNAL_SCHEMA=http for primary zone and https for others when no region_name set
+    template: templates/api-deployment.yaml
+    set:
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      kasmZones:
+        - name: zonea
+          proxyAddress: zonea.example.com
+          primary: true
+        - name: zoneb
+          proxyAddress: zoneb.example.com
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="SERVER_INTERNAL_SCHEMA" && @.value=="http")]
+        documentIndex: 0
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="SERVER_INTERNAL_SCHEMA" && @.value=="https")]
+        documentIndex: 1
+
+  # ---------------------------------------------------------------------------
+  # Proxy init container gating — guac/rdp waits only in primary region
+  # The init container command (args[0]) includes the service URL, making it
+  # a stable identifier even though the container name embeds the release name.
+  # ---------------------------------------------------------------------------
+
+  - it: primary-region proxy waits for its zone guac before starting
+    template: templates/proxy-deployment.yaml
+    set:
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      kasmZones:
+        - name: zonea
+          proxyAddress: zonea.example.com
+          primary: true
+          region_name: us-east
+        - name: zoneb
+          proxyAddress: zoneb.example.com
+          region_name: eu-west
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[2].args[0]
+          pattern: 'guac-zonea'
+        documentIndex: 0
+
+  - it: primary-region proxy waits for rdp-gateway in its zone
+    template: templates/proxy-deployment.yaml
+    set:
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      kasmZones:
+        - name: zonea
+          proxyAddress: zonea.example.com
+          primary: true
+          region_name: us-east
+        - name: zoneb
+          proxyAddress: zoneb.example.com
+          region_name: eu-west
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[3].args[0]
+          pattern: 'rdp-gateway-zonea'
+        documentIndex: 0
+
+  - it: non-primary-region proxy has no guac or rdp-gateway init containers
+    template: templates/proxy-deployment.yaml
+    set:
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      kasmZones:
+        - name: zonea
+          proxyAddress: zonea.example.com
+          primary: true
+          region_name: us-east
+        - name: zoneb
+          proxyAddress: zoneb.example.com
+          region_name: eu-west
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.initContainers
+          count: 2
+        documentIndex: 1
+
+  - it: primary-zone proxy waits for guac when no region_name set
+    template: templates/proxy-deployment.yaml
+    set:
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      kasmZones:
+        - name: zonea
+          proxyAddress: zonea.example.com
+          primary: true
+        - name: zoneb
+          proxyAddress: zoneb.example.com
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[2].args[0]
+          pattern: 'guac-zonea'
+        documentIndex: 0
+
+  - it: non-primary-zone proxy has no guac or rdp-gateway init containers when no region_name set
+    template: templates/proxy-deployment.yaml
+    set:
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      kasmZones:
+        - name: zonea
+          proxyAddress: zonea.example.com
+          primary: true
+        - name: zoneb
+          proxyAddress: zoneb.example.com
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.initContainers
+          count: 2
+        documentIndex: 1
+
+  # ---------------------------------------------------------------------------
+  # Service names embed the correct zone slug
+  # ---------------------------------------------------------------------------
+
+  - it: guac headless service uses zone-specific name
+    template: templates/guac-service.yaml
+    set:
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      kasmZones:
+        - name: zonea
+          proxyAddress: zonea.example.com
+          primary: true
+    asserts:
+      - matchRegex:
+          path: metadata.name
+          pattern: ".*guac-zonea.*"
+
+  - it: rdp-https-gateway headless service uses zone-specific name
+    template: templates/rdp-https-gateway-service.yaml
+    set:
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      kasmZones:
+        - name: zonea
+          proxyAddress: zonea.example.com
+          primary: true
+    asserts:
+      - matchRegex:
+          path: metadata.name
+          pattern: ".*rdp-https-gateway-zonea.*"
+
+  - it: rdp-https-gateway SERVER_HOSTNAME references the zone-specific headless service
+    template: templates/rdp-https-gateway-statefulset.yaml
+    set:
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      kasmZones:
+        - name: zonea
+          proxyAddress: zonea.example.com
+          primary: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].env[?(@.name=="SERVER_HOSTNAME")].value
+          pattern: ".*rdp-https-gateway-zonea.*"
+
+  - it: guac SERVER_ADDRESS references the zone-specific headless service
+    template: templates/guac-statefulset.yaml
+    set:
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      kasmZones:
+        - name: zonea
+          proxyAddress: zonea.example.com
+          primary: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].env[?(@.name=="SERVER_ADDRESS")].value
+          pattern: ".*guac-zonea.*"
+
+  # ---------------------------------------------------------------------------
+  # kasm.initContainer "is-ready" naming — must not embed the release name
+  # twice or exceed the 63-char Kubernetes name limit under a long release
+  # name and zone name (e.g. CI's "kasm-e2e-<job-id>" release names).
+  # ---------------------------------------------------------------------------
+
+  - it: proxy is-ready init container names stay short and unique under a long release+zone name
+    template: templates/proxy-deployment.yaml
+    release:
+      name: kasm-e2e-15341393551
+    set:
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      kasmZones:
+        - name: preseed-zone
+          proxyAddress: preseed-zone.example.com
+          primary: true
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: kasm-e2e-15341393551-api-is-ready
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: kasm-e2e-15341393551-manager-is-ready
+      - equal:
+          path: spec.template.spec.initContainers[2].name
+          value: kasm-e2e-15341393551-guac-is-ready
+      - equal:
+          path: spec.template.spec.initContainers[3].name
+          value: kasm-e2e-15341393551-rdp-gateway-is-ready

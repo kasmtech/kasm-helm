@@ -5,10 +5,8 @@ Deploy the Kasm OpenShift Route if .Values.route.enabled set to true
   {{- fail "The ingress.enabled and route.enabled cannot both be set. Either configure an Ingress or an OpenShift Route, not both." -}}
 {{- end -}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
-{{- $primaryZoneName := "default" -}}
-{{- if .Values.kasmZones -}}
-  {{- $primaryZoneName = (index .Values.kasmZones 0).name -}}
-{{- end -}}
+{{- $primaryZone := (include "kasm.primaryZone" . | fromYaml) -}}
+{{- $primaryZoneName := $primaryZone.name -}}
 {{- if eq .Values.route.enabled true }}
 apiVersion: route.openshift.io/v1
 kind: Route
@@ -49,7 +47,7 @@ kind: Route
 metadata:
   {{- include "kasm.metadata" (dict "context" $ "component" "proxy" "resource" "route" "zone" $zone.name "include" "all") | indent 2 }}
 spec:
-  host: {{ $zone.proxyAddress | quote }}
+  host: {{ include "kasm.zoneProxyHostnameRequired" $zone | quote }}
   to:
     kind: Service
     name: {{ printf "%s-%s" $constants.proxy.svc (include "kasm.zoneName" $zone.name) }}

@@ -36,6 +36,146 @@ tests:
           path: spec.template.spec.containers[0].args[0]
           pattern: '/usr/bin/startup\.sh \|\| true'
   
+  - it: does not run the prepare-db-preseed init container when neither generatePreseed nor existingDefaultPropertiesSecret is set
+    template: templates/db-init-job.yaml
+    set:
+      dbManagement:
+        initialize: true
+        upgrade:
+          enable: false
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.initContainers
+          count: 1
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: db-is-ready
+
+  - it: mounts a customer-provided existingDefaultPropertiesSecret and replaces the baked-in default seed file
+    template: templates/db-init-job.yaml
+    set:
+      dbManagement:
+        initialize: true
+        upgrade:
+          enable: false
+      kasmConfig:
+        generatePreseed: false
+        existingDefaultPropertiesSecret:
+          name: my-custom-seed
+          key: default_properties.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: prepare-db-preseed
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].args[0]
+          pattern: 'cp "\$\{EXISTING_DEFAULT_PROPERTIES\}" "\$\{DEFAULT_PROPERTIES\}"'
+      - notMatchRegex:
+          path: spec.template.spec.initContainers[0].args[0]
+          pattern: 'CUSTOM_PROPERTIES was not found'
+      - equal:
+          path: spec.template.spec.initContainers[0].volumeMounts[1].name
+          value: existing-db-preseed
+      - equal:
+          path: spec.template.spec.initContainers[0].volumeMounts[1].subPath
+          value: default_properties.yaml
+      - equal:
+          path: spec.template.spec.volumes[2].secret.secretName
+          value: my-custom-seed
+
+  - it: merges chart-generated custom_properties.yaml on top of an existingDefaultPropertiesSecret when both are set
+    template: templates/db-init-job.yaml
+    set:
+      dbManagement:
+        initialize: true
+        upgrade:
+          enable: false
+      kasmConfig:
+        generatePreseed: true
+        defaultUsers: false
+        existingDefaultPropertiesSecret:
+          name: my-custom-seed
+          key: default_properties.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].args[0]
+          pattern: 'cp "\$\{EXISTING_DEFAULT_PROPERTIES\}" "\$\{DEFAULT_PROPERTIES\}"'
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].args[0]
+          pattern: 'YQ_BIN.*-n'
+      - contains:
+          path: spec.template.spec.initContainers[0].volumeMounts
+          content:
+            name: existing-db-preseed
+            mountPath: /existing-preseed/default_properties.yaml
+            subPath: default_properties.yaml
+            readOnly: true
+      - contains:
+          path: spec.template.spec.initContainers[0].volumeMounts
+          content:
+            name: custom-db-preseed
+            mountPath: /custom-preseed/custom_properties.yaml
+            subPath: custom_properties.yaml
+            readOnly: true
+
+  - it: sets DEFAULT_ADMIN_PASSWORD from the built-in admin-password Secret key by default
+    template: templates/db-init-job.yaml
+    set:
+      dbManagement:
+        initialize: true
+        upgrade:
+          enable: false
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="DEFAULT_ADMIN_PASSWORD")].valueFrom.secretKeyRef.key
+          value: admin-password
+
+  - it: still sets DEFAULT_ADMIN_PASSWORD when adminUsername is customized but defaultUsers is not enabled
+    template: templates/db-init-job.yaml
+    set:
+      dbManagement:
+        initialize: true
+        upgrade:
+          enable: false
+      kasmConfig:
+        generatePreseed: true
+        defaultUsers: false
+        adminUsername: system@kasm.local
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="DEFAULT_ADMIN_PASSWORD")].valueFrom.secretKeyRef.key
+          value: admin-password
+
+  - it: still sets DEFAULT_ADMIN_PASSWORD when adminUsername is customized but preseed is disabled
+    template: templates/db-init-job.yaml
+    set:
+      dbManagement:
+        initialize: true
+        upgrade:
+          enable: false
+      kasmConfig:
+        generatePreseed: false
+        adminUsername: system@kasm.local
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="DEFAULT_ADMIN_PASSWORD")].valueFrom.secretKeyRef.key
+          value: admin-password
+
+  - it: omits DEFAULT_ADMIN_PASSWORD when defaultUsers replaces admin@kasm.local with a renamed admin account
+    template: templates/db-init-job.yaml
+    set:
+      dbManagement:
+        initialize: true
+        upgrade:
+          enable: false
+      kasmConfig:
+        generatePreseed: true
+        defaultUsers: true
+        adminUsername: system@kasm.local
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].env[?(@.name=="DEFAULT_ADMIN_PASSWORD")]
+
   - it: renders backup cronjob when backupCron enabled
     template: templates/db-backup-cron.yaml
     set:

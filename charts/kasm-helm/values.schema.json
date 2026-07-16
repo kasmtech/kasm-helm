@@ -1810,8 +1810,8 @@
               "type": "string"
             },
             "oldDbSecretsName": {
-              "default": "kasm-secrets",
-              "description": "The name of the Kubernetes secret where Kasm and DB passwords are stored.",
+              "default": "",
+              "description": "The name of an existing Kubernetes secret to use as the source for credential lookup during upgrades. Leave empty to use the current release's '<release>-secrets' secret. Set to a different secret name only when upgrading from a deployment that stored credentials under a non-default name.",
               "title": "oldDbSecretsName",
               "type": "string"
             }
@@ -2165,6 +2165,67 @@
       "title": "isOpenshift",
       "type": "boolean"
     },
+    "kasmConfig": {
+      "description": "An object of arrays of Kasm settings used to generate a preseed initialization file",
+      "type": "object",
+      "properties": {
+        "generatePreseed": {
+          "default": false,
+          "title": "generatePreseed",
+          "description": "Enable DB preseed template file generation. When true, a custom_properties.yaml is rendered from kasmConfig.config and merged with Kasm's default seed data during db-init. Opt-in; set to true explicitly for new installs that require preseed.",
+          "type": "boolean"
+        },
+        "defaultApiUsers": {
+          "default": false,
+          "title": "defaultApiUsers",
+          "description": "Seed Kasm default API configs (Admin and Read/Only API keys). Only meaningful when generatePreseed is true. Opt-in.",
+          "type": "boolean"
+        },
+        "defaultUsers": {
+          "default": false,
+          "title": "defaultUsers",
+          "description": "Seed Kasm default users and groups (admin@kasm.local, user@kasm.local, siteadmin@kasm.local, workspaceadmin@kasm.local, and standard groups). Only meaningful when generatePreseed is true. Opt-in.",
+          "type": "boolean"
+        },
+        "adminUsername": {
+          "default": "admin@kasm.local",
+          "title": "adminUsername",
+          "description": "Username for the privileged admin account in the default user seed. Defaults to admin@kasm.local. Has no effect when defaultUsers is false.",
+          "type": "string"
+        },
+        "existingDefaultPropertiesSecret": {
+          "title": "existingDefaultPropertiesSecret",
+          "description": "Reference a customer-managed Secret containing a complete default_properties.yaml seed file. When name is set, its contents replace the image's baked-in default_properties.yaml as the base seed file, independently of generatePreseed.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "title": "name",
+              "description": "Name of a pre-existing Secret containing the seed file. Leave empty to disable this feature.",
+              "type": "string"
+            },
+            "key": {
+              "default": "default_properties.yaml",
+              "title": "key",
+              "description": "Data key within the Secret that contains the seed file contents.",
+              "type": "string"
+            }
+          }
+        },
+        "config": {
+          "title": "config",
+          "description": "Preseed data sections. All user-supplied Kasm preseed data (users, groups, apiConfigs, settings, images, autoscale, server_pools, cloud VM configs, OIDC/SAML/LDAP, etc.) belong here. Control flags generatePreseed and defaultUsers remain at kasmConfig top level.",
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      "required": [
+        "generatePreseed",
+        "defaultUsers",
+        "defaultApiUsers",
+        "config"
+      ]
+    },
     "kasmZones": {
       "description": "This is a list of objects defining different Kasm Zone configurations for your deployment. This configuration is typically used for multi-region, large, or custom deployments where the customer requires a high degree of configurability and has multiple resources in disparate areas.  NOTE: If you configure custom zones below, you MUST use a valid `ingress` configuration due to the increased deployment complexity of a multi-zone Kasm deployment. Refer to the Kasm [Deployment Zones](https://docs.kasm.com/docs/latest/guide/deployment_zones/index.html) documentation for more information on Kasm Zones.",
       "title": "kasmZones",
@@ -2172,21 +2233,97 @@
       "items": {
         "type": "object",
         "properties": {
+          "allow_origin_domain": {
+            "title": "allow_origin_domain",
+            "description": "Connections to Kasm sessions are restricted to authorized Origins. This value is the authorized origin domain. The default is $request_host$.",
+            "type": "string"
+          },
+          "enable_direct_rdp_login": {
+            "title": "enable_direct_rdp_login",
+            "description": "Allow users to connect with this zone purely through RDP and their Kasm credentials. This connection method only works for RDP targets but allows clients to interact with Kasm without a web browser.",
+            "type": "boolean"
+          },
+          "enable_rdp_https_gw": {
+            "title": "enable_rdp_https_gw",
+            "description": "Use the HTTPS RDP Gateway protocol. When disabled, standard RDP over port 3389 is used.",
+            "type": "boolean"
+          },
+          "enable_rdp_https_gw_dlp": {
+            "title": "enable_rdp_https_gw_dlp",
+            "description": "Send HTTPS RDP connections through DLP (Data Loss Prevention). Enabling DLP has performance and scalability implications. Disabling DLP will disable many data loss prevention features enforced by Kasm, however, many of these features can be enforced by proper Group Policy in Windows. Disabling DLP will also break single sign on.",
+            "type": "boolean"
+          },
           "name": {
-            "description": "Define the name of the Kasm Zones to deploy management resources for",
+            "description": "The name of the Kasm Zone to deploy management resources for. Required unless `zone_name` is set. If both `name` and `zone_name` are set, `name` wins.",
             "title": "name",
             "type": "string"
           },
+          "primary": {
+            "title": "primary",
+            "description": "Set this value to true on the zone in the cluster with the Database. If you are deploying multiple zones in a single namespace and region, then just pick whichever Zone you want the chart to consider the primary.",
+            "type": "boolean"
+          },
           "proxyAddress": {
-            "description": "Define the Proxy address of the Kasm Zones to deploy management resources for. Refer to [Deployment Zones](https://docs.kasm.com/docs/latest/guide/deployment_zones/index.html) for more info.",
+            "description": "Deprecated. Use proxy_hostname instead to define the Proxy address of the Kasm Zones to deploy management resources for. Refer to [Deployment Zones](https://docs.kasm.com/docs/latest/guide/deployment_zones/index.html) for more info.",
             "title": "proxyAddress",
             "type": "string"
+          },
+          "proxy_hostname": {
+            "description": "Define the Proxy address of the Kasm Zones to deploy management resources for. Refer to [Deployment Zones](https://docs.kasm.com/docs/latest/guide/deployment_zones/index.html) for more info.",
+            "title": "proxy_hostname",
+            "type": "string"
+          },
+          "proxy_path": {
+            "title": "proxy_path",
+            "description": "The base path to append to the Kasm connection when Proxy Connections is enabled. The default is /desktop.",
+            "type": "string"
+          },
+          "proxy_port": {
+            "title": "proxy_port",
+            "description": "The port to use for the proxy server when Proxy Connections is enabled. The default is 443. Kasm Workspaces will attempt to automatically determine the correct port from window.location.port",
+            "type": "integer"
+          },
+          "prioritize_static_agents": {
+            "title": "prioritize_static_agents",
+            "description": "Utilize fixed agents before using auto scaled Docker Agents. The default is enabled.",
+            "type": "boolean"
+          },
+          "proxy_rdp_hostname": {
+            "title": "proxy_rdp_hostname",
+            "description": "The hostname/ip of a load balancer or proxy in front of the HTTPS based RDP Gateway component. By default it is $request_host$.",
+            "type": "string"
+          },
+          "proxy_rdp_port": {
+            "title": "proxy_rdp_port",
+            "description": "The port number of a load balancer or proxy in front of the HTTPS based RDP Gateway component. By default it is 443.",
+            "type": "integer"
+          },
+          "region_name": {
+            "title": "region_name",
+            "description": "The name of the region where the Zone is deployed. This is very useful if you wish to deploy multiple zones in a single region, you can use the same region_name value for all zones in the region and the Helm chart will deploy resources accordingly.",
+            "type": "string"
+          },
+          "search_alternate_zones": {
+            "title": "search_alternate_zones",
+            "description": "When a user requests a Kasm session, the system will first search for available resources on Agents within the same Zone. When enabled, the server can also search alternate Zones to satisfy the request if it can not be satisfied within the same Zone. Agents in the same Zone are always preferred over alternate Zones.",
+            "type": "boolean"
+          },
+          "upstream_auth_address": {
+            "title": "upstream_auth_address",
+            "description": "Connections to Kasm session are authenticated against a Kasm API server. This value is the address of the server. The default is $request_host$.",
+            "type": "string"
+          },
+          "verify_rdp_client_ip": {
+            "title": "verify_rdp_client_ip",
+            "description": "Allow users to connect with this zone purely through RDP and their Kasm credentials. This connection method only works for RDP targets but allows clients to interact with Kasm without a web browser.",
+            "type": "boolean"
+          },
+          "zone_name": {
+            "description": "Preferred alias for `name`, used to define the name of the Kasm Zone to deploy management resources for. If both `name` and `zone_name` are set, `name` wins.",
+            "title": "zone_name",
+            "type": "string"
           }
-        },
-        "required": [
-          "name",
-          "proxyAddress"
-        ]
+        }
       }
     },
     "labels": {

@@ -117,7 +117,7 @@ CRANE_ARCH := $(subst amd64,x86_64,$(ARCH))
 CLOUD_PROVIDER_KIND_PID_FILE ?= $(CURDIR)/.kind/cloud-provider-kind.pid
 CLOUD_PROVIDER_KIND_LOG ?= $(CURDIR)/.kind/cloud-provider-kind.log
 
-.PHONY: tools lint render kubeconform kyverno unittest readme readme-check changelog changelog-llm changelog-console changelog-console-llm changelog-check docs test build-pytest kind-up kind-down kind-recreate kind-ensure kind-load-images kind-load-old-images kind-clean-namespace kind-prep pytest-docker e2e e2e-basic e2e-trustedca e2e-multizone e2e-externaldb e2e-backup e2e-backup-pss e2e-pss e2e-json-logging e2e-upgrade e2e-upgrade-included e2e-upgrade-standalone e2e-settle extract-old-chart clean
+.PHONY: tools lint render kubeconform kyverno unittest readme readme-check changelog changelog-llm changelog-console changelog-console-llm changelog-check docs test build-pytest kind-up kind-down kind-recreate kind-ensure kind-load-images kind-load-old-images kind-clean-namespace kind-prep pytest-docker e2e e2e-basic e2e-trustedca e2e-multizone e2e-externaldb e2e-backup e2e-backup-pss e2e-pss e2e-json-logging e2e-upgrade e2e-upgrade-included e2e-upgrade-standalone e2e-settle e2e-preseed validate-preseed extract-old-chart clean
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*## "; printf "\nUsage: make \033[36m<target>\033[0m\n"} \
@@ -289,6 +289,11 @@ unittest: tools ## Run helm-unittest test suites
 	HELM_PLUGINS="$(HELM_PLUGINS_DIR)" $(HELM) unittest $(CHART_DIR)
 
 test: lint kubeconform kyverno unittest ## Run full static suite: lint + kubeconform + kyverno + unittest
+
+validate-preseed: tools render ## Validate preseed output against the 1.19.0 schema
+	python3 tests/validate_preseed.py \
+	  --schema tests/schemas/1_19_0-schema.yaml \
+	  --rendered .rendered/preseed-validate.yaml
 
 ##@ Docs
 
@@ -589,6 +594,9 @@ e2e: ## Run all e2e scenarios sequentially (requires kind cluster)
 	$(MAKE) e2e-settle
 	$(MAKE) e2e-upgrade-standalone E2E_NAMESPACE=kasm-e2e-upgrade-standalone
 	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-upgrade-standalone
+	$(MAKE) e2e-settle
+	$(MAKE) e2e-preseed E2E_NAMESPACE=kasm-e2e-preseed
+	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-preseed
 	@# Final cleanup of host-side artefacts left behind by the
 	@# external-postgres-using tests (e2e-externaldb, e2e-upgrade-standalone)
 	@# and the chart-extraction step from e2e-upgrade-*.
@@ -628,6 +636,15 @@ e2e-backup: kind-prep build-pytest ## DB backup CronJob test
 
 e2e-backup-pss: kind-prep build-pytest ## DB backup under Pod Security Standards restricted
 	$(MAKE) pytest-docker E2E_SCENARIO=e2e-backup-pss PYTEST_ARGS="-m e2e -q test_08_db_backup_restricted.py"
+
+e2e-pss: kind-prep build-pytest ## Pod Security Standards restricted namespace test
+	$(MAKE) pytest-docker E2E_SCENARIO=e2e-pss PYTEST_ARGS="-m e2e -q test_06_pod_security_standards.py"
+
+e2e-preseed: kind-prep build-pytest ## Preseed verification: group, settings, and user seeded via custom_properties.yaml
+	$(MAKE) pytest-docker E2E_SCENARIO=e2e-preseed PYTEST_ARGS="-m e2e -q test_11_preseed.py"
+
+e2e-json-logging: kind-prep build-pytest ## Verify all non-Guac pods emit JSON logs when logFormat=json
+	$(MAKE) pytest-docker E2E_SCENARIO=e2e-json-logging PYTEST_ARGS="-m e2e -q test_10_json_logging.py"
 
 ##@ Upgrade Helpers
 
@@ -676,12 +693,6 @@ e2e-upgrade-standalone: kind-prep build-pytest kind-load-old-images ## Upgrade f
 	  PYTEST_ARGS="-m e2e -q test_09_db_upgrade.py::test_db_upgrade_standalone_db"
 
 e2e-upgrade: e2e-upgrade-included e2e-upgrade-standalone ## Run both upgrade e2e tests
-
-e2e-pss: kind-prep build-pytest ## Pod Security Standards restricted namespace test
-	$(MAKE) pytest-docker E2E_SCENARIO=e2e-pss PYTEST_ARGS="-m e2e -q test_06_pod_security_standards.py"
-
-e2e-json-logging: kind-prep build-pytest ## Verify all non-Guac pods emit JSON logs when logFormat=json
-	$(MAKE) pytest-docker E2E_SCENARIO=e2e-json-logging PYTEST_ARGS="-m e2e -q test_10_json_logging.py"
 
 ##@ Maintenance
 

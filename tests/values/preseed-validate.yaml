@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=../../charts/kasm-helm/values.schema.json
+publicAddr: kasm.example.com
+certificate:
+  secretName: kasm-tls
+
+proxyService:
+  type: ClusterIP
+
+kasmZones:
+  - name: default
+    proxyAddress: kasm.example.com
+    primary: true
+
+dbManagement:
+  initialize: true
+
+kasmConfig:
+  generatePreseed: true
+  defaultUsers: true
+  config:
+    groups:
+      - name: "Test Group"
+        description: "A sample group for preseed validation"
+        priority: 500
+
+    settings:
+      - category: ldap
+        name: ldap_enabled
+        title: LDAP Enabled
+        description: Enable LDAP authentication
+        value: "False"
+        value_type: bool
+
+    branding:
+      - name: "Default Branding"
+        html_title: "Kasm Workspaces"
+        is_default: true

@@ -352,6 +352,8 @@ tests:
 
   - it: extraLabels.secret applies to Secrets
     set:
+      kasmConfig:
+        generatePreseed: false
       extraLabels:
         secret:
           secret-key: applied

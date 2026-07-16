@@ -4,7 +4,7 @@ Kasm API server Deployment definition
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- $apiReplicas := ternary .Values.components.api.replicas (include "replicas.preset" (dict "node" ($constants.api.component) "size" .Values.deploymentSize)) (gt (int .Values.components.api.replicas) 0) -}}
 {{- $merged := fromYaml (include "kasm.mergedValues" (dict "root" . "componentName" "api")) -}}
-{{- range $idx, $zone := (.Values.kasmZones | default (list (dict "name" "default"))) }}
+{{- range $idx, $zone := (include "kasm.zones" $ | fromYamlArray) }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -78,7 +78,7 @@ spec:
               another NGINX proxy
             */}}
             - name: SERVER_INTERNAL_SCHEMA
-              value: "https"
+              value: {{ if include "kasm.isInPrimaryRegion" (list $ $zone) }}"http"{{ else }}"https"{{ end }}
             - name: KASM_THREAD_POOL
               value: {{ $.Values.components.api.threadPool | quote }}
             - name: KASM_THREAD_POOL_LOG_INTERVAL

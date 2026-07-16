@@ -62,6 +62,7 @@ tests:
       kasmZones:
         - name: My_Zone 1
           proxyAddress: zone1.example.com
+          primary: true
     asserts:
       - hasDocuments:
           count: 2
@@ -90,6 +91,7 @@ tests:
       kasmZones:
         - name: My_Zone 1
           proxyAddress: zone1.example.com
+          primary: true
     asserts:
       - matchRegex:
           path: spec.template.spec.initContainers[1].args[0]

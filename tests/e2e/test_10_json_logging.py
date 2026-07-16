@@ -9,6 +9,7 @@ import pytest
 import yaml
 
 from .helpers import (
+    curl_from_pod,
     get_first_pod_by_selector,
     install_and_wait_with_retry,
     kubectl,
@@ -109,6 +110,16 @@ def test_json_log_format(installer, temp_workdir: Path) -> None:
         _POST_READY_SETTLE_SECONDS,
     )
     time.sleep(_POST_READY_SETTLE_SECONDS)
+
+    # Unlike api/manager (which emit periodic JSON diagnostic lines regardless
+    # of traffic) and rdp-gateway/rdp-https-gateway (whose sampled container is
+    # the app binary, not the nginx sidecar), the proxy component's only
+    # container is nginx itself: its json_combined access log line is only
+    # written in response to an actual HTTP request. Generate one before
+    # sampling so the JSON-format assertion below has something to observe.
+    proxy_pod_for_warmup = get_first_pod_by_selector(namespace, "app.kubernetes.io/component=proxy")
+    warmup_status, _ = curl_from_pod(namespace, proxy_pod_for_warmup, "https://localhost:8443/", insecure=True)
+    assert warmup_status == 200
 
     # Each tuple: (component label, container name or None for pod default)
     # Guac is intentionally excluded — its log format is not configurable
