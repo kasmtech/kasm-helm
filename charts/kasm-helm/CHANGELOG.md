@@ -1,6 +1,31 @@
 # Changelog
 
-All notable changes to the kasm-helm chart are documented here.
+## [1.1190.3] - 2026-07-16
+
+### Added
+
+- Adds DB preseed support via the new `kasmConfig` values block, allowing operators to seed initial users, groups, and configuration into Kasm on first install. <!-- hash:5dd5b6299c7fa0a815f9d2b7c09a66fe6ad66b72 -->
+- Adds extensive DB preseed documentation in the `./docs` directory providing operators with seed data semantics and configuration capabilities <!-- hash:5dd5b6299c7fa0a815f9d2b7c09a66fe6ad66b72 -->
+
+### Fixed
+
+- Fixed DB preseed data generation to correctly merge configurations, apply resource precedence, and resolve config resources by name, preventing silent misconfigurations in installations that use custom users, groups, or Kasm API settings. <!-- hash:eb7cf7262c5253ce9a08e6c9c18d9f453949b5b9 -->
+- Fixed preseed bug <!-- hash:1037bbb54676b8950638b7ad36272ec9936749f8 -->
+- Multiple updates to resolve pipeline and testing bugs due to preseed changes [Database, Manager] <!-- hash:6be52fe024fc41e93acb5d15113ab456ba692d55 -->
+- Updated and tested preseed all working but API permissions which is application bug not Helm bug [Database, Manager] <!-- hash:36d3817659f7d4f905795ee0761e6f807dc08d76 -->
+- Resolved merge issues [Guac, RDP Gateway, RDP HTTPS Gateway] <!-- hash:6f4db428f5712c35e24aac5f5b0f1b0d5ae24e71 -->
+
+### Changed
+
+- Set Kasm Password secret name back to `kasm-secrets` [API, Database, Guac, Manager, RDP Gateway, RDP HTTPS Gateway] <!-- hash:6ac9c800aaba6a2e87fb630d7129793921fd94d3 -->
+- Updated Makefile to merge preseed with support bundle <!-- hash:77e3ed3e9f3cba95960aba9125463e05dcc025b3 -->
+
+
+### Documentation
+
+- Updated readme <!-- hash:613cc94f8ddf3056b8d38fc2e1a3de016cbc5ab8 -->
+- Updated changelog <!-- hash:873fee28ba2590b93d04ce0b86abffe9279bab7e -->
+- Updated changelog <!-- hash:f6aea0cd0f9483ca79ce692120d57204bcacf446 -->
 
 ## [Unreleased]
 
