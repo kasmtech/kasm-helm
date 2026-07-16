@@ -4,7 +4,7 @@ Backup the DB
 {{- if and .Values.dbManagement.initialize .Values.dbManagement.upgrade.enable -}}
   {{- fail "You cannot enable both initialize and upgrade for the DB. If you have an existing Kasm deployment you wish to upgrade, refer to our upgrade procedures - https://some.upgrade.url. Otherwise, select initialize for a new deployment." -}}
 {{- end -}}
-{{- $kasmSecrets := (.Values.dbManagement.upgrade.oldDbSecretsName | default (printf "%s-secrets" .Release.Name)) }}
+{{- $kasmSecrets := (default (printf "%s-secrets" .Release.Name) .Values.dbManagement.upgrade.oldDbSecretsName) }}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- $dbHost := "kasm-db" -}}
 {{- if and .Values.database.standalone .Values.database.hostname -}}
@@ -83,7 +83,7 @@ spec:
                 {{- if .Values.database.kasmDbSecret -}}
                 {{ .Values.database.kasmDbSecret | toYaml | nindent 18 }}
                 {{- else }}
-                  name: {{ .Release.Name }}-secrets
+                  name: {{ $kasmSecrets }}
                   key: "db-password"
                 {{- end }}
           {{- include "kasm.securityContext" (list . 1000 "container") | nindent 10 }}

@@ -55,6 +55,7 @@ tests:
       kasmZones:
         - name: Zone-A
           proxyAddress: zone-a.kasm.example.test
+          primary: true
     asserts:
       - failedTemplate:
           errorMessage: "The service.type must not be LoadBalancer when using a Multi-Zone Kasm deployment - any load balancer or Route should be provisioned using the Ingress/Route settings. Set service.type=ClusterIP or remove your kasmZones settings."

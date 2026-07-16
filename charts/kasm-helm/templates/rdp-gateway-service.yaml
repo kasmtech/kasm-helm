@@ -10,19 +10,18 @@
 {{- end -}}
 {{- $publicPort := .Values.directRdpService.loadBalancerPort | default 3389 -}}
 {{- $rdpPort := 3389 -}}
-{{- $zoneName := "default" -}}
-{{- if .Values.kasmZones }}
-  {{- $zoneName = (index .Values.kasmZones 0).name -}}
-{{- end }}
 {{- if .Values.components.rdpGateway.enabled }}
+{{- range $zone := (include "kasm.primaryRegionZones" $ | fromYamlArray) }}
+---
+{{ $rdpGwSvc := printf "%s-rdp-gateway-%s" $.Release.Name (include "kasm.zoneName" $zone.name) -}}
 apiVersion: v1
 kind: Service
 metadata:
-  {{- include "kasm.metadata" (dict "context" . "component" "rdpGateway" "resource" "service" "zone" $zoneName "include" "all") | indent 2 }}
+  {{- include "kasm.metadata" (dict "context" $ "component" "rdpGateway" "resource" "service" "zone" $zone.name "include" "all") | indent 2 }}
 spec:
   type: {{ $type }}
   selector:
-    {{- include "kasm.metadata" (dict "context" . "component" "rdpGateway" "resource" "service" "zone" $zoneName "include" "match") | indent 4 }}
+    {{- include "kasm.metadata" (dict "context" $ "component" "rdpGateway" "resource" "service" "zone" $zone.name "include" "match") | indent 4 }}
   ports:
     # The app port (5555) is intentionally NOT exposed on the Service.
     # All cross-pod traffic — including the proxy pod's wait-for-rdp-gateway
@@ -30,12 +29,13 @@ spec:
     # proxies /__healthcheck (and other paths) to the app on 127.0.0.1:5555.
     # The pod's own readinessProbe/livenessProbe still hit 5555 directly
     # because they run as kubelet → 127.0.0.1, not over the Service.
-    - name: {{ printf "%s-svc-%s" $constants.rdpGateway.svc ($constants.rdpGateway.nginxPort | toString) }}
+    - name: {{ printf "%s-svc-%s" $rdpGwSvc ($constants.rdpGateway.nginxPort | toString) }}
       protocol: TCP
       port: {{ $constants.rdpGateway.nginxPort }}
       targetPort: {{ $constants.rdpGateway.nginxPort }}
-    - name: {{ printf "%s-svc-%s" $constants.rdpGateway.svc ($publicPort | toString) }}
+    - name: {{ printf "%s-svc-%s" $rdpGwSvc ($publicPort | toString) }}
       protocol: TCP
       port: {{ $publicPort }}
       targetPort: {{ $rdpPort }}
+{{- end }}
 {{- end }}

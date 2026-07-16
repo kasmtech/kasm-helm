@@ -3,6 +3,15 @@ Initialize the DB
 */}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- if .Values.dbManagement.initialize }}
+{{- $passwordSecretName := printf "%s-secrets" .Release.Name }}
+{{- $preseedSecretName := printf "%s-db-preseed" .Release.Name }}
+{{- $existingDefaultPropertiesSecret := dig "existingDefaultPropertiesSecret" "name" "" .Values.kasmConfig }}
+{{- $existingDefaultPropertiesKey := dig "existingDefaultPropertiesSecret" "key" "default_properties.yaml" .Values.kasmConfig }}
+{{- $adminUsername := dig "adminUsername" "admin@kasm.local" .Values.kasmConfig }}
+{{/* admin@kasm.local only stops being the seeded admin account when preseed's defaultUsers
+     replaces it with a renamed, non-built-in admin account. Otherwise (preseed disabled, or
+     defaultUsers disabled) the app's baked-in default seed still creates admin@kasm.local. */}}
+{{- $builtInAdminExists := or (not .Values.kasmConfig.generatePreseed) (not (dig "defaultUsers" false .Values.kasmConfig)) (eq $adminUsername "admin@kasm.local") }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -27,6 +36,112 @@ spec:
       {{- include "kasm.securityContext" (list . 1000 "pod") | nindent 6 }}
       initContainers:
         {{- include "kasm.trustedCaInit" (list . "api") | nindent 8 }}
+        {{- if or (and .Values.kasmConfig .Values.kasmConfig.generatePreseed) $existingDefaultPropertiesSecret }}
+        - name: prepare-db-preseed
+          image: {{ $constants.api.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          command:
+            - /bin/bash
+            - -c
+          args:
+            - |
+              set -euo pipefail
+
+              SOURCE_SEED_DIR="/opt/kasm/current/conf/database/seed_data"
+              WRITABLE_SEED_DIR="/seed_data"
+              DEFAULT_PROPERTIES="${WRITABLE_SEED_DIR}/default_properties.yaml"
+              EXISTING_DEFAULT_PROPERTIES="/existing-preseed/default_properties.yaml"
+              CUSTOM_PROPERTIES="/custom-preseed/custom_properties.yaml"
+              MERGED_PROPERTIES="${WRITABLE_SEED_DIR}/combined_properties.yaml"
+              YQ_BIN="/usr/bin/yq_$(uname -m)"
+              if [[ ! -x "${YQ_BIN}" ]]; then
+                echo "yq binary not found or not executable at ${YQ_BIN}" >&2
+                exit 1
+              fi
+
+              if [[ ! -f "${SOURCE_SEED_DIR}/default_properties.yaml" ]]; then
+                echo "Default seed file was not found: ${SOURCE_SEED_DIR}/default_properties.yaml" >&2
+                exit 1
+              fi
+
+              mkdir -p "${WRITABLE_SEED_DIR}"
+
+              # Preserve any other seed_data files that may exist in the image.
+              cp -r "${SOURCE_SEED_DIR}/." "${WRITABLE_SEED_DIR}/"
+
+              {{- if $existingDefaultPropertiesSecret }}
+              if [[ ! -f "${EXISTING_DEFAULT_PROPERTIES}" ]]; then
+                echo "Customer-provided seed file was not found: ${EXISTING_DEFAULT_PROPERTIES}" >&2
+                exit 1
+              fi
+
+              # Replace the image's baked-in default seed file wholesale with the customer-provided one.
+              cp "${EXISTING_DEFAULT_PROPERTIES}" "${DEFAULT_PROPERTIES}"
+              echo "Applied customer-provided default_properties.yaml from Secret."
+              {{- end }}
+
+              {{- if and .Values.kasmConfig .Values.kasmConfig.generatePreseed }}
+              if [[ ! -f "${CUSTOM_PROPERTIES}" ]]; then
+                echo "Custom preseed file was not found: ${CUSTOM_PROPERTIES}" >&2
+                exit 1
+              fi
+
+              "${YQ_BIN}" -n '
+                load("'"${DEFAULT_PROPERTIES}"'") as $default |
+                load("'"${CUSTOM_PROPERTIES}"'") as $custom |
+                (
+                  $default * (
+                    $custom
+                    | with_entries(
+                        select(
+                          (.value | tag) != "!!seq" or (.value | length) > 0
+                        )
+                      )
+                  )
+                ) |
+                .group_settings = (
+                  (($default.group_settings // []) | map(select(.group_id == null))) +
+                  ($custom.group_settings // [])
+                ) |
+                .settings = (
+                  ($default.settings // []) + ($custom.settings // [])
+                )
+              ' > "${MERGED_PROPERTIES}"
+
+              # startup.sh copies this exact file path from the seed_data dir to /tmp.
+              mv "${MERGED_PROPERTIES}" "${DEFAULT_PROPERTIES}"
+
+              echo "Merged custom preseed into ${DEFAULT_PROPERTIES}."
+              {{- end }}
+          volumeMounts:
+            - name: db-preseed-data
+              mountPath: /seed_data
+            {{- if and .Values.kasmConfig .Values.kasmConfig.generatePreseed }}
+            - name: custom-db-preseed
+              mountPath: /custom-preseed/custom_properties.yaml
+              subPath: custom_properties.yaml
+              readOnly: true
+            {{- end }}
+            {{- if $existingDefaultPropertiesSecret }}
+            - name: existing-db-preseed
+              mountPath: /existing-preseed/default_properties.yaml
+              subPath: {{ $existingDefaultPropertiesKey }}
+              readOnly: true
+            {{- end }}
+            - name: tmp-data
+              mountPath: /tmp
+        {{- end }}
         {{- include "kasm.dbIsReady" (dict "context" . "function" "init") | nindent 8 }}
       containers:
         - name: {{ include "kasm.name" (list . "dbInit" "container") }}
@@ -54,28 +169,30 @@ spec:
                 {{- if .Values.database.kasmDbSecret -}}
                 {{ .Values.database.kasmDbSecret | toYaml | nindent 18 }}
                 {{- else }}
-                  name: {{ .Release.Name }}-secrets
+                  name: {{ $passwordSecretName }}
                   key: "db-password"
                 {{- end }}
+            {{- if $builtInAdminExists }}
             - name: DEFAULT_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Release.Name }}-secrets
+                  name: {{ $passwordSecretName }}
                   key: admin-password
+            {{- end }}
             - name: DEFAULT_MANAGER_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Release.Name }}-secrets
+                  name: {{ $passwordSecretName }}
                   key: manager-token
             - name: DEFAULT_REGISTRATION_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Release.Name }}-secrets
+                  name: {{ $passwordSecretName }}
                   key: service-token
             - name: DEFAULT_USER_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Release.Name }}-secrets
+                  name: {{ $passwordSecretName }}
                   key: user-password
             {{- if and .Values.database.standalone .Values.database.postgresMasterUser }}
             - name: DATABASE_MASTER_USER
@@ -126,10 +243,36 @@ spec:
           volumeMounts:
             - name: tmp-data
               mountPath: /tmp
+            {{- if or (and .Values.kasmConfig .Values.kasmConfig.generatePreseed) $existingDefaultPropertiesSecret }}
+            - name: db-preseed-data
+              mountPath: /opt/kasm/current/conf/database/seed_data
+              readOnly: true
+            {{- end }}
             {{- include "kasm.trustedCaVolumeMounts" . | nindent 12 }}
       volumes:
         - name: tmp-data
           emptyDir:
             sizeLimit: 256Mi
+        {{- if or (and .Values.kasmConfig .Values.kasmConfig.generatePreseed) $existingDefaultPropertiesSecret }}
+        - name: db-preseed-data
+          emptyDir:
+            sizeLimit: 16Mi
+        {{- end }}
+        {{- if and .Values.kasmConfig .Values.kasmConfig.generatePreseed }}
+        - name: custom-db-preseed
+          secret:
+            secretName: {{ $preseedSecretName }}
+            items:
+              - key: custom_properties.yaml
+                path: custom_properties.yaml
+        {{- end }}
+        {{- if $existingDefaultPropertiesSecret }}
+        - name: existing-db-preseed
+          secret:
+            secretName: {{ $existingDefaultPropertiesSecret }}
+            items:
+              - key: {{ $existingDefaultPropertiesKey }}
+                path: {{ $existingDefaultPropertiesKey }}
+        {{- end }}
         {{- include "kasm.trustedCaVolumes" . | nindent 8 }}
 {{- end }}

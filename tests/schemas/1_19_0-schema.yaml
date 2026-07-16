@@ -1,0 +1,3269 @@
+accounting:
+  account_id:
+    required: false
+    type: UUID
+  cast_config_id:
+    required: false
+    type: UUID
+  container_id:
+    required: false
+    type: VARCHAR
+  container_ip:
+    required: false
+    type: VARCHAR
+  created_date:
+    required: false
+    type: TIMESTAMP
+  destroy_reason:
+    required: false
+    type: VARCHAR(32)
+  destroyed_date:
+    required: false
+    type: TIMESTAMP
+  docker_network:
+    required: false
+    type: VARCHAR
+  group_ids:
+    required: false
+    type: JSONB
+  image_friendly_name:
+    required: false
+    type: VARCHAR
+  image_id:
+    required: false
+    type: UUID
+  image_name:
+    required: false
+    type: VARCHAR
+  image_src:
+    required: false
+    type: VARCHAR
+  is_queued:
+    required: false
+    type: BOOLEAN
+  kasm_id:
+    required: false
+    type: UUID
+  server_hostname:
+    required: false
+    type: VARCHAR
+  server_id:
+    required: false
+    type: UUID
+  staging_config_id:
+    required: false
+    type: UUID
+  start_date:
+    required: false
+    type: TIMESTAMP
+  usage_hours:
+    required: false
+    type: FLOAT
+  user_id:
+    required: false
+    type: UUID
+  user_ip:
+    required: false
+    type: VARCHAR
+  user_name:
+    required: false
+    type: VARCHAR(255)
+  zone_id:
+    required: false
+    type: UUID
+  zone_name:
+    required: false
+    type: VARCHAR
+active_directory_user_management_configs:
+  ad_user_mgmt_config_id:
+    required: false
+    type: UUID
+  enable_ad_group_management:
+    required: false
+    type: BOOLEAN
+  enable_create_user:
+    required: false
+    type: BOOLEAN
+  enable_random_password_on_login:
+    required: false
+    type: BOOLEAN
+  ldap_id:
+    foreign_key: ldap_configs.ldap_id
+    required: true
+    type: UUID
+  local_accounts:
+    required: false
+    type: BOOLEAN
+  oidc_id:
+    foreign_key: oidc_configs.oidc_id
+    required: false
+    type: UUID
+  password_len:
+    required: false
+    type: INTEGER
+  saml_id:
+    foreign_key: saml_config.saml_id
+    required: false
+    type: UUID
+  user_container_dn:
+    required: false
+    type: VARCHAR
+alembic_version: bfc22f00ad19
+api_configs:
+  api_id:
+    required: false
+    type: UUID
+  api_key:
+    required: true
+    type: VARCHAR(12)
+  api_key_secret_hash:
+    required: true
+    type: VARCHAR(128)
+  created:
+    required: true
+    type: TIMESTAMP
+  enabled:
+    required: false
+    type: BOOLEAN
+  expires:
+    required: false
+    type: TIMESTAMP
+  last_used:
+    required: false
+    type: TIMESTAMP
+  name:
+    required: true
+    type: VARCHAR
+  read_only:
+    required: false
+    type: BOOLEAN
+  salt:
+    required: true
+    type: VARCHAR(64)
+autoscale_configs:
+  ad_computer_container_dn:
+    required: false
+    type: VARCHAR
+  ad_create_machine_record:
+    required: false
+    type: BOOLEAN
+  ad_recursive_machine_record_cleanup:
+    required: false
+    type: BOOLEAN
+  agent_cores_override:
+    required: false
+    type: INTEGER
+  agent_gpus_override:
+    required: false
+    type: INTEGER
+  agent_installed:
+    required: false
+    type: BOOLEAN
+  agent_memory_override_bytes:
+    required: false
+    type: BIGINT
+  aggressive_scaling:
+    required: false
+    type: BOOLEAN
+  autoscale_config_id:
+    required: false
+    type: UUID
+  autoscale_config_name:
+    required: true
+    type: VARCHAR
+  autoscale_type:
+    required: true
+    type: VARCHAR
+  aws_config_id:
+    foreign_key: aws_configs.aws_config_id
+    required: false
+    type: UUID
+  aws_dns_config_id:
+    foreign_key: aws_dns_configs.config_id
+    required: false
+    type: UUID
+  azure_config_id:
+    foreign_key: azure_configs.azure_config_id
+    required: false
+    type: UUID
+  azure_dns_config_id:
+    foreign_key: azure_dns_configs.azure_dns_config_id
+    required: false
+    type: UUID
+  base_domain_name:
+    required: false
+    type: VARCHAR
+  connection_credential_type:
+    required: false
+    type: VARCHAR
+  connection_info:
+    required: false
+    type: VARCHAR
+  connection_passphrase:
+    required: false
+    type: VARCHAR
+  connection_password:
+    required: false
+    type: VARCHAR
+  connection_port:
+    required: false
+    type: INTEGER
+  connection_private_key:
+    required: false
+    type: VARCHAR
+  connection_sso_username_domain:
+    required: false
+    type: VARCHAR
+  connection_type:
+    required: false
+    type: VARCHAR
+  connection_username:
+    required: false
+    type: VARCHAR
+  digital_ocean_dns_config_id:
+    foreign_key: digital_ocean_dns_configs.config_id
+    required: false
+    type: UUID
+  digital_ocean_vm_config_id:
+    foreign_key: digital_ocean_vm_configs.config_id
+    required: false
+    type: UUID
+  downscale_backoff:
+    required: false
+    type: INTEGER
+  enabled:
+    required: false
+    type: BOOLEAN
+  gcp_dns_config_id:
+    foreign_key: gcp_dns_configs.config_id
+    required: false
+    type: UUID
+  gcp_vm_config_id:
+    foreign_key: gcp_vm_configs.config_id
+    required: false
+    type: UUID
+  harvester_vm_config_id:
+    foreign_key: harvester_vm_configs.config_id
+    required: false
+    type: UUID
+  hooks:
+    required: false
+    type: JSON
+  kubevirt_vm_config_id:
+    foreign_key: kubevirt_vm_configs.config_id
+    required: false
+    type: UUID
+  last_provision:
+    required: true
+    type: TIMESTAMP
+  ldap_id:
+    foreign_key: ldap_configs.ldap_id
+    required: false
+    type: UUID
+  max_simultaneous_sessions_per_server:
+    required: false
+    type: INTEGER
+  max_simultaneous_users:
+    required: false
+    type: INTEGER
+  minimum_pool_standby_sessions:
+    required: false
+    type: INTEGER
+  nutanix_vm_config_id:
+    foreign_key: nutanix_vm_configs.config_id
+    required: false
+    type: UUID
+  oci_dns_config_id:
+    foreign_key: oci_dns_configs.config_id
+    required: false
+    type: UUID
+  oci_vm_config_id:
+    foreign_key: oci_vm_configs.config_id
+    required: false
+    type: UUID
+  openstack_vm_config_id:
+    foreign_key: openstack_vm_configs.config_id
+    required: false
+    type: UUID
+  proxmox_vm_config_id:
+    foreign_key: proxmox_vm_configs.config_id
+    required: false
+    type: UUID
+  register_dns:
+    required: false
+    type: BOOLEAN
+  request_downscale_at:
+    required: true
+    type: TIMESTAMP
+  require_checkin:
+    required: false
+    type: BOOLEAN
+  reusable:
+    required: false
+    type: BOOLEAN
+  rotate_servers_in_days:
+    required: false
+    type: INTEGER
+  rotate_servers_pre_warm_minutes:
+    required: false
+    type: INTEGER
+  server_pool_id:
+    foreign_key: server_pools.server_pool_id
+    required: false
+    type: UUID
+  standby_cores:
+    required: false
+    type: INTEGER
+  standby_gpus:
+    required: false
+    type: INTEGER
+  standby_memory_bytes:
+    required: false
+    type: BIGINT
+  use_user_private_key:
+    required: false
+    type: BOOLEAN
+  vsphere_vm_config_id:
+    foreign_key: vsphere_vm_configs.config_id
+    required: false
+    type: UUID
+  zone_id:
+    foreign_key: zones.zone_id
+    required: true
+    type: UUID
+aws_configs:
+  aws_access_key_id:
+    required: false
+    type: VARCHAR
+  aws_config_id:
+    required: false
+    type: UUID
+  aws_ec2_ami_id:
+    required: false
+    type: VARCHAR
+  aws_ec2_config_override:
+    required: false
+    type: JSON
+  aws_ec2_custom_tags:
+    required: false
+    type: JSON
+  aws_ec2_ebs_volume_size_bytes:
+    required: false
+    type: BIGINT
+  aws_ec2_ebs_volume_type:
+    required: false
+    type: VARCHAR
+  aws_ec2_iam:
+    required: false
+    type: VARCHAR
+  aws_ec2_instance_type:
+    required: true
+    type: VARCHAR
+  aws_ec2_private_key:
+    required: true
+    type: BLOB
+  aws_ec2_public_key:
+    required: true
+    type: VARCHAR
+  aws_ec2_security_group_ids:
+    required: false
+    type: JSON
+  aws_ec2_subnet_id:
+    required: false
+    type: VARCHAR
+  aws_region:
+    required: false
+    type: VARCHAR
+  aws_secret_access_key:
+    required: false
+    type: VARCHAR
+  config_name:
+    required: true
+    type: VARCHAR
+  max_instances:
+    required: false
+    type: INTEGER
+  retrieve_password:
+    required: false
+    type: BOOLEAN
+  startup_script:
+    required: false
+    type: VARCHAR
+aws_dns_configs:
+  aws_access_key_id:
+    required: false
+    type: VARCHAR
+  aws_secret_access_key:
+    required: false
+    type: VARCHAR
+  config_id:
+    required: false
+    type: UUID
+  config_name:
+    required: true
+    type: VARCHAR
+azure_configs:
+  azure_authority:
+    required: false
+    type: VARCHAR
+  azure_client_id:
+    required: true
+    type: VARCHAR
+  azure_client_secret:
+    required: true
+    type: VARCHAR
+  azure_config_id:
+    required: false
+    type: UUID
+  azure_config_override:
+    required: false
+    type: JSON
+  azure_image_reference:
+    required: false
+    type: JSON
+  azure_is_windows:
+    required: false
+    type: BOOLEAN
+  azure_network_sg:
+    required: true
+    type: VARCHAR
+  azure_os_disk_size_bytes:
+    required: true
+    type: BIGINT
+  azure_os_disk_type:
+    required: true
+    type: VARCHAR
+  azure_os_password:
+    required: true
+    type: VARCHAR
+  azure_os_username:
+    required: true
+    type: VARCHAR
+  azure_public_ip:
+    required: false
+    type: BOOLEAN
+  azure_region:
+    required: true
+    type: VARCHAR
+  azure_resource_group:
+    required: true
+    type: VARCHAR
+  azure_ssh_public_key:
+    required: false
+    type: VARCHAR
+  azure_subnet:
+    required: true
+    type: VARCHAR
+  azure_subscription_id:
+    required: true
+    type: VARCHAR
+  azure_tags:
+    required: false
+    type: JSON
+  azure_tenant_id:
+    required: true
+    type: VARCHAR
+  azure_vm_size:
+    required: true
+    type: VARCHAR
+  config_name:
+    required: true
+    type: VARCHAR
+  max_instances:
+    required: true
+    type: INTEGER
+  plan_name:
+    required: false
+    type: VARCHAR
+  plan_product:
+    required: false
+    type: VARCHAR
+  plan_publisher:
+    required: false
+    type: VARCHAR
+  secure_boot_enabled:
+    required: false
+    type: BOOLEAN
+  security_type:
+    required: false
+    type: VARCHAR
+  startup_script:
+    required: false
+    type: VARCHAR
+  tpm_enabled:
+    required: false
+    type: BOOLEAN
+azure_dns_configs:
+  azure_authority:
+    required: false
+    type: VARCHAR
+  azure_client_id:
+    required: true
+    type: VARCHAR
+  azure_client_secret:
+    required: true
+    type: VARCHAR
+  azure_dns_config_id:
+    required: false
+    type: UUID
+  azure_region:
+    required: true
+    type: VARCHAR
+  azure_resource_group:
+    required: true
+    type: VARCHAR
+  azure_subscription_id:
+    required: true
+    type: VARCHAR
+  azure_tenant_id:
+    required: true
+    type: VARCHAR
+  config_name:
+    required: true
+    type: VARCHAR
+banners:
+  banner_id:
+    required: false
+    type: UUID
+  config:
+    required: true
+    type: JSON
+  name:
+    required: true
+    type: VARCHAR(255)
+branding_configs:
+  branding_config_id:
+    required: false
+    type: UUID
+  dashboard_logo_url:
+    required: true
+    type: VARCHAR
+  destroying_session_text:
+    required: true
+    type: VARCHAR
+  favicon_logo_url:
+    required: true
+    type: VARCHAR
+  header_logo_url:
+    required: true
+    type: VARCHAR
+  hostname:
+    required: true
+    type: VARCHAR
+  html_title:
+    required: true
+    type: VARCHAR
+  is_default:
+    required: false
+    type: BOOLEAN
+  joining_session_text:
+    required: true
+    type: VARCHAR
+  launcher_background_url:
+    required: false
+    type: VARCHAR
+  loading_session_text:
+    required: true
+    type: VARCHAR
+  login_caption:
+    required: true
+    type: VARCHAR
+  login_logo_url:
+    required: true
+    type: VARCHAR
+  login_splash_url:
+    required: true
+    type: VARCHAR
+  name:
+    required: true
+    type: VARCHAR
+  username_input_label:
+    required: false
+    type: VARCHAR
+cast_configs:
+  allow_anonymous:
+    required: false
+    type: BOOLEAN
+  allow_kasm_audio:
+    required: false
+    type: BOOLEAN
+  allow_kasm_clipboard_down:
+    required: false
+    type: BOOLEAN
+  allow_kasm_clipboard_up:
+    required: false
+    type: BOOLEAN
+  allow_kasm_downloads:
+    required: false
+    type: BOOLEAN
+  allow_kasm_gamepad:
+    required: false
+    type: BOOLEAN
+  allow_kasm_microphone:
+    required: false
+    type: BOOLEAN
+  allow_kasm_printing:
+    required: false
+    type: BOOLEAN
+  allow_kasm_rdp_client_file_transfer_clipboard:
+    required: false
+    type: BOOLEAN
+  allow_kasm_rdp_map_local_drives:
+    required: false
+    type: BOOLEAN
+  allow_kasm_rdp_webauthn_passthrough:
+    required: false
+    type: BOOLEAN
+  allow_kasm_sharing:
+    required: false
+    type: BOOLEAN
+  allow_kasm_smart_card_passthrough:
+    required: false
+    type: BOOLEAN
+  allow_kasm_uploads:
+    required: false
+    type: BOOLEAN
+  allow_kasm_webcam:
+    required: false
+    type: BOOLEAN
+  allow_resume:
+    required: false
+    type: BOOLEAN
+  allowed_referrers:
+    required: false
+    type: JSON
+  cast_config_id:
+    required: false
+    type: UUID
+  casting_config_name:
+    required: true
+    type: VARCHAR
+  disable_control_panel:
+    required: false
+    type: BOOLEAN
+  disable_fixed_res:
+    required: false
+    type: BOOLEAN
+  disable_tips:
+    required: false
+    type: BOOLEAN
+  dynamic_docker_network:
+    required: false
+    type: BOOLEAN
+  dynamic_kasm_url:
+    required: false
+    type: BOOLEAN
+  enable_sharing:
+    required: false
+    type: BOOLEAN
+  enforce_client_settings:
+    required: false
+    type: BOOLEAN
+  error_url:
+    required: false
+    type: VARCHAR
+  group_id:
+    foreign_key: groups.group_id
+    required: false
+    type: UUID
+  image_id:
+    foreign_key: images.image_id
+    required: true
+    type: UUID
+  ip_request_limit:
+    required: false
+    type: INTEGER
+  ip_request_seconds:
+    required: false
+    type: INTEGER
+  kasm_audio_default_on:
+    required: false
+    type: BOOLEAN
+  kasm_ime_mode_default_on:
+    required: false
+    type: BOOLEAN
+  kasm_url:
+    required: false
+    type: VARCHAR
+  key:
+    required: true
+    type: VARCHAR
+  launcher_background_url:
+    required: false
+    type: VARCHAR
+  limit_ips:
+    required: false
+    type: BOOLEAN
+  limit_sessions:
+    required: false
+    type: BOOLEAN
+  remote_app_configs:
+    required: false
+    type: JSON
+  require_recaptcha:
+    required: false
+    type: BOOLEAN
+  session_remaining:
+    required: false
+    type: INTEGER
+  valid_until:
+    required: false
+    type: TIMESTAMP
+companies:
+  city:
+    required: false
+    type: VARCHAR
+  company_id:
+    required: false
+    type: UUID
+  company_name:
+    required: true
+    type: VARCHAR
+  country:
+    required: false
+    type: VARCHAR
+  created:
+    required: true
+    type: TIMESTAMP
+  street:
+    required: false
+    type: VARCHAR
+  zip:
+    required: false
+    type: VARCHAR
+connection_proxies:
+  auth_token:
+    required: false
+    type: VARCHAR
+  connection_proxy_id:
+    required: false
+    type: UUID
+  connection_proxy_type:
+    required: true
+    type: VARCHAR
+  cores:
+    required: false
+    type: INTEGER
+  cpu_percent:
+    required: false
+    type: FLOAT
+  disk_stats:
+    required: false
+    type: JSONB
+  first_reported:
+    required: false
+    type: TIMESTAMP
+  gpu_memory_used_percent:
+    required: false
+    type: FLOAT
+  gpu_percent:
+    required: false
+    type: FLOAT
+  gpu_temp:
+    required: false
+    type: FLOAT
+  last_reported:
+    required: false
+    type: TIMESTAMP
+  memory_stats:
+    required: false
+    type: JSONB
+  operational_status:
+    required: false
+    type: VARCHAR(48)
+  proxy_port:
+    required: false
+    type: INTEGER
+  server_address:
+    required: true
+    type: VARCHAR
+  server_port:
+    required: true
+    type: INTEGER
+  zone_id:
+    foreign_key: zones.zone_id
+    required: true
+    type: UUID
+digital_ocean_dns_configs:
+  config_id:
+    required: false
+    type: UUID
+  config_name:
+    required: true
+    type: VARCHAR
+  digital_ocean_token:
+    required: false
+    type: VARCHAR
+digital_ocean_vm_configs:
+  config_id:
+    required: false
+    type: UUID
+  config_name:
+    required: true
+    type: VARCHAR
+  digital_ocean_droplet_image:
+    required: false
+    type: VARCHAR
+  digital_ocean_droplet_size:
+    required: false
+    type: VARCHAR
+  digital_ocean_firewall_name:
+    required: false
+    type: VARCHAR
+  digital_ocean_sshkey_name:
+    required: false
+    type: VARCHAR
+  digital_ocean_tags:
+    required: false
+    type: VARCHAR
+  digital_ocean_token:
+    required: false
+    type: VARCHAR
+  max_instances:
+    required: false
+    type: INTEGER
+  region:
+    required: false
+    type: VARCHAR
+  startup_script:
+    required: false
+    type: VARCHAR
+domains:
+  categories:
+    required: false
+    type: JSONB
+  created:
+    required: true
+    type: TIMESTAMP
+  domain_id:
+    required: false
+    type: UUID
+  domain_name:
+    required: true
+    type: VARCHAR
+  is_system:
+    required: false
+    type: BOOLEAN
+  requested:
+    required: false
+    type: INTEGER
+  updated:
+    required: true
+    type: TIMESTAMP
+egress_credential_gateways:
+  egress_credential_id:
+    foreign_key: egress_credentials.egress_credential_id
+    required: true
+    type: UUID
+  egress_gateway_id:
+    foreign_key: egress_gateways.egress_gateway_id
+    required: true
+    type: UUID
+egress_credentials:
+  active_connection_limit:
+    required: false
+    type: INTEGER
+  allow_all_gateways:
+    required: false
+    type: BOOLEAN
+  created:
+    required: true
+    type: TIMESTAMP
+  custom_credential:
+    required: false
+    type: VARCHAR
+  egress_credential_id:
+    required: false
+    type: UUID
+  egress_plugin_account_id:
+    foreign_key: egress_plugin_accounts.egress_plugin_account_id
+    required: false
+    type: UUID
+  egress_provider_id:
+    foreign_key: egress_providers.egress_provider_id
+    required: true
+    type: UUID
+  enabled:
+    required: false
+    type: BOOLEAN
+  external_id:
+    required: false
+    type: VARCHAR
+  group_id:
+    foreign_key: groups.group_id
+    required: false
+    type: UUID
+  image_id:
+    foreign_key: images.image_id
+    required: false
+    type: UUID
+  limit_active_connections:
+    required: false
+    type: BOOLEAN
+  name:
+    required: true
+    type: VARCHAR
+  password:
+    required: false
+    type: VARCHAR
+  tailscale_key:
+    required: false
+    type: VARCHAR
+  user_id:
+    foreign_key: users.user_id
+    required: false
+    type: UUID
+  username:
+    required: false
+    type: VARCHAR
+  wireguard_private_key:
+    required: false
+    type: VARCHAR
+egress_gateways:
+  city:
+    required: true
+    type: VARCHAR
+  config:
+    required: false
+    type: VARCHAR
+  country:
+    required: true
+    type: VARCHAR
+  created:
+    required: true
+    type: TIMESTAMP
+  egress_gateway_id:
+    required: false
+    type: UUID
+  egress_provider_id:
+    foreign_key: egress_providers.egress_provider_id
+    required: true
+    type: UUID
+  enabled:
+    required: false
+    type: BOOLEAN
+  external_id:
+    required: false
+    type: VARCHAR
+  name:
+    required: true
+    type: VARCHAR
+  version:
+    required: false
+    type: VARCHAR
+egress_provider_mapping_gateways:
+  egress_gateway_id:
+    foreign_key: egress_gateways.egress_gateway_id
+    required: true
+    type: UUID
+  egress_provider_mapping_id:
+    foreign_key: egress_provider_mappings.egress_provider_mapping_id
+    required: true
+    type: UUID
+egress_provider_mappings:
+  allow_all_gateways:
+    required: false
+    type: BOOLEAN
+  created:
+    required: true
+    type: TIMESTAMP
+  egress_provider_id:
+    foreign_key: egress_providers.egress_provider_id
+    required: true
+    type: UUID
+  egress_provider_mapping_id:
+    required: false
+    type: UUID
+  enabled:
+    required: false
+    type: BOOLEAN
+  group_id:
+    foreign_key: groups.group_id
+    required: false
+    type: UUID
+  image_id:
+    foreign_key: images.image_id
+    required: false
+    type: UUID
+  user_id:
+    foreign_key: users.user_id
+    required: false
+    type: UUID
+egress_provider_ziti_configs:
+  egress_provider_id:
+    foreign_key: egress_providers.egress_provider_id
+    required: true
+    type: UUID
+  egress_provider_ziti_config_id:
+    required: false
+    type: UUID
+  ziti_admin_identity:
+    required: true
+    type: VARCHAR
+egress_providers:
+  created:
+    required: true
+    type: TIMESTAMP
+  egress_plugin_id:
+    foreign_key: egress_plugins.egress_plugin_id
+    required: false
+    type: VARCHAR
+  egress_provider_id:
+    required: false
+    type: UUID
+  egress_provider_type:
+    required: true
+    type: VARCHAR
+  enable_new_managed_gateways:
+    required: false
+    type: BOOLEAN
+  enabled:
+    required: false
+    type: BOOLEAN
+  external_id:
+    required: false
+    type: VARCHAR
+  name:
+    required: true
+    type: VARCHAR
+  version:
+    required: false
+    type: VARCHAR
+file_mappings:
+  content:
+    required: true
+    type: BLOB
+  created:
+    required: true
+    type: TIMESTAMP
+  description:
+    required: false
+    type: VARCHAR
+  destination:
+    required: true
+    type: VARCHAR
+  enabled:
+    required: false
+    type: BOOLEAN
+  file_map_id:
+    required: false
+    type: UUID
+  file_type:
+    required: true
+    type: VARCHAR
+  group_id:
+    foreign_key: groups.group_id
+    required: false
+    type: UUID
+  image_id:
+    foreign_key: images.image_id
+    required: false
+    type: UUID
+  is_executable:
+    required: false
+    type: BOOLEAN
+  is_readable:
+    required: false
+    type: BOOLEAN
+  is_writable:
+    required: false
+    type: BOOLEAN
+  kasm_id:
+    foreign_key: kasms.kasm_id
+    required: false
+    type: UUID
+  name:
+    required: true
+    type: VARCHAR
+  user_id:
+    foreign_key: users.user_id
+    required: false
+    type: UUID
+filter_policies:
+  categories:
+    required: false
+    type: JSON
+  deny_by_default:
+    required: false
+    type: BOOLEAN
+  disable_logging:
+    required: false
+    type: BOOLEAN
+  domain_blacklist:
+    required: false
+    type: JSON
+  domain_whitelist:
+    required: false
+    type: JSON
+  enable_categorization:
+    required: false
+    type: BOOLEAN
+  enable_safe_search:
+    required: false
+    type: BOOLEAN
+  filter_policy_descriptions:
+    required: false
+    type: VARCHAR
+  filter_policy_id:
+    required: false
+    type: UUID
+  filter_policy_name:
+    required: false
+    type: VARCHAR
+  safe_search_patterns:
+    required: false
+    type: JSON
+  ssl_bypass_domains:
+    required: false
+    type: JSON
+  ssl_bypass_ips:
+    required: false
+    type: JSON
+gcp_dns_configs:
+  config_id:
+    required: false
+    type: UUID
+  config_name:
+    required: true
+    type: VARCHAR
+  gcp_credentials:
+    required: false
+    type: VARCHAR
+  gcp_project:
+    required: false
+    type: VARCHAR
+gcp_vm_configs:
+  config_id:
+    required: false
+    type: UUID
+  config_name:
+    required: true
+    type: VARCHAR
+  gcp_boot_volume_bytes:
+    required: false
+    type: BIGINT
+  gcp_cmek:
+    required: false
+    type: VARCHAR
+  gcp_config_override:
+    required: false
+    type: JSON
+  gcp_credentials:
+    required: false
+    type: VARCHAR
+  gcp_custom_labels:
+    required: false
+    type: JSON
+  gcp_disk_type:
+    required: false
+    type: VARCHAR
+  gcp_guest_accelerators:
+    required: false
+    type: JSON
+  gcp_image:
+    required: false
+    type: VARCHAR
+  gcp_machine_type:
+    required: false
+    type: VARCHAR
+  gcp_metadata:
+    required: false
+    type: JSON
+  gcp_network:
+    required: false
+    type: VARCHAR
+  gcp_network_tags:
+    required: false
+    type: JSON
+  gcp_project:
+    required: false
+    type: VARCHAR
+  gcp_public_ip:
+    required: false
+    type: BOOLEAN
+  gcp_region:
+    required: false
+    type: VARCHAR
+  gcp_service_account:
+    required: false
+    type: JSON
+  gcp_subnetwork:
+    required: false
+    type: VARCHAR
+  gcp_zone:
+    required: false
+    type: VARCHAR
+  max_instances:
+    required: false
+    type: INTEGER
+  startup_script:
+    required: false
+    type: VARCHAR
+  startup_script_type:
+    required: false
+    type: VARCHAR
+  vm_installed_os_type:
+    required: false
+    type: VARCHAR
+group_images:
+  group_id:
+    foreign_key: groups.group_id
+    required: true
+    type: UUID
+  group_image_id:
+    required: false
+    type: UUID
+  image_id:
+    foreign_key: images.image_id
+    required: true
+    type: UUID
+group_permissions:
+  api_id:
+    foreign_key: api_configs.api_id
+    required: false
+    type: UUID
+  group_id:
+    foreign_key: groups.group_id
+    required: false
+    type: UUID
+  group_permission_id:
+    required: false
+    type: UUID
+  permission_id:
+    required: true
+    type: INTEGER
+group_settings:
+  description:
+    required: false
+    type: VARCHAR
+  group_id:
+    foreign_key: groups.group_id
+    required: false
+    type: UUID
+  group_setting_id:
+    required: false
+    type: UUID
+  name:
+    required: false
+    type: VARCHAR(255)
+  value:
+    required: false
+    type: VARCHAR
+  value_type:
+    required: false
+    type: VARCHAR(48)
+groups:
+  description:
+    required: false
+    type: VARCHAR
+  group_id:
+    required: false
+    type: UUID
+  group_metadata:
+    required: false
+    type: JSONB
+  is_system:
+    required: false
+    type: BOOLEAN
+  name:
+    required: false
+    type: VARCHAR(1024)
+  priority:
+    required: false
+    type: INTEGER
+  program_data:
+    required: false
+    type: JSONB
+harvester_vm_configs:
+  config_id:
+    required: false
+    type: UUID
+  config_name:
+    required: true
+    type: VARCHAR
+  config_override:
+    required: false
+    type: VARCHAR
+  cores:
+    required: true
+    type: INTEGER
+  disk_image:
+    required: true
+    type: VARCHAR
+  disk_size_bytes:
+    required: true
+    type: BIGINT
+  enable_efi_boot:
+    required: false
+    type: BOOLEAN
+  enable_secure_boot:
+    required: false
+    type: BOOLEAN
+  enable_tpm:
+    required: false
+    type: BOOLEAN
+  interface_type:
+    required: false
+    type: VARCHAR
+  kube_api_token:
+    required: false
+    type: VARCHAR
+  kube_host:
+    required: true
+    type: VARCHAR
+  kube_ssl_cert:
+    required: false
+    type: VARCHAR
+  max_instances:
+    required: true
+    type: INTEGER
+  memory_bytes:
+    required: true
+    type: BIGINT
+  network_name:
+    required: false
+    type: VARCHAR
+  network_type:
+    required: false
+    type: VARCHAR
+  startup_script:
+    required: false
+    type: VARCHAR
+  vm_namespace:
+    required: true
+    type: VARCHAR
+  vm_public_ssh_key:
+    required: false
+    type: VARCHAR
+image_attributes:
+  attr_id:
+    required: false
+    type: UUID
+  category:
+    required: false
+    type: VARCHAR(48)
+  image_id:
+    foreign_key: images.image_id
+    required: true
+    type: UUID
+  name:
+    required: false
+    type: VARCHAR(255)
+  value:
+    required: false
+    type: VARCHAR(255)
+images:
+  allow_network_selection:
+    required: false
+    type: BOOLEAN
+  available:
+    required: false
+    type: BOOLEAN
+  categories:
+    required: false
+    type: JSON
+  cores:
+    required: false
+    type: FLOAT
+  cpu_allocation_method:
+    required: false
+    type: VARCHAR
+  created_at:
+    required: false
+    type: DATETIME
+  description:
+    required: false
+    type: VARCHAR
+  docker_registry:
+    required: false
+    type: VARCHAR
+  docker_token:
+    required: false
+    type: VARCHAR
+  docker_user:
+    required: false
+    type: VARCHAR(255)
+  enabled:
+    required: false
+    type: BOOLEAN
+  enforce_workspace_persistence:
+    required: false
+    type: BOOLEAN
+  exec_config:
+    required: false
+    type: JSON
+  filter_policy_force_disabled:
+    required: false
+    type: BOOLEAN
+  filter_policy_id:
+    foreign_key: filter_policies.filter_policy_id
+    required: false
+    type: UUID
+  friendly_name:
+    required: false
+    type: VARCHAR(255)
+  gpu_count:
+    required: false
+    type: INTEGER
+  gpu_graphics_acceleration:
+    required: false
+    type: JSON
+  gpu_video_encoding:
+    required: false
+    type: JSON
+  hash:
+    required: false
+    type: VARCHAR(255)
+  hidden:
+    required: false
+    type: BOOLEAN
+  image_id:
+    required: false
+    type: UUID
+  image_src:
+    required: false
+    type: VARCHAR(255)
+  image_type:
+    required: false
+    type: VARCHAR
+  is_remote_app:
+    required: false
+    type: BOOLEAN
+  launch_config:
+    required: false
+    type: JSON
+  link_url:
+    required: false
+    type: VARCHAR
+  memory_bytes:
+    required: false
+    type: BIGINT
+  name:
+    required: false
+    type: VARCHAR(255)
+  notes:
+    required: false
+    type: VARCHAR
+  override_egress_gateways:
+    required: false
+    type: BOOLEAN
+  persistent_profile_path:
+    required: false
+    type: VARCHAR
+  rdp_client_type:
+    required: false
+    type: VARCHAR
+  remote_app_args:
+    required: false
+    type: VARCHAR
+  remote_app_icon:
+    required: false
+    type: VARCHAR
+  remote_app_name:
+    required: false
+    type: VARCHAR
+  remote_app_program:
+    required: false
+    type: VARCHAR
+  require_gpu:
+    required: false
+    type: BOOLEAN
+  restrict_network_names:
+    required: false
+    type: JSON
+  restrict_to_network:
+    required: false
+    type: BOOLEAN
+  restrict_to_server:
+    required: false
+    type: BOOLEAN
+  restrict_to_zone:
+    required: false
+    type: BOOLEAN
+  run_config:
+    required: false
+    type: JSON
+  server_id:
+    foreign_key: servers.server_id
+    required: false
+    type: UUID
+  server_pool_id:
+    foreign_key: server_pools.server_pool_id
+    required: false
+    type: UUID
+  session_banner_force_disabled:
+    required: false
+    type: BOOLEAN
+  session_banner_id:
+    foreign_key: banners.banner_id
+    required: false
+    type: UUID
+  session_time_limit:
+    required: false
+    type: INTEGER
+  uncompressed_size_bytes:
+    required: false
+    type: BIGINT
+  updated_at:
+    required: false
+    type: DATETIME
+  volume_mappings:
+    required: false
+    type: JSON
+  x_res:
+    required: false
+    type: INTEGER
+  y_res:
+    required: false
+    type: INTEGER
+  zone_id:
+    foreign_key: zones.zone_id
+    required: false
+    type: UUID
+kasm_attributes:
+  attr_id:
+    required: false
+    type: UUID
+  category:
+    required: false
+    type: VARCHAR(48)
+  kasm_id:
+    foreign_key: kasms.kasm_id
+    required: true
+    type: UUID
+  name:
+    required: false
+    type: VARCHAR(255)
+  value:
+    required: false
+    type: VARCHAR(255)
+kasms:
+  api_token:
+    required: false
+    type: VARCHAR(48)
+  autoscale_config_id:
+    foreign_key: autoscale_configs.autoscale_config_id
+    required: false
+    type: UUID
+  cast_config_id:
+    foreign_key: cast_configs.cast_config_id
+    required: false
+    type: UUID
+  connection_credential:
+    required: false
+    type: VARCHAR
+  connection_info:
+    required: false
+    type: VARCHAR
+  connection_proxy_id:
+    foreign_key: connection_proxies.connection_proxy_id
+    required: false
+    type: UUID
+  container_id:
+    required: false
+    type: VARCHAR(255)
+  container_ip:
+    required: false
+    type: VARCHAR
+  cores:
+    required: false
+    type: FLOAT
+  created_date:
+    required: true
+    type: TIMESTAMP
+  docker_environment:
+    required: false
+    type: JSON
+  docker_network:
+    required: false
+    type: VARCHAR
+  egress_credential_id:
+    foreign_key: egress_credentials.egress_credential_id
+    required: false
+    type: UUID
+  egress_gateway_id:
+    foreign_key: egress_gateways.egress_gateway_id
+    required: false
+    type: UUID
+  expiration_date:
+    required: true
+    type: TIMESTAMP
+  gpus:
+    required: false
+    type: INTEGER
+  hostname:
+    required: false
+    type: VARCHAR(255)
+  image_id:
+    foreign_key: images.image_id
+    required: false
+    type: UUID
+  is_standby:
+    required: false
+    type: BOOLEAN
+  kasm_id:
+    required: false
+    type: UUID
+  keepalive_date:
+    required: true
+    type: TIMESTAMP
+  memory_bytes:
+    required: false
+    type: BIGINT
+  operational_message:
+    required: false
+    type: VARCHAR
+  operational_progress:
+    required: false
+    type: INTEGER
+  operational_status:
+    required: false
+    type: VARCHAR(48)
+  queued_tasks:
+    required: false
+    type: JSONB
+  rdp_client_type:
+    required: false
+    type: VARCHAR
+  server_id:
+    foreign_key: servers.server_id
+    required: false
+    type: UUID
+  share_id:
+    required: false
+    type: VARCHAR(48)
+  staging_config_id:
+    foreign_key: staging_configs.staging_config_id
+    required: false
+    type: UUID
+  start_date:
+    required: false
+    type: TIMESTAMP
+  token:
+    required: false
+    type: VARCHAR(48)
+  user_id:
+    foreign_key: users.user_id
+    required: false
+    type: UUID
+  view_only_token:
+    required: false
+    type: VARCHAR(48)
+kubevirt_vm_configs:
+  config_id:
+    required: false
+    type: UUID
+  config_name:
+    required: true
+    type: VARCHAR
+  config_override:
+    required: false
+    type: VARCHAR
+  cores:
+    required: true
+    type: INTEGER
+  disk_size_bytes:
+    required: true
+    type: BIGINT
+  disk_source:
+    required: true
+    type: VARCHAR
+  enable_efi_boot:
+    required: false
+    type: BOOLEAN
+  enable_secure_boot:
+    required: false
+    type: BOOLEAN
+  enable_tpm:
+    required: false
+    type: BOOLEAN
+  interface_type:
+    required: false
+    type: VARCHAR
+  kube_api_token:
+    required: false
+    type: VARCHAR
+  kube_host:
+    required: true
+    type: VARCHAR
+  kube_ssl_cert:
+    required: false
+    type: VARCHAR
+  max_instances:
+    required: true
+    type: INTEGER
+  memory_bytes:
+    required: true
+    type: BIGINT
+  network_name:
+    required: false
+    type: VARCHAR
+  network_type:
+    required: false
+    type: VARCHAR
+  startup_script:
+    required: false
+    type: VARCHAR
+  vm_namespace:
+    required: true
+    type: VARCHAR
+  vm_public_ssh_key:
+    required: false
+    type: VARCHAR
+labeled_objects:
+  label_id:
+    foreign_key: labels.label_id
+    required: true
+    type: UUID
+  labeled_object_id:
+    required: false
+    type: UUID
+  object_id:
+    required: true
+    type: UUID
+  object_property:
+    required: true
+    type: VARCHAR
+  object_type:
+    required: true
+    type: VARCHAR
+labels:
+  label_id:
+    required: false
+    type: UUID
+  name:
+    required: true
+    type: VARCHAR
+ldap_configs:
+  auto_create_app_user:
+    required: false
+    type: BOOLEAN
+  connection_timeout:
+    required: false
+    type: INTEGER
+  email_attribute:
+    required: false
+    type: VARCHAR(255)
+  enabled:
+    required: false
+    type: BOOLEAN
+  group_membership_filter:
+    required: true
+    type: VARCHAR(255)
+  ldap_id:
+    required: false
+    type: UUID
+  name:
+    required: true
+    type: VARCHAR(255)
+  search_base:
+    required: true
+    type: VARCHAR(255)
+  search_filter:
+    required: true
+    type: VARCHAR(255)
+  search_subtree:
+    required: false
+    type: BOOLEAN
+  service_account_dn:
+    required: false
+    type: VARCHAR(255)
+  service_account_password:
+    required: false
+    type: VARCHAR
+  url:
+    required: true
+    type: VARCHAR(255)
+  username_domain_match:
+    required: false
+    type: VARCHAR
+managers:
+  cores:
+    required: false
+    type: INTEGER
+  cpu_percent:
+    required: false
+    type: FLOAT
+  disk_stats:
+    required: false
+    type: JSONB
+  enabled:
+    required: false
+    type: BOOLEAN
+  first_reported:
+    required: false
+    type: TIMESTAMP
+  gpu_memory_used_percent:
+    required: false
+    type: FLOAT
+  gpu_percent:
+    required: false
+    type: FLOAT
+  gpu_temp:
+    required: false
+    type: FLOAT
+  last_reported:
+    required: false
+    type: TIMESTAMP
+  manager_hostname:
+    required: false
+    type: VARCHAR
+  manager_id:
+    required: false
+    type: UUID
+  manager_version:
+    required: false
+    type: VARCHAR
+  memory_stats:
+    required: false
+    type: JSONB
+  operational_status:
+    required: false
+    type: VARCHAR(48)
+  zone_id:
+    foreign_key: zones.zone_id
+    required: true
+    type: UUID
+nutanix_vm_configs:
+  api_version:
+    required: true
+    type: VARCHAR
+  config_id:
+    required: false
+    type: UUID
+  config_name:
+    required: true
+    type: VARCHAR
+  cores:
+    required: true
+    type: INTEGER
+  host:
+    required: true
+    type: VARCHAR
+  max_instances:
+    required: true
+    type: INTEGER
+  memory_bytes:
+    required: true
+    type: BIGINT
+  password:
+    required: true
+    type: VARCHAR
+  port:
+    required: true
+    type: INTEGER
+  startup_script:
+    required: false
+    type: VARCHAR
+  username:
+    required: true
+    type: VARCHAR
+  verify_ssl:
+    required: false
+    type: BOOLEAN
+  vm_candidate:
+    required: true
+    type: VARCHAR
+oci_dns_configs:
+  config_id:
+    required: false
+    type: UUID
+  config_name:
+    required: true
+    type: VARCHAR
+  oci_compartment_ocid:
+    required: false
+    type: VARCHAR
+  oci_fingerprint:
+    required: false
+    type: VARCHAR
+  oci_private_key:
+    required: false
+    type: VARCHAR
+  oci_region:
+    required: false
+    type: VARCHAR
+  oci_tenancy_ocid:
+    required: false
+    type: VARCHAR
+  oci_user_ocid:
+    required: false
+    type: VARCHAR
+oci_vm_configs:
+  config_id:
+    required: false
+    type: UUID
+  config_name:
+    required: true
+    type: VARCHAR
+  max_instances:
+    required: false
+    type: INTEGER
+  oci_availability_domains:
+    required: false
+    type: JSON
+  oci_baseline_ocpu_utilization:
+    required: false
+    type: VARCHAR
+  oci_boot_volume_bytes:
+    required: false
+    type: BIGINT
+  oci_compartment_ocid:
+    required: false
+    type: VARCHAR
+  oci_config_override:
+    required: false
+    type: JSON
+  oci_custom_tags:
+    required: false
+    type: JSON
+  oci_fingerprint:
+    required: false
+    type: VARCHAR
+  oci_flex_cpus:
+    required: false
+    type: INTEGER
+  oci_flex_memory_bytes:
+    required: false
+    type: BIGINT
+  oci_image_ocid:
+    required: false
+    type: VARCHAR
+  oci_nsg_ocids:
+    required: false
+    type: JSON
+  oci_private_key:
+    required: false
+    type: VARCHAR
+  oci_region:
+    required: false
+    type: VARCHAR
+  oci_shape:
+    required: false
+    type: VARCHAR
+  oci_ssh_public_key:
+    required: false
+    type: VARCHAR
+  oci_storage_vpus_per_gb:
+    required: false
+    type: INTEGER
+  oci_subnet_ocid:
+    required: false
+    type: VARCHAR
+  oci_tenancy_ocid:
+    required: false
+    type: VARCHAR
+  oci_user_ocid:
+    required: false
+    type: VARCHAR
+  startup_script:
+    required: false
+    type: VARCHAR
+oidc_configs:
+  auth_url:
+    required: true
+    type: VARCHAR
+  auto_login:
+    required: false
+    type: BOOLEAN
+  client_id:
+    required: true
+    type: VARCHAR
+  client_secret:
+    required: true
+    type: BLOB
+  debug:
+    required: false
+    type: BOOLEAN
+  display_name:
+    required: true
+    type: VARCHAR
+  enable_frontchannel_logout:
+    required: true
+    type: BOOLEAN
+  enabled:
+    required: false
+    type: BOOLEAN
+  groups_attribute:
+    required: false
+    type: VARCHAR
+  hostname:
+    required: false
+    type: VARCHAR
+  is_default:
+    required: false
+    type: BOOLEAN
+  issuer:
+    required: false
+    type: VARCHAR
+  logo_url:
+    required: false
+    type: VARCHAR
+  logout_with_oidc_provider:
+    required: true
+    type: BOOLEAN
+  oidc_id:
+    required: false
+    type: UUID
+  redirect_url:
+    required: true
+    type: VARCHAR
+  scope:
+    required: false
+    type: JSON
+  token_url:
+    required: true
+    type: VARCHAR
+  user_info_url:
+    required: true
+    type: VARCHAR
+  username_attribute:
+    required: true
+    type: VARCHAR
+openstack_vm_configs:
+  config_id:
+    required: false
+    type: UUID
+  config_name:
+    required: true
+    type: VARCHAR
+  max_instances:
+    required: true
+    type: INTEGER
+  openstack_application_credential_id:
+    required: false
+    type: VARCHAR
+  openstack_application_credential_secret:
+    required: false
+    type: VARCHAR
+  openstack_auth_method:
+    required: true
+    type: VARCHAR
+  openstack_availability_zone:
+    required: true
+    type: VARCHAR
+  openstack_cinder_endpoint:
+    required: true
+    type: VARCHAR
+  openstack_cinder_version:
+    required: true
+    type: VARCHAR
+  openstack_config_override:
+    required: false
+    type: JSON
+  openstack_create_volume:
+    required: false
+    type: BOOLEAN
+  openstack_flavor:
+    required: true
+    type: VARCHAR
+  openstack_glance_endpoint:
+    required: true
+    type: VARCHAR
+  openstack_glance_version:
+    required: true
+    type: VARCHAR
+  openstack_image_id:
+    required: true
+    type: VARCHAR
+  openstack_key_name:
+    required: false
+    type: VARCHAR
+  openstack_keystone_endpoint:
+    required: true
+    type: VARCHAR
+  openstack_metadata:
+    required: false
+    type: JSON
+  openstack_network_id:
+    required: true
+    type: VARCHAR
+  openstack_nova_endpoint:
+    required: true
+    type: VARCHAR
+  openstack_nova_version:
+    required: true
+    type: VARCHAR
+  openstack_password:
+    required: false
+    type: VARCHAR
+  openstack_project_domain_name:
+    required: false
+    type: VARCHAR
+  openstack_project_name:
+    required: true
+    type: VARCHAR
+  openstack_security_groups:
+    required: false
+    type: JSON
+  openstack_user_domain_name:
+    required: false
+    type: VARCHAR
+  openstack_username:
+    required: false
+    type: VARCHAR
+  openstack_volume_size_bytes:
+    required: false
+    type: BIGINT
+  openstack_volume_type:
+    required: false
+    type: VARCHAR
+  startup_script:
+    required: false
+    type: VARCHAR
+physical_tokens:
+  created:
+    required: true
+    type: TIMESTAMP
+  seed_filename:
+    required: false
+    type: VARCHAR
+  serial_number:
+    required: true
+    type: VARCHAR
+  token_id:
+    required: false
+    type: UUID
+  token_seed:
+    required: true
+    type: BLOB
+  user_id:
+    foreign_key: users.user_id
+    required: false
+    type: UUID
+proxmox_vm_configs:
+  cluster_node_name:
+    required: true
+    type: VARCHAR
+  config_id:
+    required: false
+    type: UUID
+  config_name:
+    required: true
+    type: VARCHAR
+  cores:
+    required: true
+    type: INTEGER
+  full_clone:
+    required: false
+    type: BOOLEAN
+  host:
+    required: true
+    type: VARCHAR
+  installed_os_type:
+    required: true
+    type: VARCHAR
+  max_instances:
+    required: true
+    type: INTEGER
+  memory_bytes:
+    required: true
+    type: BIGINT
+  resource_pool_name:
+    required: false
+    type: VARCHAR
+  startup_script:
+    required: false
+    type: VARCHAR
+  startup_script_path:
+    required: false
+    type: VARCHAR
+  storage_pool_name:
+    required: false
+    type: VARCHAR
+  target_node_name:
+    required: false
+    type: VARCHAR
+  template_name:
+    required: true
+    type: VARCHAR
+  token_name:
+    required: true
+    type: VARCHAR
+  token_value:
+    required: true
+    type: VARCHAR
+  username:
+    required: true
+    type: VARCHAR
+  verify_ssl:
+    required: false
+    type: BOOLEAN
+  vmid_range_lower:
+    required: true
+    type: INTEGER
+  vmid_range_upper:
+    required: true
+    type: INTEGER
+registries:
+  channel:
+    required: false
+    type: VARCHAR(255)
+  config:
+    required: false
+    type: JSONB
+  do_auto_update:
+    required: false
+    type: BOOLEAN
+  kasm_version:
+    required: false
+    type: VARCHAR(20)
+  registry_id:
+    required: false
+    type: UUID
+  registry_url:
+    required: false
+    type: VARCHAR(255)
+  schema_version:
+    required: false
+    type: VARCHAR(255)
+saml_config:
+  adfs:
+    required: false
+    type: BOOLEAN
+  authn_request_signed:
+    required: false
+    type: BOOLEAN
+  auto_login:
+    required: false
+    type: BOOLEAN
+  debug:
+    required: false
+    type: BOOLEAN
+  digest_algorithm:
+    required: false
+    type: TEXT
+  display_name:
+    required: false
+    type: VARCHAR(255)
+  enabled:
+    required: false
+    type: BOOLEAN
+  group_attribute:
+    required: false
+    type: VARCHAR(255)
+  hostname:
+    required: false
+    type: VARCHAR(255)
+  idp_entity_id:
+    required: false
+    type: VARCHAR(255)
+  idp_slo_url:
+    required: false
+    type: VARCHAR(255)
+  idp_sso_url:
+    required: false
+    type: VARCHAR(255)
+  idp_x509_cert:
+    required: false
+    type: VARCHAR
+  is_default:
+    required: false
+    type: BOOLEAN
+  logo_url:
+    required: false
+    type: VARCHAR
+  logout_request_signed:
+    required: false
+    type: BOOLEAN
+  logout_response_signed:
+    required: false
+    type: BOOLEAN
+  name_id_encrypted:
+    required: false
+    type: BOOLEAN
+  requested_authn_context:
+    required: false
+    type: BOOLEAN
+  saml_id:
+    required: false
+    type: UUID
+  sign_metadata:
+    required: false
+    type: BOOLEAN
+  signature_algorithm:
+    required: false
+    type: TEXT
+  sp_acs_url:
+    required: false
+    type: VARCHAR(255)
+  sp_entity_id:
+    required: false
+    type: VARCHAR(255)
+  sp_name_id:
+    required: false
+    type: VARCHAR(255)
+  sp_private_key:
+    required: false
+    type: VARCHAR
+  sp_slo_url:
+    required: false
+    type: VARCHAR(255)
+  sp_x509_cert:
+    required: false
+    type: VARCHAR
+  strict:
+    required: false
+    type: BOOLEAN
+  want_assertions_encrypted:
+    required: false
+    type: BOOLEAN
+  want_assertions_signed:
+    required: false
+    type: BOOLEAN
+  want_attribute_statement:
+    required: false
+    type: BOOLEAN
+  want_messages_signed:
+    required: false
+    type: BOOLEAN
+  want_name_id:
+    required: false
+    type: BOOLEAN
+  want_name_id_encrypted:
+    required: false
+    type: BOOLEAN
+schedules:
+  active_end_time:
+    required: true
+    type: TIME
+  active_start_time:
+    required: true
+    type: TIME
+  autoscale_config_id:
+    foreign_key: autoscale_configs.autoscale_config_id
+    required: true
+    type: UUID
+  days_of_the_week:
+    required: false
+    type: JSON
+  schedule_id:
+    required: false
+    type: UUID
+  timezone:
+    required: true
+    type: VARCHAR(44)
+server_image_slots:
+  image_id:
+    foreign_key: images.image_id
+    required: true
+    type: UUID
+  server_id:
+    foreign_key: servers.server_id
+    required: true
+    type: UUID
+  slot_count:
+    required: true
+    type: INTEGER
+server_pools:
+  server_assignment_enabled:
+    required: false
+    type: BOOLEAN
+  server_pool_id:
+    required: false
+    type: UUID
+  server_pool_name:
+    required: true
+    type: VARCHAR
+  server_pool_type:
+    required: false
+    type: VARCHAR
+server_templates:
+  connection_credential_type:
+    required: false
+    type: VARCHAR
+  connection_info:
+    required: false
+    type: VARCHAR
+  connection_password:
+    required: false
+    type: VARCHAR
+  connection_port:
+    required: false
+    type: INTEGER
+  connection_sso_username_domain:
+    required: false
+    type: VARCHAR
+  connection_username:
+    required: false
+    type: VARCHAR
+  created:
+    required: false
+    type: TIMESTAMP
+  deleted:
+    required: false
+    type: TIMESTAMP
+  expiration:
+    required: true
+    type: TIMESTAMP
+  max_simultaneous_sessions:
+    required: false
+    type: INTEGER
+  max_simultaneous_users:
+    required: false
+    type: INTEGER
+  maximum_uses:
+    required: true
+    type: INTEGER
+  server_pool_id:
+    required: false
+    type: UUID
+  server_template_id:
+    required: false
+    type: UUID
+  servers_created:
+    required: false
+    type: INTEGER
+  template_enabled:
+    required: false
+    type: BOOLEAN
+  template_name:
+    required: true
+    type: VARCHAR
+  token:
+    required: false
+    type: VARCHAR
+  zone_id:
+    required: true
+    type: UUID
+servers:
+  agent_installed:
+    required: false
+    type: BOOLEAN
+  agent_version:
+    required: false
+    type: VARCHAR
+  autoscale_config_id:
+    foreign_key: autoscale_configs.autoscale_config_id
+    required: false
+    type: UUID
+  connection_credential_type:
+    required: false
+    type: VARCHAR
+  connection_info:
+    required: false
+    type: VARCHAR
+  connection_passphrase:
+    required: false
+    type: VARCHAR
+  connection_password:
+    required: false
+    type: VARCHAR
+  connection_port:
+    required: false
+    type: INTEGER
+  connection_private_key:
+    required: false
+    type: VARCHAR
+  connection_sso_username_domain:
+    required: false
+    type: VARCHAR
+  connection_type:
+    required: false
+    type: VARCHAR
+  connection_username:
+    required: false
+    type: VARCHAR
+  container_limit:
+    required: false
+    type: INTEGER
+  cores:
+    required: false
+    type: INTEGER
+  cores_override:
+    required: false
+    type: INTEGER
+  cpu_percent:
+    required: false
+    type: FLOAT
+  created:
+    required: false
+    type: TIMESTAMP
+  disk_stats:
+    required: false
+    type: JSON
+  docker_containers:
+    required: false
+    type: JSON
+  docker_images:
+    required: false
+    type: JSON
+  docker_info:
+    required: false
+    type: JSON
+  docker_network_names:
+    required: false
+    type: ARRAY
+  docker_networks:
+    required: false
+    type: JSON
+  docker_volume_plugin_names:
+    required: false
+    type: ARRAY
+  drain_time:
+    required: false
+    type: TIMESTAMP
+  enabled:
+    required: false
+    type: BOOLEAN
+  friendly_name:
+    required: false
+    type: VARCHAR
+  gpu_exclusions:
+    required: false
+    type: JSON
+  gpu_memory_used_percent:
+    required: false
+    type: JSON
+  gpu_percent:
+    required: false
+    type: JSON
+  gpu_temp:
+    required: false
+    type: JSON
+  gpus_override:
+    required: false
+    type: INTEGER
+  host_token:
+    required: false
+    type: VARCHAR(64)
+  hostname:
+    required: false
+    type: VARCHAR(255)
+  instance_id:
+    required: false
+    type: VARCHAR(100)
+  last_reported:
+    required: false
+    type: TIMESTAMP
+  manager_id:
+    foreign_key: managers.manager_id
+    required: false
+    type: UUID
+  max_simultaneous_sessions:
+    required: false
+    type: INTEGER
+  max_simultaneous_users:
+    required: false
+    type: INTEGER
+  memory_bytes:
+    required: false
+    type: BIGINT
+  memory_override_bytes:
+    required: false
+    type: BIGINT
+  memory_stats:
+    required: false
+    type: JSON
+  network_interfaces:
+    required: false
+    type: JSON
+  operational_status:
+    required: false
+    type: VARCHAR(48)
+  port:
+    required: false
+    type: INTEGER
+  provider:
+    required: false
+    type: VARCHAR(100)
+  prune_images_mode:
+    required: false
+    type: VARCHAR
+  public_ip:
+    required: false
+    type: VARCHAR
+  reusable:
+    required: false
+    type: BOOLEAN
+  server_id:
+    required: false
+    type: UUID
+  server_pool_id:
+    foreign_key: server_pools.server_pool_id
+    required: false
+    type: UUID
+  server_template_id:
+    foreign_key: server_templates.server_template_id
+    required: false
+    type: UUID
+  server_type:
+    required: false
+    type: VARCHAR(100)
+  tags:
+    required: false
+    type: JSON
+  use_user_private_key:
+    required: false
+    type: BOOLEAN
+  zone_id:
+    foreign_key: zones.zone_id
+    required: false
+    type: UUID
+session_permissions:
+  access:
+    required: true
+    type: VARCHAR
+  kasm_id:
+    foreign_key: kasms.kasm_id
+    required: true
+    type: UUID
+  session_permission_id:
+    required: false
+    type: UUID
+  user_id:
+    foreign_key: users.user_id
+    required: true
+    type: UUID
+  vnc_password:
+    required: true
+    type: BLOB
+  vnc_username:
+    required: true
+    type: VARCHAR
+session_recordings:
+  account_id:
+    foreign_key: accounting.account_id
+    required: true
+    type: UUID
+  recording_id:
+    required: false
+    type: UUID
+  session_recording_metadata:
+    required: false
+    type: JSONB
+  session_recording_url:
+    required: false
+    type: VARCHAR
+session_tokens:
+  oidc_iss_claim:
+    required: false
+    type: VARCHAR
+  oidc_sid_claim:
+    required: false
+    type: VARCHAR
+  oidc_sub_claim:
+    required: false
+    type: VARCHAR
+  session_date:
+    required: true
+    type: TIMESTAMP
+  session_expiration_date:
+    required: false
+    type: TIMESTAMP
+  session_token_id:
+    required: false
+    type: UUID
+  user_id:
+    foreign_key: users.user_id
+    required: true
+    type: UUID
+settings:
+  category:
+    required: false
+    type: VARCHAR(255)
+  description:
+    required: false
+    type: TEXT
+  name:
+    required: false
+    type: VARCHAR(255)
+  sanitize:
+    required: false
+    type: BOOLEAN
+  services_restart:
+    required: false
+    type: VARCHAR(255)
+  setting_id:
+    required: false
+    type: UUID
+  title:
+    required: false
+    type: VARCHAR(255)
+  value:
+    required: false
+    type: VARCHAR
+  value_type:
+    required: false
+    type: VARCHAR
+sso_attribute_userfield_mapping:
+  attribute_name:
+    required: false
+    type: VARCHAR
+  ldap_id:
+    foreign_key: ldap_configs.ldap_id
+    required: false
+    type: UUID
+  oidc_id:
+    foreign_key: oidc_configs.oidc_id
+    required: false
+    type: UUID
+  saml_id:
+    foreign_key: saml_config.saml_id
+    required: false
+    type: UUID
+  sso_attribute_id:
+    required: false
+    type: UUID
+  user_field:
+    required: false
+    type: VARCHAR
+sso_to_group_mapping:
+  apply_to_all_users:
+    required: false
+    type: BOOLEAN
+  group_id:
+    foreign_key: groups.group_id
+    required: true
+    type: UUID
+  ldap_id:
+    foreign_key: ldap_configs.ldap_id
+    required: false
+    type: UUID
+  oidc_id:
+    foreign_key: oidc_configs.oidc_id
+    required: false
+    type: UUID
+  saml_id:
+    foreign_key: saml_config.saml_id
+    required: false
+    type: UUID
+  sso_group_attributes:
+    required: false
+    type: VARCHAR
+  sso_group_id:
+    required: false
+    type: UUID
+staging_configs:
+  allow_kasm_audio:
+    required: false
+    type: BOOLEAN
+  allow_kasm_clipboard_down:
+    required: false
+    type: BOOLEAN
+  allow_kasm_clipboard_up:
+    required: false
+    type: BOOLEAN
+  allow_kasm_downloads:
+    required: false
+    type: BOOLEAN
+  allow_kasm_gamepad:
+    required: false
+    type: BOOLEAN
+  allow_kasm_microphone:
+    required: false
+    type: BOOLEAN
+  allow_kasm_printing:
+    required: false
+    type: BOOLEAN
+  allow_kasm_rdp_client_file_transfer_clipboard:
+    required: false
+    type: BOOLEAN
+  allow_kasm_uploads:
+    required: false
+    type: BOOLEAN
+  allow_kasm_webcam:
+    required: false
+    type: BOOLEAN
+  autoscale_config_id:
+    foreign_key: autoscale_configs.autoscale_config_id
+    required: false
+    type: UUID
+  expiration:
+    required: true
+    type: FLOAT
+  image_id:
+    foreign_key: images.image_id
+    required: true
+    type: UUID
+  num_sessions:
+    required: true
+    type: INTEGER
+  server_pool_id:
+    foreign_key: server_pools.server_pool_id
+    required: false
+    type: UUID
+  staging_config_id:
+    required: false
+    type: UUID
+  zone_id:
+    foreign_key: zones.zone_id
+    required: true
+    type: UUID
+storage_mappings:
+  config:
+    required: false
+    type: VARCHAR
+  enabled:
+    required: false
+    type: BOOLEAN
+  group_id:
+    foreign_key: groups.group_id
+    required: false
+    type: UUID
+  image_id:
+    foreign_key: images.image_id
+    required: false
+    type: UUID
+  name:
+    required: true
+    type: VARCHAR
+  oauth_token:
+    required: false
+    type: VARCHAR
+  read_only:
+    required: false
+    type: BOOLEAN
+  s3_access_key_id:
+    required: false
+    type: VARCHAR
+  s3_bucket:
+    required: false
+    type: VARCHAR
+  s3_secret_access_key:
+    required: false
+    type: BLOB
+  storage_mapping_id:
+    required: false
+    type: UUID
+  storage_provider_id:
+    foreign_key: storage_providers.storage_provider_id
+    required: true
+    type: UUID
+  target:
+    required: false
+    type: VARCHAR
+  user_id:
+    foreign_key: users.user_id
+    required: false
+    type: UUID
+  webdav_pass:
+    required: false
+    type: BLOB
+  webdav_user:
+    required: false
+    type: VARCHAR
+storage_providers:
+  auth_url:
+    required: false
+    type: VARCHAR
+  auth_url_options:
+    required: false
+    type: JSON
+  client_id:
+    required: false
+    type: VARCHAR
+  client_secret:
+    required: false
+    type: BLOB
+  default_target:
+    required: true
+    type: VARCHAR
+  enabled:
+    required: false
+    type: BOOLEAN
+  mount_config:
+    required: false
+    type: JSON
+  name:
+    required: true
+    type: VARCHAR
+  redirect_url:
+    required: false
+    type: VARCHAR
+  root_drive_url:
+    required: false
+    type: VARCHAR
+  scope:
+    required: false
+    type: JSON
+  storage_provider_id:
+    required: false
+    type: UUID
+  storage_provider_type:
+    required: false
+    type: VARCHAR
+  token_url:
+    required: false
+    type: VARCHAR
+  volume_config:
+    required: false
+    type: JSON
+  webdav_url:
+    required: false
+    type: VARCHAR
+used_refresh_tokens:
+  token_expires:
+    required: true
+    type: INTEGER
+  token_payload:
+    required: true
+    type: VARCHAR
+user_attributes:
+  default_image:
+    foreign_key: images.image_id
+    required: false
+    type: UUID
+  preferred_language:
+    required: false
+    type: VARCHAR
+  preferred_timezone:
+    required: false
+    type: VARCHAR
+  show_tips:
+    required: false
+    type: BOOLEAN
+  ssh_private_key:
+    required: true
+    type: BLOB
+  ssh_public_key:
+    required: true
+    type: VARCHAR
+  theme:
+    required: false
+    type: VARCHAR
+  toggle_control_panel:
+    required: false
+    type: BOOLEAN
+  user_attributes_id:
+    required: false
+    type: UUID
+  user_id:
+    foreign_key: users.user_id
+    required: true
+    type: UUID
+  user_login_to_kasm:
+    required: false
+    type: BOOLEAN
+user_groups:
+  group_id:
+    foreign_key: groups.group_id
+    required: true
+    type: UUID
+  user_group_id:
+    required: false
+    type: UUID
+  user_id:
+    foreign_key: users.user_id
+    required: true
+    type: UUID
+user_server_assignments:
+  server_id:
+    foreign_key: servers.server_id
+    required: true
+    type: UUID
+  user_id:
+    foreign_key: users.user_id
+    required: true
+    type: UUID
+users:
+  anonymous:
+    required: false
+    type: BOOLEAN
+  city:
+    required: false
+    type: VARCHAR
+  company_id:
+    foreign_key: companies.company_id
+    required: false
+    type: UUID
+  country:
+    required: false
+    type: VARCHAR
+  created:
+    required: true
+    type: TIMESTAMP
+  crypt_password:
+    required: true
+    type: BLOB
+  crypt_salt:
+    required: true
+    type: BLOB
+  custom_attribute_1:
+    required: false
+    type: VARCHAR
+  custom_attribute_2:
+    required: false
+    type: VARCHAR
+  custom_attribute_3:
+    required: false
+    type: VARCHAR
+  disabled:
+    required: false
+    type: BOOLEAN
+  email:
+    required: false
+    type: VARCHAR
+  email_confirm_token:
+    required: false
+    type: VARCHAR(64)
+  email_pw_reset_request_date:
+    required: false
+    type: TIMESTAMP
+  failed_pw_attempts:
+    required: false
+    type: INTEGER
+  first_name:
+    required: false
+    type: VARCHAR(64)
+  last_name:
+    required: false
+    type: VARCHAR(64)
+  locked:
+    required: false
+    type: BOOLEAN
+  notes:
+    required: false
+    type: TEXT
+  oidc_id:
+    foreign_key: oidc_configs.oidc_id
+    required: false
+    type: UUID
+  organization:
+    required: false
+    type: VARCHAR(64)
+  password_set_date:
+    required: false
+    type: TIMESTAMP
+  phone:
+    required: false
+    type: VARCHAR(64)
+  plan_end_date:
+    required: false
+    type: TIMESTAMP
+  plan_id:
+    required: false
+    type: VARCHAR(64)
+  plan_start_date:
+    required: false
+    type: TIMESTAMP
+  program_id:
+    required: false
+    type: VARCHAR
+  pw_hash:
+    required: false
+    type: VARCHAR(128)
+  realm:
+    required: false
+    type: VARCHAR(64)
+  salt:
+    required: false
+    type: VARCHAR(64)
+  saml_id:
+    foreign_key: saml_config.saml_id
+    required: false
+    type: UUID
+  secret:
+    required: false
+    type: VARCHAR
+  set_two_factor:
+    required: false
+    type: BOOLEAN
+  sso_ep:
+    required: false
+    type: BLOB
+  state:
+    required: false
+    type: VARCHAR
+  stripe_id:
+    required: false
+    type: VARCHAR(64)
+  subscription_id:
+    required: false
+    type: VARCHAR(64)
+  user_id:
+    required: false
+    type: UUID
+  username:
+    required: false
+    type: VARCHAR(255)
+vsphere_vm_configs:
+  config_id:
+    required: false
+    type: UUID
+  config_name:
+    required: true
+    type: VARCHAR
+  max_instances:
+    required: true
+    type: INTEGER
+  startup_script:
+    required: false
+    type: VARCHAR
+  vm_public_ssh_key:
+    required: false
+    type: VARCHAR
+  vsphere_clone_type:
+    required: false
+    type: VARCHAR
+  vsphere_cluster_name:
+    required: false
+    type: VARCHAR
+  vsphere_cpus:
+    required: false
+    type: INTEGER
+  vsphere_datacenter_name:
+    required: true
+    type: VARCHAR
+  vsphere_datastore_name:
+    required: false
+    type: VARCHAR
+  vsphere_installed_OS_type:
+    required: true
+    type: VARCHAR
+  vsphere_memory_bytes:
+    required: false
+    type: BIGINT
+  vsphere_os_password:
+    required: false
+    type: VARCHAR
+  vsphere_os_username:
+    required: false
+    type: VARCHAR
+  vsphere_resource_pool:
+    required: false
+    type: VARCHAR
+  vsphere_startup_script_method:
+    required: false
+    type: VARCHAR
+  vsphere_template_name:
+    required: false
+    type: VARCHAR
+  vsphere_use_datastore_cluster:
+    required: false
+    type: BOOLEAN
+  vsphere_vcenter_address:
+    required: true
+    type: VARCHAR
+  vsphere_vcenter_password:
+    required: true
+    type: VARCHAR
+  vsphere_vcenter_port:
+    required: true
+    type: INTEGER
+  vsphere_vcenter_username:
+    required: true
+    type: VARCHAR
+  vsphere_vm_folder:
+    required: false
+    type: VARCHAR
+  vsphere_vm_name:
+    required: false
+    type: VARCHAR
+  vsphere_vm_snapshot_name:
+    required: false
+    type: VARCHAR
+webauthn_credentials:
+  authenticator_credential_id:
+    required: true
+    type: VARCHAR(2048)
+  created:
+    required: true
+    type: TIMESTAMP
+  public_key:
+    required: false
+    type: VARCHAR(4096)
+  sign_count:
+    required: false
+    type: INTEGER
+  user_id:
+    foreign_key: users.user_id
+    required: true
+    type: UUID
+  webauthn_credential_id:
+    required: false
+    type: UUID
+webauthn_requests:
+  challenge:
+    required: true
+    type: VARCHAR(255)
+  created:
+    required: true
+    type: TIMESTAMP
+  webauthn_request_id:
+    required: false
+    type: UUID
+ziti_identity_credentials:
+  created:
+    required: true
+    type: TIMESTAMP
+  egress_provider_id:
+    foreign_key: egress_providers.egress_provider_id
+    required: true
+    type: UUID
+  identity_json:
+    required: true
+    type: VARCHAR
+  image_id:
+    foreign_key: images.image_id
+    required: false
+    type: UUID
+  user_id:
+    foreign_key: users.user_id
+    required: false
+    type: UUID
+  ziti_identity_credential_id:
+    required: false
+    type: UUID
+  ziti_identity_id:
+    required: true
+    type: VARCHAR
+zones:
+  allow_origin_domain:
+    required: false
+    type: VARCHAR
+  enable_rdp_direct_login:
+    required: false
+    type: BOOLEAN
+  enable_rdp_https_gw:
+    required: false
+    type: BOOLEAN
+  enable_rdp_https_gw_dlp:
+    required: false
+    type: BOOLEAN
+  load_strategy:
+    required: false
+    type: VARCHAR
+  primary_manager_id:
+    foreign_key: managers.manager_id
+    required: false
+    type: UUID
+  prioritize_static_agents:
+    required: false
+    type: BOOLEAN
+  proxy_connections:
+    required: false
+    type: BOOLEAN
+  proxy_hostname:
+    required: false
+    type: VARCHAR
+  proxy_path:
+    required: false
+    type: VARCHAR
+  proxy_port:
+    required: false
+    type: INTEGER
+  proxy_rdp_client_connections:
+    required: false
+    type: BOOLEAN
+  proxy_rdp_hostname:
+    required: false
+    type: VARCHAR
+  proxy_rdp_port:
+    required: false
+    type: INTEGER
+  search_alternate_zones:
+    required: false
+    type: BOOLEAN
+  upstream_auth_address:
+    required: false
+    type: VARCHAR
+  verify_rdp_client_ip:
+    required: false
+    type: BOOLEAN
+  zone_id:
+    required: false
+    type: UUID
+  zone_name:
+    required: true
+    type: VARCHAR

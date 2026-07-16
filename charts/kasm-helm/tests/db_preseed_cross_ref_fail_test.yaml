@@ -1,0 +1,345 @@
+suite: db preseed cross-reference failure cases
+templates:
+  - templates/db-preseed-secret.yaml
+
+tests:
+
+  - it: image pool_name not found in server_pools fails render
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.images:
+        - name: "kasmweb/ubuntu-focal-desktop"
+          pool_name: "nonexistent-pool"
+    asserts:
+      - failedTemplate:
+          errorMessage: "No matching server pool found for config 'kasmweb/ubuntu-focal-desktop': pool_name='nonexistent-pool'"
+
+  - it: image zone_name not found in kasmZones fails render
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.images:
+        - name: "kasmweb/ubuntu-focal-desktop"
+          zone_name: "nonexistent-zone"
+    asserts:
+      - failedTemplate:
+          errorMessage: "No matching zone found for config 'kasmweb/ubuntu-focal-desktop': zone_name='nonexistent-zone'"
+
+  - it: autoscale pool_name not found in server_pools fails render
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.autoscale:
+        - autoscale_config_name: "Test AS"
+          pool_name: "nonexistent-pool"
+    asserts:
+      - failedTemplate:
+          errorMessage: "No matching server pool found for config 'nonexistent-pool': pool_name='nonexistent-pool'"
+
+  - it: autoscale zone_name not found in kasmZones fails render
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.autoscale:
+        - autoscale_config_name: "Test AS"
+          server_pool_id: "${uuid:server_pool_id:1}"
+          zone_name: "nonexistent-zone"
+    asserts:
+      - failedTemplate:
+          errorMessage: "No matching zone found for config 'nonexistent-zone': zone_name='nonexistent-zone'"
+
+  - it: autoscale aws_config_name not found in aws_configs fails render
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.autoscale:
+        - autoscale_config_name: "Test AS"
+          server_pool_id: "${uuid:server_pool_id:1}"
+          aws_config_name: "nonexistent-aws"
+    asserts:
+      - failedTemplate:
+          errorMessage: "No matching AWS VM config found for config 'nonexistent-aws': aws_config_name='nonexistent-aws'"
+
+  - it: autoscale azure_config_name not found in azure_configs fails render
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.autoscale:
+        - autoscale_config_name: "Test AS"
+          server_pool_id: "${uuid:server_pool_id:1}"
+          azure_config_name: "nonexistent-azure"
+    asserts:
+      - failedTemplate:
+          errorMessage: "No matching Azure VM config found for config 'nonexistent-azure': azure_config_name='nonexistent-azure'"
+
+  - it: autoscale digital_ocean_vm_config_name not found fails render
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.autoscale:
+        - autoscale_config_name: "Test AS"
+          server_pool_id: "${uuid:server_pool_id:1}"
+          digital_ocean_vm_config_name: "nonexistent-do"
+    asserts:
+      - failedTemplate:
+          errorMessage: "No matching DigitalOcean VM config found for config 'nonexistent-do': digital_ocean_vm_config_name='nonexistent-do'"
+
+  - it: autoscale gcp_vm_config_name not found in gcp_vm_configs fails render
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.autoscale:
+        - autoscale_config_name: "Test AS"
+          server_pool_id: "${uuid:server_pool_id:1}"
+          gcp_vm_config_name: "nonexistent-gcp"
+    asserts:
+      - failedTemplate:
+          errorMessage: "No matching GCP VM config found for config 'nonexistent-gcp': gcp_vm_config_name='nonexistent-gcp'"
+
+  - it: autoscale harvester_vm_config_name not found fails render
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.autoscale:
+        - autoscale_config_name: "Test AS"
+          server_pool_id: "${uuid:server_pool_id:1}"
+          harvester_vm_config_name: "nonexistent-harvester"
+    asserts:
+      - failedTemplate:
+          errorMessage: "No matching Harvester VM config found for config 'nonexistent-harvester': harvester_vm_config_name='nonexistent-harvester'"
+
+  - it: autoscale kubevirt_vm_config_name not found fails render
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.autoscale:
+        - autoscale_config_name: "Test AS"
+          server_pool_id: "${uuid:server_pool_id:1}"
+          kubevirt_vm_config_name: "nonexistent-kubevirt"
+    asserts:
+      - failedTemplate:
+          errorMessage: "No matching KubeVirt VM config found for config 'nonexistent-kubevirt': kubevirt_vm_config_name='nonexistent-kubevirt'"
+
+  - it: autoscale nutanix_vm_config_name not found fails render
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.autoscale:
+        - autoscale_config_name: "Test AS"
+          server_pool_id: "${uuid:server_pool_id:1}"
+          nutanix_vm_config_name: "nonexistent-nutanix"
+    asserts:
+      - failedTemplate:
+          errorMessage: "No matching Nutanix VM config found for config 'nonexistent-nutanix': nutanix_vm_config_name='nonexistent-nutanix'"
+
+  - it: autoscale oci_vm_config_name not found in oci_vm_configs fails render
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.autoscale:
+        - autoscale_config_name: "Test AS"
+          server_pool_id: "${uuid:server_pool_id:1}"
+          oci_vm_config_name: "nonexistent-oci"
+    asserts:
+      - failedTemplate:
+          errorMessage: "No matching OCI VM config found for config 'nonexistent-oci': oci_vm_config_name='nonexistent-oci'"
+
+  - it: autoscale openstack_vm_config_name not found fails render
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.autoscale:
+        - autoscale_config_name: "Test AS"
+          server_pool_id: "${uuid:server_pool_id:1}"
+          openstack_vm_config_name: "nonexistent-openstack"
+    asserts:
+      - failedTemplate:
+          errorMessage: "No matching OpenStack VM config found for config 'nonexistent-openstack': openstack_vm_config_name='nonexistent-openstack'"
+
+  - it: autoscale proxmox_vm_config_name not found fails render
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.autoscale:
+        - autoscale_config_name: "Test AS"
+          server_pool_id: "${uuid:server_pool_id:1}"
+          proxmox_vm_config_name: "nonexistent-proxmox"
+    asserts:
+      - failedTemplate:
+          errorMessage: "No matching Proxmox VM config found for config 'nonexistent-proxmox': proxmox_vm_config_name='nonexistent-proxmox'"
+
+  - it: autoscale vsphere_vm_config_name not found fails render
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.autoscale:
+        - autoscale_config_name: "Test AS"
+          server_pool_id: "${uuid:server_pool_id:1}"
+          vsphere_vm_config_name: "nonexistent-vsphere"
+    asserts:
+      - failedTemplate:
+          errorMessage: "No matching vSphere VM config found for config 'nonexistent-vsphere': vsphere_vm_config_name='nonexistent-vsphere'"
+
+  - it: group_settings group_name not found in groups fails render
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.groupSettings:
+        - name: "test_setting"
+          value_type: "bool"
+          group_name: "nonexistent-group"
+    asserts:
+      - failedTemplate:
+          errorMessage: "No matching group found for group 'nonexistent-group'"
+
+  - it: user groups reference to nonexistent group fails render
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.users:
+        - username: "ops@example.com"
+          groups:
+            - "nonexistent-group"
+    asserts:
+      - failedTemplate:
+          errorMessage: "No matching group found for group 'nonexistent-group'"
+
+  - it: cast_configs group_name not found in groups fails render
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.cast_configs:
+        - casting_config_name: "My Cast"
+          key: "cast-key-001"
+          image_id: "image-uuid-001"
+          group_name: "nonexistent-group"
+    asserts:
+      - failedTemplate:
+          errorMessage: "No matching group found for group 'nonexistent-group'"

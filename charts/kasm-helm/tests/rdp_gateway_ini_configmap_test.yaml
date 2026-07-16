@@ -51,3 +51,12 @@ tests:
             name: kasm-rdp-gateway-config
             mountPath: /usr/local/etc/rdpproxy/conf/passthrough.app.config.yaml
             subPath: passthrough.app.config.yaml
+
+  - it: passthrough config volume references the rdpGateway-app-config ConfigMap
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: kasm-rdp-gateway-config
+            configMap:
+              name: RELEASE-NAME-rdp-gateway-app-config

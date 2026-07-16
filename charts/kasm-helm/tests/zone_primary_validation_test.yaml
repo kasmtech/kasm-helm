@@ -1,0 +1,32 @@
+suite: zone primary validation — first-zone fallback and exactly-one-primary enforcement
+templates:
+  - templates/proxy-service-external.yaml
+
+tests:
+  - it: falls back to the first zone as primary when kasmZones is set but no zone has primary true
+    template: templates/proxy-service-external.yaml
+    set:
+      proxyService.type: ClusterIP
+      kasmZones:
+        - name: zonea
+          proxyAddress: zonea.example.com
+        - name: zoneb
+          proxyAddress: zoneb.example.com
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: fails when more than one zone has primary true
+    template: templates/proxy-service-external.yaml
+    set:
+      proxyService.type: ClusterIP
+      kasmZones:
+        - name: zonea
+          primary: true
+          proxyAddress: zonea.example.com
+        - name: zoneb
+          primary: true
+          proxyAddress: zoneb.example.com
+    asserts:
+      - failedTemplate:
+          errorMessage: "kasmZones has 2 zones marked 'primary: true'; at most one zone may be primary. Remove 'primary: true' from all but one zone."

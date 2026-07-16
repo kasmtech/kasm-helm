@@ -276,7 +276,7 @@ docs-check:
       when: manual
 
 # Group A: one heavy (upgrade-included) + one medium (multizone) +
-# one light (basic).
+# two light (basic, json-logging).
 e2e_group_a:
   extends: .e2e_kind_base
   stage: e2e_group_a
@@ -289,10 +289,13 @@ e2e_group_a:
           - e2e-json-logging
 
 # Group B: one heavy (upgrade-standalone) + one medium (backup) +
-# one light (trustedca).  Standalone-DB upgrade and backup both touch
-# external-postgres state via DinD volumes; spreading them across
+# two light (trustedca, preseed).  Standalone-DB upgrade and backup both
+# touch external-postgres state via DinD volumes; spreading them across
 # different stages avoids two of them stepping on each other's
-# kasm-e2e-postgres-data-* volumes within one stage.
+# kasm-e2e-postgres-data-* volumes within one stage. e2e-preseed guards
+# the kasmConfig preseed feature (custom_properties.yaml generation,
+# zone/primary resolution, existingDefaultPropertiesSecret) against
+# regressions on merge.
 e2e_group_b:
   extends: .e2e_kind_base
   stage: e2e_group_b
@@ -302,6 +305,7 @@ e2e_group_b:
           - e2e-trustedca
           - e2e-backup
           - e2e-upgrade-standalone
+          - e2e-preseed
 
 # Group C: one external-DB (externaldb) + one PSS-restricted
 # variant (backup-pss) + one light (pss).

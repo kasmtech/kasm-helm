@@ -60,3 +60,35 @@ tests:
       - contains:
           path: spec.tls[0].hosts
           content: zoneb.kasm.example.com
+
+  - it: falls back to the deprecated proxyAddress alias when proxy_hostname is unset
+    set:
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      kasmZones:
+        - name: zonea
+          primary: true
+          proxyAddress: legacy-a.example.com
+        - name: zoneb
+          proxy_hostname: preferred-b.example.com
+    asserts:
+      - equal:
+          path: spec.rules[0].host
+          value: legacy-a.example.com
+      - equal:
+          path: spec.rules[1].host
+          value: preferred-b.example.com
+
+  - it: prefers proxy_hostname when both proxyAddress and proxy_hostname are set on the same zone
+    set:
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      kasmZones:
+        - name: zonea
+          primary: true
+          proxyAddress: legacy-a.example.com
+          proxy_hostname: preferred-a.example.com
+    asserts:
+      - equal:
+          path: spec.rules[0].host
+          value: preferred-a.example.com

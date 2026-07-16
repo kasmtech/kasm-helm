@@ -4,7 +4,7 @@ Kasm Proxy server Deployment definition
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- $proxyReplicas := ternary .Values.components.proxy.replicas (include "replicas.preset" (dict "node" $constants.proxy.component "size" .Values.deploymentSize)) (gt (int .Values.components.proxy.replicas) 0) -}}
 {{- $merged := fromYaml (include "kasm.mergedValues" (dict "root" . "componentName" "proxy")) -}}
-{{- range $idx, $zone := (.Values.kasmZones | default (list (dict "name" "default"))) }}
+{{- range $idx, $zone := (include "kasm.zones" $ | fromYamlArray) }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -40,6 +40,21 @@ spec:
         {{- include "kasm.trustedCaInit" (list $ "proxy") | nindent 8 }}
         {{- include "kasm.initContainer" (dict "context" $ "serviceName" (printf "%s-%s" $constants.api.svc (include "kasm.zoneName" $zone.name)) "servicePort" $constants.api.port "path" "/api/__healthcheck" "schema" "http" "image" $constants.api.image "component" "api") | nindent 8 }}
         {{- include "kasm.initContainer" (dict "context" $ "serviceName" (printf "%s-%s" $constants.manager.svc (include "kasm.zoneName" $zone.name)) "servicePort" $constants.manager.port "path" "/__healthcheck" "schema" "http" "image" $constants.api.image "component" "manager") | nindent 8 }}
+        {{- if and $.Values.components.guac.enabled (include "kasm.isInPrimaryRegion" (list $ $zone)) }}
+          {{- $guacSvc := printf "%s-guac-%s" $.Release.Name (include "kasm.zoneName" $zone.name) -}}
+          {{- include "kasm.initContainer" (dict "context" $ "serviceName" $guacSvc "servicePort" $constants.guac.nginxPort "path" "/guac/__healthcheck" "schema" "http" "image" $constants.api.image "component" "guac") | nindent 8 }}
+        {{- end }}
+        {{- if and $.Values.components.rdpGateway.enabled (include "kasm.isInPrimaryRegion" (list $ $zone)) }}
+          {{/*
+            Probe the rdp-gateway through its nginx sidecar (nginxPort = 9001),
+            not the app port (5555), so cross-pod traffic uses the same
+            front door as all other consumers. The sidecar's services.d config
+            exposes a /__healthcheck location that proxy_passes to the local
+            rdp_gateway upstream on 127.0.0.1:5555.
+          */}}
+          {{- $rdpGwSvc := printf "%s-rdp-gateway-%s" $.Release.Name (include "kasm.zoneName" $zone.name) -}}
+          {{- include "kasm.initContainer" (dict "context" $ "serviceName" $rdpGwSvc "servicePort" $constants.rdpGateway.nginxPort "path" "/__healthcheck" "schema" "http" "image" $constants.api.image "component" "rdpGateway") | nindent 8 }}
+        {{- end }}
         {{- with $merged.extraInitContainers }}
           {{- toYaml . | nindent 8 }}
         {{- end }}

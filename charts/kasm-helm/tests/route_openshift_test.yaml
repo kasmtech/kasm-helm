@@ -110,6 +110,39 @@ tests:
       - hasDocuments:
           count: 1
 
+  - it: falls back to the deprecated proxyAddress alias when proxy_hostname is unset
+    template: templates/route.yaml
+    values:
+      - ../../../tests/values/route-openshift.yaml
+    set:
+      kasmZones:
+        - name: zonea
+          primary: true
+          proxyAddress: legacy-a.example.com
+        - name: zoneb
+          proxy_hostname: preferred-b.example.com
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.host
+          value: legacy-a.example.com
+
+  - it: prefers proxy_hostname when both proxyAddress and proxy_hostname are set on the same zone
+    template: templates/route.yaml
+    values:
+      - ../../../tests/values/route-openshift.yaml
+    set:
+      kasmZones:
+        - name: zonea
+          primary: true
+          proxyAddress: legacy-a.example.com
+          proxy_hostname: preferred-a.example.com
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.host
+          value: preferred-a.example.com
+
   - it: fails if both ingress.enabled and route.enabled are true
     template: templates/route.yaml
     set:

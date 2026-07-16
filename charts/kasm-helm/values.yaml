@@ -25,15 +25,22 @@ publicAddr: ""
 # [Deployment Zones](https://docs.kasm.com/docs/latest/guide/deployment_zones) documentation for more
 # information on Kasm Zones.
 #
-# The first zone in the list is treated as the primary zone.
+# The zone marked `primary: true` is treated as the primary zone; if no zone is marked primary,
+# the first zone in the list is used instead. At most one zone may be marked `primary: true`.
 # Traffic to the configured `publicAddr` in the ingress rule will be routed to this primary zone.
+#
+# Each zone requires a `name` (or the `zone_name` alias, if `name` is not set; `name` wins if both are set).
+#
+# Each zone's `proxy_hostname` is used to build the ingress/route/certificate hostnames for that zone,
+# as well as the zone's preseed `proxy_hostname` value. `proxyAddress` is a deprecated alias for
+# `proxy_hostname`, kept for backwards compatibility; if both are set, `proxy_hostname` wins.
 #
 kasmZones: []
 # Example Kasm Zone configuration:
 #   - name: zonea
-#     proxyAddress: zonea.kasm.contoso.com
+#     proxy_hostname: zonea.kasm.contoso.com
 #   - name: zoneb
-#     proxyAddress: zoneb.kasm.contoso.com
+#     proxy_hostname: zoneb.kasm.contoso.com
 
 # isOpenshift -- Use this flag to remove Pod and Container security ID values and allow OpenShift to dynamically
 # set them in accordance with [OpenShift UIDs](https://www.redhat.com/en/blog/a-guide-to-openshift-and-uids) documentation.
@@ -370,10 +377,10 @@ dbManagement:
     # dbManagement.upgrade.backupStorageClass -- The storageClass to use to create PV for the backup PVC.
     #
     backupStorageClass: ""
-    # dbManagement.upgrade.oldDbSecretsName -- The name of the Kubernetes secret where Kasm and DB passwords are stored.
-    # Leave empty to default to "<release-name>-secrets" (the standard 1.18.1+ name). Only override if you renamed
-    # the secret manually before upgrading; the value MUST equal the in-cluster secret name so the chart can read
-    # existing credentials via `lookup`.
+    # dbManagement.upgrade.oldDbSecretsName -- The name of an existing Kubernetes secret to use as the source for
+    # credential lookup during upgrades. Leave empty to use the current release's '<release>-secrets' secret.
+    # Set to a different secret name only when upgrading from a deployment that stored credentials under a
+    # non-default name.
     #
     oldDbSecretsName: ""
     # dbManagement.upgrade.oldDbBackupFileName -- The file name of the database backup to restore and upgrade.
@@ -1086,3 +1093,50 @@ extraInitContainers: []
 # This field is expected to be either a multi-line string, a list of strings, or a list of objects.
 #
 extraObjects: []
+
+# kasmConfig -- Use fields in the `kasmConfig` section to apply customization to a Kasm deployment
+# during database initialization.
+#
+# NOTE: This data is only used during DB initialization and does not have any effect on live Kasm
+# configuration settings. 
+#
+kasmConfig:
+  # kasmConfig.generatePreseed -- Enable generation of a custom DB initialization configuration to
+  # pre-configure Kasm during installation.
+  #
+  generatePreseed: false
+  # kasmConfig.defaultUsers -- Creates a series of 4 users and 5 groups with a standard set of
+  # permissions accommodating most standard deployment scenarios. Refer to the [Default Users](./docs/default-users.md)
+  # for additional information about what this flag creates.
+  #
+  defaultUsers: false
+  # kasmConfig.defaultApiUsers -- Creates two predefined sets of API credentials with permissions
+  # accommodating most standard deployment scenarios. Refer to the [Default API Users](./docs/default-api-users.md)
+  # for additional information about what this flag creates.
+  #
+  defaultApiUsers: false
+  # kasmConfig.adminUsername -- Change the username seeded on the admin-group member. Default: `admin@kasm.local`,
+  # the only true built-in admin account. Setting this to any other value seeds that account with generated
+  # (non-built-in) credentials stored under a `<local-part>-password`/`<local-part>-salt` key pair in the
+  # passwords/salts Secrets (e.g. `system@kasm.local` -> `system-password`) instead of the built-in
+  # admin-password-Secret-backed credentials. The chart will not create an `admin-password` key at all in that
+  # case, and the db-init Job will not be given a DEFAULT_ADMIN_PASSWORD env var. See docs/default-users.md.
+  #
+  adminUsername: "admin@kasm.local"
+  # kasmConfig.existingDefaultPropertiesSecret -- Reference a customer-managed Secret containing a complete
+  # `default_properties.yaml` seed file, for infrastructure-as-code workflows that manage the seed file directly
+  # as a Kubernetes Secret rather than expressing it through kasmConfig.config values.
+  #
+  # When `name` is set, its contents (at `key`) replace the image's baked-in default_properties.yaml as the base
+  # seed file. This works independently of generatePreseed: set generatePreseed=true as well to additionally merge
+  # kasmConfig.config-generated values on top of the customer-provided file, or leave it false to use the
+  # customer-provided file as-is with no chart-side merge.
+  #
+  existingDefaultPropertiesSecret:
+    name: ""
+    key: "default_properties.yaml"
+  # kasmConfig.config -- Kasm DB pre-seed configuration settings in YAML format. Refer to the
+  # [Preseed Documentation](./docs/preseed.md) and to the [Kasm Slip-Stream Install](https://docs.kasm.com/docs/1.19.0/how-to/administration/import-export/slipstream-install)
+  # documentation for additional details.
+  #
+  config: {}

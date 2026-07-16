@@ -2,6 +2,7 @@
 Deploy the Kasm ingress if .Values.ingress.enabled set to true
 */}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $primaryZone := (include "kasm.primaryZone" . | fromYaml) -}}
 {{- if .Values.ingress.enabled }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -20,7 +21,7 @@ spec:
         {{- end }}
         {{- with .Values.kasmZones }}
         {{- range $idx, $zone := . }}
-        - {{ $zone.proxyAddress | quote }}
+        - {{ include "kasm.zoneProxyHostnameRequired" $zone | quote }}
         {{- end }}
         {{- end }}
       secretName: {{ .Values.certificate.secretName | default (include "kasm.name" (list . "cert-manager" "secret")) }}
@@ -28,7 +29,7 @@ spec:
   rules:
   {{- with .Values.kasmZones }}
   {{- range $idx, $zone := . }}
-  - host: {{ $zone.proxyAddress | quote }}
+  - host: {{ include "kasm.zoneProxyHostnameRequired" $zone | quote }}
     http:
       paths:
         - path: /
@@ -47,13 +48,7 @@ spec:
           pathType: Prefix
           backend:
             service:
-            {{- if .Values.kasmZones }}
-              {{- with index .Values.kasmZones 0 }}
-              name: {{ printf "%s-%s" $constants.proxy.svc (include "kasm.zoneName" .name) -}}
-              {{- end }}
-            {{- else }}
-              name: {{ printf "%s-default" $constants.proxy.svc -}}
-            {{- end }}
+              name: {{ printf "%s-%s" $constants.proxy.svc (include "kasm.zoneName" $primaryZone.name) }}
               port:
                 number: {{ if eq .Values.ingress.backendProtocol "https" }}{{ $constants.proxy.https }}{{ else }}{{ $constants.proxy.http }}{{ end }}
 {{- end }}

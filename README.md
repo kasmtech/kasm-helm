@@ -75,6 +75,13 @@ The chart is configured through `values.yaml`. Two values are required to instal
 
 For the full values reference (cert-manager, external database, ingress, per-component overrides, multi-zone topology, and more), see the chart documentation in the [Helm chart repository](https://github.com/kasmtech/kasm-helm). The repo also includes example manifests for pre-seeding secrets and managing database backups.
 
+### DB preseed
+
+The chart can seed Kasm's database at initialization time — users, groups, images, autoscale providers, SSO connectors, and more — declared as Helm values rather than post-install API calls. See [charts/kasm-helm/docs/preseed.md](charts/kasm-helm/docs/preseed.md) for the full preseed reference, including:
+
+- [Default user accounts and group permissions](charts/kasm-helm/docs/default-users.md) (`defaultUsers: true`)
+- [Default API credentials and permissions](charts/kasm-helm/docs/default-api-users.md) (`defaultApiUsers: true`)
+
 ## Versioning
 
 Chart versions track Kasm Workspaces versions. The middle component of the chart version corresponds to the Kasm release — for example, chart **1.1181.0** matches Kasm Workspaces **1.18.1**. This branch (`1.1200.0-develop` / app `develop`) is the developer preview for the upcoming **1.20** release.

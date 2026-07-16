@@ -1,8 +1,6 @@
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
-{{- $zoneName := "default" -}}
-{{- if .Values.kasmZones }}
-  {{- $zoneName = (index .Values.kasmZones 0).name -}}
-{{- end }}
+{{- $primaryZone := (include "kasm.primaryZone" . | fromYaml) -}}
+{{- $zoneName := $primaryZone.name -}}
 CHART NAME: {{ .Chart.Name }}
 CHART VERSION: {{ .Chart.Version }}
 APP VERSION: {{ .Chart.AppVersion }}

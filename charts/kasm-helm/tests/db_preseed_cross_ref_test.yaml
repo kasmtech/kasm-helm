@@ -1,0 +1,442 @@
+suite: db preseed cross-reference resolution
+templates:
+  - templates/db-preseed-secret.yaml
+
+tests:
+
+  - it: images zone_name resolves zone_id from kasmZones
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: my-zone
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.images:
+        - name: "kasmweb/ubuntu-focal-desktop"
+          zone_name: "my-zone"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "zone_id: \\$\\{uuid:zone_id:1\\}"
+
+  - it: autoscale pool_name resolves server_pool_id from server_pools
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.server_pools:
+        - name: "my-pool"
+          server_pool_id: "pool-uuid-002"
+      kasmConfig.config.autoscale:
+        - autoscale_config_name: "Test AS"
+          pool_name: "my-pool"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "server_pool_id: pool-uuid-002"
+
+  - it: autoscale zone_name resolves zone_id from kasmZones
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: my-zone
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.autoscale:
+        - autoscale_config_name: "Test AS"
+          server_pool_id: "${uuid:server_pool_id:1}"
+          zone_name: "my-zone"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "zone_id: \\$\\{uuid:zone_id:1\\}"
+
+  - it: autoscale azure_config_name resolves azure_config_id via azure_vm_configs alias
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.azure_vm_configs:
+        - config_name: "my-azure"
+          azure_config_id: "azure-uuid-001"
+      kasmConfig.config.autoscale:
+        - autoscale_config_name: "Test AS"
+          server_pool_id: "${uuid:server_pool_id:1}"
+          azure_config_name: "my-azure"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "azure_config_id: azure-uuid-001"
+
+  - it: autoscale digital_ocean_vm_config_name resolves digital_ocean_vm_config_id
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.digital_ocean_vm_configs:
+        - config_name: "my-do"
+          config_id: "do-uuid-001"
+      kasmConfig.config.autoscale:
+        - autoscale_config_name: "Test AS"
+          server_pool_id: "${uuid:server_pool_id:1}"
+          digital_ocean_vm_config_name: "my-do"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "digital_ocean_vm_config_id: do-uuid-001"
+
+  - it: autoscale gcp_vm_config_name resolves gcp_vm_config_id
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.gcp_vm_configs:
+        - config_name: "my-gcp"
+          config_id: "gcp-uuid-001"
+      kasmConfig.config.autoscale:
+        - autoscale_config_name: "Test AS"
+          server_pool_id: "${uuid:server_pool_id:1}"
+          gcp_vm_config_name: "my-gcp"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "gcp_vm_config_id: gcp-uuid-001"
+
+  - it: autoscale oci_vm_config_name resolves oci_vm_config_id
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.oci_vm_configs:
+        - config_name: "my-oci"
+          config_id: "oci-uuid-001"
+      kasmConfig.config.autoscale:
+        - autoscale_config_name: "Test AS"
+          server_pool_id: "${uuid:server_pool_id:1}"
+          oci_vm_config_name: "my-oci"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "oci_vm_config_id: oci-uuid-001"
+
+  - it: autoscale harvester_vm_config_name resolves harvester_vm_config_id
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.harvester_vm_configs:
+        - config_name: "my-harvester"
+          config_id: "harvester-uuid-001"
+          cores: 2
+          disk_image: "ubuntu:22.04"
+          disk_size_bytes: 107374182400
+          kube_host: "https://harvester.example.com"
+          max_instances: 5
+          memory_bytes: 4294967296
+          vm_namespace: "default"
+      kasmConfig.config.autoscale:
+        - autoscale_config_name: "Test AS"
+          server_pool_id: "${uuid:server_pool_id:1}"
+          harvester_vm_config_name: "my-harvester"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "harvester_vm_config_id: harvester-uuid-001"
+
+  - it: autoscale kubevirt_vm_config_name resolves kubevirt_vm_config_id
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.kubevirt_vm_configs:
+        - config_name: "my-kubevirt"
+          config_id: "kubevirt-uuid-001"
+          cores: 2
+          disk_size_bytes: 107374182400
+          disk_source: "ubuntu:22.04"
+          kube_host: "https://k8s.example.com"
+          max_instances: 5
+          memory_bytes: 4294967296
+          vm_namespace: "default"
+      kasmConfig.config.autoscale:
+        - autoscale_config_name: "Test AS"
+          server_pool_id: "${uuid:server_pool_id:1}"
+          kubevirt_vm_config_name: "my-kubevirt"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "kubevirt_vm_config_id: kubevirt-uuid-001"
+
+  - it: autoscale nutanix_vm_config_name resolves nutanix_vm_config_id
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.nutanix_vm_configs:
+        - config_name: "my-nutanix"
+          config_id: "nutanix-uuid-001"
+          api_version: "v3"
+          cores: 2
+          host: "nutanix.example.com"
+          max_instances: 5
+          memory_bytes: 4294967296
+          password: "nutanix-pass"
+          port: 9440
+          username: "admin"
+          vm_candidate: "ubuntu-22.04"
+      kasmConfig.config.autoscale:
+        - autoscale_config_name: "Test AS"
+          server_pool_id: "${uuid:server_pool_id:1}"
+          nutanix_vm_config_name: "my-nutanix"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "nutanix_vm_config_id: nutanix-uuid-001"
+
+  - it: autoscale openstack_vm_config_name resolves openstack_vm_config_id
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.openstack_vm_configs:
+        - config_name: "my-openstack"
+          config_id: "openstack-uuid-001"
+          max_instances: 5
+          openstack_auth_method: "password"
+          openstack_availability_zone: "nova"
+          openstack_cinder_endpoint: "https://openstack.example.com:8776"
+          openstack_cinder_version: "v3"
+          openstack_flavor: "m1.medium"
+          openstack_glance_endpoint: "https://openstack.example.com:9292"
+          openstack_glance_version: "v2"
+          openstack_image_id: "ubuntu-22.04"
+          openstack_keystone_endpoint: "https://openstack.example.com:5000"
+          openstack_network_id: "net-uuid-001"
+          openstack_nova_endpoint: "https://openstack.example.com:8774"
+          openstack_nova_version: "v2.1"
+          openstack_project_name: "kasm"
+      kasmConfig.config.autoscale:
+        - autoscale_config_name: "Test AS"
+          server_pool_id: "${uuid:server_pool_id:1}"
+          openstack_vm_config_name: "my-openstack"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "openstack_vm_config_id: openstack-uuid-001"
+
+  - it: autoscale proxmox_vm_config_name resolves proxmox_vm_config_id
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.proxmox_vm_configs:
+        - config_name: "my-proxmox"
+          config_id: "proxmox-uuid-001"
+          cluster_node_name: "pve"
+          cores: 2
+          host: "proxmox.example.com"
+          installed_os_type: "ubuntu"
+          max_instances: 5
+          memory_bytes: 4294967296
+          template_name: "ubuntu-22.04-template"
+          token_name: "kasm@pve!kasm"
+          token_value: "proxmox-token-value"
+          username: "root"
+          vmid_range_lower: 200
+          vmid_range_upper: 300
+      kasmConfig.config.autoscale:
+        - autoscale_config_name: "Test AS"
+          server_pool_id: "${uuid:server_pool_id:1}"
+          proxmox_vm_config_name: "my-proxmox"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "proxmox_vm_config_id: proxmox-uuid-001"
+
+  - it: autoscale vsphere_vm_config_name resolves vsphere_vm_config_id
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.vsphere_vm_configs:
+        - config_name: "my-vsphere"
+          config_id: "vsphere-uuid-001"
+          max_instances: 5
+          vsphere_datacenter_name: "dc1"
+          vsphere_installed_OS_type: "ubuntu"
+          vsphere_os_password: "vsphere-os-pass"
+          vsphere_os_username: "kasm"
+          vsphere_template_name: "ubuntu-22.04-template"
+          vsphere_vcenter_address: "vcenter.example.com"
+          vsphere_vcenter_password: "vcenter-pass"
+          vsphere_vcenter_port: 443
+          vsphere_vcenter_username: "administrator@vsphere.local"
+      kasmConfig.config.autoscale:
+        - autoscale_config_name: "Test AS"
+          server_pool_id: "${uuid:server_pool_id:1}"
+          vsphere_vm_config_name: "my-vsphere"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "vsphere_vm_config_id: vsphere-uuid-001"
+
+  - it: group_settings group_name resolves group_id from groups
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.groups:
+        - name: "My Group"
+          group_id: "group-uuid-001"
+      kasmConfig.config.groupSettings:
+        - name: "allow_kasm_audio"
+          value_type: "bool"
+          value: "True"
+          group_name: "My Group"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "group_id: \"group-uuid-001\""
+
+  - it: users groups list resolves group_id in user_groups section
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.groups:
+        - name: "My Group"
+          group_id: "group-uuid-002"
+      kasmConfig.config.users:
+        - username: "ops@example.com"
+          groups:
+            - "My Group"
+    asserts:
+      - documentIndex: 2
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "group_id: \"group-uuid-002\""
+
+  - it: cast_configs group_name resolves group_id from groups
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.groups:
+        - name: "My Group"
+          group_id: "group-uuid-003"
+      kasmConfig.config.cast_configs:
+        - casting_config_name: "My Cast"
+          key: "cast-key-001"
+          image_id: "image-uuid-001"
+          group_name: "My Group"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "group_id: \"group-uuid-003\""

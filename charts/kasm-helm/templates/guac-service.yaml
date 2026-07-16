@@ -4,21 +4,21 @@ The service exposes only port 9000 (the nginx sidecar). Ports 3000-3004 are
 internal to the pod and accessed via the kasm_guac upstream.
 */}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
-{{- $zoneName := "default" -}}
-{{- if .Values.kasmZones }}
-  {{- $zoneName = (index .Values.kasmZones 0).name -}}
-{{- end }}
 {{- if .Values.components.guac.enabled }}
+{{- range $zone := (include "kasm.primaryRegionZones" $ | fromYamlArray) }}
+---
+{{ $guacSvc := printf "%s-guac-%s" $.Release.Name (include "kasm.zoneName" $zone.name) -}}
 apiVersion: v1
 kind: Service
 metadata:
-  {{- include "kasm.metadata" (dict "context" . "component" "guac" "resource" "service" "zone" $zoneName "include" "all") | indent 2 }}
+  {{- include "kasm.metadata" (dict "context" $ "component" "guac" "resource" "service" "zone" $zone.name "include" "all") | indent 2 }}
 spec:
   clusterIP: None
   selector:
-    {{- include "kasm.metadata" (dict "context" . "component" "guac" "resource" "service" "zone" $zoneName "include" "match") | indent 4 }}
+    {{- include "kasm.metadata" (dict "context" $ "component" "guac" "resource" "service" "zone" $zone.name "include" "match") | indent 4 }}
   ports:
-    - name: {{ printf "%s-svc-%s" $constants.guac.svc ($constants.guac.nginxPort | toString) }}
+    - name: {{ printf "%s-svc-%s" $guacSvc ($constants.guac.nginxPort | toString) }}
       protocol: TCP
       port: {{ $constants.guac.nginxPort }}
+{{- end }}
 {{- end }}
