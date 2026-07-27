@@ -55,7 +55,7 @@ spec:
                     {{- if .Values.database.kasmDbSecret }}
                       {{- .Values.database.kasmDbSecret | toYaml | nindent 22 }}
                     {{- else }}
-                      name: {{ .Release.Name }}-secrets
+                      name: {{ $constants.secrets.name }}
                       key: "db-password"
                     {{- end }}
               {{- include "kasm.securityContext" (list . 1000 "container") | nindent 14 }}

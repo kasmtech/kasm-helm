@@ -11,7 +11,7 @@ metadata:
   {{- include "kasm.metadata" (dict "context" $ "component" "proxy-settings" "resource" "configMap" "zone" $zone.name "include" "all") | indent 2 }}
 data:
   resolver.conf: |
-    resolver 127.0.0.11 valid=10s ipv6=off;
+    resolver {{ include "kasm.nginxResolver" $ }} valid=10s ipv6=off;
 
   listener.conf: |
     server {

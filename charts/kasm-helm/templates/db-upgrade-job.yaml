@@ -60,7 +60,7 @@ spec:
                 {{- if .Values.database.kasmDbSecret -}}
                 {{ .Values.database.kasmDbSecret | toYaml | nindent 18 }}
                 {{- else }}
-                  name: {{ .Release.Name }}-secrets
+                  name: {{ $constants.secrets.name }}
                   key: "db-password"
                 {{- end }}
           resources: {{- include "resources.preset" (dict "node" "api" "size" "small") | nindent 12 }}

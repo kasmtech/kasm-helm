@@ -1,0 +1,48 @@
+suite: nginx resolver directive across all sidecar ConfigMaps
+
+templates:
+  - templates/proxy-configmaps.yaml
+  - templates/guac-nginx-configmap.yaml
+  - templates/rdp-gateway-nginx-configmap.yaml
+  - templates/rdp-https-gateway-nginx-configmap.yaml
+
+tests:
+  - it: defaults to 127.0.0.11 when nginxResolver is unset (no live cluster to auto-detect against)
+    values:
+      - ../../../tests/values/components-all.yaml
+    documentIndex: 0
+    asserts:
+      - matchRegex:
+          path: data["resolver.conf"]
+          pattern: "resolver 127\\.0\\.0\\.11 valid=10s ipv6=off;"
+
+  - it: uses the explicit nginxResolver override when set
+    set:
+      nginxResolver: "10.96.0.10"
+    values:
+      - ../../../tests/values/components-all.yaml
+    documentIndex: 0
+    asserts:
+      - matchRegex:
+          path: data["resolver.conf"]
+          pattern: "resolver 10\\.96\\.0\\.10 valid=10s ipv6=off;"
+
+  - it: proxy resolver.conf renders per-zone with the explicit override
+    template: templates/proxy-configmaps.yaml
+    set:
+      nginxResolver: "10.96.0.10"
+      kasmZones:
+        - name: zonea
+          proxyAddress: zonea.example.com
+          primary: true
+        - name: zoneb
+          proxyAddress: zoneb.example.com
+    asserts:
+      - matchRegex:
+          path: data["resolver.conf"]
+          pattern: "resolver 10\\.96\\.0\\.10 valid=10s ipv6=off;"
+        documentIndex: 0
+      - matchRegex:
+          path: data["resolver.conf"]
+          pattern: "resolver 10\\.96\\.0\\.10 valid=10s ipv6=off;"
+        documentIndex: 1

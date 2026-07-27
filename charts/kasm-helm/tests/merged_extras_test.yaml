@@ -4,6 +4,9 @@ templates:
   - templates/api-deployment.yaml
   - templates/proxy-deployment.yaml
   - templates/db-statefulset.yaml
+  - templates/guac-statefulset.yaml
+  - templates/rdp-gateway-deployment.yaml
+  - templates/rdp-https-gateway-statefulset.yaml
 
 tests:
   - it: supports component-specific extras using proxy as example
@@ -98,3 +101,100 @@ tests:
           path: spec.template.spec.containers[?(@.name=="shared-sidecar-api" && @.image=="alpine:3.20")]
       - exists:
           path: spec.template.spec.containers[?(@.name=="shared-sidecar-global" && @.image=="busybox:1.36")]
+
+  # ---------- nginxSidecar extraVolumes/extraVolumeMounts (guac/rdp-gateway/rdp-https-gateway) ----------
+
+  - it: guac nginxSidecar extraVolumeMounts/extraVolumes attach to the nginx sidecar container only
+    template: templates/guac-statefulset.yaml
+    set:
+      components:
+        guac:
+          enabled: true
+          nginxSidecar:
+            extraVolumes:
+              - name: guac-nginx-extra
+                secret:
+                  secretName: guac-nginx-extra-secret
+            extraVolumeMounts:
+              - name: guac-nginx-extra
+                mountPath: /etc/nginx/extra
+                readOnly: true
+    asserts:
+      - exists:
+          path: spec.template.spec.volumes[?(@.name=="guac-nginx-extra")]
+      - exists:
+          path: spec.template.spec.containers[?(@.name=="RELEASE-NAME-guac-nginx")].volumeMounts[?(@.name=="guac-nginx-extra" && @.mountPath=="/etc/nginx/extra")]
+      - notExists:
+          path: spec.template.spec.containers[?(@.name=="RELEASE-NAME-guac")].volumeMounts[?(@.name=="guac-nginx-extra")]
+
+  - it: rdp-gateway nginxSidecar extraVolumeMounts/extraVolumes attach to the nginx sidecar container only
+    template: templates/rdp-gateway-deployment.yaml
+    set:
+      components:
+        rdpGateway:
+          enabled: true
+          nginxSidecar:
+            extraVolumes:
+              - name: rdpgw-nginx-extra
+                secret:
+                  secretName: rdpgw-nginx-extra-secret
+            extraVolumeMounts:
+              - name: rdpgw-nginx-extra
+                mountPath: /etc/nginx/extra
+                readOnly: true
+    asserts:
+      - exists:
+          path: spec.template.spec.volumes[?(@.name=="rdpgw-nginx-extra")]
+      - exists:
+          path: spec.template.spec.containers[?(@.name=="RELEASE-NAME-rdp-gateway-nginx")].volumeMounts[?(@.name=="rdpgw-nginx-extra" && @.mountPath=="/etc/nginx/extra")]
+      - notExists:
+          path: spec.template.spec.containers[?(@.name=="RELEASE-NAME-rdp-gateway")].volumeMounts[?(@.name=="rdpgw-nginx-extra")]
+
+  - it: rdp-https-gateway nginxSidecar extraVolumeMounts/extraVolumes attach to the nginx sidecar container only
+    template: templates/rdp-https-gateway-statefulset.yaml
+    set:
+      components:
+        rdpHttpsGateway:
+          enabled: true
+          nginxSidecar:
+            extraVolumes:
+              - name: rdphttps-nginx-extra
+                secret:
+                  secretName: rdphttps-nginx-extra-secret
+            extraVolumeMounts:
+              - name: rdphttps-nginx-extra
+                mountPath: /etc/nginx/extra
+                readOnly: true
+    asserts:
+      - exists:
+          path: spec.template.spec.volumes[?(@.name=="rdphttps-nginx-extra")]
+      - exists:
+          path: spec.template.spec.containers[?(@.name=="RELEASE-NAME-rdp-https-gateway-nginx")].volumeMounts[?(@.name=="rdphttps-nginx-extra" && @.mountPath=="/etc/nginx/extra")]
+      - notExists:
+          path: spec.template.spec.containers[?(@.name=="RELEASE-NAME-rdp-https-gateway")].volumeMounts[?(@.name=="rdphttps-nginx-extra")]
+
+  - it: nginxSidecar extras do not leak between guac and rdp-gateway components
+    templates:
+      - templates/guac-statefulset.yaml
+      - templates/rdp-gateway-deployment.yaml
+    set:
+      components:
+        guac:
+          enabled: true
+          nginxSidecar:
+            extraVolumes:
+              - name: guac-nginx-extra
+                secret:
+                  secretName: guac-nginx-extra-secret
+            extraVolumeMounts:
+              - name: guac-nginx-extra
+                mountPath: /etc/nginx/extra
+        rdpGateway:
+          enabled: true
+    asserts:
+      - exists:
+          path: spec.template.spec.volumes[?(@.name=="guac-nginx-extra")]
+        template: templates/guac-statefulset.yaml
+      - notExists:
+          path: spec.template.spec.volumes[?(@.name=="guac-nginx-extra")]
+        template: templates/rdp-gateway-deployment.yaml

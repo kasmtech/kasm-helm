@@ -435,12 +435,13 @@ tests:
         documentIndex: 1
 
   # ---------------------------------------------------------------------------
-  # Proxy init container gating — guac/rdp waits only in primary region
-  # The init container command (args[0]) includes the service URL, making it
-  # a stable identifier even though the container name embeds the release name.
+  # Proxy init containers — always just api-wait + manager-wait, regardless of
+  # region/primary status. Proxy no longer waits for guac/rdp-gateway readiness:
+  # since guac/rdp-gateway now reach the API through the proxy (and gate their
+  # own readiness on it), proxy waiting on them back would deadlock.
   # ---------------------------------------------------------------------------
 
-  - it: primary-region proxy waits for its zone guac before starting
+  - it: primary-region proxy has only api-wait and manager-wait init containers
     template: templates/proxy-deployment.yaml
     set:
       proxyService.type: ClusterIP
@@ -454,28 +455,9 @@ tests:
           proxyAddress: zoneb.example.com
           region_name: eu-west
     asserts:
-      - matchRegex:
-          path: spec.template.spec.initContainers[2].args[0]
-          pattern: 'guac-zonea'
-        documentIndex: 0
-
-  - it: primary-region proxy waits for rdp-gateway in its zone
-    template: templates/proxy-deployment.yaml
-    set:
-      proxyService.type: ClusterIP
-      ingress.enabled: true
-      kasmZones:
-        - name: zonea
-          proxyAddress: zonea.example.com
-          primary: true
-          region_name: us-east
-        - name: zoneb
-          proxyAddress: zoneb.example.com
-          region_name: eu-west
-    asserts:
-      - matchRegex:
-          path: spec.template.spec.initContainers[3].args[0]
-          pattern: 'rdp-gateway-zonea'
+      - lengthEqual:
+          path: spec.template.spec.initContainers
+          count: 2
         documentIndex: 0
 
   - it: non-primary-region proxy has no guac or rdp-gateway init containers
@@ -497,7 +479,7 @@ tests:
           count: 2
         documentIndex: 1
 
-  - it: primary-zone proxy waits for guac when no region_name set
+  - it: primary-zone proxy has only api-wait and manager-wait init containers when no region_name set
     template: templates/proxy-deployment.yaml
     set:
       proxyService.type: ClusterIP
@@ -509,9 +491,9 @@ tests:
         - name: zoneb
           proxyAddress: zoneb.example.com
     asserts:
-      - matchRegex:
-          path: spec.template.spec.initContainers[2].args[0]
-          pattern: 'guac-zonea'
+      - lengthEqual:
+          path: spec.template.spec.initContainers
+          count: 2
         documentIndex: 0
 
   - it: non-primary-zone proxy has no guac or rdp-gateway init containers when no region_name set
@@ -615,9 +597,3 @@ tests:
       - equal:
           path: spec.template.spec.initContainers[1].name
           value: kasm-e2e-15341393551-manager-is-ready
-      - equal:
-          path: spec.template.spec.initContainers[2].name
-          value: kasm-e2e-15341393551-guac-is-ready
-      - equal:
-          path: spec.template.spec.initContainers[3].name
-          value: kasm-e2e-15341393551-rdp-gateway-is-ready
