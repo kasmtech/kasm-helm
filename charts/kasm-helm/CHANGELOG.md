@@ -2,7 +2,13 @@
 
 All notable changes to the kasm-helm chart are documented here.
 
-## [Unreleased]
+## [1.1190.4] - 2026-07-25
+
+### Fixed
+
+- Fixed component images to pull the correct release tag instead of the develop branch tag, ensuring deployments use tested, versioned images rather than a moving target. <!-- hash:80a1334a6ca84f9fb7825185ed1a720ca2dfbcc8 -->
+
+## [1.1190.3] - 2026-07-16
 
 ### Added
 
