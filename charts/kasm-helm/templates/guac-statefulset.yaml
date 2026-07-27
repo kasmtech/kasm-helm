@@ -40,7 +40,7 @@ spec:
       {{- end }}
       initContainers:
         {{- include "kasm.trustedCaInit" (list $ "guac") | nindent 8 }}
-        {{- include "kasm.initContainer" (dict "context" $ "serviceName" (printf "%s-%s" $constants.api.svc (include "kasm.zoneName" $zone.name)) "servicePort" ($constants.api.port) "path" "/api/__healthcheck" "schema" "http" "image" ($constants.api.image) "component" "api") | nindent 8 }}
+        {{- include "kasm.initContainer" (dict "context" $ "serviceName" (printf "%s-%s" $constants.proxy.svc (include "kasm.zoneName" $zone.name)) "servicePort" ($constants.proxy.http) "path" "/api/__healthcheck" "schema" "http" "image" ($constants.api.image) "component" "api") | nindent 8 }}
         {{- with $merged.extraInitContainers }}
           {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -54,7 +54,7 @@ spec:
             - name: REGISTRATION_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ $.Release.Name }}-secrets
+                  name: {{ $constants.secrets.name }}
                   key: service-token
             - name: ZONE
               value: {{ $zone.name | quote }}
@@ -76,10 +76,10 @@ spec:
               Connection proxies must reach the manager's /manager_api/ endpoint
               (support-bundle uploads) as well as /api/ (registration/heartbeat).
               Only the kasm-proxy nginx service serves both on one port, so point
-              the API endpoint at it rather than the api (CherryPy) service.
+              the API endpoint at the Kasm Proxy rather than the api (CherryPy) service.
             */}}
             - name: API_HOSTNAME
-              value: {{ printf "%s-%s" $constants.api.svc (include "kasm.zoneName" $zone.name) | quote }}
+              value: {{ printf "%s-%s" $constants.proxy.svc (include "kasm.zoneName" $zone.name) | quote }}
             - name: API_PORT
               value: {{ $constants.proxy.http | quote }}
             - name: KASM_EPHEMERAL
@@ -151,6 +151,9 @@ spec:
               subPath: tls.key
               readOnly: true
             {{- include "kasm.trustedCaVolumeMounts" $ | nindent 12 }}
+            {{- with $merged.nginxSidecarMounts }}
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- if $.Values.applyHealthChecks }}
           livenessProbe:
             {{- include "health.probe" (dict "root" $ "component" "guac" "timingScope" "nginxSidecar" "probeType" "livenessProbe" "type" "tcp" "portName" "guac-nginx-pt") | nindent 12 }}

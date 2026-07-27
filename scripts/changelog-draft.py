@@ -56,6 +56,28 @@ _UNRELEASED_RE = re.compile(
     re.MULTILINE | re.DOTALL,
 )
 
+# Canonical top-of-file header. Always present, always first, regardless of
+# whatever preamble (or lack thereof) the file starts with.
+_HEADER_TEXT = (
+    "# Changelog\n"
+    "\n"
+    "All notable changes to the kasm-helm chart are documented here.\n"
+    "\n"
+)
+
+# Matches any existing leading "# Changelog" title and/or subtitle line(s) so
+# they can be stripped before the canonical header is prepended.
+_LEADING_HEADER_RE = re.compile(
+    r"^\s*# Changelog\s*\n+"
+    r"(?:All notable changes to the kasm-helm chart are documented here\.\s*\n+)?",
+)
+
+
+def _ensure_header(text: str) -> str:
+    """Return text with the canonical header guaranteed at the top."""
+    stripped = _LEADING_HEADER_RE.sub("", text, count=1)
+    return _HEADER_TEXT + stripped.lstrip("\n")
+
 # Embedded hash marker written into every entry; invisible in rendered markdown.
 _HASH_RE = re.compile(r"<!-- hash:([0-9a-f]+) -->")
 
@@ -331,7 +353,7 @@ def _update(new_buckets: dict) -> tuple:
 
     Returns (included, existing_had_unreleased) for reporting.
     """
-    text = CHANGELOG.read_text()
+    text = _ensure_header(CHANGELOG.read_text())
     match = _UNRELEASED_RE.search(text)
 
     if match:
@@ -340,7 +362,7 @@ def _update(new_buckets: dict) -> tuple:
         had_unreleased = True
     else:
         fresh = _render_fresh_section(new_buckets)
-        insert_at = (m.end() if (m := re.search(r"\n\n", text)) else len(text))
+        insert_at = len(_HEADER_TEXT)
         updated = text[:insert_at] + fresh + "\n" + text[insert_at:]
         had_unreleased = False
 
@@ -408,14 +430,14 @@ def main() -> None:
         # Simulate the full update and write to stdout so output is directly
         # comparable to the current file (e.g. via diff). All status messages
         # go to stderr so stdout contains only the file content.
-        text = CHANGELOG.read_text()
+        text = _ensure_header(CHANGELOG.read_text())
         match = _UNRELEASED_RE.search(text)
         if match and new_buckets:
             merged = _merge_into_existing(match.group(0), new_buckets)
             sys.stdout.write(text[:match.start()] + merged + text[match.end():])
         elif not match and new_buckets:
             fresh = _render_fresh_section(new_buckets)
-            insert_at = (m.end() if (m := re.search(r"\n\n", text)) else len(text))
+            insert_at = len(_HEADER_TEXT)
             sys.stdout.write(text[:insert_at] + fresh + "\n" + text[insert_at:])
         else:
             sys.stdout.write(text)

@@ -46,7 +46,25 @@ kasmZones: []
 # set them in accordance with [OpenShift UIDs](https://www.redhat.com/en/blog/a-guide-to-openshift-and-uids) documentation.
 isOpenshift: false
 
-# proxyService -- Configure the external-facing service type to use. 
+# logFormat -- Kasm Log format to write to console. Valid options are: json, log
+#
+logFormat: log
+
+# nginxResolver -- The IP address used by the `resolver` directive in the Kasm nginx configs (proxy, guac,
+# rdp-gateway, and rdp-https-gateway nginx sidecars) for dynamic upstream DNS resolution.
+#
+# Leave empty (the default) to auto-detect the cluster's kube-dns Service ClusterIP at install/upgrade time.
+# Auto-detection requires a live cluster and read access to Services in the kube-system namespace; it silently
+# falls back to the historical hardcoded value, 127.0.0.11, when running `helm template`/`--dry-run`, when RBAC
+# denies the lookup, or when the cluster's DNS Service isn't named `kube-dns` in `kube-system` (uncommon, but
+# some distros differ).
+#
+# Set this explicitly to skip auto-detection and pin a specific resolver IP, such as a known CoreDNS/kube-dns
+# ClusterIP, or 127.0.0.11 to restore the previous unconditional default.
+#
+nginxResolver: ""
+
+# proxyService -- Configure the external-facing service type to use.
 # Allowed service types: ClusterIP, LoadBalancer, or NodePort. 
 #
 # The proxyService.annotations defined here only apply to the `proxy` service (`proxy-service-external.yaml` file).
@@ -207,9 +225,57 @@ trustedCaBundle:
   #   [...]
   #   -----END CERTIFICATE-----
 
-# logFormat -- Kasm Log format to write to console. Valid options are: json, log
+# kasmSecrets -- Use this to create custom Kasm Password secret, or to reference an existing one. If this is left blank
+# then Helm will automatically generate random passwords and store them as `<Release-Name>-secrets` in your deployment
+# namespace.
 #
-logFormat: log
+# To reference a secret you already created yourself, set `create: false` and `name: "<existing secret name>"`,
+# leaving `passwords` at its defaults; the chart will not manage that secret and will read the credentials from it.
+#
+# To have the chart create the secret but pin one or more specific credential values (leaving the rest randomly
+# generated), keep `create: true`, optionally set `name`, and set the desired key(s) under `passwords`.
+#
+kasmSecrets:
+  # kasmSecrets.create -- Set to false to use an existing Kasm Password secret. Default = `true`.
+  #
+  create: true
+  # kasmSecrets.name -- The name of the Kasm Password secret to create. If a value is provided here and `create=true`,
+  # Helm will use that as the secret name. If `create=false` then you MUST provide the name of an existing Kasm Password
+  # secret in your deployment namespace.
+  #
+  name: ""
+  # kasmSecrets.passwords -- Set any of the five well-known keys below to a non-empty value to pin that credential to
+  # a specific value instead of letting the chart generate (or preserve, on upgrade) a random one. An explicitly set
+  # value here always wins, even if a Secret with that key already exists in the namespace.
+  #
+  # This object also accepts additional, arbitrary keys beyond the five below. Any extra key you add is written into
+  # the generated Secret's `data` as a literal base64-encoded value (no random generation, since the chart has no
+  # other source of truth for a custom key) - useful for seeding extra application secrets alongside the standard
+  # Kasm credentials.
+  #
+  # NOTE: Only used when `kasmSecrets.create` is `true`. Has no effect when referencing an existing secret.
+  #
+  passwords:
+    manager-token: ""
+    service-token: ""
+    db-password: ""
+    admin-password: ""
+    user-password: ""
+  # Example additional custom secret value:
+  #   my-custom-secret: "some-value"
+  # kasmSecrets.annotations -- Custom annotations to add to the Kasm Password secret
+  annotations: {}
+  # kasmSecrets.labels -- Custom labels to add to the Kasm Kasm Password secret
+  labels: {}
+
+# useImageTags -- Chart-wide image tag used when a component's `image.tag` is empty. Per-component tag wins if set.
+# To override the tag for a single component, see `components.<x>.image.tag` (or `database.image.tag`).
+# Examples:
+#   "1.19.0-rolling"             rolling tag, receives ongoing bug-fix updates within 1.19.x
+#   "1.19.0"                     frozen point-in-time tag
+#   "1.19.0-rolling-2026-06-02"  date-locked rolling tag, pins a specific rolling build
+#
+useImageTags: "develop"
 
 # Kasm DB settings and configuration options
 #
@@ -687,6 +753,25 @@ components:
       healthCheckTiming:
         livenessProbe: {}
         readinessProbe: {}
+      # components.guac.nginxSidecar.extraVolumes -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
+      #  like custom SSL certificates, config files, or data volumes to the Kasm Guac nginx sidecar container
+      # Example:
+      #   extraVolumes:
+      #     - secret:
+      #         defaultMode: 420
+      #         secretName: kasm-custom-tls
+      #       name: pkichain
+      extraVolumes: []
+      # components.guac.nginxSidecar.extraVolumeMounts -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
+      #  like custom SSL certificates, config files, or data volumes to the Kasm Guac nginx sidecar container
+      # Example:
+      #   extraVolumeMounts:
+      #     - mountPath: /etc/ssl/certs/ca-certificates.crt
+      #       name: pkichain
+      #       readOnly: true
+      #       subPath: ca.crt
+      extraVolumeMounts: []
+
     # components.guac.labels -- Custom labels to add to the Kasm Guac Deployment
     labels: {}
     # components.guac.extraVolumes -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
@@ -787,6 +872,25 @@ components:
       healthCheckTiming:
         livenessProbe: {}
         readinessProbe: {}
+      # components.rdpGateway.nginxSidecar.extraVolumes -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
+      #  like custom SSL certificates, config files, or data volumes to the Kasm RDP Gateway nginx sidecar container
+      # Example:
+      #   extraVolumes:
+      #     - secret:
+      #         defaultMode: 420
+      #         secretName: kasm-custom-tls
+      #       name: pkichain
+      extraVolumes: []
+      # components.rdpGateway.nginxSidecar.extraVolumeMounts -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
+      #  like custom SSL certificates, config files, or data volumes to the Kasm RDP Gateway nginx sidecar container
+      # Example:
+      #   extraVolumeMounts:
+      #     - mountPath: /etc/ssl/certs/ca-certificates.crt
+      #       name: pkichain
+      #       readOnly: true
+      #       subPath: ca.crt
+      extraVolumeMounts: []
+
     # components.rdpGateway.labels -- Custom labels to add to the Kasm RDP Gateway Deployment
     labels: {}
     # components.rdpGateway.extraVolumes -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
@@ -883,6 +987,25 @@ components:
       healthCheckTiming:
         livenessProbe: {}
         readinessProbe: {}
+      # components.rdpHttpsGateway.nginxSidecar.extraVolumes -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
+      #  like custom SSL certificates, config files, or data volumes to the Kasm RDP HTTPS Gateway nginx sidecar container
+      # Example:
+      #   extraVolumes:
+      #     - secret:
+      #         defaultMode: 420
+      #         secretName: kasm-custom-tls
+      #       name: pkichain
+      extraVolumes: []
+      # components.rdpHttpsGateway.nginxSidecar.extraVolumeMounts -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
+      #  like custom SSL certificates, config files, or data volumes to the Kasm RDP HTTPS Gateway nginx sidecar container
+      # Example:
+      #   extraVolumeMounts:
+      #     - mountPath: /etc/ssl/certs/ca-certificates.crt
+      #       name: pkichain
+      #       readOnly: true
+      #       subPath: ca.crt
+      extraVolumeMounts: []
+
     # components.rdpHttpsGateway.labels -- Custom labels to add to the Kasm RDP HTTPS Gateway Deployment
     labels: {}
     # components.rdpHttpsGateway.extraVolumes -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
@@ -919,15 +1042,6 @@ components:
 ####################################
 # Extra Kubernetes config settings #
 ####################################
-
-# useImageTags -- Chart-wide image tag used when a component's `image.tag` is empty. Per-component tag wins if set.
-# To override the tag for a single component, see `components.<x>.image.tag` (or `database.image.tag`).
-# Examples:
-#   "1.19.0-rolling"             rolling tag, receives ongoing bug-fix updates within 1.19.x
-#   "1.19.0"                     frozen point-in-time tag
-#   "1.19.0-rolling-2026-06-02"  date-locked rolling tag, pins a specific rolling build
-#
-useImageTags: "develop"
 
 # imagePullPolicy -- Configure global image pull policy
 #

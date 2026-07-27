@@ -3,7 +3,7 @@ Initialize the DB
 */}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- if .Values.dbManagement.initialize }}
-{{- $passwordSecretName := printf "%s-secrets" .Release.Name }}
+{{- $passwordSecretName := $constants.secrets.name }}
 {{- $preseedSecretName := printf "%s-db-preseed" .Release.Name }}
 {{- $existingDefaultPropertiesSecret := dig "existingDefaultPropertiesSecret" "name" "" .Values.kasmConfig }}
 {{- $existingDefaultPropertiesKey := dig "existingDefaultPropertiesSecret" "key" "default_properties.yaml" .Values.kasmConfig }}

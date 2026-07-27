@@ -218,6 +218,12 @@
       "title": "clusterDomain",
       "type": "string"
     },
+    "nginxResolver": {
+      "default": "",
+      "description": "The IP address used by the nginx `resolver` directive in the Kasm nginx configs (proxy, guac, rdp-gateway, rdp-https-gateway). Leave empty to auto-detect the cluster's kube-dns Service ClusterIP at install/upgrade time, falling back to 127.0.0.11 if auto-detection is unavailable. Set explicitly to pin a specific resolver IP.",
+      "title": "nginxResolver",
+      "type": "string"
+    },
     "components": {
       "additionalProperties": false,
       "description": "Kasm component resources and associated settings",
@@ -594,13 +600,25 @@
                       }
                     }
                   }
+                },
+                "extraVolumeMounts": {
+                  "description": "A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things\n like custom SSL certificates, config files, or data volumes to the Kasm Guac nginx sidecar container\nExample: \n  extraVolumeMounts:\n    - mountPath: /etc/ssl/certs/ca-certificates.crt\n      name: pkichain\n      readOnly: true\n      subPath: ca.crt",
+                  "title": "extraVolumeMounts",
+                  "type": "array"
+                },
+                "extraVolumes": {
+                  "description": "A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things\n like custom SSL certificates, config files, or data volumes to the Kasm Guac nginx sidecar container\nExample:\n  extraVolumes:\n    - secret:\n        defaultMode: 420\n        secretName: kasm-custom-tls\n      name: pkichain",
+                  "title": "extraVolumes",
+                  "type": "array"
                 }
               },
               "title": "nginxSidecar",
               "type": "object",
               "required": [
                 "resources",
-                "healthCheckTiming"
+                "healthCheckTiming",
+                "extraVolumes",
+                "extraVolumeMounts"
               ]
             },
             "recordingData": {
@@ -1165,13 +1183,25 @@
                       }
                     }
                   }
+                },
+                "extraVolumeMounts": {
+                  "description": "A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things\n like custom SSL certificates, config files, or data volumes to the Kasm RDP Gateway nginx sidecar container\nExample: \n  extraVolumeMounts:\n    - mountPath: /etc/ssl/certs/ca-certificates.crt\n      name: pkichain\n      readOnly: true\n      subPath: ca.crt",
+                  "title": "extraVolumeMounts",
+                  "type": "array"
+                },
+                "extraVolumes": {
+                  "description": "A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things\n like custom SSL certificates, config files, or data volumes to the Kasm RDP Gateway nginx sidecar container\nExample:\n  extraVolumes:\n    - secret:\n        defaultMode: 420\n        secretName: kasm-custom-tls\n      name: pkichain",
+                  "title": "extraVolumes",
+                  "type": "array"
                 }
               },
               "title": "nginxSidecar",
               "type": "object",
               "required": [
                 "resources",
-                "healthCheckTiming"
+                "healthCheckTiming",
+                "extraVolumes",
+                "extraVolumeMounts"
               ]
             }
           },
@@ -1398,13 +1428,25 @@
                       }
                     }
                   }
+                },
+                "extraVolumeMounts": {
+                  "description": "A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things\n like custom SSL certificates, config files, or data volumes to the Kasm RDP HTTPS Gateway nginx sidecar container\nExample: \n  extraVolumeMounts:\n    - mountPath: /etc/ssl/certs/ca-certificates.crt\n      name: pkichain\n      readOnly: true\n      subPath: ca.crt",
+                  "title": "extraVolumeMounts",
+                  "type": "array"
+                },
+                "extraVolumes": {
+                  "description": "A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things\n like custom SSL certificates, config files, or data volumes to the Kasm RDP HTTPS Gateway nginx sidecar container\nExample:\n  extraVolumes:\n    - secret:\n        defaultMode: 420\n        secretName: kasm-custom-tls\n      name: pkichain",
+                  "title": "extraVolumes",
+                  "type": "array"
                 }
               },
               "title": "nginxSidecar",
               "type": "object",
               "required": [
                 "resources",
-                "healthCheckTiming"
+                "healthCheckTiming",
+                "extraVolumes",
+                "extraVolumeMounts"
               ]
             }
           },
@@ -2042,6 +2084,77 @@
       "title": "logFormat",
       "type": "string",
       "enum": ["log", "json"]
+    },
+    "kasmSecrets": {
+      "additionalProperties": false,
+      "description": "Create a custom Kasm Password secret, or reference an existing one.",
+      "title": "kasmSecrets",
+      "type": "object",
+      "properties": {
+        "create": {
+          "default": true,
+          "description": "Set to false to use an existing Kasm Password secret instead of having the chart manage one.",
+          "title": "create",
+          "type": "boolean"
+        },
+        "name": {
+          "default": "",
+          "description": "The name of the Kasm Password secret. If provided and create=true, Helm uses this as the created secret's name. If create=false, this MUST be the name of an existing Kasm Password secret in the deployment namespace.",
+          "title": "name",
+          "type": "string"
+        },
+        "passwords": {
+          "additionalProperties": true,
+          "description": "Pin specific credential values instead of letting the chart randomly generate them. Extra, non-standard keys are also allowed and are written into the generated Secret as literal base64-encoded values.",
+          "title": "passwords",
+          "type": "object",
+          "properties": {
+            "manager-token": {
+              "default": "",
+              "description": "Pin the manager-token credential to a specific value instead of random generation.",
+              "title": "manager-token",
+              "type": "string"
+            },
+            "service-token": {
+              "default": "",
+              "description": "Pin the service-token credential to a specific value instead of random generation.",
+              "title": "service-token",
+              "type": "string"
+            },
+            "db-password": {
+              "default": "",
+              "description": "Pin the db-password credential to a specific value instead of random generation.",
+              "title": "db-password",
+              "type": "string"
+            },
+            "admin-password": {
+              "default": "",
+              "description": "Pin the admin-password credential to a specific value instead of random generation.",
+              "title": "admin-password",
+              "type": "string"
+            },
+            "user-password": {
+              "default": "",
+              "description": "Pin the user-password credential to a specific value instead of random generation.",
+              "title": "user-password",
+              "type": "string"
+            }
+          }
+        },
+        "annotations": {
+          "additionalProperties": true,
+          "description": "Custom annotations to add to the Kasm Password secret",
+          "title": "annotations",
+          "type": "object"
+        },
+        "labels": {
+          "additionalProperties": true,
+          "description": "Custom labels to add to the Kasm Password secret",
+          "title": "labels",
+          "type": "object"
+        }
+      },
+      "required": ["create", "name", "passwords", "annotations", "labels"]
     },
     "imagePullSecrets": {
       "additionalProperties": false,

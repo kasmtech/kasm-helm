@@ -27,9 +27,39 @@
 {{- end }}
 
 {{/*
+  Resolve the IP address nginx's `resolver` directive should use for dynamic upstream DNS
+  resolution (proxy, guac, rdp-gateway, and rdp-https-gateway nginx sidecar ConfigMaps).
+
+  Precedence:
+    1. .Values.nginxResolver if explicitly set (always wins)
+    2. else the live cluster's kube-dns Service ClusterIP, via `lookup` (only available against
+       a real cluster during install/upgrade; always empty under `helm template`/`--dry-run`, and
+       empty if the cluster's DNS Service isn't named "kube-dns" in "kube-system" or the Helm
+       service account lacks permission to read Services there)
+    3. else the historical hardcoded default, 127.0.0.11
+
+  Call with the root context: (include "kasm.nginxResolver" .)
+*/}}
+{{- define "kasm.nginxResolver" -}}
+{{- if .Values.nginxResolver -}}
+{{ .Values.nginxResolver }}
+{{- else -}}
+{{- $kubeDnsSvc := lookup "v1" "Service" "kube-system" "kube-dns" -}}
+{{- if and $kubeDnsSvc $kubeDnsSvc.spec $kubeDnsSvc.spec.clusterIP -}}
+{{ $kubeDnsSvc.spec.clusterIP }}
+{{- else -}}
+127.0.0.11
+{{- end -}}
+{{- end -}}
+{{- end }}
+
+{{/*
   Constants to use across chart template files
 */}}
 {{- define "kasm.constants" }}
+secrets:
+  component: secrets
+  name: {{ default (printf "%s-secrets" .Release.Name) .Values.kasmSecrets.name }}
 api:
   component: api
   svc: {{ printf "%s-api" .Release.Name }}
@@ -349,6 +379,12 @@ Where:
   {{- end -}}
 {{- end -}}
 
+{{- if eq $component "secrets" -}}
+  {{- with $ctx.Values.kasmSecrets.labels -}}
+    {{- $labels = merge $labels . -}}
+  {{- end -}}
+{{- end -}}
+
 {{- if and (or (eq $component "proxy") (eq $component "proxy-ext")) (eq $resource "service") -}}
   {{- with $ctx.Values.proxyService.labels -}}
     {{- $labels = merge $labels . -}}
@@ -424,6 +460,12 @@ Where:
 
 {{- if eq $component "image-pull" -}}
   {{- with $ctx.Values.imagePullSecrets.annotations -}}
+    {{- $annotations = merge $annotations . -}}
+  {{- end -}}
+{{- end -}}
+
+{{- if eq $component "secrets" -}}
+  {{- with $ctx.Values.kasmSecrets.annotations -}}
     {{- $annotations = merge $annotations . -}}
   {{- end -}}
 {{- end -}}
@@ -1170,6 +1212,8 @@ Dedup rules:
       "extraContainerMounts" (default (list) $component.extraVolumeMounts)
       "extraContainers"      (default (list) $component.extraContainers)
       "extraInitContainers"  (default (list) $component.extraInitContainers)
+      "nginxSidecarVolumes"  (default (list) (dig "nginxSidecar" "extraVolumes" (list) $component))
+      "nginxSidecarMounts"   (default (list) (dig "nginxSidecar" "extraVolumeMounts" (list) $component))
     -}}
 
   {{/* Build dedupe maps */}}
@@ -1179,6 +1223,14 @@ Dedup rules:
   {{- end -}}
   {{- range $v := get $componentLevel "extraVolumes" -}}
     {{- $_ := set $volMap (include "kasm.volumeKey" $v) $v -}}
+  {{- end -}}
+  {{- range $v := get $componentLevel "nginxSidecarVolumes" -}}
+    {{- $_ := set $volMap (include "kasm.volumeKey" $v) $v -}}
+  {{- end -}}
+
+  {{- $sidecarMountMap := dict -}}
+  {{- range $mounts := get $componentLevel "nginxSidecarMounts" -}}
+    {{- $_ := set $sidecarMountMap (include "kasm.mountKey" $mounts) $mounts -}}
   {{- end -}}
 
   {{- $mainMountMap := dict -}}
@@ -1221,6 +1273,7 @@ Dedup rules:
   {{- $_ := set $out "initMounts"         (values $initMountMap) -}}
   {{- $_ := set $out "extraContainers"    (values $sidecarMap) -}}
   {{- $_ := set $out "extraInitContainers" (values $initCtrMap) -}}
+  {{- $_ := set $out "nginxSidecarMounts" (values $sidecarMountMap) -}}
   {{- toYaml $out -}}
 {{- end -}}
 

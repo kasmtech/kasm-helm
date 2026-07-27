@@ -559,3 +559,129 @@ tests:
         matchRegex:
           path: stringData["custom_properties.yaml"]
           pattern: "api_configs: \\[\\]"
+
+  # ---------- kasmSecrets: custom name / create toggle / password overrides ----------
+
+  - it: uses a custom secret name for the preseed passwords secret when kasmSecrets.name is set
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmSecrets:
+        name: my-custom-kasm-secret
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+    asserts:
+      - documentIndex: 0
+        equal:
+          path: metadata.name
+          value: my-custom-kasm-secret
+
+  - it: does not render the preseed passwords secret when kasmSecrets.create is false
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmSecrets:
+        create: false
+        name: existing-kasm-secret
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - documentIndex: 0
+        equal:
+          path: metadata.name
+          value: RELEASE-NAME-db-preseed
+
+  - it: fails when kasmSecrets.create is false and kasmSecrets.name is empty
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmSecrets:
+        create: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "kasmSecrets.name is required when kasmSecrets.create is false. Provide the name of the existing Kasm Password secret in your deployment namespace."
+
+  - it: an explicit kasmSecrets.passwords value overrides random generation in the preseed passwords secret
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmSecrets:
+        passwords:
+          admin-password: "password"
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+    asserts:
+      - documentIndex: 0
+        equal:
+          path: data["admin-password"]
+          value: "cGFzc3dvcmQ="
+
+  - it: an extra custom key in kasmSecrets.passwords is rendered as a literal base64 value in the preseed passwords secret
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmSecrets:
+        passwords:
+          my-custom-secret: "foobar"
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+    asserts:
+      - documentIndex: 0
+        equal:
+          path: data["my-custom-secret"]
+          value: "Zm9vYmFy"
+
+  - it: applies kasmSecrets.annotations and kasmSecrets.labels to the preseed passwords secret metadata
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmSecrets:
+        annotations:
+          my-annotation: my-value
+        labels:
+          my-label: my-value
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+    asserts:
+      - documentIndex: 0
+        equal:
+          path: metadata.annotations["my-annotation"]
+          value: my-value
+      - documentIndex: 0
+        equal:
+          path: metadata.labels["my-label"]
+          value: my-value
