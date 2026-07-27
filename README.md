@@ -1,6 +1,6 @@
 # Kasm Workspaces on Kubernetes
 
-![Version: 1.1200.0-develop](https://img.shields.io/badge/Version-1.1200.0--develop-informational?style=flat-square) ![AppVersion: develop](https://img.shields.io/badge/AppVersion-develop-informational?style=flat-square) ![Type: Application](https://img.shields.io/badge/Type-application-informational?style=flat-square)
+![Version: 1.1190.5](https://img.shields.io/badge/Version-1.1190.5-informational?style=flat-square) ![AppVersion: 1.19.0](https://img.shields.io/badge/AppVersion-1.19.0-informational?style=flat-square) ![Type: Application](https://img.shields.io/badge/Type-application-informational?style=flat-square)
 
 Kasm Workspaces core services can be deployed to Kubernetes using the [open-source Kasm Helm chart](https://github.com/kasmtech/kasm-helm), which will be Generally Available as of Kasm version 1.19.0 (the developer preview is available using chart version 1.1200.0-develop).
 
@@ -45,7 +45,7 @@ Install from the OCI registry (recommended):
 
 ```bash
 helm install kasm oci://registry-1.docker.io/kasmweb/kasm-helm \
-  --version 1.1200.0-develop \
+  --version 1.1190.5 \
   --namespace kasm --create-namespace \
   -f my-values.yaml
 ```
@@ -56,7 +56,7 @@ Or from the classic Helm repository:
 helm repo add kasmweb https://helm.kasm.com
 helm repo update
 helm install kasm kasmweb/kasm-helm \
-  --version 1.1200.0-develop \
+  --version 1.1190.5 \
   --namespace kasm --create-namespace \
   -f my-values.yaml
 ```
@@ -84,7 +84,7 @@ The chart can seed Kasm's database at initialization time — users, groups, ima
 
 ## Versioning
 
-Chart versions track Kasm Workspaces versions. The middle component of the chart version corresponds to the Kasm release — for example, chart **1.1181.0** matches Kasm Workspaces **1.18.1**. This branch (`1.1200.0-develop` / app `develop`) is the developer preview for the upcoming **1.20** release.
+Chart versions track Kasm Workspaces versions. The middle component of the chart version corresponds to the Kasm release — for example, chart **1.1181.0** matches Kasm Workspaces **1.18.1**. This branch (`1.1190.5` / app `1.19.0`) is the stable release for Kasm Workspaces **1.19.0**.
 
 | Branch | Purpose |
 | --- | --- |
