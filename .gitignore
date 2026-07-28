@@ -48,5 +48,6 @@ charts/kasm-helm/values-test.yaml
 .beads/
 .claude/
 .claude-octopus/
+.superpowers/
 AGENTS.md
 CLAUDE.md
