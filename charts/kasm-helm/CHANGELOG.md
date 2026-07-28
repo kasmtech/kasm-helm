@@ -4,8 +4,13 @@ All notable changes to the kasm-helm chart are documented here.
 
 ## [1.1190.6] - 2026-07-28
 
+### Changed
+
+- The API deployment now checks a dedicated `/livez` HTTP endpoint for its liveness probe (previously a TCP socket check), backed by a new startup probe that gives the container up to 5 minutes to come up before liveness checks begin. This makes liveness failures reflect actual API health rather than just port reachability, reducing the chance of unnecessary restarts during slow startups. <!-- hash:903d4fe1d934397c7f0222684fdb702d27588c4f -->
+
 ### Fixed
 
+- Corrects the API startup probe's grace period, reducing it from 300 seconds to 180 seconds before the pod is marked as failed. <!-- hash:bdb84c1d0e4792940eefa4cbc811baa103e36f93 -->
 - Fixed the API server to require HTTPS by default for internal Kasm service-to-service communication instead of HTTP, closing an unencrypted-transport gap. No operator action required unless you've overridden `SERVER_INTERNAL_SCHEMA` explicitly. <!-- hash:c4d02388b6ad40fbdf012b3049b80000b3e05f7b -->
 
 ## [1.1190.5] - 2026-07-27
