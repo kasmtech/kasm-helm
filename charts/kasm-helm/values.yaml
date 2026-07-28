@@ -563,9 +563,10 @@ components:
     replicas: 0
     # components.api.healthCheckTiming -- Override the pod's default healthcheck timing values for startup, liveness, and/or
     #  readiness probes. Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10
-    #  will override only the timeoutSeconds value of the livenessProbe. The startupProbe covers the window before the API's
-    #  /livez endpoint binds (e.g. Alembic migrations); its failureThreshold * periodSeconds should cover the worst-case
-    #  migration time.
+    #  will override only the timeoutSeconds value of the livenessProbe. Migrations run before this pod's main container ever
+    #  starts (a separate initContainer blocks until the DB is at head), so the startupProbe only needs to cover the api
+    #  process's own boot (a bounded DB connectivity retry plus imports/settings load); its failureThreshold * periodSeconds
+    #  is a safety margin, not a migration budget.
     #  Example:
     #    healthCheckTiming:
     #      startupProbe:
@@ -582,7 +583,7 @@ components:
     healthCheckTiming:
       startupProbe:
         periodSeconds: 10
-        failureThreshold: 30
+        failureThreshold: 18
       livenessProbe:
         periodSeconds: 10
       readinessProbe: {}

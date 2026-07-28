@@ -113,8 +113,10 @@ spec:
             {{- include "kasm.trustedCaVolumeMounts" $ | nindent 12 }}
           {{- if $.Values.applyHealthChecks }}
           {{/*
-            /livez does not bind until after Alembic migrations run, so a startupProbe is required to suppress the
-            liveness probe until it first answers, avoiding a restart loop while migrations are in progress.
+            Migrations run before this container ever starts (the db-is-ready initContainer above blocks until the
+            DB is at head), so /livez's remaining startup delay is just the api process's own boot: a bounded DB
+            connectivity retry plus imports/settings load. A startupProbe still suppresses the liveness probe until
+            /livez first answers, so a slow bind can't be mistaken for a deadlock and trigger a restart loop.
           */}}
           startupProbe:
             {{- include "health.probe" (dict "root" $ "component" "api" "probeType" "startupProbe" "type" "http" "path" "/livez" "portName" $constants.api.livenessPortName) | nindent 12 }}

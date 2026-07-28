@@ -92,7 +92,7 @@ tests:
           value: 10
       - equal:
           path: spec.template.spec.containers[0].startupProbe.failureThreshold
-          value: 30
+          value: 18
 
   - it: api startup probe omitted when applyHealthChecks=false
     template: templates/api-deployment.yaml
