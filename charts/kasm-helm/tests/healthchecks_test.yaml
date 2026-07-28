@@ -48,13 +48,59 @@ tests:
           value: 10
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.periodSeconds
-          value: 30
+          value: 10
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.failureThreshold
           value: 3
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.successThreshold
           value: 1
+
+  - it: api liveness probe targets the HTTP /livez endpoint on the liveness port
+    template: templates/api-deployment.yaml
+    set:
+      applyHealthChecks: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /livez
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.port
+          value: api-liveness-pt
+      - notExists:
+          path: spec.template.spec.containers[0].livenessProbe.tcpSocket
+      - equal:
+          path: spec.template.spec.containers[0].ports[1].name
+          value: api-liveness-pt
+      - equal:
+          path: spec.template.spec.containers[0].ports[1].containerPort
+          value: 8081
+
+  - it: api startup probe uses default timing and is omitted when applyHealthChecks=false
+    template: templates/api-deployment.yaml
+    set:
+      applyHealthChecks: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.httpGet.path
+          value: /livez
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.httpGet.port
+          value: api-liveness-pt
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.periodSeconds
+          value: 10
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.failureThreshold
+          value: 30
+
+  - it: api startup probe omitted when applyHealthChecks=false
+    template: templates/api-deployment.yaml
+    set:
+      applyHealthChecks: false
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].startupProbe
 
   - it: api readiness probe uses default timing when no override is set
     template: templates/api-deployment.yaml
@@ -102,7 +148,7 @@ tests:
           value: 20
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.periodSeconds
-          value: 30
+          value: 10
 
   - it: api liveness override does not bleed into readiness probe
     template: templates/api-deployment.yaml
@@ -145,7 +191,7 @@ tests:
           value: 5
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.periodSeconds
-          value: 30
+          value: 10
 
   # ---------- proxy component timing ----------
   - it: proxy liveness probe honors component-level initialDelaySeconds override

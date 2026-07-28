@@ -561,11 +561,16 @@ components:
       tag: ""
     # components.api.replicas -- Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset (default).
     replicas: 0
-    # components.api.healthCheckTiming -- Override the pod's default healthcheck timing values for liveness and/or readiness probes.
-    #  Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only
-    #  the timeoutSeconds value of the livenessProbe.
+    # components.api.healthCheckTiming -- Override the pod's default healthcheck timing values for startup, liveness, and/or
+    #  readiness probes. Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10
+    #  will override only the timeoutSeconds value of the livenessProbe. The startupProbe covers the window before the API's
+    #  /livez endpoint binds (e.g. Alembic migrations); its failureThreshold * periodSeconds should cover the worst-case
+    #  migration time.
     #  Example:
     #    healthCheckTiming:
+    #      startupProbe:
+    #        periodSeconds: 10
+    #        failureThreshold: 60
     #      livenessProbe:
     #        timeoutSeconds: 10
     #        initialDelaySeconds: 20
@@ -575,7 +580,11 @@ components:
     #        periodSeconds: 60
     #        successThreshold: 3
     healthCheckTiming:
-      livenessProbe: {}
+      startupProbe:
+        periodSeconds: 10
+        failureThreshold: 30
+      livenessProbe:
+        periodSeconds: 10
       readinessProbe: {}
     # components.api.annotations -- Custom annotations to add to the Kasm api Deployment
     annotations: {}

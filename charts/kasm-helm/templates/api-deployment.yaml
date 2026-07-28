@@ -96,6 +96,9 @@ spec:
             - name: {{ $constants.api.portName }}
               containerPort: {{ $constants.api.port }}
               protocol: TCP
+            - name: {{ $constants.api.livenessPortName }}
+              containerPort: {{ $constants.api.livenessPort }}
+              protocol: TCP
           volumeMounts:
             - name: tmp-data
               mountPath: /tmp
@@ -109,8 +112,14 @@ spec:
             {{- end }}
             {{- include "kasm.trustedCaVolumeMounts" $ | nindent 12 }}
           {{- if $.Values.applyHealthChecks }}
+          {{/*
+            /livez does not bind until after Alembic migrations run, so a startupProbe is required to suppress the
+            liveness probe until it first answers, avoiding a restart loop while migrations are in progress.
+          */}}
+          startupProbe:
+            {{- include "health.probe" (dict "root" $ "component" "api" "probeType" "startupProbe" "type" "http" "path" "/livez" "portName" $constants.api.livenessPortName) | nindent 12 }}
           livenessProbe:
-            {{- include "health.probe" (dict "root" $ "component" "api" "probeType" "livenessProbe" "type" "tcp" "portName" $constants.api.portName) | nindent 12 }}
+            {{- include "health.probe" (dict "root" $ "component" "api" "probeType" "livenessProbe" "type" "http" "path" "/livez" "portName" $constants.api.livenessPortName) | nindent 12 }}
           readinessProbe:
             {{- include "health.probe" (dict "root" $ "component" "api" "probeType" "readinessProbe" "type" "http" "path" "/api/__healthcheck" "portName" $constants.api.portName) | nindent 12 }}
           {{- end }}
