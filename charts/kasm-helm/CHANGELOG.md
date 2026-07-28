@@ -2,6 +2,12 @@
 
 All notable changes to the kasm-helm chart are documented here.
 
+## [1.1190.6] - 2026-07-28
+
+### Fixed
+
+- Fixed the API server to require HTTPS by default for internal Kasm service-to-service communication instead of HTTP, closing an unencrypted-transport gap. No operator action required unless you've overridden `SERVER_INTERNAL_SCHEMA` explicitly. <!-- hash:c4d02388b6ad40fbdf012b3049b80000b3e05f7b -->
+
 ## [1.1190.5] - 2026-07-27
 
 ### Added

@@ -388,7 +388,7 @@ tests:
           region_name: eu-west
     asserts:
       - exists:
-          path: spec.template.spec.containers[0].env[?(@.name=="SERVER_INTERNAL_SCHEMA" && @.value=="http")]
+          path: spec.template.spec.containers[0].env[?(@.name=="SERVER_INTERNAL_SCHEMA" && @.value=="https")]
         documentIndex: 0
       - exists:
           path: spec.template.spec.containers[0].env[?(@.name=="SERVER_INTERNAL_SCHEMA" && @.value=="https")]
@@ -409,10 +409,10 @@ tests:
           region_name: us-east
     asserts:
       - exists:
-          path: spec.template.spec.containers[0].env[?(@.name=="SERVER_INTERNAL_SCHEMA" && @.value=="http")]
+          path: spec.template.spec.containers[0].env[?(@.name=="SERVER_INTERNAL_SCHEMA" && @.value=="https")]
         documentIndex: 0
       - exists:
-          path: spec.template.spec.containers[0].env[?(@.name=="SERVER_INTERNAL_SCHEMA" && @.value=="http")]
+          path: spec.template.spec.containers[0].env[?(@.name=="SERVER_INTERNAL_SCHEMA" && @.value=="https")]
         documentIndex: 1
 
   - it: sets SERVER_INTERNAL_SCHEMA=http for primary zone and https for others when no region_name set
@@ -428,7 +428,7 @@ tests:
           proxyAddress: zoneb.example.com
     asserts:
       - exists:
-          path: spec.template.spec.containers[0].env[?(@.name=="SERVER_INTERNAL_SCHEMA" && @.value=="http")]
+          path: spec.template.spec.containers[0].env[?(@.name=="SERVER_INTERNAL_SCHEMA" && @.value=="https")]
         documentIndex: 0
       - exists:
           path: spec.template.spec.containers[0].env[?(@.name=="SERVER_INTERNAL_SCHEMA" && @.value=="https")]
