@@ -2,17 +2,12 @@
 
 All notable changes to the kasm-helm chart are documented here.
 
-## [Unreleased]
-
-### Changed
-
-- The rendered `api.app.config.yaml` now includes `server.liveness_port` and `server.liveness_stall_seconds`, matching the api image's new configurable liveness settings (still overridable via `KASM_LIVENESS_PORT`/`KASM_LIVENESS_STALL_SECONDS`). No operator action required — this keeps the chart's config in sync with the api image's defaults introduced alongside the `/livez` liveness probe. <!-- hash:f55868eed3e969a6e91694d555d6163155906ae1 -->
-
 ## [1.1190.6] - 2026-07-28
 
 ### Changed
 
 - The API deployment now checks a dedicated `/livez` HTTP endpoint for its liveness probe (previously a TCP socket check), backed by a new startup probe that gives the container up to 5 minutes to come up before liveness checks begin. This makes liveness failures reflect actual API health rather than just port reachability, reducing the chance of unnecessary restarts during slow startups. <!-- hash:903d4fe1d934397c7f0222684fdb702d27588c4f -->
+- The rendered `api.app.config.yaml` now includes `server.liveness_port` and `server.liveness_stall_seconds`, matching the api image's new configurable liveness settings (still overridable via `KASM_LIVENESS_PORT`/`KASM_LIVENESS_STALL_SECONDS`). No operator action required — this keeps the chart's config in sync with the api image's defaults introduced alongside the `/livez` liveness probe. <!-- hash:f55868eed3e969a6e91694d555d6163155906ae1 -->
 
 ### Fixed
 
