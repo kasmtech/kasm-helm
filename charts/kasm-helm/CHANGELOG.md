@@ -2,6 +2,12 @@
 
 All notable changes to the kasm-helm chart are documented here.
 
+## [Unreleased]
+
+### Changed
+
+- The rendered `api.app.config.yaml` now includes `server.liveness_port` and `server.liveness_stall_seconds`, matching the api image's new configurable liveness settings (still overridable via `KASM_LIVENESS_PORT`/`KASM_LIVENESS_STALL_SECONDS`). No operator action required — this keeps the chart's config in sync with the api image's defaults introduced alongside the `/livez` liveness probe. <!-- hash:f55868eed3e969a6e91694d555d6163155906ae1 -->
+
 ## [1.1190.6] - 2026-07-28
 
 ### Changed
