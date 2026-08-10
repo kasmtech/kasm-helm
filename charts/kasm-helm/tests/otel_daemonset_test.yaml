@@ -1,0 +1,146 @@
+suite: hostLogs DaemonSet — node-level nginx log collection
+
+templates:
+  - templates/otel-collector-daemonset.yaml
+  - templates/otel-collector-daemonset-configmap.yaml
+
+tests:
+  - it: DaemonSet and its ConfigMap render by default
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/otel-collector-daemonset.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/otel-collector-daemonset-configmap.yaml
+      - isKind:
+          of: DaemonSet
+        template: templates/otel-collector-daemonset.yaml
+
+  - it: DaemonSet and ConfigMap disappear when hostLogs.enabled=false
+    set:
+      observability.hostLogs.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/otel-collector-daemonset.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/otel-collector-daemonset-configmap.yaml
+
+  - it: DaemonSet absent when observability.enabled=false
+    set:
+      observability.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/otel-collector-daemonset.yaml
+
+  - it: rendered include glob substitutes the actual namespace/release and contains release-proxy-*
+    template: templates/otel-collector-daemonset-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: '/var/log/pods/NAMESPACE_RELEASE-NAME-proxy-\*/\*/\*\.log'
+
+  - it: extraSelectors entries appear as additional globs
+    template: templates/otel-collector-daemonset-configmap.yaml
+    set:
+      observability.hostLogs.extraSelectors:
+        - kasm-db-*
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: '/var/log/pods/NAMESPACE_kasm-db-\*/\*/\*\.log'
+
+  - it: varlogpods hostPath is readOnly true
+    template: templates/otel-collector-daemonset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[1].name
+          value: varlogpods
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[1].readOnly
+          value: true
+      - equal:
+          path: spec.template.spec.volumes[1].hostPath.path
+          value: /var/log/pods
+
+  - it: checkpoint hostPath present when persistOffsets=true (default)
+    template: templates/otel-collector-daemonset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.volumes[2].name
+          value: otelcol-checkpoints
+      - equal:
+          path: spec.template.spec.volumes[2].hostPath.path
+          value: /var/lib/otelcol/file_storage
+
+  - it: checkpoint hostPath absent when persistOffsets=false
+    template: templates/otel-collector-daemonset.yaml
+    set:
+      observability.hostLogs.persistOffsets: false
+    asserts:
+      - notContains:
+          path: spec.template.spec.volumes
+          content:
+            name: otelcol-checkpoints
+
+  - it: DaemonSet security context is runAsUser 0, readOnlyRootFilesystem true, no priv esc, all caps dropped
+    template: templates/otel-collector-daemonset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsUser
+          value: 0
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop[0]
+          value: ALL
+
+  - it: no hostNetwork, hostPID, or hostIPC on the DaemonSet pod spec
+    template: templates/otel-collector-daemonset.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.hostNetwork
+      - notExists:
+          path: spec.template.spec.hostPID
+      - notExists:
+          path: spec.template.spec.hostIPC
+
+  - it: DaemonSet exports to the cluster gateway Service on 4317, not any zone-scoped Service
+    template: templates/otel-collector-daemonset-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'endpoint: "RELEASE-NAME-otel-gateway:4317"'
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "otel-collector-default"
+
+  - it: DaemonSet exports to externalEndpoint (unauthenticated) when collector.externalEndpoint is set
+    template: templates/otel-collector-daemonset-configmap.yaml
+    set:
+      observability.collector.externalEndpoint: http://alloy.observability:4318
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'otlphttp:'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'endpoint: "http://alloy\.observability:4318"'
+
+  # helm-unittest asserts per-template, so a chart-wide "zero ServiceAccount/Role/ClusterRole/
+  # *Binding" claim can't be expressed as a single assertion here — it's verified in the H6
+  # verification pass via `helm template ... | grep -cE 'kind: (ServiceAccount|Role|ClusterRole|
+  # RoleBinding|ClusterRoleBinding)'` == 0 across every rendered scenario. This assertion covers
+  # the DaemonSet's own pod spec, which is the piece most likely to regress by acquiring one.
+  - it: the DaemonSet pod spec has no serviceAccountName (the chart grants no RBAC anywhere)
+    template: templates/otel-collector-daemonset.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.serviceAccountName

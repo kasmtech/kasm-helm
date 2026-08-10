@@ -1,0 +1,236 @@
+suite: kasm.otelEnv — per-workload OTel/logging env vars
+
+templates:
+  - templates/api-deployment.yaml
+  - templates/manager-deployment.yaml
+  - templates/guac-statefulset.yaml
+  - templates/rdp-gateway-deployment.yaml
+  - templates/rdp-https-gateway-statefulset.yaml
+  - templates/db-init-job.yaml
+
+tests:
+  # ---------- OTEL_SERVICE_NAME per workload ----------
+  - it: api container gets OTEL_SERVICE_NAME=kasm-api
+    template: templates/api-deployment.yaml
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_SERVICE_NAME" && @.value=="kasm-api")]
+
+  - it: manager container gets OTEL_SERVICE_NAME=kasm-manager
+    template: templates/manager-deployment.yaml
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_SERVICE_NAME" && @.value=="kasm-manager")]
+
+  - it: guac application container gets OTEL_SERVICE_NAME=kasm-guac
+    template: templates/guac-statefulset.yaml
+    documentIndex: 0
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_SERVICE_NAME" && @.value=="kasm-guac")]
+
+  - it: rdp-gateway application container gets OTEL_SERVICE_NAME=kasm-rdp-gateway
+    template: templates/rdp-gateway-deployment.yaml
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_SERVICE_NAME" && @.value=="kasm-rdp-gateway")]
+
+  - it: rdp-https-gateway application container gets OTEL_SERVICE_NAME=kasm-rdp-https-gateway
+    template: templates/rdp-https-gateway-statefulset.yaml
+    documentIndex: 0
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_SERVICE_NAME" && @.value=="kasm-rdp-https-gateway")]
+
+  # ---------- endpoint points at the per-zone collector Service ----------
+  - it: api OTEL_EXPORTER_OTLP_ENDPOINT points at the default-zone forwarder Collector
+    template: templates/api-deployment.yaml
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_EXPORTER_OTLP_ENDPOINT" && @.value=="http://RELEASE-NAME-otel-collector-default:4318")]
+
+  - it: api OTEL_EXPORTER_OTLP_ENDPOINT is zone-scoped with two kasmZones
+    template: templates/api-deployment.yaml
+    values:
+      - ../../../tests/values/multizone-config.yaml
+    documentIndex: 0
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_EXPORTER_OTLP_ENDPOINT")].value
+          pattern: "http://RELEASE-NAME-otel-collector-zonea:4318"
+
+  - it: api endpoint follows externalEndpoint when set
+    template: templates/api-deployment.yaml
+    set:
+      observability.collector.externalEndpoint: http://alloy.observability:4318
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_EXPORTER_OTLP_ENDPOINT" && @.value=="http://alloy.observability:4318")]
+
+  # ---------- OTEL_PYTHON_EXCLUDED_URLS only on api+manager ----------
+  - it: OTEL_PYTHON_EXCLUDED_URLS present on api
+    template: templates/api-deployment.yaml
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_PYTHON_EXCLUDED_URLS")]
+
+  - it: OTEL_PYTHON_EXCLUDED_URLS present on manager
+    template: templates/manager-deployment.yaml
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_PYTHON_EXCLUDED_URLS")]
+
+  - it: OTEL_PYTHON_EXCLUDED_URLS absent on guac
+    template: templates/guac-statefulset.yaml
+    documentIndex: 0
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_PYTHON_EXCLUDED_URLS")]
+
+  - it: OTEL_PYTHON_EXCLUDED_URLS absent on rdp-gateway
+    template: templates/rdp-gateway-deployment.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_PYTHON_EXCLUDED_URLS")]
+
+  - it: OTEL_PYTHON_EXCLUDED_URLS absent on rdp-https-gateway
+    template: templates/rdp-https-gateway-statefulset.yaml
+    documentIndex: 0
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_PYTHON_EXCLUDED_URLS")]
+
+  # ---------- KASM_LOG_FILE_ENABLED default false ----------
+  - it: KASM_LOG_FILE_ENABLED=false by default on api
+    template: templates/api-deployment.yaml
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_LOG_FILE_ENABLED" && @.value=="false")]
+
+  # ---------- regression: KASM_LOG_FILE_ENABLED still emitted when observability.enabled=false ----------
+  # This is the H2 amendment regression test: KASM_LOG_FILE_ENABLED is not an OTel setting.
+  # kasm_telemetry defaults file logging to true and init_logging() mkdir/opens the log path, so
+  # omitting this env var when observability is disabled would crash every workload at startup
+  # under readOnlyRootFilesystem. Only OTEL_SDK_DISABLED should be gated on observability.enabled.
+  - it: KASM_LOG_FILE_ENABLED=false is still emitted when observability.enabled=false (api)
+    template: templates/api-deployment.yaml
+    set:
+      observability.enabled: false
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_LOG_FILE_ENABLED" && @.value=="false")]
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_SDK_DISABLED" && @.value=="true")]
+
+  - it: KASM_LOG_FILE_ENABLED=false is still emitted when observability.enabled=false (manager)
+    template: templates/manager-deployment.yaml
+    set:
+      observability.enabled: false
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_LOG_FILE_ENABLED" && @.value=="false")]
+
+  - it: KASM_LOG_FILE_ENABLED=false is still emitted when observability.enabled=false (guac)
+    template: templates/guac-statefulset.yaml
+    documentIndex: 0
+    set:
+      observability.enabled: false
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_LOG_FILE_ENABLED" && @.value=="false")]
+
+  - it: only OTEL_SDK_DISABLED is emitted for the OTel-specific vars when observability is disabled
+    template: templates/api-deployment.yaml
+    set:
+      observability.enabled: false
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_EXPORTER_OTLP_ENDPOINT")]
+      - notExists:
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_SERVICE_NAME")]
+
+  # ---------- fileLogs.enabled=true yields true + KASM_LOG_FILE_PATH ----------
+  - it: fileLogs.enabled=true yields KASM_LOG_FILE_ENABLED=true and KASM_LOG_FILE_PATH on api
+    template: templates/api-deployment.yaml
+    set:
+      observability.fileLogs.enabled: true
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_LOG_FILE_ENABLED" && @.value=="true")]
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_LOG_FILE_PATH" && @.value=="/opt/kasm/current/log/kasm-api.log")]
+
+  - it: fileLogs.enabled=true but component removed from the list falls back to false
+    template: templates/api-deployment.yaml
+    set:
+      observability.fileLogs.enabled: true
+      observability.fileLogs.components:
+        - manager
+        - guac
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_LOG_FILE_ENABLED" && @.value=="false")]
+
+  # ---------- KASM_CLICKHOUSE_* on api+manager only ----------
+  - it: KASM_CLICKHOUSE_ENDPOINT present on api
+    template: templates/api-deployment.yaml
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_ENDPOINT")]
+
+  - it: KASM_CLICKHOUSE_ENDPOINT present on manager
+    template: templates/manager-deployment.yaml
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_ENDPOINT")]
+
+  - it: KASM_CLICKHOUSE_ENDPOINT absent on guac (no clickhouse env wired there)
+    template: templates/guac-statefulset.yaml
+    documentIndex: 0
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_ENDPOINT")]
+
+  - it: KASM_CLICKHOUSE_ENDPOINT absent when there is no store (clickhouse disabled, not standalone)
+    template: templates/api-deployment.yaml
+    set:
+      observability.clickhouse.enabled: false
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_ENDPOINT")]
+
+  # ---------- KASM_LOG_CONSOLE_COLOR ----------
+  - it: KASM_LOG_CONSOLE_COLOR=false on api
+    template: templates/api-deployment.yaml
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_LOG_CONSOLE_COLOR" && @.value=="false")]
+
+  - it: KASM_LOG_CONSOLE_COLOR=false on api even when observability is disabled
+    template: templates/api-deployment.yaml
+    set:
+      observability.enabled: false
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_LOG_CONSOLE_COLOR" && @.value=="false")]
+
+  - it: db Jobs running the api image disable file logging
+    set:
+      dbManagement.initialize: true
+    templates:
+      - templates/db-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_LOG_FILE_ENABLED")].value
+          value: "false"
+
+  - it: db Jobs still disable file logging when observability is off
+    set:
+      dbManagement.initialize: true
+      observability.enabled: false
+    templates:
+      - templates/db-init-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_LOG_FILE_ENABLED")].value
+          value: "false"

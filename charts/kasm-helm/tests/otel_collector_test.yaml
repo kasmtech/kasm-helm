@@ -1,0 +1,248 @@
+suite: OTel Collector forwarder + gateway workloads
+
+templates:
+  - templates/otel-collector-configmap.yaml
+  - templates/otel-collector-deployment.yaml
+  - templates/otel-collector-service.yaml
+  - templates/otel-gateway-configmap.yaml
+  - templates/otel-gateway-deployment.yaml
+  - templates/otel-gateway-service.yaml
+
+tests:
+  # ---------- forwarder: default rendering ----------
+  - it: forwarder Deployment/Service/ConfigMap render by default
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/otel-collector-deployment.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/otel-collector-service.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/otel-collector-configmap.yaml
+      - isKind:
+          of: Deployment
+        template: templates/otel-collector-deployment.yaml
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-otel-collector-default
+        template: templates/otel-collector-deployment.yaml
+
+  # ---------- forwarder: disabled ----------
+  - it: forwarder resources are absent when observability.enabled=false
+    set:
+      observability.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/otel-collector-deployment.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/otel-collector-service.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/otel-collector-configmap.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/otel-gateway-deployment.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/otel-gateway-service.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/otel-gateway-configmap.yaml
+
+  # ---------- forwarder: externalEndpoint ----------
+  - it: all Collector resources are absent when collector.externalEndpoint is set
+    set:
+      observability.collector.externalEndpoint: http://alloy.observability:4318
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/otel-collector-deployment.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/otel-collector-service.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/otel-collector-configmap.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/otel-gateway-deployment.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/otel-gateway-service.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/otel-gateway-configmap.yaml
+
+  # ---------- forwarder: per-zone ----------
+  - it: one forwarder Deployment/Service set per zone with two kasmZones
+    template: templates/otel-collector-deployment.yaml
+    values:
+      - ../../../tests/values/multizone-config.yaml
+    asserts:
+      - hasDocuments:
+          count: 2
+      - matchRegex:
+          path: metadata.name
+          pattern: ".*zonea.*"
+        documentIndex: 0
+      - matchRegex:
+          path: metadata.name
+          pattern: ".*zoneb.*"
+        documentIndex: 1
+
+  - it: one forwarder Service per zone with two kasmZones
+    template: templates/otel-collector-service.yaml
+    values:
+      - ../../../tests/values/multizone-config.yaml
+    asserts:
+      - hasDocuments:
+          count: 2
+      - matchRegex:
+          path: metadata.name
+          pattern: ".*zonea.*"
+        documentIndex: 0
+      - matchRegex:
+          path: metadata.name
+          pattern: ".*zoneb.*"
+        documentIndex: 1
+
+  - it: forwarder ConfigMap is shared (one document) across zones, not one-per-zone
+    template: templates/otel-collector-configmap.yaml
+    values:
+      - ../../../tests/values/multizone-config.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  # ---------- forwarder: existingConfigMap ----------
+  - it: forwarder existingConfigMap suppresses the rendered ConfigMap and is mounted
+    set:
+      observability.collector.forwarder.existingConfigMap: my-forwarder-collector-config
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/otel-collector-configmap.yaml
+      - equal:
+          path: spec.template.spec.volumes[0].configMap.name
+          value: my-forwarder-collector-config
+        template: templates/otel-collector-deployment.yaml
+
+  - it: gateway existingConfigMap does not affect the forwarder ConfigMap
+    set:
+      observability.collector.gateway.existingConfigMap: my-gateway-collector-config
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/otel-collector-configmap.yaml
+
+  # ---------- forwarder: external Service ----------
+  - it: external forwarder Service renders only when externalService.enabled, exposing only 4317
+    template: templates/otel-collector-service.yaml
+    set:
+      observability.collector.forwarder.externalService.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 2
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-otel-collector-default-external
+        documentIndex: 1
+      - lengthEqual:
+          path: spec.ports
+          count: 1
+        documentIndex: 1
+      - equal:
+          path: spec.ports[0].port
+          value: 4317
+        documentIndex: 1
+
+  - it: external forwarder Service absent by default
+    template: templates/otel-collector-service.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  # ---------- forwarder: checksum annotation ----------
+  - it: forwarder pod template carries a checksum/config annotation
+    template: templates/otel-collector-deployment.yaml
+    asserts:
+      - exists:
+          path: spec.template.metadata.annotations["checksum/config"]
+
+  # ---------- gateway: exactly one per release ----------
+  - it: exactly one gateway Deployment/Service/ConfigMap regardless of zone count
+    values:
+      - ../../../tests/values/multizone-config.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/otel-gateway-deployment.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/otel-gateway-service.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/otel-gateway-configmap.yaml
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-otel-gateway
+        template: templates/otel-gateway-deployment.yaml
+
+  - it: gateway replicas is always 1 and strategy is Recreate
+    template: templates/otel-gateway-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 1
+      - equal:
+          path: spec.strategy.type
+          value: Recreate
+
+  - it: gateway.existingConfigMap suppresses only the gateway ConfigMap
+    set:
+      observability.collector.gateway.existingConfigMap: my-gateway-collector-config
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/otel-gateway-configmap.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/otel-collector-configmap.yaml
+      - equal:
+          path: spec.template.spec.volumes[0].configMap.name
+          value: my-gateway-collector-config
+        template: templates/otel-gateway-deployment.yaml
+
+  - it: gateway pod template carries a checksum/config annotation
+    template: templates/otel-gateway-deployment.yaml
+    asserts:
+      - exists:
+          path: spec.template.metadata.annotations["checksum/config"]
+
+  - it: gateway waits for ClickHouse via an initContainer instead of crash-looping
+    template: templates/otel-gateway-deployment.yaml
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.initContainers
+          count: 1
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: docker.io/clickhouse/clickhouse-server:24.12-alpine
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "https://RELEASE-NAME-clickhouse:8443/ping"
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.runAsUser
+          value: 101
+
+  - it: gateway has no ClickHouse wait when there is no store to wait for
+    template: templates/otel-gateway-deployment.yaml
+    set:
+      observability.clickhouse.enabled: false
+    asserts:
+      - notExists:
+          path: spec.template.spec.initContainers

@@ -113,6 +113,28 @@ rdpHttpsGateway:
   image: {{ printf "%s/%s:%s" .Values.components.rdpHttpsGateway.image.registry .Values.components.rdpHttpsGateway.image.repository (include "kasm.imageTag" (list . .Values.components.rdpHttpsGateway.image.tag "rdpHttpsGateway")) }}
   port: 9443
   nginxPort: 9002
+otel:
+  component: otel-collector
+  svc: {{ if .Values.kasmZones }}{{ printf "%s-otel-collector-%s" .Release.Name (include "kasm.zoneName" (include "kasm.primaryZone" . | fromYaml).name) }}{{ else }}{{ printf "%s-otel-collector-default" .Release.Name }}{{ end }}
+  portName: otel-pt
+  gatewayComponent: otel-gateway
+  gatewaySvc: {{ printf "%s-otel-gateway" .Release.Name }}
+  image: {{ printf "%s/%s:%s" .Values.observability.collector.image.registry .Values.observability.collector.image.repository .Values.observability.collector.image.tag }}
+  otlpHttp: 4318
+  otlpGrpc: 4317
+  otlpNginx: 4316
+  health: 13133
+  selfMetrics: 8888
+clickhouse:
+  component: clickhouse
+  svc: {{ printf "%s-clickhouse" .Release.Name }}
+  portName: ch-pt
+  image: {{ printf "%s/%s:%s" .Values.observability.clickhouse.image.registry .Values.observability.clickhouse.image.repository .Values.observability.clickhouse.image.tag }}
+  http: 8123
+  native: 9000
+  httpTls: 8443
+  nativeTls: 9440
+proxyStubStatus: 8090
 {{- end }}
 
 {{/*
@@ -391,6 +413,12 @@ Where:
   {{- end -}}
 {{- end -}}
 
+{{- if eq $component "otel-collector-ext" -}}
+  {{- with $ctx.Values.observability.collector.forwarder.externalService.labels -}}
+    {{- $labels = merge $labels . -}}
+  {{- end -}}
+{{- end -}}
+
 {{- $labels = merge $labels (dict
   "kasm.com/version" $ctx.Chart.AppVersion
   "app.kubernetes.io/name" $labelName
@@ -440,6 +468,12 @@ Where:
   {{- end -}}
 {{- end -}}
 
+{{- if eq $component "otel-collector-ext" -}}
+  {{- with $ctx.Values.observability.collector.forwarder.externalService.annotations -}}
+    {{- $annotations = merge $annotations . -}}
+  {{- end -}}
+{{- end -}}
+
 {{- if eq $resource "route" -}}
   {{- with $ctx.Values.route.annotations -}}
     {{- $annotations = merge $annotations . -}}
@@ -468,6 +502,15 @@ Where:
   {{- with $ctx.Values.kasmSecrets.annotations -}}
     {{- $annotations = merge $annotations . -}}
   {{- end -}}
+{{- end -}}
+
+{{/*
+  Caller-supplied ad-hoc annotations (e.g. a checksum/config annotation computed by the calling
+  template). Merged in like every other annotation source above rather than emitted as a second
+  "annotations:" block, which would be a duplicate YAML key.
+*/}}
+{{- with .extraAnnotations -}}
+  {{- $annotations = merge $annotations . -}}
 {{- end -}}
 
 {{/* Special Cases */}}
@@ -596,6 +639,10 @@ securityContext:
     timingScope: Optional sub-selector for components with multiple containers and container-specific health check timing. When
                 supplied, timing resolves from: .Values.components.<component>.<timingScope>.healthCheckTiming.<probeType>
                 Example timingScope selectors: nginxSidecar
+    timingParent: Optional dict, used in place of the .Values.components.<component> lookup for components that
+                don't live under .Values.components (e.g. observability.clickhouse, observability.collector).
+                When supplied, timing resolves from: <timingParent>.healthCheckTiming.<probeType>, and both the
+                "db" special-case and the "components" lookup are skipped entirely. Takes priority over timingScope.
 
   Probe-specific args:
     For type: http or https 
@@ -640,7 +687,9 @@ securityContext:
 
 {{- $healthCheckParent := dict -}}
 
-{{- if eq $componentName "db" -}}
+{{- if hasKey . "timingParent" -}}
+  {{- $healthCheckParent = .timingParent | default dict -}}
+{{- else if eq $componentName "db" -}}
   {{- $healthCheckParent = get $root.Values "database" | default dict -}}
 {{- else -}}
   {{- $components := get $root.Values "components" | default dict -}}
@@ -959,6 +1008,11 @@ successThreshold: {{ $successThreshold }}
   Return a replica object based on given presets
   Example usage:
   {{ include "replicas.preset" (dict "node" "proxy" "size" "small") -}}
+
+  Note: "otel-gateway" is 1 at every size on purpose. The gateway runs tail_sampling, which
+  must see every span of a trace in one process, and a ClusterIP Service would spread a
+  trace's spans across replicas. "otel-collector" (the per-zone forwarders) has no such
+  constraint and scales with size.
 */}}
 {{- define "replicas.preset" -}}
 {{- $presetSizes := dict
@@ -996,6 +1050,16 @@ successThreshold: {{ $successThreshold }}
     "small" 1
     "medium" 2
     "large" 3
+  )
+  "otel-collector" (dict
+    "small" 1
+    "medium" 2
+    "large" 2
+  )
+  "otel-gateway" (dict
+    "small" 1
+    "medium" 1
+    "large" 1
   )
 -}}
 
@@ -1147,6 +1211,62 @@ successThreshold: {{ $successThreshold }}
       "large" (dict
         "requests" (dict "cpu" "100m" "memory" "64Mi")
         "limits" (dict "cpu" "100m" "memory" "64Mi")
+      )
+    )
+    "otel-collector" (dict
+      "small" (dict
+        "requests" (dict "cpu" "200m" "memory" "256Mi" "ephemeral-storage" "50Mi")
+        "limits" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
+      )
+      "medium" (dict
+        "requests" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "50Mi")
+        "limits" (dict "cpu" "1" "memory" "1Gi" "ephemeral-storage" "2Gi")
+      )
+      "large" (dict
+        "requests" (dict "cpu" "1" "memory" "1Gi" "ephemeral-storage" "50Mi")
+        "limits" (dict "cpu" "2" "memory" "2Gi" "ephemeral-storage" "2Gi")
+      )
+    )
+    "otel-gateway" (dict
+      "small" (dict
+        "requests" (dict "cpu" "300m" "memory" "512Mi" "ephemeral-storage" "50Mi")
+        "limits" (dict "cpu" "1" "memory" "1Gi" "ephemeral-storage" "2Gi")
+      )
+      "medium" (dict
+        "requests" (dict "cpu" "500m" "memory" "1Gi" "ephemeral-storage" "50Mi")
+        "limits" (dict "cpu" "1" "memory" "2Gi" "ephemeral-storage" "2Gi")
+      )
+      "large" (dict
+        "requests" (dict "cpu" "1" "memory" "2Gi" "ephemeral-storage" "50Mi")
+        "limits" (dict "cpu" "2" "memory" "4Gi" "ephemeral-storage" "2Gi")
+      )
+    )
+    "clickhouse" (dict
+      "small" (dict
+        "requests" (dict "cpu" "500m" "memory" "1Gi" "ephemeral-storage" "50Mi")
+        "limits" (dict "cpu" "1" "memory" "2Gi" "ephemeral-storage" "2Gi")
+      )
+      "medium" (dict
+        "requests" (dict "cpu" "1" "memory" "2Gi" "ephemeral-storage" "50Mi")
+        "limits" (dict "cpu" "2" "memory" "4Gi" "ephemeral-storage" "2Gi")
+      )
+      "large" (dict
+        "requests" (dict "cpu" "2" "memory" "4Gi" "ephemeral-storage" "50Mi")
+        "limits" (dict "cpu" "4" "memory" "8Gi" "ephemeral-storage" "2Gi")
+      )
+    )
+    "otel-sidecar" (dict
+      "small" (dict
+        "requests" (dict "cpu" "100m" "memory" "128Mi" "ephemeral-storage" "50Mi")
+        "limits" (dict "cpu" "200m" "memory" "256Mi" "ephemeral-storage" "2Gi")
+      )
+      "medium" (dict
+        "requests" (dict "cpu" "100m" "memory" "128Mi" "ephemeral-storage" "50Mi")
+        "limits" (dict "cpu" "200m" "memory" "256Mi" "ephemeral-storage" "2Gi")
+      )
+      "large" (dict
+        "requests" (dict "cpu" "100m" "memory" "128Mi" "ephemeral-storage" "50Mi")
+        "limits" (dict "cpu" "200m" "memory" "256Mi" "ephemeral-storage" "2Gi")
       )
     )
   }}
@@ -1351,4 +1471,387 @@ Dedup rules:
 - name: REQUESTS_CA_BUNDLE
   value: /etc/ssl/certs/ca-certificates.crt
 {{- end }}
+{{- end }}
+
+{{/*
+  Shared OpenTelemetry SDK env block for Kasm service containers.
+  Usage:
+    {{- include "kasm.otelEnv" (dict "context" $ "serviceName" "kasm-api" "zone" $zone.name) | nindent 12 }}
+  Where:
+    context     = root context (.)
+    serviceName = OTEL_SERVICE_NAME value, e.g. "kasm-api"
+    zone        = zone name (from kasm.zones), used to build the collector endpoint
+    component   = (optional) key under observability.fileLogs.components used for the file-logging
+                  membership test, e.g. "api". Omit for components that never file-log (guac excepted).
+    python      = (optional bool) set true for the Python services (api, manager) to also emit
+                  OTEL_PYTHON_EXCLUDED_URLS.
+  Emits a YAML list fragment suitable for splicing into a container's `env:`.
+*/}}
+{{- define "kasm.otelEnv" -}}
+{{- $ctx := .context -}}
+{{- $obs := $ctx.Values.observability -}}
+{{- $serviceName := required "kasm.otelEnv requires serviceName" .serviceName -}}
+{{- if not $obs.enabled }}
+- name: OTEL_SDK_DISABLED
+  value: "true"
+{{- else }}
+{{- $zone := .zone | default "" -}}
+{{- $zoneName := ternary (include "kasm.zoneName" $zone) "default" (ne $zone "") -}}
+{{- $endpoint := $obs.collector.externalEndpoint -}}
+{{- if not $endpoint -}}
+  {{- $endpoint = printf "http://%s-otel-collector-%s:4318" $ctx.Release.Name $zoneName -}}
+{{- end }}
+- name: OTEL_SERVICE_NAME
+  value: {{ $serviceName | quote }}
+- name: OTEL_EXPORTER_OTLP_ENDPOINT
+  value: {{ $endpoint | quote }}
+- name: OTEL_EXPORTER_OTLP_PROTOCOL
+  value: "http/protobuf"
+{{- if .python }}
+- name: OTEL_PYTHON_EXCLUDED_URLS
+  value: "socket.io/*,healthcheck"
+{{- end }}
+- name: OTEL_RESOURCE_ATTRIBUTES
+  value: {{ printf "deployment.environment=kubernetes,service.namespace=%s" $ctx.Release.Namespace | quote }}
+{{- end }}
+{{- /*
+  The logging vars below are emitted whether or not observability is enabled. They are not OTel
+  settings: kasm_telemetry defaults log_file_enabled to TRUE, and init_logging() then does
+  mkdir(parents=True) + opens the log file. With the chart's default readOnlyRootFilesystem and
+  nothing mounted at /opt/kasm/current/log, that raises OSError and the container dies at startup.
+  Gating these on observability.enabled would therefore make `observability.enabled: false`
+  un-deployable.
+*/ -}}
+{{- include "kasm.loggingEnv" (dict "context" $ctx "serviceName" $serviceName "component" (.component | default "")) }}
+{{- end }}
+
+{{/*
+  ClickHouse HTTP(S) endpoint Kasm (api/manager) reads reports from.
+  Usage:
+    {{ include "kasm.clickhouseHttpEndpoint" (dict "context" $) }}
+*/}}
+{{- define "kasm.clickhouseHttpEndpoint" -}}
+{{- $ctx := .context -}}
+{{- $ch := $ctx.Values.observability.clickhouse -}}
+{{- if $ch.standalone -}}
+{{- $ch.httpEndpoint -}}
+{{- else -}}
+{{- $scheme := ternary "https" "http" $ch.tls -}}
+{{- $port := ternary 8443 8123 $ch.tls -}}
+{{- printf "%s://%s-clickhouse:%d" $scheme $ctx.Release.Name (int $port) -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+  ClickHouse native-protocol DSN the Collector writes telemetry to.
+  Usage:
+    {{ include "kasm.clickhouseNativeDsn" (dict "context" $) }}
+*/}}
+{{- define "kasm.clickhouseNativeDsn" -}}
+{{- $ctx := .context -}}
+{{- $ch := $ctx.Values.observability.clickhouse -}}
+{{- if $ch.standalone -}}
+  {{- if contains "://" $ch.nativeEndpoint -}}
+    {{- $ch.nativeEndpoint -}}
+  {{- else -}}
+    {{- printf "tcp://%s" $ch.nativeEndpoint -}}
+  {{- end -}}
+{{- else -}}
+{{- $port := ternary 9440 9000 $ch.tls -}}
+{{- printf "tcp://%s-clickhouse:%d%s" $ctx.Release.Name (int $port) (ternary "?secure=true" "" $ch.tls) -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+  ClickHouse reporting read-path env vars for the Kasm api/manager containers.
+  Emits nothing when observability is disabled, or when there is no store to read
+  (clickhouse.enabled is false and standalone is false).
+  Usage:
+    {{- include "kasm.clickhouseEnv" (dict "context" $) | nindent 12 }}
+*/}}
+{{- define "kasm.clickhouseEnv" -}}
+{{- $ctx := .context -}}
+{{- $obs := $ctx.Values.observability -}}
+{{- $ch := $obs.clickhouse -}}
+{{- if and $obs.enabled (or $ch.standalone $ch.enabled) }}
+{{- $constants := include "kasm.constants" $ctx | fromYaml -}}
+{{- $endpoint := include "kasm.clickhouseHttpEndpoint" (dict "context" $ctx) -}}
+{{- $secretName := default $constants.secrets.name $ch.existingSecret.name -}}
+{{- $secretKey := default "clickhouse-password" $ch.existingSecret.key -}}
+- name: KASM_CLICKHOUSE_ENDPOINT
+  value: {{ $endpoint | quote }}
+- name: KASM_CLICKHOUSE_DATABASE
+  value: {{ $ch.database | quote }}
+- name: KASM_CLICKHOUSE_USER
+  value: {{ $ch.username | quote }}
+- name: KASM_CLICKHOUSE_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      name: {{ $secretName }}
+      key: {{ $secretKey }}
+{{- if and (not $ch.standalone) $ch.tls }}
+- name: KASM_CLICKHOUSE_CA_CERT
+  value: /etc/ssl/certs/kasm_clickhouse.crt
+{{- else if and $ch.standalone (or $ch.caCert $ch.caCertConfigMap) }}
+- name: KASM_CLICKHOUSE_CA_CERT
+  value: /etc/ssl/certs/kasm_clickhouse_ca.crt
+{{- else if and $ch.standalone (not $ch.tlsVerify) }}
+- name: KASM_CLICKHOUSE_VERIFY
+  value: "false"
+{{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
+  Render-time validation for the observability values tree. Call once from a template that
+  always renders (H4 calls this at the top of templates/otel-collector-configmap.yaml).
+  Usage:
+    {{ include "kasm.observabilityValidate" $ }}
+*/}}
+{{- define "kasm.observabilityValidate" -}}
+{{- $ctx := . -}}
+{{- $obs := $ctx.Values.observability -}}
+{{- $ch := $obs.clickhouse -}}
+{{- $collector := $obs.collector -}}
+{{- if $ch.standalone -}}
+  {{- if or (not $ch.nativeEndpoint) (not $ch.httpEndpoint) -}}
+    {{- fail "observability.clickhouse.standalone requires both observability.clickhouse.nativeEndpoint and observability.clickhouse.httpEndpoint to be set." -}}
+  {{- end -}}
+  {{- if not $ch.enabled -}}
+    {{- fail "observability.clickhouse.standalone and observability.clickhouse.enabled=false are mutually exclusive: standalone already means 'use an external ClickHouse', while enabled=false means 'no ClickHouse store at all'." -}}
+  {{- end -}}
+{{- end -}}
+{{- if and $ch.caCert $ch.caCertConfigMap -}}
+  {{- fail "observability.clickhouse.caCert and observability.clickhouse.caCertConfigMap are mutually exclusive: caCert has the chart render a ConfigMap from literal PEM text, caCertConfigMap points at one you already manage." -}}
+{{- end -}}
+{{- $forwardSecretNameSet := ne $collector.forward.existingSecret.name "" -}}
+{{- $forwardSecretKeySet := ne $collector.forward.existingSecret.key "" -}}
+{{- if and (or $forwardSecretNameSet $forwardSecretKeySet) (not (and $forwardSecretNameSet $forwardSecretKeySet)) -}}
+  {{- fail "observability.collector.forward.existingSecret requires both 'name' and 'key' to be set." -}}
+{{- end -}}
+{{- if and $collector.externalEndpoint (or $collector.forwarder.existingConfigMap $collector.gateway.existingConfigMap) -}}
+  {{- fail "observability.collector.externalEndpoint is mutually exclusive with observability.collector.forwarder.existingConfigMap and observability.collector.gateway.existingConfigMap: externalEndpoint means neither Collector tier is rendered by this chart, so there is no config for them to override." -}}
+{{- end -}}
+{{- range $entry := $obs.fileLogs.components -}}
+  {{- if not (has $entry (list "api" "manager" "guac")) -}}
+    {{- fail (printf "observability.fileLogs.components contains %q, which is not a supported component. Allowed values: api, manager, guac." $entry) -}}
+  {{- end -}}
+{{- end -}}
+{{- if and $obs.hostLogs.enabled $obs.nginxLogs.enabled -}}
+  {{- fail "observability.hostLogs.enabled and observability.nginxLogs.enabled are mutually exclusive: hostLogs runs a node-level DaemonSet reading container-runtime log files, nginxLogs runs a sidecar in the proxy pod reading a shared volume. Enabling both would store every nginx log line twice. Use nginxLogs in namespaces that enforce the baseline/restricted Pod Security Standards; use hostLogs otherwise." -}}
+{{- end -}}
+{{- if and $ctx.Values.isOpenshift $obs.hostLogs.enabled (not $obs.nginxLogs.enabled) -}}
+  {{- fail "isOpenshift: true never renders the hostLogs DaemonSet (a hostPath + runAsUser:0 workload needs a SecurityContextConstraint this chart does not ship). Set observability.nginxLogs.enabled: true to collect nginx logs on OpenShift instead." -}}
+{{- end -}}
+{{- if or (lt (int $collector.tailSamplePercentage) 0) (gt (int $collector.tailSamplePercentage) 100) -}}
+  {{- fail (printf "observability.collector.tailSamplePercentage must be between 0 and 100, got %d." (int $collector.tailSamplePercentage)) -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+  Compute a GOMEMLIMIT value (~80% of a Kubernetes memory limit quantity) so the Collector's Go
+  runtime starts proactively GCing before memory_limiter has to act. Accepts the binary memory
+  quantities (Mi/Gi suffixes) used by every resources.preset entry in this chart; any other
+  suffix is treated as a plain Mi count.
+  Usage:
+    {{ include "kasm.gomemlimit" "512Mi" }}
+*/}}
+{{- define "kasm.gomemlimit" -}}
+{{- $mem := . -}}
+{{- $mib := 0.0 -}}
+{{- if hasSuffix "Gi" $mem -}}
+  {{- $mib = mulf (trimSuffix "Gi" $mem | float64) 1024 -}}
+{{- else if hasSuffix "Mi" $mem -}}
+  {{- $mib = trimSuffix "Mi" $mem | float64 -}}
+{{- else -}}
+  {{- $mib = $mem | float64 -}}
+{{- end -}}
+{{- printf "%dMiB" (int64 (mulf $mib 0.8)) -}}
+{{- end -}}
+
+{{/*
+  Volume for the standalone-ClickHouse CA certificate, when configured. No-op for the bundled
+  ClickHouse (which is trusted via the shared Kasm certificate, mounted separately) or when neither
+  `caCert` nor `caCertConfigMap` is set.
+  Usage:
+    {{- include "kasm.clickhouseCaVolume" . | nindent 8 }}
+*/}}
+{{- define "kasm.clickhouseCaVolume" -}}
+{{- $ch := .Values.observability.clickhouse -}}
+{{- if and $ch.standalone (or $ch.caCert $ch.caCertConfigMap) }}
+- name: clickhouse-ca-cert
+  configMap:
+    name: {{ $ch.caCertConfigMap | default (include "kasm.name" (list . "clickhouse-ca" "configmap")) }}
+{{- end }}
+{{- end -}}
+
+{{/*
+  Volume mount for the standalone-ClickHouse CA certificate, matching kasm.clickhouseCaVolume.
+  Usage:
+    {{- include "kasm.clickhouseCaVolumeMount" . | nindent 12 }}
+*/}}
+{{- define "kasm.clickhouseCaVolumeMount" -}}
+{{- $ch := .Values.observability.clickhouse -}}
+{{- if and $ch.standalone (or $ch.caCert $ch.caCertConfigMap) }}
+- name: clickhouse-ca-cert
+  mountPath: /etc/ssl/certs/kasm_clickhouse_ca.crt
+  subPath: ca.crt
+  readOnly: true
+{{- end }}
+{{- end -}}
+
+{{/*
+  filelog operator chain for the nginx JSON access log, ported verbatim (including
+  overwrite_text: true) from kasm_backend/install/conf/otel/otel-collector-local.yaml. Used
+  directly as the `operators:` list of a dedicated filelog/nginx_access receiver — the sidecar
+  fallback (§7) reads a plain file, so no container/router unwrapping is needed here. The
+  hostLogs DaemonSet reads the same backend source but must merge access+error handling into one
+  CRI-wrapped receiver, so it reimplements this chain inline with explicit operator ids instead of
+  including this define (a shared router target can't safely reuse bare, non-namespaced ids).
+  Usage:
+    operators:
+      {{- include "kasm.otelNginxAccessLogOperators" . | nindent 8 }}
+*/}}
+{{- define "kasm.otelNginxAccessLogOperators" -}}
+- type: json_parser
+  timestamp:
+    parse_from: attributes.time_iso8601
+    layout: "%Y-%m-%dT%H:%M:%S%z"
+- type: severity_parser
+  parse_from: attributes.http_status
+  overwrite_text: true
+  mapping:
+    error: "5xx"
+    warn:  "4xx"
+    info:  "2xx"
+    debug: "3xx"
+- type: add
+  field: body
+  value: EXPR(attributes["request"] + '" ' + attributes["http_status"] + ' ' + attributes["body_bytes_sent"] + ' "' + attributes["http_user_agent"] + '"')
+- type: move
+  from: attributes.request_method
+  to:   attributes.http.request.method
+- type: move
+  from: attributes.uri
+  to:   attributes.url.path
+- type: move
+  from: attributes.http_status
+  to:   attributes.http.response.status_code
+- type: add
+  field: resource["service.name"]
+  value: kasm-proxy
+- type: add
+  field: attributes["application"]
+  value: kasm-proxy
+{{- end -}}
+
+{{/*
+  filelog operator chain for the nginx error log, ported verbatim from
+  kasm_backend/install/conf/otel/otel-collector-local.yaml. See kasm.otelNginxAccessLogOperators
+  for why the DaemonSet doesn't include this define directly.
+  Usage:
+    operators:
+      {{- include "kasm.otelNginxErrorLogOperators" . | nindent 8 }}
+*/}}
+{{- define "kasm.otelNginxErrorLogOperators" -}}
+- type: regex_parser
+  regex: '^(?P<timestamp>\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}) \[(?P<level>\w+)\] (?P<pid>\d+)#\d+: (?:\*\d+ )?(?P<message>.+)$'
+  timestamp:
+    parse_from: attributes.timestamp
+    layout: "%Y/%m/%d %H:%M:%S"
+- type: severity_parser
+  parse_from: attributes.level
+  overwrite_text: true
+  mapping:
+    fatal:  crit
+    error:  [error, alert, emerg]
+    warn:   warn
+    info:   notice
+    debug:  [info, debug]
+- type: add
+  field: resource["service.name"]
+  value: kasm-proxy
+{{- end -}}
+
+{{/*
+  Shared OTel Collector sidecar container, used by two callers:
+    - the nginxLogs fallback (proxy pod, reads a shared emptyDir of nginx log files)
+    - observability.fileLogs (api/manager/guac pods, reads a shared emptyDir of JSON app logs)
+  The caller is responsible for adding matching volumes to the pod spec:
+    - a ConfigMap volume named "otel-sidecar-config" (the same name passed as .configMap)
+    - an emptyDir volume named "otel-sidecar-tmp"
+    - the log volume named .volumeName, already mounted (read-write) into the primary container
+  Optional args:
+    zone        = zone name (from kasm.zones), used to build the forwarder endpoint the same way
+                  kasm.otelEnv does. Omitted for pods that are not zone-scoped.
+    serviceName = OTEL_SERVICE_NAME to report resource attributes under (e.g. "kasm-api"). Omit for
+                  callers whose collector config already hardcodes the service name (the nginx
+                  operator chains set resource["service.name"]=kasm-proxy themselves).
+  Usage:
+    {{- include "kasm.otelSidecar" (dict "context" $ "configMap" "my-cm" "volumeName" "my-logs" "mountPath" "/var/log/nginx/otel") | nindent 8 }}
+*/}}
+{{- define "kasm.otelSidecar" -}}
+{{- $ctx := .context -}}
+{{- $volumeName := required "kasm.otelSidecar requires volumeName" .volumeName -}}
+{{- $mountPath := required "kasm.otelSidecar requires mountPath" .mountPath -}}
+{{- $constants := include "kasm.constants" $ctx | fromYaml -}}
+{{- $zone := .zone | default "" -}}
+{{- $zoneName := ternary (include "kasm.zoneName" $zone) "default" (ne $zone "") -}}
+{{- $endpoint := $ctx.Values.observability.collector.externalEndpoint -}}
+{{- if not $endpoint -}}
+  {{- $endpoint = printf "http://%s-otel-collector-%s:4318" $ctx.Release.Name $zoneName -}}
+{{- end -}}
+- name: otel-sidecar
+  image: {{ $constants.otel.image }}
+  imagePullPolicy: {{ $ctx.Values.imagePullPolicy }}
+  {{- include "kasm.securityContext" (list $ctx 10001 "container") | nindent 2 }}
+  env:
+    - name: OTEL_EXPORTER_OTLP_ENDPOINT
+      value: {{ $endpoint | quote }}
+    {{- if .serviceName }}
+    - name: OTEL_SERVICE_NAME
+      value: {{ .serviceName | quote }}
+    {{- end }}
+  resources: {{- include "resources.preset" (dict "node" "otel-sidecar" "size" $ctx.Values.deploymentSize) | nindent 4 }}
+  volumeMounts:
+    - name: {{ $volumeName }}
+      mountPath: {{ $mountPath }}
+      readOnly: true
+    - name: otel-sidecar-config
+      mountPath: /etc/otelcol-contrib/config.yaml
+      subPath: config.yaml
+    - name: otel-sidecar-tmp
+      mountPath: /tmp
+  {{- if $ctx.Values.applyHealthChecks }}
+  livenessProbe:
+    {{- include "health.probe" (dict "root" $ctx "component" "otel-sidecar" "probeType" "livenessProbe" "type" "http" "path" "/" "port" 13133) | nindent 4 }}
+  readinessProbe:
+    {{- include "health.probe" (dict "root" $ctx "component" "otel-sidecar" "probeType" "readinessProbe" "type" "http" "path" "/" "port" 13133) | nindent 4 }}
+  {{- end }}
+{{- end -}}
+
+{{/*
+  kasm_telemetry logging env. Emitted regardless of observability.enabled: log_file_enabled
+  defaults to TRUE in the library and init_logging() mkdirs the path, which fails on the chart's
+  readOnlyRootFilesystem. Every workload running Kasm python needs this, Jobs included.
+  Usage:
+    {{- include "kasm.loggingEnv" (dict "context" $ "serviceName" "kasm-api" "component" "api") | nindent 12 }}
+*/}}
+{{- define "kasm.loggingEnv" -}}
+{{- $ctx := .context -}}
+{{- $obs := $ctx.Values.observability -}}
+{{- $serviceName := required "kasm.loggingEnv requires serviceName" .serviceName -}}
+{{- $component := .component | default "" -}}
+{{- $fileLoggingEnabled := and $obs.enabled $obs.fileLogs.enabled (and $component (has $component $obs.fileLogs.components)) -}}
+{{- if $fileLoggingEnabled }}
+- name: KASM_LOG_FILE_ENABLED
+  value: "true"
+- name: KASM_LOG_FILE_PATH
+  value: {{ printf "/opt/kasm/current/log/%s.log" $serviceName | quote }}
+{{- else }}
+- name: KASM_LOG_FILE_ENABLED
+  value: "false"
+{{- end }}
+- name: KASM_LOG_CONSOLE_COLOR
+  value: "false"
 {{- end }}

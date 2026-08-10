@@ -73,6 +73,35 @@ data:
       keepalive {{ $serviceKeepalive }};
     }
 
+  {{- if $.Values.observability.enabled }}
+  otel.conf: |
+    # http-context OTel tracing for this zone's proxy nginx. Points at the per-zone
+    # forwarder Collector on 4316 (unauthenticated OTLP/gRPC) — never the cluster-wide
+    # gateway, which only exposes 4317-with-bearer and cannot be reached by
+    # ngx_otel_module (gRPC-only, cannot present a bearer token).
+    otel_exporter {
+      endpoint {{ printf "%s-otel-collector-%s" $.Release.Name (include "kasm.zoneName" $zone.name) }}:4316;
+    }
+
+    otel_service_name  kasm-proxy;
+    otel_trace          on;
+    otel_trace_context  propagate;
+
+  stub_status.conf: |
+    server {
+      listen 0.0.0.0:8090;
+      location = /stub_status {
+        otel_trace off;
+        stub_status;
+        # loopback-only: the only in-cluster consumer is the optional nginxLogs sidecar,
+        # which shares this pod's network namespace. Anything else must be explicitly
+        # allowed by the operator.
+        allow 127.0.0.1;
+        deny  all;
+      }
+    }
+  {{- end }}
+
 {{- end }}
 ---
 apiVersion: v1
@@ -82,6 +111,9 @@ metadata:
 data:
   health.conf: |
     location = /health {
+      {{- if $.Values.observability.enabled }}
+      otel_trace off;
+      {{- end }}
       default_type application/json;
       if (-f /opt/kasm/current/tmp/manager/kasm_manager_draining) {
         add_header Retry-After "30" always;
@@ -93,6 +125,9 @@ data:
 
   closest.conf: |
     location /checkvalid {
+      {{- if $.Values.observability.enabled }}
+      otel_trace off;
+      {{- end }}
       return 200 'ok';
       add_header Access-Control-Allow-Origin *;
       add_header Content-Type text/plain;
@@ -100,6 +135,12 @@ data:
 
   admin_api.conf: |
     location /api/admin/ {
+      {{- if $.Values.observability.enabled }}
+      otel_span_name "$request_method /api/admin/";
+      otel_span_attr http.method $request_method;
+      otel_span_attr http.target $request_uri;
+      otel_span_attr http.status $status;
+      {{- end }}
       proxy_http_version	    1.1;
       proxy_set_header	      Host $host;
       proxy_set_header	      Upgrade $http_upgrade;
@@ -114,6 +155,12 @@ data:
 
   client_api.conf: |
     location /api/ {
+      {{- if $.Values.observability.enabled }}
+      otel_span_name "$request_method /api/";
+      otel_span_attr http.method $request_method;
+      otel_span_attr http.target $request_uri;
+      otel_span_attr http.status $status;
+      {{- end }}
       proxy_http_version	    1.1;
       proxy_set_header	      Host $host;
       proxy_set_header	      Upgrade $http_upgrade;
@@ -128,6 +175,12 @@ data:
 
   manager_api.conf: |
     location /manager_api/ {
+      {{- if $.Values.observability.enabled }}
+      otel_span_name "$request_method /manager_api/";
+      otel_span_attr http.method $request_method;
+      otel_span_attr http.target $request_uri;
+      otel_span_attr http.status $status;
+      {{- end }}
       proxy_http_version	    1.1;
       proxy_set_header	      Host $host;
       proxy_set_header	      Upgrade $http_upgrade;
@@ -162,6 +215,12 @@ data:
 
   upstream_proxy.conf: |
     location /kasm_connect {
+      {{- if $.Values.observability.enabled }}
+      # auth_request gotcha: exclude this internal subrequest so the OTel module
+      # doesn't inject a stale traceparent into the auth call instead of the real
+      # upstream. Matches the backend's commented state pending validation.
+      # otel_trace          off;
+      {{- end }}
       internal;
       proxy_pass              {{ printf "http://%s/api/kasm_connect/" $constants.api.svc }};
       proxy_pass_request_body off;
@@ -173,6 +232,11 @@ data:
     }
 
     location /desktop/ {
+      {{- if $.Values.observability.enabled }}
+      # long-lived WebSocket tunnel — traces stay open for the entire session
+      # duration (potentially hours), so tracing is excluded here.
+      otel_trace  off;
+      {{- end }}
       if ($request_method = OPTIONS) {
         rewrite .* /_options_response last;
       }
@@ -194,6 +258,10 @@ data:
       proxy_set_header        Authorization "${connect_auth}";
       proxy_set_header        X-Kasm-ID "${connect_kasm_id}";
       proxy_set_header        Cookie "username=$cookie_username; session_token=$cookie_session_token; kasm_client_key=$cookie_kasm_client_key";
+      {{- if $.Values.observability.enabled }}
+      otel_span_attr          kasm.kasm_id            "$connect_kasm_id";
+      otel_span_attr          kasm.kasm_user_name     "$cookie_username";
+      {{- end }}
       rewrite                 ^/desktop/(.*) /$1 break;
       proxy_pass              $connect_schema://$connect_hostname:$connect_port/$connect_path;
       proxy_read_timeout      1800s;
@@ -229,6 +297,39 @@ data:
       add_header          Content-Length 0;
       return 204;
     }
+
+  otel_browser.conf: |
+    {{- if and $.Values.observability.enabled $.Values.observability.browser.enabled }}
+    location = /otel-config.js {
+        otel_trace     off;
+        default_type   application/javascript;
+        add_header     Cache-Control "no-store";
+        return 200     'window.__OTEL__={"enabled":true,"endpoint":"/api/client/telemetry","serviceName":"kasm-web"};';
+    }
+
+    # /otel-time — NTP-style time probe for browser clock-skew correction.
+    # $msec is request-arrival time in *seconds* with millisecond resolution;
+    # the browser parses it as float seconds and multiplies by 1000.
+    location = /otel-time {
+        otel_trace off;
+        default_type   application/json;
+        add_header     Cache-Control "no-store";
+        return 200     '{"server_time_ms":$msec}';
+    }
+    {{- else if $.Values.observability.enabled }}
+    location = /otel-config.js {
+        otel_trace     off;
+        default_type   application/javascript;
+        add_header     Cache-Control "no-store";
+        return 200     'window.__OTEL__={"enabled":false};';
+    }
+    {{- else }}
+    location = /otel-config.js {
+        default_type   application/javascript;
+        add_header     Cache-Control "no-store";
+        return 200     'window.__OTEL__={"enabled":false};';
+    }
+    {{- end }}
 
   website.conf: |
     location / {

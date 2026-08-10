@@ -46,7 +46,12 @@ kasmZones: []
 # set them in accordance with [OpenShift UIDs](https://www.redhat.com/en/blog/a-guide-to-openshift-and-uids) documentation.
 isOpenshift: false
 
-# logFormat -- Kasm Log format to write to console. Valid options are: json, log
+# logFormat -- Log format written to the console by the Kasm Proxy (nginx) and Kasm DB. Valid
+# options are: json, log
+#
+# NOTE: This no longer affects the API and Manager services. Their console output is always
+# human-readable text; their structured logs are exported over OpenTelemetry instead. See
+# `observability` and the observability documentation for how to collect them.
 #
 logFormat: log
 
@@ -261,6 +266,8 @@ kasmSecrets:
     db-password: ""
     admin-password: ""
     user-password: ""
+    clickhouse-password: ""
+    otel-bearer-token: ""
   # Example additional custom secret value:
   #   my-custom-secret: "some-value"
   # kasmSecrets.annotations -- Custom annotations to add to the Kasm Password secret
@@ -1039,6 +1046,313 @@ components:
     #    command: [/bin/sh, -c, 'echo "Hello world"']
     extraInitContainers: []
 
+# Configure the Kasm observability stack (OpenTelemetry Collector + ClickHouse). Kasm services emit
+# logs, traces, and metrics over OTLP to a Collector, which stores them in ClickHouse where they back
+# the reporting UI. See [Observability](./docs/observability.md) for architecture and sizing guidance.
+#
+observability:
+  # observability.enabled -- Master switch for the whole observability stack. Set to false to deploy
+  # no Collector and no ClickHouse, disable the OpenTelemetry SDKs in every Kasm service, and serve a
+  # disabled browser-telemetry stub. Reporting features that read telemetry will return empty results.
+  #
+  enabled: true
+
+  # Configure the OpenTelemetry Collector. Telemetry flows through two tiers, mirroring the Docker
+  # install: a zone-local *forwarder* Collector that Kasm services export to, and a single cluster-wide
+  # *gateway* Collector that makes the trace-sampling decision and is the only writer to ClickHouse.
+  # Trace sampling has to see every span of a trace in one process, so the gateway is deliberately a
+  # single instance while the forwarders scale freely.
+  #
+  collector:
+    # observability.collector.externalEndpoint -- Point every Kasm service at an OTLP/HTTP endpoint you
+    # already run instead of deploying a Collector with this chart (e.g. `http://alloy.observability:4318`).
+    # Neither tier is rendered when this is set: no Deployments, Services, or configs.
+    #
+    externalEndpoint: ""
+    # observability.collector.image -- Configure the image repository where the image is stored. Use this
+    # to point to a private hosted container registry instead of our public DockerHub hosted one. Both
+    # tiers run the same image.
+    #
+    image:
+      registry: docker.io
+      repository: otel/opentelemetry-collector-contrib
+      # observability.collector.image.tag -- Tag for the Collector image. Unlike Kasm components this is
+      # pinned by the chart rather than falling back to `useImageTags`, because the Collector is versioned
+      # independently of Kasm.
+      tag: "0.156.0"
+    # observability.collector.forwarder -- Configure the per-zone forwarder Collectors, which Kasm services
+    # and nginx export to. They batch and forward to the gateway; they neither sample nor write to
+    # ClickHouse, so they hold no cross-request state and scale freely.
+    #
+    forwarder:
+      # observability.collector.forwarder.existingConfigMap -- Name of a user-created ConfigMap holding a
+      # complete configuration for the forwarder Collectors, under the key `config.yaml`. Set this to take
+      # full ownership of the forwarder config; the chart renders none of its own. The gateway config is
+      # unaffected — override that separately with `gateway.existingConfigMap`. Start from the chart's
+      # rendered output or from `examples/otel-collector-custom.yaml`.
+      #
+      existingConfigMap: ""
+      # observability.collector.forwarder.replicas -- Override the per-zone forwarder replica count set by
+      # deploymentSize. Set to 0 to use the deploymentSize preset (default).
+      #
+      replicas: 0
+      # observability.collector.forwarder.resources -- Manually configure the forwarder Collector Deployment
+      # resources. This overrides the pre-defined `deploymentSize` values.
+      #
+      resources: {}
+      # observability.collector.forwarder.externalService -- Expose the forwarder's OTLP/gRPC port (4317)
+      # outside the cluster so Kasm Agents or Collectors running outside Kubernetes can forward telemetry in.
+      # The connection requires the bearer token stored in the `otel-bearer-token` key of the Kasm secret.
+      #
+      externalService:
+        enabled: false
+        type: LoadBalancer
+        annotations: {}
+        labels: {}
+    # observability.collector.gateway -- Configure the single cluster-wide gateway Collector, which makes
+    # the trace-sampling decision and is the only writer to ClickHouse.
+    #
+    gateway:
+      # observability.collector.gateway.existingConfigMap -- Name of a user-created ConfigMap holding a
+      # complete configuration for the gateway Collector, under the key `config.yaml`. Set this to take
+      # full ownership of the gateway config: the chart renders none of its own, and the values that only
+      # shape that config (`tailSamplePercentage`, `forward`, and `clickhouse.retention`) are ignored. The
+      # forwarder config is unaffected — override that separately with `forwarder.existingConfigMap`.
+      #
+      existingConfigMap: ""
+      # observability.collector.gateway.replicas -- Override the gateway replica count set by
+      # deploymentSize. Set to 0 to use the deploymentSize preset (default, which is 1 at every size).
+      #
+      # Raising this above 1 breaks trace sampling unless you also put trace-ID-aware load balancing in
+      # front of it: the gateway's sampling decision needs every span of a trace, and a plain Service
+      # spreads a trace's spans across replicas, producing traces with missing spans.
+      #
+      replicas: 0
+      # observability.collector.gateway.resources -- Manually configure the gateway Collector Deployment
+      # resources. This overrides the pre-defined `deploymentSize` values.
+      #
+      resources: {}
+    # observability.collector.tailSamplePercentage -- Percentage (0-100) of traces to keep after the
+    # always-keep rules. Traces containing an error, and traces slower than one second, are always kept
+    # regardless of this value. Applied at the gateway, which is the only tier that sees a whole trace.
+    #
+    tailSamplePercentage: 10
+    # observability.collector.forward -- Forward a copy of all telemetry to an external OTLP/HTTP endpoint
+    # in addition to storing it in ClickHouse. Useful for shipping to a vendor or a central Collector.
+    # Applied at the gateway, so a forwarded copy reflects the sampling decision.
+    #
+    forward:
+      # observability.collector.forward.endpoint -- OTLP/HTTP endpoint to forward to (e.g.
+      # `https://otlp-gateway.example.com/otlp`). Leave empty to disable forwarding.
+      endpoint: ""
+      # observability.collector.forward.token -- Bearer token for the forwarding endpoint. Prefer
+      # `existingSecret` over putting a credential in values.
+      token: ""
+      # observability.collector.forward.existingSecret -- Read the forwarding bearer token from an existing
+      # Secret instead of `token`. Both `name` and `key` are required when used.
+      existingSecret:
+        name: ""
+        key: ""
+
+  # observability.fileLogs -- Have Kasm services additionally write JSON log files to a shared volume,
+  # tailed by a Collector sidecar. Off by default: services export logs over OTLP, which needs no volume.
+  # Enable this only if you specifically want file-shaped JSON logs inside the pods.
+  #
+  fileLogs:
+    # observability.fileLogs.enabled -- Enable JSON file logging plus a log-tailing sidecar on the
+    # components listed in `components` below.
+    enabled: false
+    # observability.fileLogs.sizeLimit -- Size limit of the emptyDir volume holding the log files.
+    sizeLimit: 512Mi
+    # observability.fileLogs.components -- Which Kasm components get file logging and a tailing sidecar.
+    # Allowed entries: api, manager, guac.
+    components:
+      - api
+      - manager
+      - guac
+
+  # observability.hostLogs -- Collect the Kasm Proxy's nginx access and error logs with a Collector
+  # DaemonSet that reads the container runtime's log files from each node. This is the standard
+  # Kubernetes log-collection pattern and requires no changes to the proxy pod. The DaemonSet reads only
+  # this release's proxy pods, in this namespace, and derives pod metadata from the log file path, so it
+  # needs no ServiceAccount and no cluster permissions.
+  #
+  # NOTE: the DaemonSet mounts a hostPath and runs as root, both of which are forbidden by the
+  # `baseline` and `restricted` Pod Security Standards. If your namespace enforces either, set this to
+  # false and use `nginxLogs` instead.
+  #
+  hostLogs:
+    # observability.hostLogs.enabled -- Deploy the node-level log collection DaemonSet.
+    enabled: true
+    # observability.hostLogs.persistOffsets -- Keep track of how far through each log file the collector
+    # has read, in a directory on the node, so a collector restart neither loses nor repeats log lines.
+    # Requires a second, writable hostPath.
+    persistOffsets: true
+    # observability.hostLogs.extraSelectors -- Additional pod-name patterns in this namespace to collect
+    # logs from, e.g. `kasm-db-*` to capture the bundled database's logs. The release's proxy pods are
+    # always collected. Kasm's API, Manager, Guac, and RDP services are deliberately excluded: they
+    # export their logs over OTLP already, and collecting their console output as well would store every
+    # log line twice.
+    # Example:
+    #   extraSelectors:
+    #     - kasm-db-*
+    extraSelectors: []
+    # observability.hostLogs.tolerations -- Tolerations for the DaemonSet, so it can schedule onto
+    # tainted nodes. Only needed if Kasm pods themselves run on tainted nodes.
+    tolerations: []
+    # observability.hostLogs.resources -- Manually configure the DaemonSet's resources. This overrides
+    # the pre-defined `deploymentSize` values.
+    resources: {}
+
+  # observability.nginxLogs -- Collect the Kasm Proxy's nginx logs and connection metrics with a
+  # Collector sidecar in the proxy pod, reading a shared volume, instead of the `hostLogs` DaemonSet.
+  # Off by default: `hostLogs` is the recommended mechanism.
+  #
+  # Use this when your namespace enforces the `baseline` or `restricted` Pod Security Standards, which
+  # forbid the hostPath mount the DaemonSet needs. This path also collects nginx connection metrics,
+  # which the DaemonSet cannot reach.
+  #
+  # `hostLogs.enabled` and `nginxLogs.enabled` are mutually exclusive.
+  #
+  nginxLogs:
+    # observability.nginxLogs.enabled -- Enable the nginx log/metrics sidecar in the Kasm Proxy pod.
+    enabled: false
+    # observability.nginxLogs.sizeLimit -- Size limit of the emptyDir volume shared between nginx and the sidecar.
+    sizeLimit: 512Mi
+
+  # Configure ClickHouse, the telemetry store that backs Kasm reporting.
+  #
+  clickhouse:
+    # observability.clickhouse.enabled -- Deploy a ClickHouse StatefulSet to store telemetry. Set to false
+    # to run the Collector with no telemetry store at all: signals are received and discarded, and Kasm
+    # reporting features return empty results. To use a ClickHouse you already run, leave this true and set
+    # `standalone` instead.
+    #
+    enabled: true
+    # observability.clickhouse.standalone -- Setting standalone to true will prevent the deployment of the
+    # ClickHouse StatefulSet and requires you to have a ClickHouse server already set up and awaiting
+    # connections. Use the endpoint values below to connect to your external instance.
+    #
+    standalone: false
+    # observability.clickhouse.nativeEndpoint -- DSN for ClickHouse's native interface, used by the
+    # Collector to write telemetry (e.g. `tcp://clickhouse.example.com:9440?secure=true&skip_verify=true`).
+    # A bare `host:port` is wrapped with the chart's defaults. Only used when `standalone` is true, and
+    # required together with `httpEndpoint`.
+    #
+    nativeEndpoint: ""
+    # observability.clickhouse.httpEndpoint -- URL for ClickHouse's HTTP interface, used by Kasm to read
+    # reports and logs (e.g. `https://clickhouse.example.com:8443`). Only used when `standalone` is true,
+    # and required together with `nativeEndpoint`.
+    #
+    httpEndpoint: ""
+    # observability.clickhouse.database -- Name of the ClickHouse database holding Kasm telemetry.
+    #
+    # Changing this on an existing deployment requires starting from an empty ClickHouse volume.
+    # The audit-log retention tier depends on a column created by the initial schema, which only runs
+    # when the data directory is empty; pointing an existing volume at a new database name silently
+    # drops audit logs to the shorter `retention.logsDays` window. See
+    # [Observability](./docs/observability.md) for the procedure and a way to check an existing
+    # deployment.
+    #
+    database: kasm_otel
+    # observability.clickhouse.username -- ClickHouse user Kasm connects as.
+    #
+    username: kasm_otel
+    # observability.clickhouse.existingSecret -- Read the ClickHouse password from an existing Secret
+    # instead of the chart-generated `clickhouse-password` key. Both `name` and `key` are required when used.
+    #
+    existingSecret:
+      name: ""
+      key: ""
+    # observability.clickhouse.tls -- Enable TLS on the bundled ClickHouse's 8443 (HTTPS) and 9440 (native)
+    # ports using the same certificate as the rest of Kasm, mirroring how the bundled Kasm DB is configured.
+    # Requires `certificate.secretName` or cert-manager. Has no effect when `standalone` is true.
+    #
+    tls: true
+    # observability.clickhouse.caCert -- PEM-encoded CA certificate trusted when connecting to a
+    # *standalone* ClickHouse over TLS (e.g. `httpEndpoint: https://...` behind a private or self-signed
+    # CA). Ignored for the bundled ClickHouse, which already uses the shared Kasm certificate.
+    # `clickhouse_connect` (the Python client Kasm's api/manager use) requires an explicit CA file — it does
+    # not consult `SSL_CERT_FILE`/`REQUESTS_CA_BUNDLE` or this chart's `trustedCaBundle` mechanism — so
+    # setting this renders a dedicated ConfigMap and mounts it into the api/manager containers. Leave empty
+    # to use the system trust store, or set `tlsVerify: false` to skip verification instead. Mutually
+    # exclusive with `caCertConfigMap`.
+    #
+    caCert: ""
+    # observability.clickhouse.caCertConfigMap -- Name of an existing ConfigMap containing the CA
+    # certificate for a standalone ClickHouse, under the key `ca.crt`. Use this instead of `caCert` if you
+    # already manage the certificate as a ConfigMap. Ignored for the bundled ClickHouse.
+    #
+    caCertConfigMap: ""
+    # observability.clickhouse.tlsVerify -- Whether the api/manager containers verify a standalone
+    # ClickHouse's TLS certificate at all. Set to false to skip verification (not recommended). Ignored
+    # when `caCert` or `caCertConfigMap` is set (an explicit CA always wins), and for the bundled
+    # ClickHouse, whose certificate is always verified.
+    #
+    tlsVerify: true
+    # observability.clickhouse.image -- Configure the image repository where the image is stored. Use this
+    # to point to a private hosted container registry instead of our public DockerHub hosted one.
+    #
+    image:
+      registry: docker.io
+      repository: clickhouse/clickhouse-server
+      # observability.clickhouse.image.tag -- Tag for the ClickHouse image. Pinned by the chart rather than
+      # falling back to `useImageTags`, because ClickHouse is versioned independently of Kasm.
+      tag: "24.12-alpine"
+    # observability.clickhouse.resources -- Manually configure the ClickHouse StatefulSet resources. This
+    # overrides the pre-defined `deploymentSize` values.
+    #
+    resources: {}
+    # observability.clickhouse.healthCheckTiming -- Override the pod's default healthcheck timing values for
+    # liveness and/or readiness probes. Values provided individually override their respective timing value.
+    #
+    healthCheckTiming:
+      livenessProbe: {}
+      readinessProbe: {}
+    # Configure the storage for the ClickHouse StatefulSet.
+    #
+    storage:
+      # observability.clickhouse.storage.storageClassName -- Set the storage class to attach to ClickHouse for
+      # storage. Leaving this blank will use the cluster-default storage class.
+      #
+      storageClassName: ""
+      # observability.clickhouse.storage.pvcSize -- Size of the PVC backing ClickHouse, in GiB. Telemetry volume
+      # scales with session count and retention; see the observability documentation for sizing guidance.
+      #
+      pvcSize: 20
+      # observability.clickhouse.storage.retentionPolicy -- Configure how the ClickHouse volume should be retained
+      # or deleted throughout the StatefulSet's lifecycle. Defaults to Retain so telemetry history survives an
+      # uninstall.
+      #
+      retentionPolicy:
+        whenDeleted: Retain
+        whenScaled: Retain
+    # observability.clickhouse.retention -- How long each class of telemetry is kept before ClickHouse deletes it.
+    # Applied to the schema at install time and re-applied by a post-upgrade Job when these values change.
+    #
+    retention:
+      # observability.clickhouse.retention.logsDays -- Retention in days for general application logs.
+      logsDays: 30
+      # observability.clickhouse.retention.auditLogsDays -- Retention in days for security-relevant audit logs
+      # (login and logout events). Usually longer than general logs to satisfy audit requirements.
+      auditLogsDays: 365
+      # observability.clickhouse.retention.tracesDays -- Retention in days for distributed traces.
+      tracesDays: 7
+      # observability.clickhouse.retention.metricsDays -- Retention in days for metrics.
+      metricsDays: 90
+    # observability.clickhouse.annotations -- Custom annotations to add to the ClickHouse StatefulSet
+    annotations: {}
+    # observability.clickhouse.labels -- Custom labels to add to the ClickHouse StatefulSet
+    labels: {}
+
+  # observability.browser -- Collect real-user telemetry from the Kasm web UI in the user's browser.
+  #
+  browser:
+    # observability.browser.enabled -- Serve the browser telemetry runtime configuration so the Kasm web UI
+    # reports page loads and user interactions. When false, a stub is served that disables the browser SDK
+    # without producing console errors.
+    enabled: true
+
 ####################################
 # Extra Kubernetes config settings #
 ####################################
@@ -1118,6 +1432,8 @@ extraAnnotations:
   cronJob: {}
   # extraAnnotations.cronPod -- Additional annotations to apply to the pod template inside CronJobs created by this chart
   cronPod: {}
+  # extraAnnotations.daemonSet -- Additional daemonSet annotations to apply to resources created by this chart
+  daemonSet: {}
   # extraAnnotations.deployment -- Additional deployment annotations to apply to resources created by this chart
   deployment: {}
   # extraAnnotations.job -- Additional job annotations to apply to resources created by this chart
@@ -1140,6 +1456,8 @@ extraAnnotations:
 extraLabels:
   # extraLabels.configMap -- Additional configMap labels to apply to resources created by this chart
   configMap: {}
+  # extraLabels.daemonSet -- Additional daemonSet labels to apply to resources created by this chart
+  daemonSet: {}
   # extraLabels.deployment -- Additional deployment labels to apply to resources created by this chart
   deployment: {}
   # extraLabels.pod -- Additional pod labels to apply to resources created by this chart

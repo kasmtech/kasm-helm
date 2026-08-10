@@ -1,65 +1,17 @@
 suite: logFormat rendering
 
+# api-app-configmap.yaml and manager-app-configmap.yaml were deleted in H2 (dead config: the API
+# and Manager services no longer call logging.config.dictConfig, so logFormat never affected their
+# structured logs; their console output is always human-readable text now, and their structured
+# logs are exported over OpenTelemetry instead). logFormat's remaining scope is nginx's access log
+# format and the Postgres JSON log symlink, both covered below.
 templates:
-  - templates/api-app-configmap.yaml
-  - templates/manager-app-configmap.yaml
   - templates/rdp-gateway-configmap.yaml
   - templates/nginx-shared-configmap.yaml
   - templates/db-configmap.yaml
+  - templates/db-statefulset.yaml
 
 tests:
-
-  # ---------- api-app-configmap ----------
-  - it: api-app-configmap is not rendered when logFormat is log (default)
-    template: templates/api-app-configmap.yaml
-    asserts:
-      - hasDocuments:
-          count: 0
-
-  - it: api-app-configmap is rendered when logFormat is json
-    template: templates/api-app-configmap.yaml
-    set:
-      logFormat: json
-    asserts:
-      - hasDocuments:
-          count: 1
-      - isKind:
-          of: ConfigMap
-
-  - it: api-app-configmap stream handler uses pythonjsonlogger formatter
-    template: templates/api-app-configmap.yaml
-    set:
-      logFormat: json
-    asserts:
-      - matchRegex:
-          path: data["api.app.config.yaml"]
-          pattern: "formatter: pythonjsonlogger"
-
-  # ---------- manager-app-configmap ----------
-  - it: manager-app-configmap is not rendered when logFormat is log (default)
-    template: templates/manager-app-configmap.yaml
-    asserts:
-      - hasDocuments:
-          count: 0
-
-  - it: manager-app-configmap is rendered when logFormat is json
-    template: templates/manager-app-configmap.yaml
-    set:
-      logFormat: json
-    asserts:
-      - hasDocuments:
-          count: 1
-      - isKind:
-          of: ConfigMap
-
-  - it: manager-app-configmap stream handler uses pythonjsonlogger formatter
-    template: templates/manager-app-configmap.yaml
-    set:
-      logFormat: json
-    asserts:
-      - matchRegex:
-          path: data["api.app.config.yaml"]
-          pattern: "formatter: pythonjsonlogger"
 
   # ---------- rdp-gateway-configmap ----------
   # The configmap always contains both formatter *definitions* (pythonjsonlogger
@@ -82,9 +34,13 @@ tests:
           pattern: "formatter: pythonjsonlogger"
 
   # ---------- nginx-shared-configmap ----------
-  # The access_log switching lives in data["logging.conf"], not data["nginx.conf"].
-  - it: nginx shared configmap uses main access log format by default
+  # The access_log switching lives in data["logging.conf"], not data["nginx.conf"]. H5 makes
+  # observability.enabled force json_combined regardless of logFormat (the hostLogs DaemonSet
+  # parses stdout as JSON), so logFormat's own effect is only observable with observability off.
+  - it: nginx shared configmap uses main access log format by default when observability is disabled
     template: templates/nginx-shared-configmap.yaml
+    set:
+      observability.enabled: false
     asserts:
       - matchRegex:
           path: data["logging.conf"]
@@ -93,10 +49,23 @@ tests:
           path: data["logging.conf"]
           pattern: "access_log /dev/stdout json_combined"
 
-  - it: nginx shared configmap uses json_combined access log format when logFormat is json
+  - it: nginx shared configmap uses json_combined access log format when logFormat is json and observability is disabled
     template: templates/nginx-shared-configmap.yaml
     set:
+      observability.enabled: false
       logFormat: json
+    asserts:
+      - matchRegex:
+          path: data["logging.conf"]
+          pattern: "access_log /dev/stdout json_combined"
+      - notMatchRegex:
+          path: data["logging.conf"]
+          pattern: "access_log /dev/stdout main"
+
+  - it: nginx shared configmap forces json_combined access log format when observability is enabled, regardless of logFormat
+    template: templates/nginx-shared-configmap.yaml
+    set:
+      logFormat: log
     asserts:
       - matchRegex:
           path: data["logging.conf"]
@@ -121,3 +90,26 @@ tests:
       - matchRegex:
           path: data["postgresql.conf"]
           pattern: "log_destination = 'stderr,jsonlog'"
+
+  # ---------- db-statefulset ----------
+  # logFormat: json symlinks postgres's JSON log file to stdout via a custom command/args; the
+  # default (log) uses the image's own entrypoint with no override.
+  - it: db statefulset uses the default entrypoint (no command override) when logFormat is log
+    template: templates/db-statefulset.yaml
+    documentIndex: 0
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].command
+
+  - it: db statefulset symlinks the postgres JSON log to stdout when logFormat is json
+    template: templates/db-statefulset.yaml
+    documentIndex: 0
+    set:
+      logFormat: json
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].command
+          value: ["/bin/bash", "-c"]
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "ln -sf /dev/stdout /tmp/postgres/postgresql.json"

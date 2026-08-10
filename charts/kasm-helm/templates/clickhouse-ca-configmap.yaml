@@ -1,0 +1,21 @@
+{{/*
+CA certificate ConfigMap for a *standalone* ClickHouse reached over TLS with a private or
+self-signed CA. Only rendered when observability.clickhouse.standalone is true, caCert is set, and
+caCertConfigMap (an existing ConfigMap) is not — the latter means the operator already manages the
+certificate themselves.
+
+Not zone-scoped: api/manager containers in every zone mount the same CA cert.
+
+This holds only public certificate bytes, never a password or private key, so a ConfigMap (not a
+Secret) is the right primitive here.
+*/}}
+{{- $ch := .Values.observability.clickhouse -}}
+{{- if and .Values.observability.enabled $ch.standalone $ch.caCert (not $ch.caCertConfigMap) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  {{- include "kasm.metadata" (dict "context" . "component" "clickhouse-ca" "resource" "configMap" "include" "all") | indent 2 }}
+data:
+  ca.crt: |
+{{ $ch.caCert | indent 4 }}
+{{- end }}

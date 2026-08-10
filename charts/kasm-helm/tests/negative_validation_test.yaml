@@ -4,6 +4,7 @@ templates:
   - templates/proxy-service-external.yaml
   - templates/route.yaml
   - templates/rdp-gateway-deployment.yaml
+  - templates/otel-collector-configmap.yaml
 
 tests:
   - it: ingress + route both enabled fails the route template with a clear message
@@ -50,3 +51,112 @@ tests:
     asserts:
       - failedTemplate:
           errorMessage: "directRdpService.rdpAccessURL must be set if directRdpService.enabled is true."
+
+  # ---------- kasm.observabilityValidate ----------
+  - it: standalone=true with one endpoint missing fails
+    template: templates/otel-collector-configmap.yaml
+    set:
+      observability.clickhouse.standalone: true
+      observability.clickhouse.nativeEndpoint: "tcp://ch.example.test:9440"
+      observability.clickhouse.httpEndpoint: ""
+    asserts:
+      - failedTemplate:
+          errorMessage: "observability.clickhouse.standalone requires both observability.clickhouse.nativeEndpoint and observability.clickhouse.httpEndpoint to be set."
+
+  - it: standalone=true with clickhouse.enabled=false fails (mutually exclusive)
+    template: templates/otel-collector-configmap.yaml
+    set:
+      observability.clickhouse.standalone: true
+      observability.clickhouse.enabled: false
+      observability.clickhouse.nativeEndpoint: "tcp://ch.example.test:9440"
+      observability.clickhouse.httpEndpoint: "https://ch.example.test:8443"
+    asserts:
+      - failedTemplate:
+          errorMessage: "observability.clickhouse.standalone and observability.clickhouse.enabled=false are mutually exclusive: standalone already means 'use an external ClickHouse', while enabled=false means 'no ClickHouse store at all'."
+
+  - it: caCert and caCertConfigMap both set fails
+    template: templates/otel-collector-configmap.yaml
+    set:
+      observability.clickhouse.caCert: "-----BEGIN CERTIFICATE-----\nabc\n-----END CERTIFICATE-----"
+      observability.clickhouse.caCertConfigMap: my-ca-configmap
+    asserts:
+      - failedTemplate:
+          errorMessage: "observability.clickhouse.caCert and observability.clickhouse.caCertConfigMap are mutually exclusive: caCert has the chart render a ConfigMap from literal PEM text, caCertConfigMap points at one you already manage."
+
+  - it: forward.existingSecret half-set (name only) fails
+    template: templates/otel-collector-configmap.yaml
+    set:
+      observability.collector.forward.existingSecret.name: my-forward-secret
+    asserts:
+      - failedTemplate:
+          errorMessage: "observability.collector.forward.existingSecret requires both 'name' and 'key' to be set."
+
+  - it: forward.existingSecret half-set (key only) fails
+    template: templates/otel-collector-configmap.yaml
+    set:
+      observability.collector.forward.existingSecret.key: token
+    asserts:
+      - failedTemplate:
+          errorMessage: "observability.collector.forward.existingSecret requires both 'name' and 'key' to be set."
+
+  - it: externalEndpoint + forwarder.existingConfigMap fails
+    template: templates/otel-collector-configmap.yaml
+    set:
+      observability.collector.externalEndpoint: http://alloy.observability:4318
+      observability.collector.forwarder.existingConfigMap: my-forwarder-config
+    asserts:
+      - failedTemplate:
+          errorMessage: "observability.collector.externalEndpoint is mutually exclusive with observability.collector.forwarder.existingConfigMap and observability.collector.gateway.existingConfigMap: externalEndpoint means neither Collector tier is rendered by this chart, so there is no config for them to override."
+
+  - it: externalEndpoint + gateway.existingConfigMap fails
+    template: templates/otel-collector-configmap.yaml
+    set:
+      observability.collector.externalEndpoint: http://alloy.observability:4318
+      observability.collector.gateway.existingConfigMap: my-gateway-config
+    asserts:
+      - failedTemplate:
+          errorMessage: "observability.collector.externalEndpoint is mutually exclusive with observability.collector.forwarder.existingConfigMap and observability.collector.gateway.existingConfigMap: externalEndpoint means neither Collector tier is rendered by this chart, so there is no config for them to override."
+
+  # NOTE: values.schema.json already enforces the fileLogs.components enum (api/manager/guac), so
+  # an unsupported entry is rejected at schema-validation time — a different error path than
+  # kasm.observabilityValidate's render-time `fail` (a defense-in-depth belt-and-suspenders check
+  # for callers who bypass schema validation, e.g. --disable-openapi-validation). helm-unittest
+  # treats a schema-validation rejection as a suite-level execution error rather than a
+  # `failedTemplate`-assertable one, so this case is verified manually instead (matching H1's
+  # `helm template ... --set observability.bogusKey=1` precedent): `helm template kasm-test
+  # charts/kasm-helm -n kasm-test --set
+  # observability.fileLogs.components='{api,not-a-real-component}'` fails with "value must be one
+  # of 'api', 'manager', 'guac'".
+
+  - it: hostLogs.enabled and nginxLogs.enabled both true fails
+    template: templates/otel-collector-configmap.yaml
+    set:
+      observability.hostLogs.enabled: true
+      observability.nginxLogs.enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "observability.hostLogs.enabled and observability.nginxLogs.enabled are mutually exclusive: hostLogs runs a node-level DaemonSet reading container-runtime log files, nginxLogs runs a sidecar in the proxy pod reading a shared volume. Enabling both would store every nginx log line twice. Use nginxLogs in namespaces that enforce the baseline/restricted Pod Security Standards; use hostLogs otherwise."
+
+  - it: isOpenshift with hostLogs still enabled fails
+    template: templates/otel-collector-configmap.yaml
+    set:
+      isOpenshift: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "isOpenshift: true never renders the hostLogs DaemonSet (a hostPath + runAsUser:0 workload needs a SecurityContextConstraint this chart does not ship). Set observability.nginxLogs.enabled: true to collect nginx logs on OpenShift instead."
+
+  - it: tailSamplePercentage above 100 fails
+    template: templates/otel-collector-configmap.yaml
+    set:
+      observability.collector.tailSamplePercentage: 101
+    asserts:
+      - failedTemplate:
+          errorMessage: "observability.collector.tailSamplePercentage must be between 0 and 100, got 101."
+
+  - it: tailSamplePercentage below 0 fails
+    template: templates/otel-collector-configmap.yaml
+    set:
+      observability.collector.tailSamplePercentage: -1
+    asserts:
+      - failedTemplate:
+          errorMessage: "observability.collector.tailSamplePercentage must be between 0 and 100, got -1."

@@ -1,0 +1,49 @@
+{{/*
+Kasm OTel Collector forwarder Services — one ClusterIP per zone (always), plus an optional
+external Service per zone for out-of-cluster senders (Kasm Agents, external Collectors).
+*/}}
+{{- $obs := .Values.observability -}}
+{{- if and $obs.enabled (not $obs.collector.externalEndpoint) }}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- range $idx, $zone := (include "kasm.zones" $ | fromYamlArray) }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  {{- include "kasm.metadata" (dict "context" $ "component" "otel-collector" "resource" "service" "zone" $zone.name "include" "all") | indent 2 }}
+spec:
+  selector:
+    {{- include "kasm.metadata" (dict "context" $ "component" "otel-collector" "resource" "service" "zone" $zone.name "include" "match") | indent 4 }}
+  ports:
+    - name: otlp-http
+      protocol: TCP
+      port: {{ $constants.otel.otlpHttp }}
+    - name: otlp-grpc
+      protocol: TCP
+      port: {{ $constants.otel.otlpGrpc }}
+    - name: otlp-nginx
+      protocol: TCP
+      port: {{ $constants.otel.otlpNginx }}
+    - name: health
+      protocol: TCP
+      port: {{ $constants.otel.health }}
+    - name: self-metrics
+      protocol: TCP
+      port: {{ $constants.otel.selfMetrics }}
+{{- if $obs.collector.forwarder.externalService.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  {{- include "kasm.metadata" (dict "context" $ "component" "otel-collector-ext" "resource" "service" "zone" $zone.name "name" (printf "%s-otel-collector-%s-external" $.Release.Name (include "kasm.zoneName" $zone.name)) "include" "all") | indent 2 }}
+spec:
+  type: {{ $obs.collector.forwarder.externalService.type }}
+  selector:
+    {{- include "kasm.metadata" (dict "context" $ "component" "otel-collector" "resource" "service" "zone" $zone.name "include" "match") | indent 4 }}
+  ports:
+    - name: otlp-grpc
+      protocol: TCP
+      port: {{ $constants.otel.otlpGrpc }}
+{{- end }}
+{{- end }}
+{{- end }}

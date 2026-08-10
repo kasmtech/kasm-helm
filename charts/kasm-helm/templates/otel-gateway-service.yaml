@@ -1,0 +1,27 @@
+{{/*
+Kasm OTel Collector gateway Service — exactly one per release, cluster-wide (not zone-scoped).
+Must equal $constants.otel.gatewaySvc; the per-zone forwarders and H5's host-log DaemonSet both
+point at this name directly. No external Service variant — out-of-cluster senders use a zone
+forwarder's externalService instead.
+*/}}
+{{- $obs := .Values.observability -}}
+{{- if and $obs.enabled (not $obs.collector.externalEndpoint) }}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+apiVersion: v1
+kind: Service
+metadata:
+  {{- include "kasm.metadata" (dict "context" $ "component" "otel-gateway" "resource" "service" "include" "all") | indent 2 }}
+spec:
+  selector:
+    {{- include "kasm.metadata" (dict "context" $ "component" "otel-gateway" "resource" "service" "include" "match") | indent 4 }}
+  ports:
+    - name: otlp-grpc
+      protocol: TCP
+      port: {{ $constants.otel.otlpGrpc }}
+    - name: health
+      protocol: TCP
+      port: {{ $constants.otel.health }}
+    - name: self-metrics
+      protocol: TCP
+      port: {{ $constants.otel.selfMetrics }}
+{{- end }}

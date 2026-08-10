@@ -70,7 +70,6 @@ def _assert_json_logs(component: str, raw_logs: str) -> None:
 def test_json_log_format(installer, temp_workdir: Path) -> None:
     e2e_config = installer["config"]
     namespace = installer["namespace"]
-    release = e2e_config.release_name
 
     low_resources = {"requests": {"cpu": "50m", "memory": "256Mi"}}
     low_resources_proxy = {"requests": {"cpu": "50m", "memory": "128Mi"}}
@@ -122,15 +121,18 @@ def test_json_log_format(installer, temp_workdir: Path) -> None:
     assert warmup_status == 200
 
     # Each tuple: (component label, container name or None for pod default)
-    # Guac is intentionally excluded — its log format is not configurable
-    # via logFormat in this release.
+    #
+    # H2 (see docs/otel-integration-plan.md §4) narrowed logFormat's scope: api_server/server.py
+    # no longer calls logging.config.dictConfig, so api/manager's console output is always
+    # human-readable text now regardless of logFormat — their structured logs are exported over
+    # OpenTelemetry instead (see otel_env_test.yaml / test_12_observability.py). rdp-gateway and
+    # rdp-https-gateway were never logFormat-controlled for their sampled container (the Go/C++
+    # app binary, not the nginx sidecar) in the first place. Only the proxy (nginx json_combined,
+    # now forced on whenever observability.enabled — see log_format_test.yaml) and the bundled DB
+    # remain in logFormat's actual scope. Do not "fix" this back — see the doc reference above.
     components = [
-        ("api",               None),
-        ("manager",           None),
-        ("proxy",             None),
-        ("rdp-gateway",       f"{release}-rdp-gateway"),
-        ("rdp-https-gateway", f"{release}-rdp-https-gateway"),
-        ("db",                None),
+        ("proxy", None),
+        ("db",    None),
     ]
 
     for component, container in components:

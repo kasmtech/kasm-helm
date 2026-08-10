@@ -19,6 +19,19 @@ spec:
                 - StatefulSet
                 - DaemonSet
                 - Job
+      # The hostLogs DaemonSet (observability.hostLogs) intentionally runs as root to read
+      # /var/log/pods and is exempt from restricted-compatible hardening; see
+      # docs/otel-execution/H5-nginx-sidecars.md §6b. It still carries kasm.com/security=true
+      # like every other workload's pod template (that annotation just means "apply the chart's
+      # standard hardening pattern where possible" for other Kyverno checks), so it must be
+      # excluded by name here rather than by dropping the annotation.
+      exclude:
+        any:
+          - resources:
+              kinds:
+                - DaemonSet
+              names:
+                - "*-otel-hostlogs"
       preconditions:
         all:
           - key: "{{ request.object.spec.template.metadata.annotations.\"kasm.com/security\" || '' }}"
@@ -64,6 +77,16 @@ spec:
                 - StatefulSet
                 - DaemonSet
                 - Job
+      # See the matching exclude comment on require-workload-pod-security-context above: the
+      # hostLogs DaemonSet's container deliberately runs as root (runAsUser: 0) to read
+      # /var/log/pods and cannot satisfy runAsNonRoot.
+      exclude:
+        any:
+          - resources:
+              kinds:
+                - DaemonSet
+              names:
+                - "*-otel-hostlogs"
       preconditions:
         all:
           - key: "{{ request.object.spec.template.metadata.annotations.\"kasm.com/security\" || '' }}"

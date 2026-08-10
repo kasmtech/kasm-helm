@@ -1,0 +1,59 @@
+suite: isOpenshift — hostLogs DaemonSet never renders, sidecar path required instead
+
+templates:
+  - templates/otel-collector-daemonset.yaml
+  - templates/otel-collector-daemonset-configmap.yaml
+  - templates/otel-collector-configmap.yaml
+  - templates/proxy-deployment.yaml
+  - templates/clickhouse-statefulset.yaml
+  - templates/clickhouse-configmap.yaml
+
+tests:
+  - it: isOpenshift=true with default observability values fails the render (fail-loud, not silent fallback)
+    template: templates/otel-collector-configmap.yaml
+    set:
+      isOpenshift: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "isOpenshift: true never renders the hostLogs DaemonSet (a hostPath + runAsUser:0 workload needs a SecurityContextConstraint this chart does not ship). Set observability.nginxLogs.enabled: true to collect nginx logs on OpenShift instead."
+
+  - it: isOpenshift=true + nginxLogs.enabled=true renders with no DaemonSet and the sidecar present
+    values:
+      - ../../../tests/values/route-openshift.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/otel-collector-daemonset.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/otel-collector-daemonset-configmap.yaml
+
+  - it: isOpenshift=true + nginxLogs.enabled=true still renders the rest of the observability stack
+    values:
+      - ../../../tests/values/route-openshift.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/otel-collector-configmap.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/clickhouse-statefulset.yaml
+
+  - it: isOpenshift=true + nginxLogs.enabled=true gives the proxy pod an otel-sidecar container
+    template: templates/proxy-deployment.yaml
+    documentIndex: 0
+    values:
+      - ../../../tests/values/route-openshift.yaml
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 2
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: otel-sidecar
+
+  - it: isOpenshift=false (default) with default observability values renders the DaemonSet
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/otel-collector-daemonset.yaml

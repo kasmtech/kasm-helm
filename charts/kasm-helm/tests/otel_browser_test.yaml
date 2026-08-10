@@ -1,0 +1,80 @@
+suite: browser telemetry stub — /otel-config.js and /otel-time
+
+templates:
+  - templates/proxy-configmaps.yaml
+
+tests:
+  - it: /otel-config.js always present regardless of observability/browser settings
+    template: templates/proxy-configmaps.yaml
+    documentIndex: 1
+    asserts:
+      - matchRegex:
+          path: data["otel_browser.conf"]
+          pattern: "location = /otel-config\\.js \\{"
+
+  - it: enabled:true when observability and browser are both enabled (default)
+    template: templates/proxy-configmaps.yaml
+    documentIndex: 1
+    asserts:
+      - matchRegex:
+          path: data["otel_browser.conf"]
+          pattern: '"enabled":true'
+
+  - it: enabled:false when browser.enabled=false (observability still on)
+    template: templates/proxy-configmaps.yaml
+    documentIndex: 1
+    set:
+      observability.browser.enabled: false
+    asserts:
+      - matchRegex:
+          path: data["otel_browser.conf"]
+          pattern: '"enabled":false'
+
+  - it: enabled:false when observability.enabled=false
+    template: templates/proxy-configmaps.yaml
+    documentIndex: 1
+    set:
+      observability.enabled: false
+    asserts:
+      - matchRegex:
+          path: data["otel_browser.conf"]
+          pattern: '"enabled":false'
+
+  - it: /otel-time present when observability and browser are both enabled
+    template: templates/proxy-configmaps.yaml
+    documentIndex: 1
+    asserts:
+      - matchRegex:
+          path: data["otel_browser.conf"]
+          pattern: "location = /otel-time \\{"
+
+  - it: /otel-time absent when browser.enabled=false
+    template: templates/proxy-configmaps.yaml
+    documentIndex: 1
+    set:
+      observability.browser.enabled: false
+    asserts:
+      - notMatchRegex:
+          path: data["otel_browser.conf"]
+          pattern: "/otel-time"
+
+  - it: /otel-time absent when observability.enabled=false
+    template: templates/proxy-configmaps.yaml
+    documentIndex: 1
+    set:
+      observability.enabled: false
+    asserts:
+      - notMatchRegex:
+          path: data["otel_browser.conf"]
+          pattern: "/otel-time"
+
+  - it: otel_trace off on both locations when observability is on
+    template: templates/proxy-configmaps.yaml
+    documentIndex: 1
+    asserts:
+      - matchRegex:
+          path: data["otel_browser.conf"]
+          pattern: "(?s)location = /otel-config\\.js \\{\\s*otel_trace     off;"
+      - matchRegex:
+          path: data["otel_browser.conf"]
+          pattern: "(?s)location = /otel-time \\{\\s*otel_trace off;"

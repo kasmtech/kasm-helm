@@ -100,6 +100,7 @@ spec:
               value: "30"
             - name: FORWARD_LOGS
               value: "true"
+            {{- include "kasm.otelEnv" (dict "context" $ "serviceName" "kasm-rdp-gateway" "zone" $zone.name) | nindent 12 }}
           ports:
             - name: {{ $constants.rdpGateway.portName }}
               containerPort: 5555

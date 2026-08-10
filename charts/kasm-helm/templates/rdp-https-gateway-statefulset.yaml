@@ -95,6 +95,7 @@ spec:
               value: "30"
             - name: FORWARD_LOGS
               value: "true"
+            {{- include "kasm.otelEnv" (dict "context" $ "serviceName" "kasm-rdp-https-gateway" "zone" $zone.name) | nindent 12 }}
           {{- if $.Values.applyHealthChecks }}
           livenessProbe:
             {{- include "health.probe" (dict "root" $ "component" "rdpHttpsGateway" "probeType" "livenessProbe" "type" "tcp" "port" $constants.rdpHttpsGateway.port) | nindent 12 }}

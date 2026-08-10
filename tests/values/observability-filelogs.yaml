@@ -1,0 +1,3 @@
+observability:
+  fileLogs:
+    enabled: true

@@ -14,13 +14,14 @@ Try Kasm Workspaces in your browser: [kasm.com](https://kasm.com/solutions/platf
 
 ## About This Chart
 
-Kasm Workspaces is a container streaming platform that delivers browsers, desktops, and applications as disposable, isolated sessions in any modern browser. This chart deploys the Kasm **core control-plane services** — `api`, `manager`, `guac`, `rdp-gateway`, and `rdp-https-gateway` — into a Kubernetes cluster, along with an optional bundled PostgreSQL database.
+Kasm Workspaces is a container streaming platform that delivers browsers, desktops, and applications as disposable, isolated sessions in any modern browser. This chart deploys the Kasm **core control-plane services** — `api`, `manager`, `guac`, `rdp-gateway`, and `rdp-https-gateway` — into a Kubernetes cluster, along with an optional bundled PostgreSQL database and a built-in observability stack (an OpenTelemetry Collector plus a bundled ClickHouse store) that powers logs, traces, metrics, and the Admin UI's reporting views.
 
 A few things to know up front:
 
 - **Sessions do not run in the cluster.** Containerized desktop, browser, and app sessions are hosted on external Docker Agent servers that you provision separately (statically or via auto scaling).
 - **RDP target hosts are external.** RDP sessions are routed by the in-cluster gateways to Windows or Linux hosts running outside the cluster.
 - **Ingress fronts the deployment.** Browser and HTTPS-based client traffic enters through your Ingress controller, typically backed by a cloud load balancer.
+- **Observability is on by default.** The chart deploys an OpenTelemetry Collector (a per-zone forwarder plus a single cluster-wide gateway) and a ClickHouse StatefulSet; see [charts/kasm-helm/docs/observability.md](charts/kasm-helm/docs/observability.md) for what gets deployed, sizing guidance, and how to opt out (`observability.enabled: false`).
 
 ## Prerequisites
 

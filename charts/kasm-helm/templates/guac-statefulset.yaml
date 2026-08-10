@@ -84,6 +84,15 @@ spec:
               value: {{ $constants.proxy.http | quote }}
             - name: KASM_EPHEMERAL
               value: "true"
+            {{- include "kasm.otelEnv" (dict "context" $ "serviceName" "kasm-guac" "zone" $zone.name "component" "guac") | nindent 12 }}
+            {{- if and $.Values.observability.fileLogs.enabled (has "guac" $.Values.observability.fileLogs.components) }}
+            - name: LOG_FILE_NAME_PATTERN
+              value: "kasm_guac.<DATE>.log"
+            - name: LOG_DATE_FORMAT
+              value: "YYYY.MM.DD"
+            - name: LOG_TIMESTAMP_FORMAT
+              value: "YYYY-MM-DD HH:mm:ss.SSS"
+            {{- end }}
           ports:
             - name: {{ $constants.guac.portName }}
               containerPort: {{ $constants.guac.port }}
@@ -93,7 +102,9 @@ spec:
               mountPath: /tmp
             - name: kasm-guac-log-data
               mountPath: /opt/kasm/current/log
+              {{- if not (and $.Values.observability.fileLogs.enabled (has "guac" $.Values.observability.fileLogs.components)) }}
               readOnly: true
+              {{- end }}
             - name: kasm-guac-data
               mountPath: /opt/kasm/current/tmp/guac
             {{- include "kasm.trustedCaVolumeMounts" $ | nindent 12 }}
@@ -112,6 +123,9 @@ spec:
           resources: {{- include "resources.preset" (dict "node" ($constants.guac.component) "size" $.Values.deploymentSize) | nindent 12 }}
           {{- end }}
           {{- include "kasm.securityContext" (list $ 1000 "container") | nindent 10 }}
+        {{- if and $.Values.observability.fileLogs.enabled (has "guac" $.Values.observability.fileLogs.components) }}
+        {{- include "kasm.otelSidecar" (dict "context" $ "zone" $zone.name "serviceName" "kasm-guac" "configMap" (include "kasm.name" (list $ "otel-filelogs-sidecar" "configmap")) "volumeName" "kasm-guac-log-data" "mountPath" "/opt/kasm/current/log") | nindent 8 }}
+        {{- end }}
         - name: {{ printf "%s-guac-nginx" $.Release.Name }}
           image: {{ $constants.proxy.image }}
           imagePullPolicy: {{ $.Values.imagePullPolicy }}
@@ -175,7 +189,19 @@ spec:
             secretName: {{ $.Values.certificate.secretName | default (include "kasm.name" (list $ "cert-manager" "secret")) }}
         - name: kasm-guac-log-data
           emptyDir:
+            {{- if and $.Values.observability.fileLogs.enabled (has "guac" $.Values.observability.fileLogs.components) }}
+            sizeLimit: {{ $.Values.observability.fileLogs.sizeLimit }}
+            {{- else }}
             sizeLimit: 1Mi
+            {{- end }}
+        {{- if and $.Values.observability.fileLogs.enabled (has "guac" $.Values.observability.fileLogs.components) }}
+        - name: otel-sidecar-config
+          configMap:
+            name: {{ include "kasm.name" (list $ "otel-filelogs-sidecar" "configmap") }}
+        - name: otel-sidecar-tmp
+          emptyDir:
+            sizeLimit: 64Mi
+        {{- end }}
         - name: kasm-guac-data
           emptyDir:
             sizeLimit: 256Mi

@@ -50,6 +50,12 @@ E2E_NAMESPACE ?= kasm-e2e
 E2E_RELEASE ?= kasm-e2e
 E2E_MARK ?= e2e
 E2E_CLUSTER_WARMUP_SECONDS ?= 10
+# E2E_KEEP=1 keeps the release installed after a run; =onfail keeps it only after a failure.
+E2E_KEEP ?=
+# Extra values file layered onto every install in a scenario, used for branch-build image overrides.
+# Path is as seen inside the pytest container (tests/values is mounted at /e2e-values).
+E2E_IMAGE_VALUES ?=
+E2E_ARTIFACT_DIR ?= /e2e/artifacts
 E2E_DNS_RETRIES ?= 2
 E2E_DNS_BACKOFF_SECONDS ?= 10
 # Pause between scenarios in `make e2e` to let cluster state settle
@@ -117,7 +123,7 @@ CRANE_ARCH := $(subst amd64,x86_64,$(ARCH))
 CLOUD_PROVIDER_KIND_PID_FILE ?= $(CURDIR)/.kind/cloud-provider-kind.pid
 CLOUD_PROVIDER_KIND_LOG ?= $(CURDIR)/.kind/cloud-provider-kind.log
 
-.PHONY: tools lint render kubeconform kyverno unittest readme readme-check changelog changelog-llm changelog-console changelog-console-llm changelog-check docs test build-pytest kind-up kind-down kind-recreate kind-ensure kind-load-images kind-load-old-images kind-clean-namespace kind-prep pytest-docker e2e e2e-basic e2e-trustedca e2e-multizone e2e-externaldb e2e-backup e2e-backup-pss e2e-pss e2e-json-logging e2e-upgrade e2e-upgrade-included e2e-upgrade-standalone e2e-settle e2e-preseed validate-preseed extract-old-chart clean
+.PHONY: tools lint render kubeconform kyverno unittest readme readme-check changelog changelog-llm changelog-console changelog-console-llm changelog-check docs test build-pytest kind-up kind-down kind-recreate kind-ensure kind-load-images kind-load-old-images kind-clean-namespace kind-prep pytest-docker e2e e2e-basic e2e-trustedca e2e-multizone e2e-externaldb e2e-backup e2e-backup-pss e2e-pss e2e-json-logging e2e-observability e2e-observability-off e2e-observability-filelogs e2e-observability-sidecar e2e-upgrade e2e-upgrade-included e2e-upgrade-standalone e2e-settle e2e-preseed validate-preseed extract-old-chart clean
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*## "; printf "\nUsage: make \033[36m<target>\033[0m\n"} \
@@ -480,6 +486,9 @@ pytest-docker:
 	  -e KASM_TAG=$(KASM_TAG) \
 	  -e HOME=/tmp \
 	  -e PYTHONDONTWRITEBYTECODE=1 \
+	  -e E2E_KEEP=$(E2E_KEEP) \
+	  -e E2E_IMAGE_VALUES=$(E2E_IMAGE_VALUES) \
+	  -e E2E_ARTIFACT_DIR=$(E2E_ARTIFACT_DIR) \
 	  -e E2E_CLUSTER_WARMUP_SECONDS=$(E2E_CLUSTER_WARMUP_SECONDS) \
 	  -e E2E_DNS_RETRIES=$(E2E_DNS_RETRIES) \
 	  -e E2E_DNS_BACKOFF_SECONDS=$(E2E_DNS_BACKOFF_SECONDS) \
@@ -489,6 +498,7 @@ pytest-docker:
 	  -v $(CURDIR)/charts:/charts:ro \
 	  -v $(CURDIR)/tests/e2e/pytest.ini:/e2e/pytest.ini:ro \
 	  -v $(CURDIR)/tests/e2e:/e2e \
+	  -v $(CURDIR)/tests/values:/e2e-values:ro \
 	  $(if $(E2E_OLD_CHART_HOST_DIR),-v $(E2E_OLD_CHART_HOST_DIR):/old-chart:ro -e E2E_OLD_CHART_DIR=/old-chart) \
 	  $$sock_args \
 	  $(PYTEST_IMAGE) $(PYTEST_ARGS) \
@@ -502,10 +512,14 @@ pytest-docker:
 kind-load-images: $(CRANE) $(HELM) ## Pull and load current chart images into kind (slow)
 	@$(MAKE) kind-fix-kubeconfig
 	@set -euo pipefail; \
-	chart_images=$$($(HELM) template kasm $(KIND_LOAD_CHART_DIR) \
+	chart_images=$$( { $(HELM) template kasm $(KIND_LOAD_CHART_DIR) \
+		--set publicAddr=kind.kasm.local \
+		--set certificate.secretName=kasm-tls; \
+	  $(HELM) template kasm $(KIND_LOAD_CHART_DIR) \
 		--set publicAddr=kind.kasm.local \
 		--set certificate.secretName=kasm-tls \
-		| awk '/^[[:space:]]*image:[[:space:]]/{print $$2}' \
+		-f tests/values/dev31-images.yaml; \
+	  } | awk '/^[[:space:]]*image:[[:space:]]/{print $$2}' \
 		| sort -u); \
 	images="$$chart_images $(KIND_EXTRA_IMAGES)"; \
 	load_image_archive() { \
@@ -589,6 +603,18 @@ e2e: ## Run all e2e scenarios sequentially (requires kind cluster)
 	$(MAKE) e2e-json-logging E2E_NAMESPACE=kasm-e2e-json-logging
 	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-json-logging
 	$(MAKE) e2e-settle
+	$(MAKE) e2e-observability E2E_NAMESPACE=kasm-e2e-observability
+	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-observability
+	$(MAKE) e2e-settle
+	$(MAKE) e2e-observability-off E2E_NAMESPACE=kasm-e2e-observability-off
+	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-observability-off
+	$(MAKE) e2e-settle
+	$(MAKE) e2e-observability-filelogs E2E_NAMESPACE=kasm-e2e-observability-filelogs
+	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-observability-filelogs
+	$(MAKE) e2e-settle
+	$(MAKE) e2e-observability-sidecar E2E_NAMESPACE=kasm-e2e-observability-sidecar
+	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-observability-sidecar
+	$(MAKE) e2e-settle
 	$(MAKE) e2e-upgrade-included E2E_NAMESPACE=kasm-e2e-upgrade-included
 	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-upgrade-included
 	$(MAKE) e2e-settle
@@ -645,6 +671,23 @@ e2e-preseed: kind-prep build-pytest ## Preseed verification: group, settings, an
 
 e2e-json-logging: kind-prep build-pytest ## Verify all non-Guac pods emit JSON logs when logFormat=json
 	$(MAKE) pytest-docker E2E_SCENARIO=e2e-json-logging PYTEST_ARGS="-m e2e -q test_10_json_logging.py"
+
+# The four e2e-observability-* targets depend on the DEV-31 backend (OTel instrumentation,
+# ClickHouse env vars, the ngx_otel_module-carrying proxy image) — see
+# tests/values/dev31-images.yaml for the branch-build image overrides these pass alongside their
+# own values file, and PROGRESS.md's H6 entry for exactly which image tags were confirmed present
+# on this host and which are unconfirmed placeholders the human must resolve before running these.
+e2e-observability: kind-prep build-pytest ## Default observability install: collector + ClickHouse end-to-end telemetry flow
+	$(MAKE) pytest-docker E2E_SCENARIO=e2e-observability E2E_IMAGE_VALUES=/e2e-values/dev31-images.yaml PYTEST_ARGS="-m e2e -q test_12_observability.py"
+
+e2e-observability-off: kind-prep build-pytest ## observability.enabled=false stays deployable
+	$(MAKE) pytest-docker E2E_SCENARIO=e2e-observability-off E2E_IMAGE_VALUES=/e2e-values/dev31-images.yaml PYTEST_ARGS="-m e2e -q test_13_observability_disabled.py"
+
+e2e-observability-filelogs: kind-prep build-pytest ## observability.fileLogs sidecar produces JSON file logs that reach ClickHouse
+	$(MAKE) pytest-docker E2E_SCENARIO=e2e-observability-filelogs E2E_IMAGE_VALUES=/e2e-values/dev31-images.yaml PYTEST_ARGS="-m e2e -q test_14_observability_filelogs.py"
+
+e2e-observability-sidecar: kind-prep build-pytest ## PSS-restricted fallback: nginxLogs sidecar instead of the hostLogs DaemonSet
+	$(MAKE) pytest-docker E2E_SCENARIO=e2e-observability-sidecar E2E_IMAGE_VALUES=/e2e-values/dev31-images.yaml PYTEST_ARGS="-m e2e -q test_15_observability_sidecar_logs.py"
 
 ##@ Upgrade Helpers
 

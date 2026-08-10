@@ -1,0 +1,248 @@
+suite: OTel Collector config content — forwarder/gateway split regression
+
+templates:
+  - templates/otel-collector-configmap.yaml
+  - templates/otel-gateway-configmap.yaml
+
+tests:
+  # ---------- THE regression test: sampling/CH exporters live in exactly one place ----------
+  # helm-unittest has no "matchRegexCount" assertion. "Exactly one" is proven by pairing a
+  # positive matchRegex (at least one occurrence) with a notMatchRegex on a dotall pattern that
+  # only matches if the token appears *twice* in the document — if that fails to match, the
+  # token appears at most once, and combined with the positive assertion, exactly once.
+  - it: tail_sampling and each clickhouse exporter appear exactly once with two zones configured
+    values:
+      - ../../../tests/values/multizone-config.yaml
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "tail_sampling:"
+        template: templates/otel-gateway-configmap.yaml
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "(?s)tail_sampling:.*tail_sampling:"
+        template: templates/otel-gateway-configmap.yaml
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "clickhouse/logs:"
+        template: templates/otel-gateway-configmap.yaml
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "(?s)clickhouse/logs:.*clickhouse/logs:"
+        template: templates/otel-gateway-configmap.yaml
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "clickhouse/traces:"
+        template: templates/otel-gateway-configmap.yaml
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "(?s)clickhouse/traces:.*clickhouse/traces:"
+        template: templates/otel-gateway-configmap.yaml
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "clickhouse/metrics:"
+        template: templates/otel-gateway-configmap.yaml
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "(?s)clickhouse/metrics:.*clickhouse/metrics:"
+        template: templates/otel-gateway-configmap.yaml
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "tail_sampling:"
+        template: templates/otel-collector-configmap.yaml
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "clickhouse/(logs|traces|metrics):"
+        template: templates/otel-collector-configmap.yaml
+
+  - it: tail_sampling and each clickhouse exporter appear exactly once with forwarder replicas=3
+    set:
+      observability.collector.forwarder.replicas: 3
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "tail_sampling:"
+        template: templates/otel-gateway-configmap.yaml
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "(?s)tail_sampling:.*tail_sampling:"
+        template: templates/otel-gateway-configmap.yaml
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "clickhouse/logs:"
+        template: templates/otel-gateway-configmap.yaml
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "(?s)clickhouse/logs:.*clickhouse/logs:"
+        template: templates/otel-gateway-configmap.yaml
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "clickhouse/traces:"
+        template: templates/otel-gateway-configmap.yaml
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "(?s)clickhouse/traces:.*clickhouse/traces:"
+        template: templates/otel-gateway-configmap.yaml
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "clickhouse/metrics:"
+        template: templates/otel-gateway-configmap.yaml
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "(?s)clickhouse/metrics:.*clickhouse/metrics:"
+        template: templates/otel-gateway-configmap.yaml
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "tail_sampling:"
+        template: templates/otel-collector-configmap.yaml
+
+  # ---------- forwarder points at the gateway ----------
+  - it: forwarder otlp exporter targets the gateway Service on 4317 with the bearer token
+    template: templates/otel-collector-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'endpoint: "RELEASE-NAME-otel-gateway:4317"'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: '\$\{env:OTEL_BEARER_TOKEN\}'
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "filelog|nginx/metrics"
+
+  # ---------- no filelog/nginx receivers in the central configs ----------
+  - it: no filelog or nginx/metrics receiver in the gateway config
+    template: templates/otel-gateway-configmap.yaml
+    asserts:
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "filelog|nginx/metrics"
+
+  # ---------- sampling_percentage tracks tailSamplePercentage ----------
+  - it: sampling_percentage tracks observability.collector.tailSamplePercentage
+    template: templates/otel-gateway-configmap.yaml
+    set:
+      observability.collector.tailSamplePercentage: 42
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "sampling_percentage: 42"
+
+  # ---------- ttl values track retention days * 24 ----------
+  - it: ttl values track retention days converted to hours
+    template: templates/otel-gateway-configmap.yaml
+    set:
+      observability.clickhouse.retention.logsDays: 10
+      observability.clickhouse.retention.tracesDays: 5
+      observability.clickhouse.retention.metricsDays: 20
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "ttl: 240h"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "ttl: 120h"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "ttl: 480h"
+
+  # ---------- no literal credentials ----------
+  - it: gateway config references env-substituted credentials only, no literal password/token
+    template: templates/otel-gateway-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: '\$\{env:CLICKHOUSE_PASSWORD\}'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: '\$\{env:OTEL_BEARER_TOKEN\}'
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: 'password: "[^$]'
+
+  - it: forwarder config references the bearer token via env substitution only
+    template: templates/otel-collector-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: '\$\{env:OTEL_BEARER_TOKEN\}'
+
+  # ---------- debug exporter replaces ClickHouse exporters when disabled ----------
+  - it: debug exporter replaces the ClickHouse exporters when clickhouse.enabled=false
+    template: templates/otel-gateway-configmap.yaml
+    set:
+      observability.clickhouse.enabled: false
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "debug:"
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "clickhouse/(logs|traces|metrics):"
+
+  # ---------- otlphttp/external forwarding ----------
+  - it: otlphttp/external is appended to all three pipelines when forwarding is set
+    template: templates/otel-gateway-configmap.yaml
+    set:
+      observability.collector.forward.endpoint: https://otlp-gateway.example.com/otlp
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "otlphttp/external:"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'exporters: \[clickhouse/logs, otlphttp/external\]'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'exporters: \[clickhouse/traces, otlphttp/external\]'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'exporters: \[clickhouse/metrics, otlphttp/external\]'
+
+  - it: no otlphttp/external when forwarding is not configured
+    template: templates/otel-gateway-configmap.yaml
+    asserts:
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "otlphttp/external"
+
+  # ---------- DSN construction ----------
+  - it: DSN uses 9440+secure=true+skip_verify=true when clickhouse.tls=true
+    template: templates/otel-gateway-configmap.yaml
+    set:
+      observability.clickhouse.tls: true
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'tcp://RELEASE-NAME-clickhouse:9440\?secure=true&skip_verify=true&dial_timeout=10s'
+
+  - it: DSN uses plain 9000 when clickhouse.tls=false
+    template: templates/otel-gateway-configmap.yaml
+    set:
+      observability.clickhouse.tls: false
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'tcp://RELEASE-NAME-clickhouse:9000\?dial_timeout=10s'
+
+  - it: standalone DSN is passed through verbatim
+    template: templates/otel-gateway-configmap.yaml
+    values:
+      - ../../../tests/values/observability-external-ch.yaml
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'endpoint: "tcp://ch\.example\.test:9440\?secure=true&skip_verify=true"'
+
+  # ---------- H0b: non-default database templates into all three exporters ----------
+  - it: a non-default clickhouse database is templated into all three exporters, never left as kasm_otel
+    template: templates/otel-gateway-configmap.yaml
+    set:
+      observability.clickhouse.database: kasm_tenant_a
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "(?s)database: kasm_tenant_a.*database: kasm_tenant_a.*database: kasm_tenant_a"
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "database: kasm_otel"

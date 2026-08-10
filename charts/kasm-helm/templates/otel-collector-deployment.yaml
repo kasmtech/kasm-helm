@@ -1,0 +1,109 @@
+{{/*
+Kasm OTel Collector forwarder Deployment — one per zone.
+
+Receives from Kasm services and nginx, batches, and forwards to the cluster-wide gateway. Holds
+no cross-request state (no sampling, no ClickHouse), so it scales freely.
+*/}}
+{{- $obs := .Values.observability -}}
+{{- if and $obs.enabled (not $obs.collector.externalEndpoint) }}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $forwarderReplicas := ternary .Values.observability.collector.forwarder.replicas (include "replicas.preset" (dict "node" "otel-collector" "size" .Values.deploymentSize)) (gt (int .Values.observability.collector.forwarder.replicas) 0) -}}
+{{- $resourcesObj := $obs.collector.forwarder.resources -}}
+{{- if not (gt (len $resourcesObj) 0) -}}
+  {{- $resourcesObj = (include "resources.preset" (dict "node" "otel-collector" "size" .Values.deploymentSize) | fromYaml) -}}
+{{- end -}}
+{{- $memLimit := dig "limits" "memory" "256Mi" $resourcesObj -}}
+{{- range $idx, $zone := (include "kasm.zones" $ | fromYamlArray) }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  {{- include "kasm.metadata" (dict "context" $ "component" "otel-collector" "resource" "deployment" "zone" $zone.name "include" "all") | indent 2 }}
+spec:
+  replicas: {{ $forwarderReplicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: {{ add1 $forwarderReplicas }}
+  selector:
+    matchLabels:
+      {{- include "kasm.metadata" (dict "context" $ "component" "otel-collector" "resource" "deployment" "zone" $zone.name "include" "match") | indent 6 }}
+  template:
+    metadata:
+      {{- $checksumAnn := dict -}}
+      {{- if not $obs.collector.forwarder.existingConfigMap -}}
+        {{- $checksumAnn = dict "checksum/config" (include (print $.Template.BasePath "/otel-collector-configmap.yaml") $ | sha256sum) -}}
+      {{- end -}}
+      {{- include "kasm.metadata" (dict "context" $ "component" "otel-collector" "resource" "pod" "zone" $zone.name "include" "la" "extraAnnotations" $checksumAnn) | indent 6 }}
+    spec:
+      restartPolicy: {{ $.Values.restartPolicy }}
+      {{- if $.Values.imagePullSecrets.enabled }}
+      imagePullSecrets:
+        - name: {{ $.Values.imagePullSecrets.name | default (printf "%s-image-pull-secret" $.Release.Name) }}
+      {{- end }}
+      {{- include "kasm.securityContext" (list $ 10001 "pod") | nindent 6 }}
+      {{- with $.Values.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $.Values.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ include "kasm.name" (list $ "otel-collector" "container" $zone.name) }}
+          image: {{ $constants.otel.image }}
+          imagePullPolicy: {{ $.Values.imagePullPolicy }}
+          env:
+            - name: OTEL_BEARER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $constants.secrets.name }}
+                  key: otel-bearer-token
+            # ~80% of the resolved memory limit, so the Go runtime cooperates with memory_limiter
+            # instead of waiting for it to intervene.
+            - name: GOMEMLIMIT
+              value: {{ include "kasm.gomemlimit" $memLimit | quote }}
+          ports:
+            - name: otlp-http
+              containerPort: {{ $constants.otel.otlpHttp }}
+              protocol: TCP
+            - name: otlp-grpc
+              containerPort: {{ $constants.otel.otlpGrpc }}
+              protocol: TCP
+            - name: otlp-nginx
+              containerPort: {{ $constants.otel.otlpNginx }}
+              protocol: TCP
+            - name: health
+              containerPort: {{ $constants.otel.health }}
+              protocol: TCP
+            - name: self-metrics
+              containerPort: {{ $constants.otel.selfMetrics }}
+              protocol: TCP
+          volumeMounts:
+            # NOTE: a customer-provided existingConfigMap must use the key `config.yaml`.
+            - name: config
+              mountPath: /etc/otelcol-contrib/config.yaml
+              subPath: config.yaml
+            - name: tmp
+              mountPath: /tmp
+          {{- if $.Values.applyHealthChecks }}
+          livenessProbe:
+            {{- include "health.probe" (dict "root" $ "component" "otel-collector" "probeType" "livenessProbe" "type" "http" "path" "/" "port" 13133) | nindent 12 }}
+          readinessProbe:
+            {{- include "health.probe" (dict "root" $ "component" "otel-collector" "probeType" "readinessProbe" "type" "http" "path" "/" "port" 13133) | nindent 12 }}
+          {{- end }}
+          {{- if $obs.collector.forwarder.resources }}
+          resources: {{- toYaml $obs.collector.forwarder.resources | nindent 12 }}
+          {{- else }}
+          resources: {{- include "resources.preset" (dict "node" "otel-collector" "size" $.Values.deploymentSize) | nindent 12 }}
+          {{- end }}
+          {{- include "kasm.securityContext" (list $ 10001 "container") | nindent 10 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ default (include "kasm.name" (list $ "otel-collector" "configmap")) $obs.collector.forwarder.existingConfigMap }}
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+{{- end }}
+{{- end }}

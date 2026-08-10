@@ -1,0 +1,82 @@
+{{/*
+Collector config for the proxy pod's nginxLogs sidecar (§7 of H5-nginx-sidecars.md) — the
+restricted-namespace fallback to the hostLogs DaemonSet. Reads the two files nginx writes to the
+shared kasm-proxy-otel-logs emptyDir (see nginx-shared-configmap.yaml's logging.conf) instead of
+the container runtime's log files, so it needs no hostPath and no root.
+
+Not zone-scoped: the exporter endpoint is supplied per-pod via the OTEL_EXPORTER_OTLP_ENDPOINT env
+var that kasm.otelSidecar sets on the container (same convention as kasm.otelEnv), so one rendered
+ConfigMap is shared by every zone's proxy pods.
+
+Unlike the hostLogs DaemonSet, this path can reach the proxy's own stub_status endpoint over the
+pod's loopback interface (they share a network namespace), so it also collects nginx connection
+metrics — the one thing the DaemonSet path deliberately does not do (see plan §3b).
+*/}}
+{{- $obs := .Values.observability -}}
+{{- if and $obs.enabled $obs.nginxLogs.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  {{- include "kasm.metadata" (dict "context" . "component" "otel-nginx-sidecar" "resource" "configMap" "include" "all") | indent 2 }}
+data:
+  config.yaml: |
+    extensions:
+      health_check:
+        endpoint: "0.0.0.0:13133"
+
+    receivers:
+      nginx/metrics:
+        endpoint: "http://localhost:8090/stub_status"
+        collection_interval: 30s
+
+      filelog/nginx_access:
+        include: [/var/log/nginx/otel/access_json.log]
+        start_at: end
+        operators:
+          {{- include "kasm.otelNginxAccessLogOperators" . | nindent 10 }}
+
+      filelog/nginx_error:
+        include: [/var/log/nginx/otel/error.log]
+        start_at: end
+        operators:
+          {{- include "kasm.otelNginxErrorLogOperators" . | nindent 10 }}
+
+    processors:
+      batch:
+        send_batch_size: 5000
+        timeout: 10s
+
+      memory_limiter:
+        check_interval: 5s
+        limit_mib: 96
+        spike_limit_mib: 32
+
+    exporters:
+      otlphttp:
+        endpoint: "${env:OTEL_EXPORTER_OTLP_ENDPOINT}"
+
+    service:
+      extensions: [health_check]
+
+      pipelines:
+        logs:
+          receivers: [filelog/nginx_access, filelog/nginx_error]
+          processors: [memory_limiter, batch]
+          exporters: [otlphttp]
+
+        metrics:
+          receivers: [nginx/metrics]
+          processors: [memory_limiter, batch]
+          exporters: [otlphttp]
+
+      telemetry:
+        logs:
+          level: info
+        metrics:
+          readers:
+            - pull:
+                exporter:
+                  prometheus:
+                    host: "0.0.0.0"
+                    port: 8888
+{{- end }}

@@ -1,0 +1,212 @@
+{{/*
+Kasm OTel Collector gateway ConfigMap — one per release, cluster-wide (not zone-scoped).
+
+Owns tail_sampling and the three ClickHouse exporters. This is the only tier that may hold
+either, and the only tier the gateway Deployment may ever scale past 1 replica for — see
+docs/otel-execution/H4-collector.md.
+
+Ported from kasm_backend/install/conf/otel/otel-collector-local.yaml, minus the nginx log/metric
+receivers (those live in H5's host-log DaemonSet / nginx sidecar, not the central Collector).
+*/}}
+{{- $obs := .Values.observability -}}
+{{- if and $obs.enabled (not $obs.collector.externalEndpoint) (not $obs.collector.gateway.existingConfigMap) }}
+{{- $ch := $obs.clickhouse -}}
+{{- $useClickhouse := or $ch.enabled $ch.standalone -}}
+{{- $dsn := include "kasm.clickhouseNativeDsn" (dict "context" $) -}}
+{{- if not $ch.standalone -}}
+  {{- $sep := ternary "&" "?" (contains "?" $dsn) -}}
+  {{- if $ch.tls -}}
+    {{- $dsn = printf "%s%sskip_verify=true&dial_timeout=10s" $dsn $sep -}}
+  {{- else -}}
+    {{- $dsn = printf "%s%sdial_timeout=10s" $dsn $sep -}}
+  {{- end -}}
+{{- else if contains "://" $ch.nativeEndpoint -}}
+  {{- if and (contains "secure=true" $dsn) (not (contains "skip_verify" $dsn)) -}}
+    {{- $sep := ternary "&" "?" (contains "?" $dsn) -}}
+    {{- $dsn = printf "%s%sskip_verify=true" $dsn $sep -}}
+  {{- end -}}
+{{- else -}}
+  {{- $dsn = printf "%s?dial_timeout=10s" $dsn -}}
+{{- end -}}
+{{- $forwardEnabled := ne $obs.collector.forward.endpoint "" -}}
+{{- $forwardHasToken := or (ne $obs.collector.forward.token "") (ne $obs.collector.forward.existingSecret.name "") -}}
+{{- $logsExporter := ternary "clickhouse/logs" "debug" $useClickhouse -}}
+{{- $tracesExporter := ternary "clickhouse/traces" "debug" $useClickhouse -}}
+{{- $metricsExporter := ternary "clickhouse/metrics" "debug" $useClickhouse -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  {{- include "kasm.metadata" (dict "context" . "component" "otel-gateway" "resource" "configMap" "include" "all") | indent 2 }}
+data:
+  config.yaml: |
+    extensions:
+      bearertokenauth/server:
+        token: "${env:OTEL_BEARER_TOKEN}"
+
+      health_check:
+        endpoint: "0.0.0.0:13133"
+
+    receivers:
+      # The forwarders and the host-log DaemonSet are this receiver's only clients. Nothing
+      # addresses the gateway directly: no otlp/local (4318), no otlp/nginx (4316).
+      otlp/remote:
+        protocols:
+          grpc:
+            endpoint: "0.0.0.0:4317"
+            auth:
+              authenticator: bearertokenauth/server
+
+    processors:
+      batch:
+        send_batch_size: 5000
+        timeout: 10s
+
+      memory_limiter:
+        check_interval: 5s
+        limit_mib: 512
+        spike_limit_mib: 128
+
+      # Tail sampling is applied to the traces pipeline only. The collector
+      # buffers spans per trace for decision_wait before making a keep/drop
+      # decision. Spans that arrive after the window still honour the decision
+      # already made (they are forwarded or dropped accordingly).
+      #
+      # decision_wait trade-off: raising it captures more of the duration for
+      # very long traces (e.g. VM provisioning root spans) but linearly
+      # increases the memory held in num_traces × span data.
+      tail_sampling:
+        decision_wait: 30s
+        num_traces: 50000
+        expected_new_traces_per_sec: 100
+        policies:
+          # Always keep traces that contain at least one ERROR-status span.
+          - name: keep-errors
+            type: status_code
+            status_code:
+              status_codes: [ERROR]
+          # Always keep traces whose observed duration is >= 1000 ms.
+          - name: keep-slow
+            type: latency
+            latency:
+              threshold_ms: 1000
+          # Retain this percentage of all remaining traces.
+          - name: probabilistic-sample
+            type: probabilistic
+            probabilistic:
+              sampling_percentage: {{ $obs.collector.tailSamplePercentage }}
+
+    exporters:
+{{- if $useClickhouse }}
+      # Three named ClickHouse exporter instances — one per signal — so each can
+      # carry an independent TTL.  The factory creates a signal-specific sub-exporter
+      # per instance (logsExporter / tracesExporter / metricsExporter), so each
+      # instance only touches its own table when create_schema: true fires.
+      #
+      # otel_logs is pre-created by init-schema.sql with a two-tier conditional TTL
+      # (general vs. audit records).  The clickhouse/logs ttl here acts only as a
+      # fallback if the table is ever recreated by the exporter; it cannot express
+      # the conditional — init-schema.sql is authoritative for logs TTL.
+      clickhouse/logs:
+        endpoint: "{{ $dsn }}"
+        database: {{ $ch.database }}
+        username: {{ $ch.username }}
+        password: "${env:CLICKHOUSE_PASSWORD}"
+        logs_table_name: otel_logs
+        ttl: {{ mul $ch.retention.logsDays 24 }}h
+        create_schema: true
+        retry_on_failure:
+          enabled: true
+          initial_interval: 5s
+          max_interval: 30s
+          max_elapsed_time: 300s
+        sending_queue:
+          enabled: true
+          num_consumers: 4
+          queue_size: 1000
+
+      clickhouse/traces:
+        endpoint: "{{ $dsn }}"
+        database: {{ $ch.database }}
+        username: {{ $ch.username }}
+        password: "${env:CLICKHOUSE_PASSWORD}"
+        traces_table_name: otel_traces
+        ttl: {{ mul $ch.retention.tracesDays 24 }}h
+        create_schema: true
+        retry_on_failure:
+          enabled: true
+          initial_interval: 5s
+          max_interval: 30s
+          max_elapsed_time: 300s
+        sending_queue:
+          enabled: true
+          num_consumers: 4
+          queue_size: 1000
+
+      clickhouse/metrics:
+        endpoint: "{{ $dsn }}"
+        database: {{ $ch.database }}
+        username: {{ $ch.username }}
+        password: "${env:CLICKHOUSE_PASSWORD}"
+        metrics_table_name: otel_metrics
+        ttl: {{ mul $ch.retention.metricsDays 24 }}h
+        create_schema: true
+        retry_on_failure:
+          enabled: true
+          initial_interval: 5s
+          max_interval: 30s
+          max_elapsed_time: 300s
+        sending_queue:
+          enabled: true
+          num_consumers: 4
+          queue_size: 1000
+{{- else }}
+      # No ClickHouse store configured (observability.clickhouse.enabled: false, not standalone):
+      # receive and discard rather than crash-looping on a DNS lookup for a service that
+      # doesn't exist. Mirrors configure_otel_no_database in install.sh.
+      debug:
+        verbosity: basic
+{{- end }}
+{{- if $forwardEnabled }}
+
+      # Forward a copy of everything to an external OTLP/HTTP endpoint in addition to the
+      # exporter(s) above, so a forwarded copy reflects the sampling decision.
+      otlphttp/external:
+        endpoint: "{{ $obs.collector.forward.endpoint }}"
+{{- if $forwardHasToken }}
+        headers:
+          Authorization: "Bearer ${env:OTEL_FORWARD_TOKEN}"
+{{- end }}
+{{- end }}
+
+    service:
+      extensions: [bearertokenauth/server, health_check]
+
+      pipelines:
+        logs:
+          receivers: [otlp/remote]
+          processors: [memory_limiter, batch]
+          exporters: [{{ $logsExporter }}{{ if $forwardEnabled }}, otlphttp/external{{ end }}]
+
+        traces:
+          receivers: [otlp/remote]
+          processors: [memory_limiter, tail_sampling, batch]
+          exporters: [{{ $tracesExporter }}{{ if $forwardEnabled }}, otlphttp/external{{ end }}]
+
+        metrics:
+          receivers: [otlp/remote]
+          processors: [memory_limiter, batch]
+          exporters: [{{ $metricsExporter }}{{ if $forwardEnabled }}, otlphttp/external{{ end }}]
+
+      telemetry:
+        logs:
+          level: info
+        # Collector self-metrics. The flat `address:` form was removed in
+        # collector v0.123+; this is the replacement syntax.
+        metrics:
+          readers:
+            - pull:
+                exporter:
+                  prometheus:
+                    host: "0.0.0.0"
+                    port: 8888
+{{- end }}

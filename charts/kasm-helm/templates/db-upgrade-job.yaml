@@ -39,6 +39,7 @@ spec:
           image: {{ $constants.api.image }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           env:
+          {{- include "kasm.loggingEnv" (dict "context" $ "serviceName" "kasm-api") | nindent 12 }}
             - name: SERVER_HOSTNAME
               value: {{ $constants.api.svc }}
             - name: POST_DB_INIT_EXIT

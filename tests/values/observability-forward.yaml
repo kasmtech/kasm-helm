@@ -1,0 +1,5 @@
+observability:
+  collector:
+    forward:
+      endpoint: "https://otlp-gateway.example.com/otlp"
+      token: "example-forward-token"

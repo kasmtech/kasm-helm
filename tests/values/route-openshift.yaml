@@ -4,6 +4,14 @@ publicAddr: kasm.apps.example.test
 
 isOpenshift: true
 
+# H5: isOpenshift forces the nginxLogs sidecar path for nginx log collection (the hostLogs
+# DaemonSet needs hostPath + runAsUser:0, which requires an SCC this chart does not ship).
+observability:
+  hostLogs:
+    enabled: false
+  nginxLogs:
+    enabled: true
+
 proxyService:
   type: ClusterIP
 

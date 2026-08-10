@@ -1,0 +1,162 @@
+{{/*
+ClickHouse StatefulSet — the telemetry store backing Kasm reporting.
+Modeled on db-statefulset.yaml. Not zone-scoped: a single ClickHouse serves all zones.
+
+Env var notes (verified against a live clickhouse/clickhouse-server:24.12-alpine, since the
+base image's docker-entrypoint.sh has non-obvious behavior around these):
+  - CLICKHOUSE_SKIP_USER_SETUP=1 is required. Without it, the entrypoint tries to write
+    /etc/clickhouse-server/users.d/default-user.xml whenever CLICKHOUSE_USER != "default" or
+    CLICKHOUSE_PASSWORD is set — which fails under readOnlyRootFilesystem. Our own user is
+    fully defined by the mounted users.xml ConfigMap, so the "default" user needs no setup.
+  - KASM_CLICKHOUSE_PASSWORD (not CLICKHOUSE_PASSWORD) feeds the users.xml `from_env`
+    substitution — a deliberately different name so the entrypoint's own CLICKHOUSE_PASSWORD
+    handling (which also touches default-user.xml) is never triggered by our value.
+*/}}
+{{- if and .Values.observability.enabled .Values.observability.clickhouse.enabled (not .Values.observability.clickhouse.standalone) }}
+{{- $ch := .Values.observability.clickhouse }}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $secretName := default $constants.secrets.name $ch.existingSecret.name -}}
+{{- $secretKey := default "clickhouse-password" $ch.existingSecret.key -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  {{- include "kasm.metadata" (dict "context" . "component" "clickhouse" "resource" "statefulSet" "include" "all") | indent 2 }}
+spec:
+  replicas: 1
+  serviceName: {{ $constants.clickhouse.svc }}
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      {{- include "kasm.metadata" (dict "context" . "component" "clickhouse" "resource" "service" "include" "match") | indent 6 }}
+  template:
+    metadata:
+      {{- $checksumAnn := dict "checksum/config" (include (print $.Template.BasePath "/clickhouse-configmap.yaml") . | sha256sum) -}}
+      {{- include "kasm.metadata" (dict "context" . "component" "clickhouse" "resource" "pod" "include" "la" "extraAnnotations" $checksumAnn) | indent 6 }}
+    spec:
+      restartPolicy: {{ .Values.restartPolicy }}
+      {{- if .Values.imagePullSecrets.enabled }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets.name | default (printf "%s-image-pull-secret" .Release.Name) }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- include "kasm.securityContext" (list . 101 "pod") | nindent 6 }}
+      {{- if .Values.trustedCaBundle.enabled }}
+      initContainers:
+        {{- include "kasm.trustedCaInit" (list . "clickhouse") | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ include "kasm.name" (list . "clickhouse" "container") }}
+          image: {{ $constants.clickhouse.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          env:
+            - name: CLICKHOUSE_DB
+              value: {{ $ch.database | quote }}
+            - name: CLICKHOUSE_USER
+              value: {{ $ch.username | quote }}
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: {{ $secretKey }}
+            - name: CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT
+              value: "0"
+            - name: CLICKHOUSE_SKIP_USER_SETUP
+              value: "1"
+            - name: KASM_CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: {{ $secretKey }}
+          ports:
+            - name: ch-http
+              containerPort: {{ $constants.clickhouse.http }}
+              protocol: TCP
+            - name: ch-native
+              containerPort: {{ $constants.clickhouse.native }}
+              protocol: TCP
+            {{- if $ch.tls }}
+            - name: ch-https
+              containerPort: {{ $constants.clickhouse.httpTls }}
+              protocol: TCP
+            - name: ch-native-tls
+              containerPort: {{ $constants.clickhouse.nativeTls }}
+              protocol: TCP
+            {{- end }}
+          {{- if .Values.applyHealthChecks }}
+          livenessProbe:
+            {{- include "health.probe" (dict "root" $ "component" "clickhouse" "probeType" "livenessProbe" "type" "http" "path" "/ping" "port" $constants.clickhouse.http "timingParent" $ch) | nindent 12 }}
+          readinessProbe:
+            {{- include "health.probe" (dict "root" $ "component" "clickhouse" "probeType" "readinessProbe" "type" "http" "path" "/ping" "port" $constants.clickhouse.http "timingParent" $ch) | nindent 12 }}
+          {{- end }}
+          {{- if $ch.resources }}
+          resources: {{- toYaml $ch.resources | nindent 12 }}
+          {{- else }}
+          resources: {{- include "resources.preset" (dict "node" $constants.clickhouse.component "size" .Values.deploymentSize) | nindent 12 }}
+          {{- end }}
+          {{- include "kasm.securityContext" (list . 101 "container") | nindent 10 }}
+          volumeMounts:
+            - name: {{ include "kasm.name" (list . "clickhouse" "data") }}
+              mountPath: /var/lib/clickhouse
+            - name: kasm-clickhouse-configs
+              mountPath: /etc/clickhouse-server/config.d/kasm.xml
+              subPath: config.xml
+            - name: kasm-clickhouse-configs
+              mountPath: /etc/clickhouse-server/users.d/kasm.xml
+              subPath: users.xml
+            - name: kasm-clickhouse-configs
+              mountPath: /docker-entrypoint-initdb.d/init.sql
+              subPath: init-schema.sql
+            {{- if $ch.tls }}
+            - name: kasm-clickhouse-cert
+              mountPath: /etc/clickhouse-server/certs/tls.crt
+              subPath: tls.crt
+            - name: kasm-clickhouse-cert
+              mountPath: /etc/clickhouse-server/certs/tls.key
+              subPath: tls.key
+            {{- end }}
+            - name: kasm-clickhouse-tmp
+              mountPath: /tmp
+            - name: kasm-clickhouse-log
+              mountPath: /var/log/clickhouse-server
+            {{- include "kasm.trustedCaVolumeMounts" . | nindent 12 }}
+      volumes:
+        - name: kasm-clickhouse-configs
+          configMap:
+            name: {{ include "kasm.name" (list . "clickhouse" "configmap") }}
+        {{- if $ch.tls }}
+        - name: kasm-clickhouse-cert
+          secret:
+            secretName: {{ .Values.certificate.secretName | default (include "kasm.name" (list . "cert-manager" "secret")) }}
+            defaultMode: 0o600
+        {{- end }}
+        - name: kasm-clickhouse-tmp
+          emptyDir: {}
+        - name: kasm-clickhouse-log
+          emptyDir: {}
+        {{- include "kasm.trustedCaVolumes" . | nindent 8 }}
+  {{- if $ch.storage.retentionPolicy }}
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: {{ $ch.storage.retentionPolicy.whenDeleted }}
+    whenScaled: {{ $ch.storage.retentionPolicy.whenScaled }}
+  {{- end }}
+  volumeClaimTemplates:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: {{ include "kasm.name" (list . "clickhouse" "data") }}
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        {{- with $ch.storage.storageClassName }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ printf "%sGi" ($ch.storage.pvcSize | toString) }}
+{{- end }}

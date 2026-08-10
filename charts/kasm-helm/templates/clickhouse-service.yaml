@@ -1,0 +1,30 @@
+{{/*
+Headless Service for the ClickHouse StatefulSet. Not zone-scoped.
+*/}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- if and .Values.observability.enabled .Values.observability.clickhouse.enabled (not .Values.observability.clickhouse.standalone) }}
+{{- $ch := .Values.observability.clickhouse }}
+apiVersion: v1
+kind: Service
+metadata:
+  {{- include "kasm.metadata" (dict "context" . "component" "clickhouse" "resource" "service" "include" "all") | indent 2 }}
+spec:
+  clusterIP: None
+  selector:
+    {{- include "kasm.metadata" (dict "context" . "component" "clickhouse" "resource" "service" "include" "match") | indent 4 }}
+  ports:
+    - name: {{ printf "%s-svc-%s" $constants.clickhouse.svc ($constants.clickhouse.http | toString) }}
+      protocol: TCP
+      port: {{ $constants.clickhouse.http }}
+    - name: {{ printf "%s-svc-%s" $constants.clickhouse.svc ($constants.clickhouse.native | toString) }}
+      protocol: TCP
+      port: {{ $constants.clickhouse.native }}
+    {{- if $ch.tls }}
+    - name: {{ printf "%s-svc-%s" $constants.clickhouse.svc ($constants.clickhouse.httpTls | toString) }}
+      protocol: TCP
+      port: {{ $constants.clickhouse.httpTls }}
+    - name: {{ printf "%s-svc-%s" $constants.clickhouse.svc ($constants.clickhouse.nativeTls | toString) }}
+      protocol: TCP
+      port: {{ $constants.clickhouse.nativeTls }}
+    {{- end }}
+{{- end }}

@@ -51,9 +51,69 @@ def namespace(e2e_config: E2EConfig) -> str:
     return e2e_config.namespace
 
 
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_runtest_makereport(item, call):  # type: ignore[no-untyped-def]
+    """Record each phase's outcome on the item so fixtures can see whether the test failed."""
+    outcome = yield
+    setattr(item, f"rep_{call.when}", outcome.get_result())
+
+
+def _dump_diagnostics(namespace: str, release_name: str, label: str) -> None:
+    """Write pod logs and describe output for the release into E2E_ARTIFACT_DIR."""
+    root = Path(os.environ.get("E2E_ARTIFACT_DIR", "artifacts")) / label
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return
+    selector = f"app.kubernetes.io/instance={release_name}"
+    written = []
+    describe = kubectl(["describe", "pods", "-l", selector], namespace=namespace, check=False)
+    (root / "describe-pods.txt").write_text(describe.stdout or "")
+    written.append("describe-pods.txt")
+    pods = kubectl(
+        ["get", "pods", "-l", selector, "-o", "name"], namespace=namespace, check=False
+    )
+    for line in (pods.stdout or "").split():
+        pod = line.split("/", 1)[-1]
+        if not pod:
+            continue
+        for suffix, args in (("", []), (".previous", ["--previous"])):
+            got = kubectl(
+                ["logs", pod, "--all-containers", "--tail=2000", *args],
+                namespace=namespace,
+                check=False,
+            )
+            if got.stdout:
+                name = f"{pod}{suffix}.log"
+                (root / name).write_text(got.stdout)
+                written.append(name)
+    events = kubectl(
+        ["get", "events", "--sort-by=.lastTimestamp"], namespace=namespace, check=False
+    )
+    (root / "events.txt").write_text(events.stdout or "")
+    written.append("events.txt")
+    print(f"\n[diag] wrote {len(written)} diagnostic file(s) to {root}")
+
+
 @pytest.fixture()
-def cleanup_release(e2e_config: E2EConfig, namespace: str) -> Iterator[None]:
+def cleanup_release(
+    request: pytest.FixtureRequest, e2e_config: E2EConfig, namespace: str
+) -> Iterator[None]:
     yield
+    failed = any(
+        getattr(getattr(request.node, f"rep_{phase}", None), "failed", False)
+        for phase in ("setup", "call", "teardown")
+    )
+    if failed:
+        _dump_diagnostics(namespace, e2e_config.release_name, request.node.name)
+    # E2E_KEEP=1 keeps the release for post-mortem; E2E_KEEP=onfail keeps it only after a failure.
+    keep_mode = os.environ.get("E2E_KEEP", "").strip().lower()
+    if keep_mode in ("1", "true", "yes", "always") or (keep_mode == "onfail" and failed):
+        print(
+            f"\n[diag] E2E_KEEP={keep_mode}: leaving release {e2e_config.release_name} "
+            f"installed in namespace {namespace} for inspection"
+        )
+        return
     try:
         helm(
             ["uninstall", e2e_config.release_name, "-n", namespace],
@@ -111,6 +171,16 @@ def helm_install(
     ]
     if values_file:
         command_args.extend(["-f", values_file])
+    # Layered last so it wins: branch-build image overrides for scenarios that need code which only
+    # exists on a feature branch. Released tags lack it and the scenario fails with no telemetry.
+    image_values = os.environ.get("E2E_IMAGE_VALUES", "").strip()
+    if image_values:
+        if not Path(image_values).is_file():
+            raise AssertionError(
+                f"E2E_IMAGE_VALUES={image_values} does not exist inside the test container; "
+                "tests/values is mounted at /e2e-values by the pytest-docker target"
+            )
+        command_args.extend(["-f", image_values])
     if set_args:
         for set_arg in set_args:
             command_args.extend(["--set", set_arg])

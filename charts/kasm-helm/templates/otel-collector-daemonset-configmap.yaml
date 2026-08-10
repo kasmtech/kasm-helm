@@ -1,0 +1,179 @@
+{{/*
+Config for the hostLogs DaemonSet's Collector (§6a of H5-nginx-sidecars.md). Reads the container
+runtime's log files for this release's proxy pods only, so no k8sattributes processor (and
+therefore no ServiceAccount/RBAC) is needed — the `container` operator derives pod metadata from
+the log file path itself.
+
+Not zone-scoped: one DaemonSet covers every node and therefore every zone's proxy pods, and it
+exports straight to the cluster-wide gateway (never a per-zone forwarder — the DaemonSet has no
+zone affinity of its own).
+
+The access/error operator chains are ported from otel-collector-local.yaml (see
+kasm.otelNginxAccessLogOperators/kasm.otelNginxErrorLogOperators in _helpers.tpl for the verbatim
+per-file versions used by the nginxLogs sidecar). Here both chains are merged into one filelog
+receiver behind a `router` that splits on stdout/stderr, so each operator needs an explicit,
+unique id and the first chain must terminate explicitly (`output: []`) or it would fall through
+into the second chain's operators.
+*/}}
+{{- $obs := .Values.observability -}}
+{{- if and $obs.enabled $obs.hostLogs.enabled (not .Values.isOpenshift) }}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  {{- include "kasm.metadata" (dict "context" . "component" "otel-hostlogs" "resource" "configMap" "include" "all") | indent 2 }}
+data:
+  config.yaml: |
+    extensions:
+      health_check:
+        endpoint: "0.0.0.0:13133"
+      {{- if $obs.hostLogs.persistOffsets }}
+      file_storage/checkpoints:
+        directory: /var/lib/otelcol/file_storage
+        create_directory: true
+      {{- end }}
+
+    receivers:
+      filelog/kasm_proxy:
+        include:
+          - /var/log/pods/{{ .Release.Namespace }}_{{ .Release.Name }}-proxy-*/*/*.log
+          {{- range $obs.hostLogs.extraSelectors }}
+          - /var/log/pods/{{ $.Release.Namespace }}_{{ . }}/*/*.log
+          {{- end }}
+        exclude:
+          - /var/log/pods/*/otel-collector*/*.log
+        start_at: end
+        include_file_path: true
+        {{- if $obs.hostLogs.persistOffsets }}
+        storage: file_storage/checkpoints
+        {{- end }}
+        operators:
+          - type: container
+            add_metadata_from_filepath: true
+          - type: router
+            routes:
+              # Verified against the 0.156.0 container operator: it stamps the stream the line
+              # came from onto attributes["log.iostream"] ("stdout"/"stderr"). If a future
+              # collector version renames this attribute, error-log lines will silently be routed
+              # through the JSON parser instead of the regex one — check this first if the
+              # error-log pipeline stops populating.
+              - expr: 'attributes["log.iostream"] == "stdout"'
+                output: access_json
+              - expr: 'true'
+                output: error_regex
+          - id: error_regex
+            type: regex_parser
+            regex: '^(?P<timestamp>\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}) \[(?P<level>\w+)\] (?P<pid>\d+)#\d+: (?:\*\d+ )?(?P<message>.+)$'
+            timestamp:
+              parse_from: attributes.timestamp
+              layout: "%Y/%m/%d %H:%M:%S"
+          - id: error_severity
+            type: severity_parser
+            parse_from: attributes.level
+            overwrite_text: true
+            mapping:
+              fatal:  crit
+              error:  [error, alert, emerg]
+              warn:   warn
+              info:   notice
+              debug:  [info, debug]
+          - id: error_add_service
+            type: add
+            field: resource["service.name"]
+            value: kasm-proxy
+            # Terminate the error chain here — without this it would fall through into the
+            # access chain below (default behaviour is "next operator in the array").
+            output: []
+          - id: access_json
+            type: json_parser
+            timestamp:
+              parse_from: attributes.time_iso8601
+              layout: "%Y-%m-%dT%H:%M:%S%z"
+          - id: access_severity
+            type: severity_parser
+            parse_from: attributes.http_status
+            overwrite_text: true
+            mapping:
+              error: "5xx"
+              warn:  "4xx"
+              info:  "2xx"
+              debug: "3xx"
+          - id: access_add_body
+            type: add
+            field: body
+            value: EXPR(attributes["request"] + '" ' + attributes["http_status"] + ' ' + attributes["body_bytes_sent"] + ' "' + attributes["http_user_agent"] + '"')
+          - id: access_move_method
+            type: move
+            from: attributes.request_method
+            to:   attributes.http.request.method
+          - id: access_move_path
+            type: move
+            from: attributes.uri
+            to:   attributes.url.path
+          - id: access_move_status
+            type: move
+            from: attributes.http_status
+            to:   attributes.http.response.status_code
+          - id: access_add_service
+            type: add
+            field: resource["service.name"]
+            value: kasm-proxy
+          - id: access_add_app
+            type: add
+            field: attributes["application"]
+            value: kasm-proxy
+
+    processors:
+      batch:
+        send_batch_size: 5000
+        timeout: 10s
+
+      memory_limiter:
+        check_interval: 5s
+        limit_mib: 256
+        spike_limit_mib: 64
+
+    exporters:
+      {{- if $obs.collector.externalEndpoint }}
+      # No gateway is rendered when externalEndpoint is set — forward straight there, unauthenticated.
+      otlphttp:
+        endpoint: "{{ $obs.collector.externalEndpoint }}"
+      {{- else }}
+      otlp:
+        endpoint: "{{ $constants.otel.gatewaySvc }}:{{ $constants.otel.otlpGrpc }}"
+        headers:
+          Authorization: "Bearer ${env:OTEL_BEARER_TOKEN}"
+        # In-cluster traffic; not attempting mTLS between the DaemonSet and the gateway.
+        tls:
+          insecure: true
+        retry_on_failure:
+          enabled: true
+          initial_interval: 5s
+          max_interval: 30s
+          max_elapsed_time: 300s
+        sending_queue:
+          enabled: true
+          num_consumers: 4
+          queue_size: 1000
+      {{- end }}
+
+    service:
+      extensions: [health_check{{ if $obs.hostLogs.persistOffsets }}, file_storage/checkpoints{{ end }}]
+
+      pipelines:
+        logs:
+          receivers: [filelog/kasm_proxy]
+          processors: [memory_limiter, batch]
+          exporters: [{{ if $obs.collector.externalEndpoint }}otlphttp{{ else }}otlp{{ end }}]
+
+      telemetry:
+        logs:
+          level: info
+        metrics:
+          readers:
+            - pull:
+                exporter:
+                  prometheus:
+                    host: "0.0.0.0"
+                    port: 8888
+{{- end }}

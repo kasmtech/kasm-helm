@@ -77,6 +77,17 @@ def test_chart_installs_in_restricted_namespace_and_rejects_noncompliant_pods(
                 "schedule": "0 * * * *",
             },
         },
+        # H6/H5 carve-out: the observability.hostLogs DaemonSet mounts a hostPath and runs as
+        # root, both forbidden by the restricted Pod Security Standard (see plan §3a and the
+        # "Kyverno/PSS handling of the DaemonSet" contract row in PROGRESS.md). A restricted
+        # namespace install must therefore disable it and fall back to the nginxLogs sidecar,
+        # which collects the same nginx logs (plus connection metrics) from inside the compliant
+        # proxy pod instead. See test_observability_hostlogs_daemonset_rejected_in_restricted_ns
+        # below for the proof that the DaemonSet really is rejected when left at its default.
+        "observability": {
+            "hostLogs": {"enabled": False},
+            "nginxLogs": {"enabled": True},
+        },
     }
     values_path = temp_workdir / "values.yaml"
     values_path.write_text(yaml.safe_dump(values_obj, sort_keys=False))
@@ -130,4 +141,64 @@ spec:
     )
 
     assert apply_result.returncode != 0, "expected the restricted namespace to reject a non-compliant pod"
+    assert "podsecurity" in combined_output.lower(), combined_output
+
+
+@pytest.mark.e2e
+def test_observability_hostlogs_daemonset_rejected_in_restricted_namespace(
+    installer,
+    temp_workdir: Path,
+) -> None:
+    """H6 addition: prove the hostLogs DaemonSet is genuinely rejected by `restricted` admission
+    when left at its (enabled-by-default) setting, which is exactly why the main test above must
+    install with hostLogs.enabled=false + nginxLogs.enabled=true instead.
+
+    This does NOT do a full chart install (unnecessary and slow for what's being proven): it
+    renders just the DaemonSet's pod template via `helm template` with default observability
+    values, patches in a unique name/namespace, and applies it directly to a namespace enforcing
+    the restricted Pod Security Standard. The `runAsUser: 0` + missing `runAsNonRoot: true`
+    security context (see otel-collector-daemonset.yaml — deliberately not routed through
+    kasm.securityContext, which never grants root) must be rejected by admission.
+
+    Run with `make e2e-pss`.
+    """
+    e2e_config = installer["config"]
+    namespace = installer["namespace"]
+
+    apply_restricted_pod_security(namespace)
+
+    from .helpers import helm
+
+    render_result = helm(
+        [
+            "template",
+            "kasm-pss-daemonset-check",
+            e2e_config.chart_dir,
+            "-n",
+            namespace,
+            "--set",
+            "publicAddr=kasm.example.com",
+            "--set",
+            "certificate.secretName=kasm-deployment-tls",
+            "--show-only",
+            "templates/otel-collector-daemonset.yaml",
+        ]
+    )
+    daemonset_manifest_path = temp_workdir / "hostlogs-daemonset.yaml"
+    daemonset_manifest_path.write_text(render_result.stdout)
+
+    apply_result = kubectl(
+        ["apply", "-f", str(daemonset_manifest_path)],
+        namespace=namespace,
+        check=False,
+    )
+    combined_output = "\n".join(
+        part for part in [apply_result.stdout, apply_result.stderr] if part
+    )
+
+    assert apply_result.returncode != 0, (
+        "expected the restricted namespace to reject the hostLogs DaemonSet's pod template "
+        "(runAsUser: 0, no runAsNonRoot) — if this now succeeds, the chart's documented "
+        "'use nginxLogs under restricted PSS' guidance is no longer accurate"
+    )
     assert "podsecurity" in combined_output.lower(), combined_output

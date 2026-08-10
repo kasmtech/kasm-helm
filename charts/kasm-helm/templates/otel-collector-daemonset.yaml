@@ -1,0 +1,116 @@
+{{/*
+Kasm hostLogs DaemonSet (§6b of H5-nginx-sidecars.md) — the default mechanism for collecting the
+Kasm Proxy's nginx access/error logs in Kubernetes. One per node, cluster-wide (not zone-scoped),
+reading the container runtime's captured stdout/stderr for this release's proxy pods only.
+
+Not gated through kasm.securityContext: reading /var/log/pods requires root, which that helper
+(by design) never grants. isOpenshift forces the nginxLogs sidecar path instead — see
+kasm.observabilityValidate, which fails the render if hostLogs stays enabled on OpenShift without
+nginxLogs picking up the slack.
+*/}}
+{{- $obs := .Values.observability -}}
+{{- if and $obs.enabled $obs.hostLogs.enabled (not .Values.isOpenshift) }}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  {{- include "kasm.metadata" (dict "context" . "component" "otel-hostlogs" "resource" "daemonSet" "include" "all") | indent 2 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "kasm.metadata" (dict "context" . "component" "otel-hostlogs" "resource" "daemonSet" "include" "match") | indent 6 }}
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      {{- $checksumAnn := dict "checksum/config" (include (print .Template.BasePath "/otel-collector-daemonset-configmap.yaml") . | sha256sum) -}}
+      {{- include "kasm.metadata" (dict "context" . "component" "otel-hostlogs" "resource" "pod" "include" "la" "extraAnnotations" $checksumAnn) | indent 6 }}
+    spec:
+      restartPolicy: {{ .Values.restartPolicy }}
+      {{- if .Values.imagePullSecrets.enabled }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets.name | default (printf "%s-image-pull-secret" .Release.Name) }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.observability.hostLogs.tolerations }}
+      tolerations: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ include "kasm.name" (list . "otel-hostlogs" "container") }}
+          image: {{ $constants.otel.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          # Not kasm.securityContext: reading /var/log/pods needs root, which that helper never
+          # grants regardless of .Values.applySecurity. This is why the DaemonSet is incompatible
+          # with the baseline/restricted Pod Security Standards (see the nginxLogs sidecar fallback
+          # and the isOpenshift handling in kasm.observabilityValidate).
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            privileged: false
+            seccompProfile:
+              type: RuntimeDefault
+          env:
+            - name: OTEL_BEARER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $constants.secrets.name }}
+                  key: otel-bearer-token
+          ports:
+            - name: health
+              containerPort: {{ $constants.otel.health }}
+              protocol: TCP
+            - name: self-metrics
+              containerPort: {{ $constants.otel.selfMetrics }}
+              protocol: TCP
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otelcol-contrib/config.yaml
+              subPath: config.yaml
+            - name: varlogpods
+              mountPath: /var/log/pods
+              readOnly: true
+            {{- if .Values.observability.hostLogs.persistOffsets }}
+            - name: otelcol-checkpoints
+              mountPath: /var/lib/otelcol/file_storage
+            {{- end }}
+            - name: tmp
+              mountPath: /tmp
+          {{- if .Values.applyHealthChecks }}
+          livenessProbe:
+            {{- include "health.probe" (dict "root" . "component" "otel-hostlogs" "probeType" "livenessProbe" "type" "http" "path" "/" "port" 13133) | nindent 12 }}
+          readinessProbe:
+            {{- include "health.probe" (dict "root" . "component" "otel-hostlogs" "probeType" "readinessProbe" "type" "http" "path" "/" "port" 13133) | nindent 12 }}
+          {{- end }}
+          {{- if .Values.observability.hostLogs.resources }}
+          resources: {{- toYaml .Values.observability.hostLogs.resources | nindent 12 }}
+          {{- else }}
+          resources: {{- include "resources.preset" (dict "node" "otel-sidecar" "size" .Values.deploymentSize) | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "kasm.name" (list . "otel-hostlogs" "configmap") }}
+        - name: varlogpods
+          hostPath:
+            path: /var/log/pods
+            type: Directory
+        {{- if .Values.observability.hostLogs.persistOffsets }}
+        - name: otelcol-checkpoints
+          hostPath:
+            path: /var/lib/otelcol/file_storage
+            type: DirectoryOrCreate
+        {{- end }}
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+{{- end }}

@@ -2,6 +2,34 @@
 
 All notable changes to the kasm-helm chart are documented here.
 
+## [Unreleased]
+
+### Added
+
+- Built-in OpenTelemetry observability stack, enabled by default: a Collector (a per-zone forwarder plus a single cluster-wide gateway) and a bundled ClickHouse StatefulSet that back logs, traces, metrics, and the Kasm Admin UI's reporting views. See the new `charts/kasm-helm/docs/observability.md`.
+- nginx distributed tracing (nginx is the trace root for every request) and, on the `observability.nginxLogs` sidecar path, nginx connection metrics.
+- Browser telemetry for the Kasm web UI (`observability.browser`).
+- New `observability.*` values tree: Collector forwarder/gateway sizing and BYO config (`existingConfigMap` per tier), external-ClickHouse support (`observability.clickhouse.standalone`), forwarding to an external OTLP backend (`observability.collector.forward`), and per-signal retention controls (`observability.clickhouse.retention`).
+- Configurable ClickHouse database name (`observability.clickhouse.database`, default `kasm_otel`), independent of the ClickHouse username, threaded through the Collector's exporters, schema initialization, the ClickHouse user's grant, and the Kasm API's read path — needed for a tenant-specific database on a shared, multi-tenant external ClickHouse.
+- Optional file-based JSON logging (`observability.fileLogs`) with a log-tailing Collector sidecar, for services that need JSON log files inside the pod instead of relying on OTLP export alone.
+- A node-level log-collection DaemonSet (`observability.hostLogs`) for the Kasm Proxy's nginx logs, needing no ServiceAccount or cluster permissions, with a proxy-pod sidecar alternative (`observability.nginxLogs`) for namespaces enforcing the `baseline`/`restricted` Pod Security Standards or running on OpenShift.
+- Three worked example Collector configs under `examples/`: `otel-collector-custom.yaml`, `otel-collector-splunk.yaml` (Splunk HEC forwarding), and `otel-collector-debug.yaml` (stdout debug exporter).
+
+### Changed
+
+- **`logFormat: json` no longer affects the API and Manager services.** Their console output is human-readable text; their structured logs are exported over OpenTelemetry instead. If you were scraping JSON from those pods' stdout, switch to OTLP collection or enable `observability.fileLogs`.
+- **New PVC and new workloads on every deployment**: a ClickHouse StatefulSet + PVC, two Collector Deployments (forwarder + gateway), and — on the default log-collection path — one DaemonSet pod per node. Budget resources and storage accordingly before upgrading; see `charts/kasm-helm/docs/observability.md` §2 and §6.
+- The Kasm Proxy's stdout access log is JSON whenever `observability.enabled` is true (the default), regardless of `logFormat`, because the log collector parses it as JSON.
+- nginx connection metrics are not collected on the default (DaemonSet) log-collection path; enable `observability.nginxLogs` if you need them.
+- **Splunk HEC settings previously stored in the Kasm database are no longer read.** Move them into a Collector config — see `examples/otel-collector-splunk.yaml` and the upgrade note in `charts/kasm-helm/docs/observability.md` §12.
+- **If you supply your own Kasm Secret (`kasmSecrets.create: false`), it now needs two more keys**: `clickhouse-password` and `otel-bearer-token`. The chart references both via `secretKeyRef`, so a pre-created Secret without them leaves ClickHouse, both Collector tiers, and the API/Manager pods in `CreateContainerConfigError`. See the updated `examples/kasm-secrets.yaml`. Omit them only if you also set `observability.enabled: false`.
+- **The Kasm Proxy image must contain `ngx_otel_module`** (Kasm 1.20 or later) when `observability.enabled` is true, since the chart loads the module in its own `nginx.conf`. Setting `observability.enabled: false` omits the `load_module` line entirely, so the chart still deploys on an older proxy image.
+- Changing `observability.clickhouse.database` on an existing deployment requires starting from an empty ClickHouse volume, or audit logs silently fall back to the shorter `retention.logsDays` window — see `charts/kasm-helm/docs/observability.md` §6.
+
+### Removed
+
+- The `api-app-config` and `manager-app-config` ConfigMaps (dead configuration — `api_server/server.py` no longer reads them).
+
 ## [1.1190.6] - 2026-07-28
 
 ### Fixed

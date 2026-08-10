@@ -51,3 +51,5 @@ charts/kasm-helm/values-test.yaml
 .superpowers/
 AGENTS.md
 CLAUDE.md
+# e2e diagnostic dumps (E2E_ARTIFACT_DIR)
+tests/e2e/artifacts/

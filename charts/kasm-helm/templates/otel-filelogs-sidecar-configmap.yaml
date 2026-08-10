@@ -1,0 +1,82 @@
+{{/*
+Collector config for the observability.fileLogs sidecar (§8 of H5-nginx-sidecars.md). Shared by
+every api/manager/guac pod that opts in via fileLogs.components — the service name and forwarder
+endpoint are supplied per-pod through OTEL_SERVICE_NAME/OTEL_EXPORTER_OTLP_ENDPOINT env vars (set
+by kasm.otelSidecar), so one rendered ConfigMap covers all three components and every zone.
+
+Reads the JSON lines kasm_telemetry's JsonFormatter writes (see
+libs/telemetry/kasm_telemetry/logs.py): timestamp, level, logger, module, line, message. Off by
+default — services already export logs over OTLP directly; this is only for operators who
+specifically want file-shaped JSON logs inside the pod as well.
+*/}}
+{{- $obs := .Values.observability -}}
+{{- if and $obs.enabled $obs.fileLogs.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  {{- include "kasm.metadata" (dict "context" . "component" "otel-filelogs-sidecar" "resource" "configMap" "include" "all") | indent 2 }}
+data:
+  config.yaml: |
+    extensions:
+      health_check:
+        endpoint: "0.0.0.0:13133"
+
+    receivers:
+      filelog/kasm_app:
+        include:
+          - /opt/kasm/current/log/*.log
+        start_at: end
+        operators:
+          - type: json_parser
+            timestamp:
+              parse_from: attributes.timestamp
+              layout: "%Y-%m-%dT%H:%M:%S.%f%z"
+          - type: severity_parser
+            parse_from: attributes.level
+            overwrite_text: true
+            mapping:
+              error: [ERROR, CRITICAL]
+              warn:  WARNING
+              info:  INFO
+              debug: DEBUG
+          - type: move
+            from: attributes.message
+            to:   body
+          - type: add
+            field: resource["service.name"]
+            value: "${env:OTEL_SERVICE_NAME}"
+
+    processors:
+      batch:
+        send_batch_size: 5000
+        timeout: 10s
+
+      memory_limiter:
+        check_interval: 5s
+        limit_mib: 96
+        spike_limit_mib: 32
+
+    exporters:
+      otlphttp:
+        endpoint: "${env:OTEL_EXPORTER_OTLP_ENDPOINT}"
+
+    service:
+      extensions: [health_check]
+
+      pipelines:
+        logs:
+          receivers: [filelog/kasm_app]
+          processors: [memory_limiter, batch]
+          exporters: [otlphttp]
+
+      telemetry:
+        logs:
+          level: info
+        metrics:
+          readers:
+            - pull:
+                exporter:
+                  prometheus:
+                    host: "0.0.0.0"
+                    port: 8888
+{{- end }}

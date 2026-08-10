@@ -1,0 +1,76 @@
+suite: ClickHouse standalone (external) — no bundled workloads, endpoints threaded through
+
+templates:
+  - templates/clickhouse-statefulset.yaml
+  - templates/clickhouse-service.yaml
+  - templates/clickhouse-configmap.yaml
+  - templates/clickhouse-retention-job.yaml
+  - templates/api-deployment.yaml
+  - templates/manager-deployment.yaml
+  - templates/otel-gateway-configmap.yaml
+  - templates/otel-collector-configmap.yaml
+
+tests:
+  - it: standalone=true renders no StatefulSet/Service/ConfigMap/Job
+    values:
+      - ../../../tests/values/observability-external-ch.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/clickhouse-statefulset.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/clickhouse-service.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/clickhouse-configmap.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/clickhouse-retention-job.yaml
+
+  - it: api KASM_CLICKHOUSE_ENDPOINT equals the standalone httpEndpoint
+    template: templates/api-deployment.yaml
+    values:
+      - ../../../tests/values/observability-external-ch.yaml
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_ENDPOINT" && @.value=="https://ch.example.test:8443")]
+
+  - it: manager KASM_CLICKHOUSE_ENDPOINT equals the standalone httpEndpoint
+    template: templates/manager-deployment.yaml
+    values:
+      - ../../../tests/values/observability-external-ch.yaml
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_ENDPOINT" && @.value=="https://ch.example.test:8443")]
+
+  - it: gateway Collector DSN equals the standalone nativeEndpoint
+    template: templates/otel-gateway-configmap.yaml
+    values:
+      - ../../../tests/values/observability-external-ch.yaml
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'endpoint: "tcp://ch\.example\.test:9440\?secure=true&skip_verify=true"'
+
+  - it: enabled=false renders no store and no retention Job (and no standalone conflict)
+    set:
+      observability.clickhouse.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/clickhouse-statefulset.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/clickhouse-retention-job.yaml
+
+  - it: standalone=true with clickhouse.enabled=false fails render (mutually exclusive)
+    template: templates/otel-collector-configmap.yaml
+    set:
+      observability.clickhouse.standalone: true
+      observability.clickhouse.enabled: false
+      observability.clickhouse.nativeEndpoint: "tcp://ch.example.test:9440"
+      observability.clickhouse.httpEndpoint: "https://ch.example.test:8443"
+    asserts:
+      - failedTemplate:
+          errorMessage: "observability.clickhouse.standalone and observability.clickhouse.enabled=false are mutually exclusive: standalone already means 'use an external ClickHouse', while enabled=false means 'no ClickHouse store at all'."

@@ -31,6 +31,24 @@ data:
       {{- end }}
     }
 
+  {{- if .Values.observability.enabled }}
+  otel.conf: |
+    # ngx_otel_module requires an otel_exporter block wherever otel_trace/otel_span_attr are
+    # used (verified: nginx -t fails with "otel_exporter block is missing" without this), so
+    # kasmguac.conf's directives need this even though guac's own traffic isn't otherwise
+    # instrumented. Not zone-scoped (this ConfigMap is shared by every zone's guac StatefulSet,
+    # per kasm.primaryRegionZones), so this always points at the primary zone's forwarder rather
+    # than each pod's own zone — a minor cross-zone hop for guac pods in a non-primary zone
+    # within the same region, not a correctness bug.
+    otel_exporter {
+      endpoint {{ printf "%s-otel-collector-%s" .Release.Name (include "kasm.zoneName" (include "kasm.primaryZone" . | fromYaml).name) }}:4316;
+    }
+
+    otel_service_name  kasm-guac;
+    otel_trace          off;
+    otel_trace_context  propagate;
+  {{- end }}
+
   orchestrator.conf: |
     server {
       listen {{ $constants.guac.nginxPort }} ssl;
@@ -61,6 +79,11 @@ metadata:
 data:
   kasmguac.conf: |
     location /guac_connect/vnc/ {
+      {{- if .Values.observability.enabled }}
+      # long-lived WebSocket tunnel — traces stay open for the entire session
+      # duration, matching the backend's commented state pending validation.
+      # otel_trace  off;
+      {{- end }}
       proxy_http_version      1.1;
       proxy_set_header        Host $host;
       proxy_set_header        Upgrade $http_upgrade;
@@ -77,9 +100,17 @@ data:
       expires                 4h;
       add_header              Strict-Transport-Security "max-age=63072000" always;
       add_header              Cache-Control "private";
+      {{- if .Values.observability.enabled }}
+      # kasm.kasm_id is dropped here: unlike the backend's single-nginx /kasm_connect flow,
+      # this location has no auth_request_set that populates $connect_kasm_id.
+      otel_span_attr          kasm.kasm_user_name   "$cookie_username";
+      {{- end }}
     }
 
     location /guac_connect/vnc/vnc.htmlguaclite {
+      {{- if .Values.observability.enabled }}
+      # otel_trace  off;
+      {{- end }}
       proxy_http_version      1.1;
       proxy_set_header        Host $host;
       proxy_set_header        Upgrade $http_upgrade;
@@ -97,9 +128,17 @@ data:
       add_header              Cache-Control "private";
       add_header              Strict-Transport-Security "max-age=63072000" always;
       add_header              X-Content-Type-Options 'nosniff';
+      {{- if .Values.observability.enabled }}
+      # kasm.kasm_id is dropped here: unlike the backend's single-nginx /kasm_connect flow,
+      # this location has no auth_request_set that populates $connect_kasm_id.
+      otel_span_attr          kasm.kasm_user_name   "$cookie_username";
+      {{- end }}
     }
 
     location /vm_connect {
+      {{- if .Values.observability.enabled }}
+      otel_trace          off;
+      {{- end }}
       internal;
       proxy_pass              http://kasm_guac/vm_connect;
       proxy_pass_request_body off;

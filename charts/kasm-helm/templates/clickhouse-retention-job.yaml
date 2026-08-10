@@ -1,0 +1,138 @@
+{{/*
+Re-applies ClickHouse retention TTLs after `helm upgrade`/`helm install` when
+observability.clickhouse.retention values change. init-schema.sql (clickhouse-configmap.yaml)
+only runs on a fresh, uninitialized volume, so an existing release needs this Job to converge.
+
+Statements are ported verbatim from kasm_backend/install/upgrade.sh's
+apply_clickhouse_retention_tiers(), including its per-statement `|| echo Warning` error
+handling — a missing table (e.g. a metrics variant never exported) must never fail the Job or
+block the release. clickhouse-client reads its password from the CLICKHOUSE_PASSWORD env var
+natively, so it is never passed as a command-line argument.
+
+Renders only under the guard conditions below — an external or absent ClickHouse is not ours
+to alter, mirroring apply_clickhouse_retention_tiers' own self-guard in upgrade.sh.
+*/}}
+{{- if and .Values.observability.enabled .Values.observability.clickhouse.enabled (not .Values.observability.clickhouse.standalone) }}
+{{- $ch := .Values.observability.clickhouse }}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $secretName := default $constants.secrets.name $ch.existingSecret.name -}}
+{{- $secretKey := default "clickhouse-password" $ch.existingSecret.key -}}
+{{- $hookAnnotations := dict
+      "helm.sh/hook" "post-install,post-upgrade"
+      "helm.sh/hook-weight" "5"
+      "helm.sh/hook-delete-policy" "before-hook-creation,hook-succeeded"
+}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  {{- include "kasm.metadata" (dict "context" . "component" "clickhouse-retention" "resource" "job" "include" "all" "extraAnnotations" $hookAnnotations) | indent 2 }}
+spec:
+  ttlSecondsAfterFinished: {{ .Values.dbManagement.initJobTTLSecondsAfterFinished | default 300 }}
+  backoffLimit: 3
+  template:
+    metadata:
+      {{- include "kasm.metadata" (dict "context" . "component" "clickhouse-retention" "resource" "pod" "include" "la" "extraAnnotations" $hookAnnotations) | indent 6 }}
+    spec:
+      restartPolicy: OnFailure
+      {{- if .Values.imagePullSecrets.enabled }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets.name | default (printf "%s-image-pull-secret" .Release.Name) }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- include "kasm.securityContext" (list . 101 "pod") | nindent 6 }}
+      containers:
+        - name: {{ include "kasm.name" (list . "clickhouse-retention" "container") }}
+          image: {{ $constants.clickhouse.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          env:
+            - name: HOME
+              value: /tmp
+            - name: CLICKHOUSE_HOST
+              value: {{ $constants.clickhouse.svc | quote }}
+            - name: CLICKHOUSE_HTTP_PORT
+              value: {{ $constants.clickhouse.http | quote }}
+            - name: CLICKHOUSE_NATIVE_PORT
+              value: {{ $constants.clickhouse.native | quote }}
+            - name: CLICKHOUSE_USER
+              value: {{ $ch.username | quote }}
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: {{ $secretKey }}
+            - name: CLICKHOUSE_DATABASE
+              value: {{ $ch.database | quote }}
+            - name: OTEL_LOGS_RETENTION_DAYS
+              value: {{ $ch.retention.logsDays | quote }}
+            - name: OTEL_AUDIT_LOGS_RETENTION_DAYS
+              value: {{ $ch.retention.auditLogsDays | quote }}
+            - name: OTEL_TRACES_RETENTION_DAYS
+              value: {{ $ch.retention.tracesDays | quote }}
+            - name: OTEL_METRICS_RETENTION_DAYS
+              value: {{ $ch.retention.metricsDays | quote }}
+          command:
+            - /bin/bash
+            - -c
+          args:
+            - |
+              set -uo pipefail
+
+              wait_url="http://${CLICKHOUSE_HOST}:${CLICKHOUSE_HTTP_PORT}/ping"
+              tries=60
+              until wget -q -O /dev/null "${wait_url}" 2>/dev/null; do
+                tries=$((tries-1))
+                if [ "${tries}" -le 0 ]; then
+                  echo "ClickHouse not ready after waiting; skipping retention TTL migration."
+                  exit 0
+                fi
+                sleep 5
+              done
+
+              ch_exec=(clickhouse-client --host "${CLICKHOUSE_HOST}" --port "${CLICKHOUSE_NATIVE_PORT}" --user "${CLICKHOUSE_USER}" --query)
+
+              echo "Applying ClickHouse retention tiers..."
+
+              # otel_logs — add IsAudit materialized column (IF NOT EXISTS) then replace TTL
+              "${ch_exec[@]}" "ALTER TABLE ${CLICKHOUSE_DATABASE}.otel_logs
+                ADD COLUMN IF NOT EXISTS IsAudit UInt8
+                  MATERIALIZED toUInt8(
+                    LogAttributes['metric_name'] LIKE 'account.login%'
+                    OR LogAttributes['metric_name'] LIKE 'account.logout%'
+                    OR LogAttributes['kasm.retention_class'] = 'audit'
+                  )" 2>/dev/null || echo "Warning: could not alter otel_logs (may not exist yet)."
+
+              "${ch_exec[@]}" "ALTER TABLE ${CLICKHOUSE_DATABASE}.otel_logs MODIFY TTL
+                toDateTime(Timestamp) + INTERVAL ${OTEL_LOGS_RETENTION_DAYS} DAY DELETE WHERE IsAudit = 0,
+                toDateTime(Timestamp) + INTERVAL ${OTEL_AUDIT_LOGS_RETENTION_DAYS} DAY DELETE WHERE IsAudit = 1" \
+                2>/dev/null || echo "Warning: could not update otel_logs TTL."
+
+              # otel_traces — set per-signal TTL
+              "${ch_exec[@]}" "ALTER TABLE ${CLICKHOUSE_DATABASE}.otel_traces MODIFY TTL
+                toDateTime(Timestamp) + INTERVAL ${OTEL_TRACES_RETENTION_DAYS} DAY DELETE" \
+                2>/dev/null || echo "Warning: could not update otel_traces TTL (may not exist yet)."
+
+              # otel_metrics_* — set per-signal TTL on all five metrics table variants
+              for tbl in otel_metrics_gauge otel_metrics_sum otel_metrics_summary \
+                          otel_metrics_histogram otel_metrics_exp_histogram; do
+                "${ch_exec[@]}" "ALTER TABLE ${CLICKHOUSE_DATABASE}.${tbl} MODIFY TTL
+                  toDateTime(TimeUnix) + INTERVAL ${OTEL_METRICS_RETENTION_DAYS} DAY DELETE" \
+                  2>/dev/null || echo "Warning: could not update ${tbl} TTL (may not exist yet)."
+              done
+
+              echo "ClickHouse retention tiers applied."
+              exit 0
+          {{- include "kasm.securityContext" (list . 101 "container") | nindent 10 }}
+          resources: {{- include "resources.preset" (dict "node" $constants.clickhouse.component "size" .Values.deploymentSize) | nindent 12 }}
+          volumeMounts:
+            - name: tmp-data
+              mountPath: /tmp
+      volumes:
+        - name: tmp-data
+          emptyDir:
+            sizeLimit: 64Mi
+{{- end }}
