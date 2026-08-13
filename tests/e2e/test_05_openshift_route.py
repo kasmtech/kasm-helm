@@ -21,8 +21,9 @@ def test_route_deploys_and_is_accessible_when_openshift(installer, temp_workdir:
         pytest.skip("OpenShift Route API not available in this cluster")
 
     # Lower per-component resource requests so all pods (api, manager, proxy,
-    # guac + nginx sidecar, rdpGateway + nginx sidecar, rdpHttpsGateway +
-    # nginx sidecar, bundled db) fit on small test clusters.
+    # the consolidated connection-proxy StatefulSet — one nginx plus the
+    # guac, rdp-gateway, and rdp-https-gateway service containers — and the
+    # bundled db) fit on small test clusters.
     low_resources = {"requests": {"cpu": "50m", "memory": "256Mi"}}
     low_resources_proxy = {"requests": {"cpu": "50m", "memory": "128Mi"}}
     low_resources_gw = {"requests": {"cpu": "25m", "memory": "128Mi"}}
@@ -39,9 +40,12 @@ def test_route_deploys_and_is_accessible_when_openshift(installer, temp_workdir:
             "api": {"resources": low_resources},
             "manager": {"resources": low_resources},
             "proxy": {"resources": low_resources_proxy},
-            "guac": {"resources": low_resources},
-            "rdpGateway": {"resources": low_resources_gw},
-            "rdpHttpsGateway": {"resources": low_resources_gw},
+            "connectionProxy": {
+                "nginx": {"resources": low_resources_proxy},
+                "guac": {"resources": low_resources},
+                "rdpGateway": {"resources": low_resources_gw},
+                "rdpHttpsGateway": {"resources": low_resources_gw},
+            },
         },
     }
     values_path = temp_workdir / "values.yaml"

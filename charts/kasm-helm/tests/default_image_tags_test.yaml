@@ -7,9 +7,10 @@ tests:
       components.api.image.tag: "1.19.0-hotfix"
       components.manager.image.tag: ""
       components.proxy.image.tag: ""
-      components.guac.image.tag: ""
-      components.rdpGateway.image.tag: ""
-      components.rdpHttpsGateway.image.tag: ""
+      components.connectionProxy.nginx.image.tag: ""
+      components.connectionProxy.guac.image.tag: ""
+      components.connectionProxy.rdpGateway.image.tag: ""
+      components.connectionProxy.rdpHttpsGateway.image.tag: ""
       database.image.tag: ""
       useImageTags: "1.19.0-rolling"
     asserts:
@@ -18,7 +19,7 @@ tests:
           path: spec.template.spec.containers[0].image
           value: docker.io/kasmweb/api:1.19.0-hotfix
         template: templates/api-deployment.yaml
-      # other 6: untouched, fall back to useImageTags
+      # other components: untouched, fall back to useImageTags
       - equal:
           path: spec.template.spec.containers[0].image
           value: docker.io/kasmweb/manager:1.19.0-rolling
@@ -29,16 +30,20 @@ tests:
         template: templates/proxy-deployment.yaml
       - equal:
           path: spec.template.spec.containers[0].image
+          value: docker.io/kasmweb/proxy:1.19.0-rolling
+        template: templates/connection-proxy-statefulset.yaml
+      - equal:
+          path: spec.template.spec.containers[1].image
           value: docker.io/kasmweb/kasm-guac:1.19.0-rolling
-        template: templates/guac-statefulset.yaml
+        template: templates/connection-proxy-statefulset.yaml
       - equal:
-          path: spec.template.spec.containers[0].image
+          path: spec.template.spec.containers[2].image
           value: docker.io/kasmweb/rdp-gateway:1.19.0-rolling
-        template: templates/rdp-gateway-deployment.yaml
+        template: templates/connection-proxy-statefulset.yaml
       - equal:
-          path: spec.template.spec.containers[0].image
+          path: spec.template.spec.containers[3].image
           value: docker.io/kasmweb/rdp-https-gateway:1.19.0-rolling
-        template: templates/rdp-https-gateway-statefulset.yaml
+        template: templates/connection-proxy-statefulset.yaml
       - equal:
           path: spec.template.spec.containers[0].image
           value: docker.io/kasmweb/postgres:1.19.0-rolling
@@ -50,9 +55,10 @@ tests:
       components.api.image.tag: ""
       components.manager.image.tag: ""
       components.proxy.image.tag: ""
-      components.guac.image.tag: ""
-      components.rdpGateway.image.tag: ""
-      components.rdpHttpsGateway.image.tag: ""
+      components.connectionProxy.nginx.image.tag: ""
+      components.connectionProxy.guac.image.tag: ""
+      components.connectionProxy.rdpGateway.image.tag: ""
+      components.connectionProxy.rdpHttpsGateway.image.tag: ""
       database.image.tag: ""
       useImageTags: "1.19.0-rolling"
     asserts:
@@ -70,16 +76,20 @@ tests:
         template: templates/proxy-deployment.yaml
       - equal:
           path: spec.template.spec.containers[0].image
+          value: docker.io/kasmweb/proxy:1.19.0-rolling
+        template: templates/connection-proxy-statefulset.yaml
+      - equal:
+          path: spec.template.spec.containers[1].image
           value: docker.io/kasmweb/kasm-guac:1.19.0-rolling
-        template: templates/guac-statefulset.yaml
+        template: templates/connection-proxy-statefulset.yaml
       - equal:
-          path: spec.template.spec.containers[0].image
+          path: spec.template.spec.containers[2].image
           value: docker.io/kasmweb/rdp-gateway:1.19.0-rolling
-        template: templates/rdp-gateway-deployment.yaml
+        template: templates/connection-proxy-statefulset.yaml
       - equal:
-          path: spec.template.spec.containers[0].image
+          path: spec.template.spec.containers[3].image
           value: docker.io/kasmweb/rdp-https-gateway:1.19.0-rolling
-        template: templates/rdp-https-gateway-statefulset.yaml
+        template: templates/connection-proxy-statefulset.yaml
       - equal:
           path: spec.template.spec.containers[0].image
           value: docker.io/kasmweb/postgres:1.19.0-rolling
@@ -117,10 +127,11 @@ tests:
       # would also fail render, so set them too:
       components.manager.image.tag: "1.19.0-hotfix"
       components.proxy.image.tag: "1.19.0-hotfix"
-      components.guac.image.tag: "1.19.0-hotfix"
-      components.rdpGateway.image.tag: "1.19.0-hotfix"
-      components.rdpHttpsGateway.image.tag: "1.19.0-hotfix"
       database.image.tag: "1.19.0-hotfix"
+      components.connectionProxy.nginx.image.tag: "1.19.0-hotfix"
+      components.connectionProxy.guac.image.tag: "1.19.0-hotfix"
+      components.connectionProxy.rdpGateway.image.tag: "1.19.0-hotfix"
+      components.connectionProxy.rdpHttpsGateway.image.tag: "1.19.0-hotfix"
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
@@ -143,9 +154,6 @@ tests:
       components.api.image.tag: ""
       components.manager.image.tag: ""
       components.proxy.image.tag: ""
-      components.guac.image.tag: ""
-      components.rdpGateway.image.tag: ""
-      components.rdpHttpsGateway.image.tag: ""
       database.image.tag: ""
     asserts:
       - failedTemplate:

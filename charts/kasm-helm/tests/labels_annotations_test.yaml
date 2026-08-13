@@ -13,7 +13,7 @@ templates:
   - templates/ingress.yaml
   - templates/route.yaml
   - templates/image-pull-secret.yaml
-  - templates/rdp-gateway-service.yaml
+  - templates/connection-proxy-services.yaml
   - templates/cert-manager-certificate.yaml
 
 tests:
@@ -314,7 +314,7 @@ tests:
           path: metadata.annotations["rotate.example.com/policy"]
           value: monthly
 
-  - it: directRdpService.labels and directRdpService.annotations apply to the rdp-gateway service
+  - it: directRdpService.labels and directRdpService.annotations apply to the direct RDP service
     values:
       - ../../../tests/values/rdp_gateway_service.yaml
     set:
@@ -323,7 +323,8 @@ tests:
           rdp-exposure: external
         annotations:
           rdp.example.com/notes: "direct lb"
-    template: templates/rdp-gateway-service.yaml
+    template: templates/connection-proxy-services.yaml
+    documentIndex: 1
     asserts:
       - equal:
           path: metadata.labels["rdp-exposure"]

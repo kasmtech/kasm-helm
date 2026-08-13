@@ -80,6 +80,139 @@ Please see our [official documentation site](https://docs.kasm.com) for more inf
 </table>
 {{ end }}
 
+## Migrating to connection-proxy
+
+Guac, RDP Gateway, and RDP HTTPS Gateway are consolidated into a single `connection-proxy` StatefulSet. `components.guac`, `components.rdpGateway`, and `components.rdpHttpsGateway` are removed from `values.yaml`; use `components.connectionProxy` instead. See [CHANGELOG.md](./CHANGELOG.md) for the breaking-change summary.
+
+| Old key | New key | Notes |
+| --- | --- | --- |
+| `components.guac.enabled` | `components.connectionProxy.guac.enabled` | |
+| `components.guac.image.{registry,repository,tag}` | `components.connectionProxy.guac.image.{registry,repository,tag}` | |
+| `components.guac.guacClusterSize` | `components.connectionProxy.guac.guacClusterSize` | |
+| `components.guac.replicas` | `components.connectionProxy.replicas` | Merged with `rdpGateway.replicas` / `rdpHttpsGateway.replicas` into one shared value |
+| `components.guac.healthCheckTiming` | `components.connectionProxy.guac.healthCheckTiming` | |
+| `components.guac.resources` | `components.connectionProxy.guac.resources` | |
+| `components.guac.recordingData.pvcSize` | `components.connectionProxy.guac.recordingData.pvcSize` | |
+| `components.guac.recordingData.storageClassName` | `components.connectionProxy.guac.recordingData.storageClassName` | |
+| `components.guac.annotations` | `components.connectionProxy.annotations` | Now pod/StatefulSet-level, shared across all three services |
+| `components.guac.labels` | `components.connectionProxy.labels` | Shared, pod/StatefulSet-level |
+| `components.guac.nginxSidecar.resources` | `components.connectionProxy.nginx.resources` | Merged; one nginx container for all three services |
+| `components.guac.nginxSidecar.healthCheckTiming` | `components.connectionProxy.nginx.healthCheckTiming` | Merged |
+| `components.guac.nginxSidecar.extraVolumes` | `components.connectionProxy.extraVolumes` | Merged, now pod-level |
+| `components.guac.nginxSidecar.extraVolumeMounts` | `components.connectionProxy.extraVolumeMounts` | Merged, now pod-level |
+| `components.guac.extraVolumes` | `components.connectionProxy.extraVolumes` | Merged, pod-level |
+| `components.guac.extraVolumeMounts` | `components.connectionProxy.extraVolumeMounts` | Merged, pod-level |
+| `components.guac.extraContainers` | `components.connectionProxy.extraContainers` | Merged, pod-level |
+| `components.guac.extraInitContainers` | `components.connectionProxy.extraInitContainers` | Merged, pod-level |
+| `components.rdpGateway.enabled` | `components.connectionProxy.rdpGateway.enabled` | |
+| `components.rdpGateway.image.{registry,repository,tag}` | `components.connectionProxy.rdpGateway.image.{registry,repository,tag}` | |
+| `components.rdpGateway.replicas` | `components.connectionProxy.replicas` | Merged (see above); single-replica `fail` restriction removed |
+| `components.rdpGateway.healthCheckTiming` | `components.connectionProxy.rdpGateway.healthCheckTiming` | |
+| `components.rdpGateway.resources` | `components.connectionProxy.rdpGateway.resources` | |
+| `components.rdpGateway.iniConfigMapName` | `components.connectionProxy.rdpGateway.iniConfigMapName` | |
+| `components.rdpGateway.annotations` | `components.connectionProxy.annotations` | Merged, shared, pod/StatefulSet-level |
+| `components.rdpGateway.labels` | `components.connectionProxy.labels` | Merged, shared, pod/StatefulSet-level |
+| `components.rdpGateway.nginxSidecar.resources` | `components.connectionProxy.nginx.resources` | Merged |
+| `components.rdpGateway.nginxSidecar.healthCheckTiming` | `components.connectionProxy.nginx.healthCheckTiming` | Merged |
+| `components.rdpGateway.nginxSidecar.extraVolumes` | `components.connectionProxy.extraVolumes` | Merged, pod-level |
+| `components.rdpGateway.nginxSidecar.extraVolumeMounts` | `components.connectionProxy.extraVolumeMounts` | Merged, pod-level |
+| `components.rdpGateway.extraVolumes` | `components.connectionProxy.extraVolumes` | Merged, pod-level |
+| `components.rdpGateway.extraVolumeMounts` | `components.connectionProxy.extraVolumeMounts` | Merged, pod-level |
+| `components.rdpGateway.extraContainers` | `components.connectionProxy.extraContainers` | Merged, pod-level |
+| `components.rdpGateway.extraInitContainers` | `components.connectionProxy.extraInitContainers` | Merged, pod-level |
+| `components.rdpHttpsGateway.enabled` | `components.connectionProxy.rdpHttpsGateway.enabled` | |
+| `components.rdpHttpsGateway.image.{registry,repository,tag}` | `components.connectionProxy.rdpHttpsGateway.image.{registry,repository,tag}` | |
+| `components.rdpHttpsGateway.replicas` | `components.connectionProxy.replicas` | Merged (see above) |
+| `components.rdpHttpsGateway.healthCheckTiming` | `components.connectionProxy.rdpHttpsGateway.healthCheckTiming` | |
+| `components.rdpHttpsGateway.resources` | `components.connectionProxy.rdpHttpsGateway.resources` | |
+| `components.rdpHttpsGateway.annotations` | `components.connectionProxy.annotations` | Merged, shared, pod/StatefulSet-level |
+| `components.rdpHttpsGateway.labels` | `components.connectionProxy.labels` | Merged, shared, pod/StatefulSet-level |
+| `components.rdpHttpsGateway.nginxSidecar.resources` | `components.connectionProxy.nginx.resources` | Merged |
+| `components.rdpHttpsGateway.nginxSidecar.healthCheckTiming` | `components.connectionProxy.nginx.healthCheckTiming` | Merged |
+| `components.rdpHttpsGateway.nginxSidecar.extraVolumes` | `components.connectionProxy.extraVolumes` | Merged, pod-level |
+| `components.rdpHttpsGateway.nginxSidecar.extraVolumeMounts` | `components.connectionProxy.extraVolumeMounts` | Merged, pod-level |
+| `components.rdpHttpsGateway.extraVolumes` | `components.connectionProxy.extraVolumes` | Merged, pod-level |
+| `components.rdpHttpsGateway.extraVolumeMounts` | `components.connectionProxy.extraVolumeMounts` | Merged, pod-level |
+| `components.rdpHttpsGateway.extraContainers` | `components.connectionProxy.extraContainers` | Merged, pod-level |
+| `components.rdpHttpsGateway.extraInitContainers` | `components.connectionProxy.extraInitContainers` | Merged, pod-level |
+| *(new)* | `components.connectionProxy.enabled` | New top-level gate; when false, no StatefulSet/Service/ConfigMap renders for this component |
+| *(new)* | `components.connectionProxy.nginx.image.{registry,repository,tag}` | New; the consolidated nginx image is now explicitly configurable (`kasmweb/proxy`), previously implicit via internal constants |
+| *(new)* | `directRdpService.perServiceSettings` | New list, one entry per connection-proxy replica, with per-entry `rdpAccessURL` (required), `zone` (required with more than one primary-region zone), `loadBalancerPort`, `annotations`, `labels` (all optional) |
+| `directRdpService.rdpAccessURL` | `directRdpService.rdpAccessURL` (unchanged key, changed semantics) | Kept as a deprecated legacy singular; only honored at 1 replica when `perServiceSettings` is empty |
+
+## Direct RDP Service
+
+Set `directRdpService.enabled: true` to expose the Kasm RDP Gateway on port 3389 for native RDP clients, alongside the browser-based paths already served by the connection proxy.
+
+### One Service per replica
+
+The connection proxy is a StatefulSet and scales with `deploymentSize` (or `components.connectionProxy.replicas`). Each replica needs its own externally reachable RDP address, so the chart renders one Service per replica, named `<release>-connection-proxy-<zone>-rdp-<ordinal>` and selected by `statefulset.kubernetes.io/pod-name` so it targets exactly one pod.
+
+Provide one `perServiceSettings` entry per replica. With one primary-region zone (the common case, `kasmZones` unset or a single zone), ordinal is simply the entry's position in the list:
+
+```yaml
+directRdpService:
+  enabled: true
+  type: LoadBalancer
+  perServiceSettings:
+    - rdpAccessURL: rdp0.kasm.example.com
+      annotations:
+        external-dns.alpha.kubernetes.io/hostname: rdp0.kasm.example.com
+    - rdpAccessURL: rdp1.kasm.example.com
+      annotations:
+        external-dns.alpha.kubernetes.io/hostname: rdp1.kasm.example.com
+```
+
+Rendering fails if there are fewer entries than replicas. `rdpAccessURL` is the address Kasm registers for that replica, so it must resolve to that replica's own Service.
+
+The legacy `directRdpService.rdpAccessURL` (a single string) is still accepted, but only with one replica, one primary-region zone, and an empty `perServiceSettings`.
+
+### Multiple zones
+
+With more than one primary-region zone configured in `kasmZones`, each zone gets its own set of connection-proxy replicas and needs its own RDP addresses, so a flat `perServiceSettings` list can't tell them apart. Every entry needs a `zone` field naming which zone it belongs to; ordinal is then the entry's position among that zone's own entries, so entries for different zones can be interleaved in any order:
+
+```yaml
+directRdpService:
+  enabled: true
+  type: LoadBalancer
+  perServiceSettings:
+    - zone: zone-a
+      rdpAccessURL: rdp0.zone-a.kasm.example.com
+    - zone: zone-b
+      rdpAccessURL: rdp0.zone-b.kasm.example.com
+    - zone: zone-a
+      rdpAccessURL: rdp1.zone-a.kasm.example.com
+```
+
+Rendering fails if any entry omits `zone`, names a zone that isn't configured, or if a zone ends up with fewer entries than that zone's replica count. The legacy singular `rdpAccessURL` is rejected outright with more than one zone, since it has no way to express which zone it belongs to.
+
+### Load balancer type
+
+RDP is raw TCP on port 3389, not HTTP, so an HTTP (layer 7) load balancer cannot carry it. Where the provider does not already use a network (layer 4) load balancer, request one by annotation:
+
+| Provider | Annotation |
+| --- | --- |
+| OCI | `oci.oraclecloud.com/load-balancer-type: "nlb"` |
+| AWS | `service.beta.kubernetes.io/aws-load-balancer-type: "nlb"` |
+| Azure | Not required; LoadBalancer Services are layer 4 by default |
+| GCP | Not required; LoadBalancer Services are layer 4 by default |
+
+### Shared and per-Service annotations
+
+`directRdpService.annotations` and `directRdpService.labels` are applied to **every** per-replica Service. Anything that must differ per Service belongs in `perServiceSettings[i]` instead: external-dns hostnames, static IP or EIP allocation IDs, per-AZ subnets, and provider load balancer names.
+
+Putting those in the shared map gives every replica the same identity. With external-dns, for example, every replica publishes the same hostname, so clients are round-robined across pods instead of reaching the replica that holds their session.
+
+Precedence is most specific first: `perServiceSettings[i]` overrides `directRdpService.annotations`, which overrides the chart-wide `annotations`.
+
+### Cost and addresses
+
+N replicas means N load balancers. OCI Network Load Balancers are free; AWS, Azure and GCP bill per load balancer.
+
+`perServiceSettings[i].loadBalancerPort` overrides the shared `loadBalancerPort` for a single Service. This supports providers that can share one load balancer address across Services on distinct ports (for example MetalLB's `metallb.universe.tf/allow-shared-ip`), so several replicas can share an address instead of consuming one each. If you use this, confirm that the `rdpAccessURL` you register for each replica matches the address and port clients actually connect to.
+
+`type: NodePort` avoids load balancers entirely, but exposes a high port on every node and moves firewall management to the node level; many environments prohibit it.
+
 ## Chart value settings in `values.yaml`
 
 {{ template "chart.valuesSectionHtml" . }}

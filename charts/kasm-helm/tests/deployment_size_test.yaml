@@ -4,9 +4,7 @@ templates:
   - templates/api-deployment.yaml
   - templates/db-statefulset.yaml
   - templates/proxy-deployment.yaml
-  - templates/guac-statefulset.yaml
-  - templates/rdp-gateway-deployment.yaml
-  - templates/rdp-https-gateway-statefulset.yaml
+  - templates/connection-proxy-statefulset.yaml
 
 tests:
   - it: sets all replicas to 1 for small
@@ -17,16 +15,16 @@ tests:
           path: spec.replicas
           value: 1
 
-  # rdp-gateway is intentionally excluded from the medium/large size cases —
-  # it's pinned at 1 across all sizes (see "rdp-gateway is held at 1 regardless
-  # of deploymentSize" below and the long-form comment in
-  # rdp-gateway-deployment.yaml).
+  # connection-proxy (nginx + guac + rdp-gateway + rdp-https-gateway consolidated into one
+  # StatefulSet) now shares a single replicas.preset node ("connection-proxy") and scales
+  # 1/2/3 with deploymentSize like every other zone-scoped workload. The old single-replica
+  # `fail` pinning rdp-gateway to 1 replica was removed (maintainer decision 2026-08-11); each
+  # replica gets its own direct-RDP identity via directRdpService, tested separately.
   - it: sets all deployment replicas to 2 for medium
     templates:
       - templates/api-deployment.yaml
       - templates/proxy-deployment.yaml
-      - templates/guac-statefulset.yaml
-      - templates/rdp-https-gateway-statefulset.yaml
+      - templates/connection-proxy-statefulset.yaml
     values:
       - ../../../tests/values/components-all.yaml
     set:
@@ -40,8 +38,7 @@ tests:
     templates:
       - templates/api-deployment.yaml
       - templates/proxy-deployment.yaml
-      - templates/guac-statefulset.yaml
-      - templates/rdp-https-gateway-statefulset.yaml
+      - templates/connection-proxy-statefulset.yaml
     values:
       - ../../../tests/values/components-all.yaml
     set:
@@ -50,41 +47,3 @@ tests:
       - equal:
           path: spec.replicas
           value: 3
-
-  - it: scales guac and rdp-https-gateway to 2 replicas for medium
-    templates:
-      - templates/guac-statefulset.yaml
-      - templates/rdp-https-gateway-statefulset.yaml
-    values:
-      - ../../../tests/values/components-all.yaml
-    set:
-      deploymentSize: medium
-    asserts:
-      - equal:
-          path: spec.replicas
-          value: 2
-
-  - it: scales guac and rdp-https-gateway to 3 replicas for large
-    templates:
-      - templates/guac-statefulset.yaml
-      - templates/rdp-https-gateway-statefulset.yaml
-    values:
-      - ../../../tests/values/components-all.yaml
-    set:
-      deploymentSize: large
-    asserts:
-      - equal:
-          path: spec.replicas
-          value: 3
-
-  - it: rdp-gateway is held at 1 regardless of deploymentSize
-    templates:
-      - templates/rdp-gateway-deployment.yaml
-    values:
-      - ../../../tests/values/components-all.yaml
-    set:
-      deploymentSize: large
-    asserts:
-      - equal:
-          path: spec.replicas
-          value: 1

@@ -23,19 +23,24 @@ components:
     image:
       repository: kasmweb/manager-private
       tag: "feature_DEV-31"
-  guac:
-    image:
-      repository: kasmweb/kasm-guac-private
-      tag: "feature_DEV-31"
   proxy:
     image:
       repository: kasmweb/proxy-private
       tag: "feature_DEV-31"
-  rdpGateway:
-    image:
-      repository: kasmweb/rdp-gateway-private
-      tag: "feature_DEV-31"
-  rdpHttpsGateway:
-    image:
-      repository: kasmweb/rdp-https-gateway-private
-      tag: "feature_DEV-31"
+  connectionProxy:
+    nginx:
+      image:
+        repository: kasmweb/proxy-private
+        tag: "feature_DEV-31"
+    guac:
+      image:
+        repository: kasmweb/kasm-guac-private
+        tag: "feature_DEV-31"
+    rdpGateway:
+      image:
+        repository: kasmweb/rdp-gateway-private
+        tag: "feature_DEV-31"
+    rdpHttpsGateway:
+      image:
+        repository: kasmweb/rdp-https-gateway-private
+        tag: "feature_DEV-31"

@@ -1,30 +1,185 @@
-suite: optional components
+suite: connection-proxy direct rdp services
+# The standalone rdp-gateway Service is gone; rdp-gateway is now one of the containers in the
+# connection-proxy pod, reached in-cluster through the headless Service on port 8443. What
+# replaces the externally-reachable RDP address is directRdpService: one Service per StatefulSet
+# ordinal (connection-proxy scales 1/2/3, unlike the old single-replica rdp-gateway Deployment).
+# Validation-failure cases (bad type, too few perServiceSettings entries) live in connection_proxy_test.yaml.
+
 templates:
-  - templates/rdp-gateway-service.yaml
-  - templates/rdp-gateway-deployment.yaml
+  - templates/connection-proxy-services.yaml
 
 tests:
-  - it: renders rdp gateway service when enabled
-    template: templates/rdp-gateway-service.yaml
+  - it: renders only the headless service when directRdpService is disabled
     values:
-      - ../../../tests/values/rdp_gateway_service.yaml
+      - ../../../tests/values/components-all.yaml
     asserts:
       - hasDocuments:
           count: 1
       - isKind:
           of: Service
+      - equal:
+          path: spec.clusterIP
+          value: None
 
-  - it: renders rdp gateway deployment when enabled
-    template: templates/rdp-gateway-deployment.yaml
+  - it: renders the headless service plus one direct RDP service per replica when enabled
     values:
-      - ../../../tests/values/rdp_gateway_service.yaml
+      - ../../../tests/values/components-all.yaml
+    set:
+      directRdpService:
+        enabled: true
+        type: LoadBalancer
+        rdpAccessURL: rdp.example.com
+    asserts:
+      - hasDocuments:
+          count: 2
+      - isKind:
+          of: Service
+        documentIndex: 1
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-connection-proxy-default-rdp-0
+        documentIndex: 1
+      - equal:
+          path: spec.type
+          value: LoadBalancer
+        documentIndex: 1
+      - equal:
+          path: spec.ports[0].port
+          value: 3389
+        documentIndex: 1
+      - equal:
+          path: spec.ports[0].targetPort
+          value: 3389
+        documentIndex: 1
+
+  - it: honors a custom loadBalancerPort as the external port while targetPort stays 3389
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      directRdpService:
+        enabled: true
+        type: NodePort
+        rdpAccessURL: rdp.example.com
+        loadBalancerPort: 33890
+    asserts:
+      - equal:
+          path: spec.ports[0].port
+          value: 33890
+        documentIndex: 1
+      - equal:
+          path: spec.ports[0].targetPort
+          value: 3389
+        documentIndex: 1
+      - equal:
+          path: spec.type
+          value: NodePort
+        documentIndex: 1
+
+  - it: each direct RDP service selects exactly one pod ordinal via statefulset.kubernetes.io/pod-name
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      deploymentSize: large
+      directRdpService:
+        enabled: true
+        type: LoadBalancer
+        perServiceSettings:
+          - rdpAccessURL: rdp0.example.com
+          - rdpAccessURL: rdp1.example.com
+          - rdpAccessURL: rdp2.example.com
+    asserts:
+      - hasDocuments:
+          count: 4
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-connection-proxy-default-rdp-0
+        documentIndex: 1
+      - equal:
+          path: spec.selector["statefulset.kubernetes.io/pod-name"]
+          value: RELEASE-NAME-connection-proxy-default-0
+        documentIndex: 1
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-connection-proxy-default-rdp-1
+        documentIndex: 2
+      - equal:
+          path: spec.selector["statefulset.kubernetes.io/pod-name"]
+          value: RELEASE-NAME-connection-proxy-default-1
+        documentIndex: 2
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-connection-proxy-default-rdp-2
+        documentIndex: 3
+      - equal:
+          path: spec.selector["statefulset.kubernetes.io/pod-name"]
+          value: RELEASE-NAME-connection-proxy-default-2
+        documentIndex: 3
+
+  - it: does not render direct RDP services when rdpGateway is disabled, even if directRdpService is enabled
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      components:
+        connectionProxy:
+          rdpGateway:
+            enabled: false
+      directRdpService:
+        enabled: true
+        type: LoadBalancer
+        rdpAccessURL: rdp.example.com
     asserts:
       - hasDocuments:
           count: 1
-      - isKind:
-          of: Deployment
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: SERVER_HOSTNAME
-            value: rdp.example.com
+      - equal:
+          path: spec.clusterIP
+          value: None
+
+  - it: each zone gets its own headless service and direct RDP service, addressed via perServiceSettings[*].zone
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      kasmZones:
+        - name: zonea
+          proxyAddress: zonea.example.com
+          primary: true
+          region_name: us-east
+        - name: zoneb
+          proxyAddress: zoneb.example.com
+          region_name: us-east
+      directRdpService:
+        enabled: true
+        type: LoadBalancer
+        perServiceSettings:
+          - zone: zonea
+            rdpAccessURL: rdp0.zonea.example.com
+          - zone: zoneb
+            rdpAccessURL: rdp0.zoneb.example.com
+    asserts:
+      - hasDocuments:
+          count: 4
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-connection-proxy-zonea
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-connection-proxy-zoneb
+        documentIndex: 1
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-connection-proxy-zonea-rdp-0
+        documentIndex: 2
+      - equal:
+          path: spec.selector["statefulset.kubernetes.io/pod-name"]
+          value: RELEASE-NAME-connection-proxy-zonea-0
+        documentIndex: 2
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-connection-proxy-zoneb-rdp-0
+        documentIndex: 3
+      - equal:
+          path: spec.selector["statefulset.kubernetes.io/pod-name"]
+          value: RELEASE-NAME-connection-proxy-zoneb-0
+        documentIndex: 3

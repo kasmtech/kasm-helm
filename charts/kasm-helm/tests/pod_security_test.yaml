@@ -6,11 +6,9 @@ templates:
   - templates/db-statefulset.yaml
   - templates/db-upgrade-backup-job.yaml
   - templates/db-upgrade-job.yaml
-  - templates/guac-statefulset.yaml
+  - templates/connection-proxy-statefulset.yaml
   - templates/manager-deployment.yaml
   - templates/proxy-deployment.yaml
-  - templates/rdp-gateway-deployment.yaml
-  - templates/rdp-https-gateway-statefulset.yaml
 
 tests:
   - it: hardens core workload pod templates and main containers when security is enabled
@@ -84,11 +82,13 @@ tests:
           path: spec.template.spec.initContainers[0].securityContext.seccompProfile.type
           value: RuntimeDefault
 
-  - it: hardens optional component deployments and their first init container
-    templates:
-      - templates/guac-statefulset.yaml
-      - templates/rdp-gateway-deployment.yaml
-      - templates/rdp-https-gateway-statefulset.yaml
+  # guac, rdp-gateway, and rdp-https-gateway used to be three separate single-container
+  # (plus an nginx sidecar) workloads, each asserted separately at containers[0]/[1].
+  # They are now four containers (nginx, guac, rdp-gateway, rdp-https-gateway, in that
+  # order) inside one connection-proxy pod. Assert hardening across all four container
+  # indices plus the pod's first init container in one consolidated test.
+  - it: hardens all four connection-proxy containers and the pod's first init container
+    template: templates/connection-proxy-statefulset.yaml
     values:
       - ../../../tests/values/components-all.yaml
     set:
@@ -121,6 +121,51 @@ tests:
           value: ALL
       - equal:
           path: spec.template.spec.containers[0].securityContext.seccompProfile.type
+          value: RuntimeDefault
+      - equal:
+          path: spec.template.spec.containers[1].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[1].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.containers[1].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[1].securityContext.capabilities.drop[0]
+          value: ALL
+      - equal:
+          path: spec.template.spec.containers[1].securityContext.seccompProfile.type
+          value: RuntimeDefault
+      - equal:
+          path: spec.template.spec.containers[2].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[2].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.containers[2].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[2].securityContext.capabilities.drop[0]
+          value: ALL
+      - equal:
+          path: spec.template.spec.containers[2].securityContext.seccompProfile.type
+          value: RuntimeDefault
+      - equal:
+          path: spec.template.spec.containers[3].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[3].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.containers[3].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[3].securityContext.capabilities.drop[0]
+          value: ALL
+      - equal:
+          path: spec.template.spec.containers[3].securityContext.seccompProfile.type
           value: RuntimeDefault
       - equal:
           path: spec.template.spec.initContainers[0].securityContext.allowPrivilegeEscalation
@@ -355,32 +400,8 @@ tests:
           path: spec.template.spec.initContainers[0].securityContext.seccompProfile.type
           value: RuntimeDefault
 
-  - it: hardens the guac nginx sidecar container
-    template: templates/guac-statefulset.yaml
-    values:
-      - ../../../tests/values/components-all.yaml
-    set:
-      ingress:
-        enabled: false
-      dbManagement:
-        initialize: false
-        backupCron:
-          enabled: false
-        upgrade:
-          enable: false
-    asserts:
-      - equal:
-          path: spec.template.spec.containers[1].securityContext.allowPrivilegeEscalation
-          value: false
-      - equal:
-          path: spec.template.spec.containers[1].securityContext.readOnlyRootFilesystem
-          value: true
-      - equal:
-          path: spec.template.spec.containers[1].securityContext.runAsNonRoot
-          value: true
-      - equal:
-          path: spec.template.spec.containers[1].securityContext.capabilities.drop[0]
-          value: ALL
-      - equal:
-          path: spec.template.spec.containers[1].securityContext.seccompProfile.type
-          value: RuntimeDefault
+  # The old per-service "nginx sidecar" concept no longer exists: there is a single
+  # nginx container (index 0) fronting all three service containers in the consolidated
+  # pod. Its hardening is already asserted (containers[0]) in
+  # "hardens all four connection-proxy containers and the pod's first init container"
+  # above; a standalone test would be a pure duplicate.

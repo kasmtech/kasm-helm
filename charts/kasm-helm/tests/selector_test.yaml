@@ -7,10 +7,8 @@ templates:
   - templates/proxy-deployment.yaml
   - templates/proxy-service.yaml
   - templates/proxy-service-external.yaml
-  - templates/guac-statefulset.yaml
-  - templates/guac-service.yaml
-  - templates/rdp-https-gateway-statefulset.yaml
-  - templates/rdp-https-gateway-service.yaml
+  - templates/connection-proxy-statefulset.yaml
+  - templates/connection-proxy-services.yaml
 
 tests:
   - it: api selectors are identical
@@ -112,54 +110,67 @@ tests:
           path: spec.template.metadata.labels["app.kubernetes.io/name"]
           value: RELEASE-NAME-proxy-default
 
-  - it: guac statefulset selector labels match the headless service selector
-    template: templates/guac-statefulset.yaml
+  # connection-proxy consolidates the old guac/rdp-gateway/rdp-https-gateway StatefulSet+Service
+  # pairs into one StatefulSet fronted by one headless Service. Both the StatefulSet's
+  # spec.selector.matchLabels and the headless Service's spec.selector must agree.
+  - it: connection-proxy statefulset selector labels match the headless service selector
+    template: templates/connection-proxy-statefulset.yaml
     values:
       - ../../../tests/values/components-all.yaml
     asserts:
       - equal:
           path: spec.selector.matchLabels["app.kubernetes.io/component"]
-          value: guac
+          value: connection-proxy
       - equal:
           path: spec.selector.matchLabels["app.kubernetes.io/instance"]
           value: RELEASE-NAME
       - equal:
           path: spec.selector.matchLabels["app.kubernetes.io/name"]
-          value: RELEASE-NAME-guac-default
+          value: RELEASE-NAME-connection-proxy-default
 
-  - it: guac headless service selector matches guac pod labels
-    template: templates/guac-service.yaml
+  - it: connection-proxy headless service selector matches connection-proxy pod labels
+    template: templates/connection-proxy-services.yaml
+    documentIndex: 0
+    values:
+      - ../../../tests/values/components-all.yaml
     asserts:
       - equal:
+          path: spec.clusterIP
+          value: None
+      - equal:
           path: spec.selector["app.kubernetes.io/component"]
-          value: guac
+          value: connection-proxy
       - equal:
           path: spec.selector["app.kubernetes.io/instance"]
           value: RELEASE-NAME
       - equal:
           path: spec.selector["app.kubernetes.io/name"]
-          value: RELEASE-NAME-guac-default
+          value: RELEASE-NAME-connection-proxy-default
 
-  - it: rdp-https-gateway statefulset selector labels are consistent
-    template: templates/rdp-https-gateway-statefulset.yaml
+  # Direct RDP per-pod Services carry the standard three-field selector PLUS the
+  # StatefulSet-assigned statefulset.kubernetes.io/pod-name label so each Service targets
+  # exactly one pod ordinal.
+  - it: direct RDP service selector matches the standard selector plus the pod-name label
+    template: templates/connection-proxy-services.yaml
+    documentIndex: 1
     values:
       - ../../../tests/values/components-all.yaml
-    asserts:
-      - equal:
-          path: spec.selector.matchLabels["app.kubernetes.io/component"]
-          value: rdp-https-gateway
-      - equal:
-          path: spec.selector.matchLabels["app.kubernetes.io/instance"]
-          value: RELEASE-NAME
-
-  - it: rdp-https-gateway headless service selector matches pod labels
-    template: templates/rdp-https-gateway-service.yaml
-    values:
-      - ../../../tests/values/components-all.yaml
+    set:
+      directRdpService:
+        enabled: true
+        type: LoadBalancer
+        perServiceSettings:
+          - rdpAccessURL: rdp0.example.com
     asserts:
       - equal:
           path: spec.selector["app.kubernetes.io/component"]
-          value: rdp-https-gateway
+          value: connection-proxy
       - equal:
           path: spec.selector["app.kubernetes.io/instance"]
           value: RELEASE-NAME
+      - equal:
+          path: spec.selector["app.kubernetes.io/name"]
+          value: RELEASE-NAME-connection-proxy-default
+      - equal:
+          path: spec.selector["statefulset.kubernetes.io/pod-name"]
+          value: RELEASE-NAME-connection-proxy-default-0

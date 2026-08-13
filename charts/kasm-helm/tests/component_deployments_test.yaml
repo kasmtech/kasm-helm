@@ -1,11 +1,16 @@
-suite: per-component deployment specifics (api/manager/guac/rdp)
+suite: per-component deployment specifics (api/manager/connection-proxy)
+# guac, rdp-gateway, and rdp-https-gateway are no longer separate workloads; they are
+# containers[1], containers[2], and containers[3] respectively inside the consolidated
+# connection-proxy StatefulSet (containers[0] is the shared nginx), per components-all.yaml
+# (all three services enabled). Disabling one service no longer zeroes out the whole
+# template — the StatefulSet still renders as long as at least one service remains enabled —
+# so the old "is not rendered when disabled" assertions are replaced with "container is
+# omitted" assertions.
 
 templates:
   - templates/api-deployment.yaml
   - templates/manager-deployment.yaml
-  - templates/guac-statefulset.yaml
-  - templates/rdp-gateway-deployment.yaml
-  - templates/rdp-https-gateway-statefulset.yaml
+  - templates/connection-proxy-statefulset.yaml
 
 tests:
   # ---------- api ----------
@@ -206,127 +211,131 @@ tests:
           errorPattern: "updateTimer.*integer|got string"
 
   # ---------- guac ----------
-  - it: guac is not rendered when components.guac.enabled=false
-    template: templates/guac-statefulset.yaml
+  # No "is not rendered when disabled" case: disabling guac alone no longer zeroes the
+  # StatefulSet since rdpGateway/rdpHttpsGateway (enabled by default) keep it rendering.
+  # That behavior — and the "everything disabled" case — is covered in
+  # connection_proxy_statefulset_test.yaml and connection_proxy_test.yaml instead.
+  - it: guac container is omitted from the StatefulSet when components.connectionProxy.guac.enabled=false
+    template: templates/connection-proxy-statefulset.yaml
     set:
       components:
-        guac:
-          enabled: false
-    asserts:
-      - hasDocuments:
-          count: 0
-
-  - it: guac exposes container port 3000
-    template: templates/guac-statefulset.yaml
-    asserts:
-      - equal:
-          path: spec.template.spec.containers[0].ports[0].containerPort
-          value: 3000
-
-  - it: guac wires API_PORT to proxy http port and SERVER_PORT to nginx sidecar port
-    template: templates/guac-statefulset.yaml
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: API_PORT
-            value: "8080"
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: SERVER_PORT
-            value: "9000"
-
-  - it: guac uses primary zone in multizone deployments
-    template: templates/guac-statefulset.yaml
-    values:
-      - ../../../tests/values/multizone-config.yaml
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: ZONE
-            value: zonea
-
-  # ---------- rdp gateway ----------
-  - it: rdp gateway is not rendered when disabled
-    template: templates/rdp-gateway-deployment.yaml
-    set:
-      components:
-        rdpGateway:
-          enabled: false
-    asserts:
-      - hasDocuments:
-          count: 0
-
-  - it: rdp gateway exposes container port 5555
-    template: templates/rdp-gateway-deployment.yaml
-    asserts:
-      - equal:
-          path: spec.template.spec.containers[0].ports[0].containerPort
-          value: 5555
-
-  - it: rdp gateway uses directRdpService.rdpAccessURL as SERVER_HOSTNAME when enabled
-    template: templates/rdp-gateway-deployment.yaml
-    set:
-      directRdpService:
-        enabled: true
-        rdpAccessURL: rdp.kasm.example.test
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: SERVER_HOSTNAME
-            value: rdp.kasm.example.test
-
-  - it: rdp gateway fails when directRdpService.enabled is true but rdpAccessURL is unset
-    template: templates/rdp-gateway-deployment.yaml
-    set:
-      directRdpService:
-        enabled: true
-        rdpAccessURL: ""
-    asserts:
-      - failedTemplate:
-          errorMessage: "directRdpService.rdpAccessURL must be set if directRdpService.enabled is true."
-
-  # ---------- rdp https gateway ----------
-  - it: rdp https gateway is not rendered when disabled
-    template: templates/rdp-https-gateway-statefulset.yaml
-    set:
-      components:
-        rdpHttpsGateway:
-          enabled: false
-    asserts:
-      - hasDocuments:
-          count: 0
-
-  - it: rdp https gateway main container exposes no ports (nginx sidecar handles ingress)
-    template: templates/rdp-https-gateway-statefulset.yaml
+        connectionProxy:
+          guac:
+            enabled: false
     asserts:
       - notExists:
-          path: spec.template.spec.containers[0].ports
+          path: spec.template.spec.containers[?(@.name=="RELEASE-NAME-connection-proxy-guac")]
 
-  - it: rdp https gateway wires SERVER_PORT env to the nginx sidecar port
-    template: templates/rdp-https-gateway-statefulset.yaml
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: SERVER_PORT
-            value: "9002"
-
-  - it: rdp gateway has nginx sidecar as containers[1] on the nginx port
-    template: templates/rdp-gateway-deployment.yaml
-    asserts:
-      - equal:
-          path: spec.template.spec.containers[1].ports[0].containerPort
-          value: 9001
-
-  - it: rdp https gateway has nginx sidecar as containers[1] on the nginx port
-    template: templates/rdp-https-gateway-statefulset.yaml
+  - it: guac exposes container port 3000
+    template: templates/connection-proxy-statefulset.yaml
     values:
       - ../../../tests/values/components-all.yaml
     asserts:
       - equal:
           path: spec.template.spec.containers[1].ports[0].containerPort
-          value: 9002
+          value: 3000
+
+  - it: guac wires API_PORT to proxy http port and SERVER_PORT to the consolidated nginx port
+    template: templates/connection-proxy-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: API_PORT
+            value: "8080"
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: SERVER_PORT
+            value: "8443"
+
+  - it: guac uses primary zone in multizone deployments
+    template: templates/connection-proxy-statefulset.yaml
+    values:
+      - ../../../tests/values/multizone-config.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: ZONE
+            value: zonea
+
+  # ---------- rdp gateway ----------
+  - it: rdp-gateway container is omitted from the StatefulSet when disabled
+    template: templates/connection-proxy-statefulset.yaml
+    set:
+      components:
+        connectionProxy:
+          rdpGateway:
+            enabled: false
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[?(@.name=="RELEASE-NAME-connection-proxy-rdp-gateway")]
+
+  - it: rdp gateway exposes container port 5555
+    template: templates/connection-proxy-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[2].ports[0].containerPort
+          value: 5555
+
+  # The old assertion that directRdpService.rdpAccessURL becomes SERVER_HOSTNAME directly no
+  # longer has a static equivalent: SERVER_HOSTNAME in the env list is always the per-pod FQDN
+  # now, and the ordinal-specific access URL is picked at container start (see the /start.sh
+  # wrapper, asserted in connection_proxy_statefulset_test.yaml) from RDP_ACCESS_URLS. What is
+  # asserted here instead is that the configured URL(s) flow into RDP_ACCESS_URLS.
+  - it: rdp gateway wires directRdpService.rdpAccessURL into RDP_ACCESS_URLS for runtime ordinal selection
+    template: templates/connection-proxy-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      directRdpService:
+        enabled: true
+        type: LoadBalancer
+        rdpAccessURL: rdp.kasm.example.test
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[2].env
+          content:
+            name: RDP_ACCESS_URLS
+            value: rdp.kasm.example.test
+
+  # The old "fails when rdpAccessURL is unset" case does not apply to the StatefulSet anymore:
+  # that validation (effective URL count must be >= replica count) now lives in
+  # connection-proxy-services.yaml, covered in connection_proxy_test.yaml. The StatefulSet
+  # itself renders fine with an empty RDP_ACCESS_URLS.
+
+  # ---------- rdp https gateway ----------
+  - it: rdp-https-gateway container is omitted from the StatefulSet when disabled
+    template: templates/connection-proxy-statefulset.yaml
+    set:
+      components:
+        connectionProxy:
+          rdpHttpsGateway:
+            enabled: false
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[?(@.name=="RELEASE-NAME-connection-proxy-rdp-https-gateway")]
+
+  - it: rdp https gateway main container exposes no ports (nginx handles all ingress)
+    template: templates/connection-proxy-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[3].ports
+
+  - it: rdp https gateway wires SERVER_PORT env to the consolidated nginx port
+    template: templates/connection-proxy-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[3].env
+          content:
+            name: SERVER_PORT
+            value: "8443"

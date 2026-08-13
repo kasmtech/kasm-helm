@@ -148,9 +148,9 @@ spec:
 
     # Install Kasm with trusted CA enabled and CA injected as configmap data.
     # Lower per-component resource requests so all pods (api, manager, proxy,
-    # guac + nginx sidecar, rdpGateway + nginx sidecar, rdpHttpsGateway +
-    # nginx sidecar, bundled db) fit on the single-node kind cluster in
-    # gitlab runner.
+    # the consolidated connection-proxy StatefulSet — one nginx plus the
+    # guac, rdp-gateway, and rdp-https-gateway service containers — and the
+    # bundled db) fit on the single-node kind cluster in gitlab runner.
     low_resources = {"requests": {"cpu": "50m", "memory": "256Mi"}}
     low_resources_proxy = {"requests": {"cpu": "50m", "memory": "128Mi"}}
     low_resources_gw = {"requests": {"cpu": "25m", "memory": "128Mi"}}
@@ -171,9 +171,12 @@ spec:
             "api": {"resources": low_resources},
             "manager": {"resources": low_resources},
             "proxy": {"resources": low_resources_proxy},
-            "guac": {"resources": low_resources},
-            "rdpGateway": {"resources": low_resources_gw},
-            "rdpHttpsGateway": {"resources": low_resources_gw},
+            "connectionProxy": {
+                "nginx": {"resources": low_resources_proxy},
+                "guac": {"resources": low_resources},
+                "rdpGateway": {"resources": low_resources_gw},
+                "rdpHttpsGateway": {"resources": low_resources_gw},
+            },
         },
     }
     values_path.write_text(yaml.safe_dump(values_obj, sort_keys=False))
@@ -198,7 +201,11 @@ spec:
     # Reads the real initContainerStatuses exitCode rather than merely proving we
     # can exec into the pod (the previous check ran a no-op in the main container
     # and asserted nothing about the init container).
-    for component in ("proxy", "api", "manager", "guac", "rdp-gateway", "rdp-https-gateway"):
+    # The connection-proxy pod runs a SINGLE trusted-ca-init init container
+    # shared by the guac, rdp-gateway, and rdp-https-gateway service
+    # containers (kasm.trustedCaInit is invoked once for the whole pod), so
+    # it only needs to be checked once, not once per service.
+    for component in ("proxy", "api", "manager", "connection-proxy"):
         pod = get_first_pod_by_selector(namespace, f"app.kubernetes.io/component={component}")
         status = kubectl(
             [
@@ -219,15 +226,18 @@ spec:
     # The real point: each runtime must trust our CA-signed nginx server when
     # connecting WITHOUT -k. Cover the OpenSSL-based stacks (curl). (component
     # label, app container name) — None uses the pod's default container.
+    # guac, rdp-gateway, and rdp-https-gateway are now three service
+    # containers inside the single connection-proxy pod, so all three
+    # container names below resolve within the SAME pod.
     #   proxy             — nginx / OpenSSL
     #   guac              — C/C++ OpenSSL
     #   rdp-gateway       — Go crypto/tls (reads /etc/ssl/certs/ca-certificates.crt)
     #   rdp-https-gateway — C/C++ OpenSSL / Redemption
     openssl_curl_targets = [
         ("proxy", None),
-        ("guac", f"{release}-guac"),
-        ("rdp-gateway", f"{release}-rdp-gateway"),
-        ("rdp-https-gateway", f"{release}-rdp-https-gateway"),
+        ("connection-proxy", f"{release}-connection-proxy-guac"),
+        ("connection-proxy", f"{release}-connection-proxy-rdp-gateway"),
+        ("connection-proxy", f"{release}-connection-proxy-rdp-https-gateway"),
     ]
     for component, container in openssl_curl_targets:
         pod = get_first_pod_by_selector(namespace, f"app.kubernetes.io/component={component}")
@@ -238,7 +248,8 @@ spec:
             container=container,
         )
         assert result.returncode == 0 and "ok" in result.stdout, (
-            f"{component} CA trust check (curl) failed.\n"
+            f"{component} (container={container or 'default'}) CA trust check "
+            f"(curl) failed.\n"
             f"stdout: {result.stdout}\n"
             f"stderr: {result.stderr}"
         )

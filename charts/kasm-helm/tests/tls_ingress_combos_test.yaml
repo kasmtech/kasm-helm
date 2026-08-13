@@ -4,8 +4,7 @@ templates:
   - templates/cert-manager-certificate.yaml
   - templates/ingress.yaml
   - templates/proxy-deployment.yaml
-  - templates/rdp-gateway-deployment.yaml
-  - templates/rdp-https-gateway-statefulset.yaml
+  - templates/connection-proxy-statefulset.yaml
 
 tests:
   # ---------- TLS source variations ----------
@@ -68,8 +67,13 @@ tests:
             secret:
               secretName: my-custom-tls
 
-  - it: rdp gateway deployment mounts user-provided secretName for TLS
-    template: templates/rdp-gateway-deployment.yaml
+  # connection-proxy runs one pod fronting guac, rdp-gateway, and rdp-https-gateway, so
+  # there is a single shared cert volume (kasm-connection-proxy-cert) for the whole pod
+  # instead of one per former per-service workload.
+  - it: connection-proxy statefulset mounts a single shared user-provided secretName for TLS
+    template: templates/connection-proxy-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
     set:
       certificate:
         secretName: my-custom-tls
@@ -77,20 +81,7 @@ tests:
       - contains:
           path: spec.template.spec.volumes
           content:
-            name: kasm-rdp-gateway-cert
-            secret:
-              secretName: my-custom-tls
-
-  - it: rdp https gateway deployment mounts user-provided secretName for TLS
-    template: templates/rdp-https-gateway-statefulset.yaml
-    set:
-      certificate:
-        secretName: my-custom-tls
-    asserts:
-      - contains:
-          path: spec.template.spec.volumes
-          content:
-            name: kasm-rdp-https-gateway-cert
+            name: kasm-connection-proxy-cert
             secret:
               secretName: my-custom-tls
 

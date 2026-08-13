@@ -1,57 +1,82 @@
 {{/*
-Nginx configuration ConfigMaps for the Guac StatefulSet nginx sidecar.
+Nginx configuration ConfigMaps for the consolidated connection-proxy StatefulSet nginx
+container, which fronts the guac, rdp-gateway, and rdp-https-gateway service containers
+(each listening on localhost only) on a single port, 8443.
 
-guac-settings  — mounted at /etc/nginx/conf.d/ — contains:
-  compress.conf, logging.conf, upstream_kasm_guac.conf, orchestrator.conf
+connection-proxy-nginx-settings — mounted at /etc/nginx/conf.d/ — contains:
+  resolver.conf, upstreams.conf, connection-proxy.conf (the server {} block)
 
-guac-services  — mounted at /etc/nginx/conf.d/services.d/ — contains:
-  kasmguac.conf with all guac location blocks routing to kasm_guac upstream
+connection-proxy-services — mounted at /etc/nginx/conf.d/services.d/ — contains:
+  connection_proxy.conf with all guac/rdp-gateway/rdp-https-gateway location blocks
+
+connection-proxy-rdp-gateway-app-config — the rdp-gateway app's own config.
+
+connection-proxy-rdp-https-gateway-app-config — the rdp-https-gateway app's own config,
+  only rendered when logFormat is "json" (matches existing rdp-https-gateway-app-configmap
+  behavior).
 */}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- $serviceKeepalive := 16 -}}
-{{- if .Values.components.guac.enabled }}
+{{- $cp := .Values.components.connectionProxy }}
+{{- if and $cp.enabled (or $cp.guac.enabled $cp.rdpGateway.enabled $cp.rdpHttpsGateway.enabled) }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  {{- include "kasm.metadata" (dict "context" . "component" "guac-nginx-settings" "resource" "configMap" "include" "all") | indent 2 }}
+  {{- include "kasm.metadata" (dict "context" . "component" "cpx-nginx-settings" "resource" "configMap" "include" "all") | indent 2 }}
 data:
   resolver.conf: |
     resolver {{ include "kasm.nginxResolver" . }} valid=10s ipv6=off;
 
-  upstream_kasm_guac.conf: |
+  upstreams.conf: |
+    {{- if $cp.guac.enabled }}
     upstream kasm_guac {
       keepalive {{ $serviceKeepalive }};
-      server 127.0.0.1:{{ $constants.guac.port }};
+      server 127.0.0.1:{{ $constants.connectionProxy.guac.port }};
     }
 
     upstream kasm_guac_backend {
       zone kasm_guac_zone 512k;
-      {{- range $port := $constants.guac.ports }}
+      {{- range $port := $constants.connectionProxy.guac.ports }}
       {{ printf "server 127.0.0.1:%d;" (int $port) }}
       {{- end }}
     }
+    {{- end }}
+    {{- if $cp.rdpGateway.enabled }}
+
+    upstream rdp_gateway {
+      keepalive {{ $serviceKeepalive }};
+      server 127.0.0.1:{{ $constants.connectionProxy.rdpGateway.port }};
+    }
+    {{- end }}
+    {{- if $cp.rdpHttpsGateway.enabled }}
+
+    upstream kasm_rdp_https_gateway {
+      keepalive {{ $serviceKeepalive }};
+      server 127.0.0.1:{{ $constants.connectionProxy.rdpHttpsGateway.port }};
+    }
+    {{- end }}
 
   {{- if .Values.observability.enabled }}
   otel.conf: |
     # ngx_otel_module requires an otel_exporter block wherever otel_trace/otel_span_attr are
     # used (verified: nginx -t fails with "otel_exporter block is missing" without this), so
-    # kasmguac.conf's directives need this even though guac's own traffic isn't otherwise
-    # instrumented. Not zone-scoped (this ConfigMap is shared by every zone's guac StatefulSet,
-    # per kasm.primaryRegionZones), so this always points at the primary zone's forwarder rather
-    # than each pod's own zone — a minor cross-zone hop for guac pods in a non-primary zone
-    # within the same region, not a correctness bug.
+    # connection_proxy.conf's directives need this even though not all of guac/rdp-gateway/
+    # rdp-https-gateway traffic is otherwise instrumented. Not zone-scoped (this ConfigMap is
+    # shared by every zone's connection-proxy StatefulSet, per kasm.primaryRegionZones), so this
+    # always points at the primary zone's forwarder rather than each pod's own zone — a minor
+    # cross-zone hop for pods in a non-primary zone within the same region, not a correctness bug.
     otel_exporter {
       endpoint {{ printf "%s-otel-collector-%s" .Release.Name (include "kasm.zoneName" (include "kasm.primaryZone" . | fromYaml).name) }}:4316;
     }
 
-    otel_service_name  kasm-guac;
+    otel_service_name  kasm-connection-proxy;
     otel_trace          off;
     otel_trace_context  propagate;
   {{- end }}
 
-  orchestrator.conf: |
+  connection-proxy.conf: |
     server {
-      listen {{ $constants.guac.nginxPort }} ssl;
+      listen {{ $constants.connectionProxy.nginxPort }} ssl;
       server_name ubuntu-base;
 
       ssl_certificate     /etc/nginx/ssl/tls.crt;
@@ -75,9 +100,40 @@ data:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  {{- include "kasm.metadata" (dict "context" . "component" "guac-services" "resource" "configMap" "include" "all") | indent 2 }}
+  {{- include "kasm.metadata" (dict "context" . "component" "cpx-services" "resource" "configMap" "include" "all") | indent 2 }}
 data:
-  kasmguac.conf: |
+  connection_proxy.conf: |
+    location = /__healthcheck {
+      access_log off;
+      return 200 "OK\n";
+    }
+    {{- if $cp.rdpGateway.enabled }}
+
+    # In-cluster readiness probe entry point, namespaced under /rdp-gateway/ to avoid
+    # colliding with the rdp-https-gateway and nginx's own /__healthcheck endpoints.
+    # The app's own /__healthcheck on :5555 is reached via the rdp_gateway upstream
+    # defined in the settings configmap — keeping :5555 strictly intra-pod.
+    location = /rdp-gateway/__healthcheck {
+      access_log off;
+      proxy_pass http://rdp_gateway/__healthcheck;
+    }
+    {{- end }}
+    {{- if $cp.rdpHttpsGateway.enabled }}
+
+    location = /rdp-https-gateway/__healthcheck {
+      access_log off;
+      proxy_pass https://kasm_rdp_https_gateway/__healthcheck;
+      proxy_ssl_verify off;
+    }
+    {{- end }}
+    {{- if or $cp.rdpGateway.enabled $cp.rdpHttpsGateway.enabled }}
+
+    location /guac/vm_disconnect {
+      return 200;
+    }
+    {{- end }}
+    {{- if $cp.guac.enabled }}
+
     location /guac_connect/vnc/ {
       {{- if .Values.observability.enabled }}
       # long-lived WebSocket tunnel — traces stay open for the entire session
@@ -238,4 +294,181 @@ data:
     location /guac/ {
       proxy_pass http://kasm_guac/;
     }
+    {{- end }}
+    {{- if $cp.rdpGateway.enabled }}
+
+    location /rdp-gateway/ {
+      proxy_http_version      1.1;
+      proxy_set_header        Host $host;
+      proxy_set_header        Upgrade $http_upgrade;
+      proxy_set_header        Connection "upgrade";
+      proxy_set_header        X-Real-IP $remote_addr;
+      proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header        X-Forwarded-Proto $scheme;
+
+      proxy_pass      http://rdp_gateway/;
+    }
+    {{- end }}
+    {{- if $cp.rdpHttpsGateway.enabled }}
+
+    location /rdp-https-gateway/ {
+      proxy_http_version      1.1;
+      proxy_set_header        Host $host;
+      proxy_set_header        Upgrade $http_upgrade;
+      proxy_set_header        Connection "upgrade";
+      proxy_set_header        X-Real-IP $remote_addr;
+      proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header        X-Forwarded-Proto $scheme;
+
+      proxy_pass          https://kasm_rdp_https_gateway;
+      proxy_ssl_verify    off;
+    }
+
+    location /remoteDesktopGateway {
+      proxy_http_version 1.1;
+      proxy_set_header Connection "upgrade";
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header Host $host;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_pass          https://kasm_rdp_https_gateway;
+      proxy_ssl_verify    off;
+    }
+
+    # Route for MS RDP Gateway
+    location /rpc {
+      proxy_buffers 4 256k;
+      proxy_buffer_size 128k;
+      proxy_busy_buffers_size 256k;
+
+      proxy_pass          https://kasm_rdp_https_gateway;
+      proxy_ssl_verify    off;
+      proxy_set_header Host $http_host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto $scheme;
+
+      # WebSocket support
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+
+      # Timeout settings
+      proxy_read_timeout 3600s;
+      proxy_send_timeout 3600s;
+    }
+    {{- end }}
+{{- if $cp.rdpGateway.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  {{- include "kasm.metadata" (dict "context" . "component" "cpx-rdp-gw-app-config" "resource" "configMap" "include" "all") | indent 2 }}
+data:
+  passthrough.app.config.yaml: |
+    rdp-gateway:
+      id: 00000000-0000-0000-0000-000000000000
+      server_address: SERVER_ADDRESS
+      server_port: SERVER_PORT
+      proxy_port: 3389
+      zone: ZONE
+      registration_token: REGISTRATION_TOKEN
+      number_of_threads: 10
+      kasm_delete_session_watch_interval: 60
+      forward_logs_to_manager: true
+      keepalive_loop_interval: 30
+    api:
+      auth_token: JWTTOKEN
+      public_jwt_cert: PUBLICCERT
+      hostnames: [ 'APIHOSTNAME' ]
+      port: SERVER_PORT
+      hostname_refresh_interval: 30
+      schema: http
+    logging:
+      rdp-gateway:
+        formatters:
+          pythonjsonlogger:
+            (): pythonjsonlogger.jsonlogger.JsonFormatter
+            fmt: '%(asctime) %(name) %(processName) %(filename)  %(funcName) %(levelname) %(lineno) %(module) %(threadName) %(message)'
+            timestamp: true
+          standard:
+            format: '%(asctime)s [%(levelname)s] %(name)s: %(message)s'
+        handlers:
+          file_handler:
+            backupCount: 5
+            class: logging.handlers.RotatingFileHandler
+            encoding: utf8
+            filename: /opt/kasm/current/log/rdp_gateway.log
+            formatter: standard
+            level: DEBUG
+            maxBytes: 10485760
+          file_handler_json:
+            backupCount: 5
+            class: logging.handlers.RotatingFileHandler
+            encoding: utf8
+            filename: /opt/kasm/current/log/rdp_gateway_json.log
+            formatter: pythonjsonlogger
+            level: DEBUG
+            maxBytes: 10485760
+          stream:
+            class: logging.StreamHandler
+            formatter: {{ ternary "pythonjsonlogger" "standard" (eq .Values.logFormat "json") }}
+            level: DEBUG
+          syslog:
+            class: logging.handlers.SysLogHandler
+            formatter: pythonjsonlogger
+            level: DEBUG
+        loggers:
+          ? ''
+          : handlers:
+            - stream
+            - syslog
+            level: DEBUG
+            propagate: true
+          tornado:
+            level: INFO
+        version: 1
+{{- end }}
+---
+{{- $zoneName := "default" -}}
+{{- if .Values.kasmZones }}
+  {{- $zoneName = (index .Values.kasmZones 0).name -}}
+{{- end }}
+{{- if and $cp.rdpHttpsGateway.enabled (eq .Values.logFormat "json") }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  {{- include "kasm.metadata" (dict "context" . "component" "cpx-rdp-https-gw-app-config" "resource" "configMap" "include" "all") | indent 2 }}
+data:
+  rdp_https_gateway.app.config.yaml: |
+    api:
+      auth_token: JWTTOKEN
+      public_jwt_cert: PUBLICCERT
+      hostnames: [ {{ printf "%s-%s" $constants.proxy.svc $zoneName | quote }} ]
+      port: {{ $constants.proxy.http }}
+      hostname_refresh_interval: 30
+      schema: http
+    rdp-gateway:
+      id: auto
+      registration_token: REGISTRATION_TOKEN
+      server_address: {{ .Values.publicAddr }}
+      server_port: {{ $constants.connectionProxy.rdpHttpsGateway.port }}
+      zone: {{ $zoneName }}
+      keepalive_loop_interval: 30
+      ephemeral: true
+      kasm_delete_session_watch_interval: 60
+    logging:
+      console_level: "ERROR"
+      file_logging:
+        filename: "/dev/null"
+        level: "DEBUG"
+        backupCount: 20
+        maxMegaBytes: 10
+      json_file_logging:
+        filename: "/dev/stdout"
+        level: "DEBUG"
+        backupCount: 20
+        maxMegaBytes: 10
+      network_logging:
+        level: "DEBUG"
+{{- end }}
 {{- end }}

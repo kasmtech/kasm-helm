@@ -3,9 +3,7 @@ suite: kasm.otelEnv — per-workload OTel/logging env vars
 templates:
   - templates/api-deployment.yaml
   - templates/manager-deployment.yaml
-  - templates/guac-statefulset.yaml
-  - templates/rdp-gateway-deployment.yaml
-  - templates/rdp-https-gateway-statefulset.yaml
+  - templates/connection-proxy-statefulset.yaml
   - templates/db-init-job.yaml
 
 tests:
@@ -23,24 +21,25 @@ tests:
           path: spec.template.spec.containers[0].env[?(@.name=="OTEL_SERVICE_NAME" && @.value=="kasm-manager")]
 
   - it: guac application container gets OTEL_SERVICE_NAME=kasm-guac
-    template: templates/guac-statefulset.yaml
+    template: templates/connection-proxy-statefulset.yaml
     documentIndex: 0
     asserts:
       - exists:
-          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_SERVICE_NAME" && @.value=="kasm-guac")]
+          path: spec.template.spec.containers[1].env[?(@.name=="OTEL_SERVICE_NAME" && @.value=="kasm-guac")]
 
   - it: rdp-gateway application container gets OTEL_SERVICE_NAME=kasm-rdp-gateway
-    template: templates/rdp-gateway-deployment.yaml
-    asserts:
-      - exists:
-          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_SERVICE_NAME" && @.value=="kasm-rdp-gateway")]
-
-  - it: rdp-https-gateway application container gets OTEL_SERVICE_NAME=kasm-rdp-https-gateway
-    template: templates/rdp-https-gateway-statefulset.yaml
+    template: templates/connection-proxy-statefulset.yaml
     documentIndex: 0
     asserts:
       - exists:
-          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_SERVICE_NAME" && @.value=="kasm-rdp-https-gateway")]
+          path: spec.template.spec.containers[2].env[?(@.name=="OTEL_SERVICE_NAME" && @.value=="kasm-rdp-gateway")]
+
+  - it: rdp-https-gateway application container gets OTEL_SERVICE_NAME=kasm-rdp-https-gateway
+    template: templates/connection-proxy-statefulset.yaml
+    documentIndex: 0
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[3].env[?(@.name=="OTEL_SERVICE_NAME" && @.value=="kasm-rdp-https-gateway")]
 
   # ---------- endpoint points at the per-zone collector Service ----------
   - it: api OTEL_EXPORTER_OTLP_ENDPOINT points at the default-zone forwarder Collector
@@ -81,24 +80,25 @@ tests:
           path: spec.template.spec.containers[0].env[?(@.name=="OTEL_PYTHON_EXCLUDED_URLS")]
 
   - it: OTEL_PYTHON_EXCLUDED_URLS absent on guac
-    template: templates/guac-statefulset.yaml
+    template: templates/connection-proxy-statefulset.yaml
     documentIndex: 0
     asserts:
       - notExists:
-          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_PYTHON_EXCLUDED_URLS")]
+          path: spec.template.spec.containers[1].env[?(@.name=="OTEL_PYTHON_EXCLUDED_URLS")]
 
   - it: OTEL_PYTHON_EXCLUDED_URLS absent on rdp-gateway
-    template: templates/rdp-gateway-deployment.yaml
-    asserts:
-      - notExists:
-          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_PYTHON_EXCLUDED_URLS")]
-
-  - it: OTEL_PYTHON_EXCLUDED_URLS absent on rdp-https-gateway
-    template: templates/rdp-https-gateway-statefulset.yaml
+    template: templates/connection-proxy-statefulset.yaml
     documentIndex: 0
     asserts:
       - notExists:
-          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_PYTHON_EXCLUDED_URLS")]
+          path: spec.template.spec.containers[2].env[?(@.name=="OTEL_PYTHON_EXCLUDED_URLS")]
+
+  - it: OTEL_PYTHON_EXCLUDED_URLS absent on rdp-https-gateway
+    template: templates/connection-proxy-statefulset.yaml
+    documentIndex: 0
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[3].env[?(@.name=="OTEL_PYTHON_EXCLUDED_URLS")]
 
   # ---------- KASM_LOG_FILE_ENABLED default false ----------
   - it: KASM_LOG_FILE_ENABLED=false by default on api
@@ -131,13 +131,13 @@ tests:
           path: spec.template.spec.containers[0].env[?(@.name=="KASM_LOG_FILE_ENABLED" && @.value=="false")]
 
   - it: KASM_LOG_FILE_ENABLED=false is still emitted when observability.enabled=false (guac)
-    template: templates/guac-statefulset.yaml
+    template: templates/connection-proxy-statefulset.yaml
     documentIndex: 0
     set:
       observability.enabled: false
     asserts:
       - exists:
-          path: spec.template.spec.containers[0].env[?(@.name=="KASM_LOG_FILE_ENABLED" && @.value=="false")]
+          path: spec.template.spec.containers[1].env[?(@.name=="KASM_LOG_FILE_ENABLED" && @.value=="false")]
 
   - it: only OTEL_SDK_DISABLED is emitted for the OTel-specific vars when observability is disabled
     template: templates/api-deployment.yaml
@@ -185,11 +185,11 @@ tests:
           path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_ENDPOINT")]
 
   - it: KASM_CLICKHOUSE_ENDPOINT absent on guac (no clickhouse env wired there)
-    template: templates/guac-statefulset.yaml
+    template: templates/connection-proxy-statefulset.yaml
     documentIndex: 0
     asserts:
       - notExists:
-          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_ENDPOINT")]
+          path: spec.template.spec.containers[1].env[?(@.name=="KASM_CLICKHOUSE_ENDPOINT")]
 
   - it: KASM_CLICKHOUSE_ENDPOINT absent when there is no store (clickhouse disabled, not standalone)
     template: templates/api-deployment.yaml

@@ -1,0 +1,478 @@
+suite: connection-proxy statefulset
+# Covers the consolidated StatefulSet: one nginx container (port 8443) fronting up to
+# three localhost-only service containers (guac, rdp-gateway, rdp-https-gateway).
+# Container order with all three services enabled: [nginx, guac, rdp-gateway, rdp-https-gateway].
+#
+# The old per-service single-replica `fail` (components.rdpGateway.replicas must be 1) is REMOVED
+# by maintainer decision (connection-proxy now scales 1/2/3 like every other component), so there is
+# no replacement assertion for it here.
+
+templates:
+  - templates/connection-proxy-statefulset.yaml
+
+tests:
+  - it: renders a StatefulSet (not a Deployment) when connectionProxy is enabled
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: StatefulSet
+
+  - it: serviceName matches the connection-proxy service constant
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - equal:
+          path: spec.serviceName
+          value: RELEASE-NAME-connection-proxy-default
+
+  - it: uses updateStrategy not strategy
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - exists:
+          path: spec.updateStrategy
+      - notExists:
+          path: spec.strategy
+
+  - it: container order is nginx, guac, rdp-gateway, rdp-https-gateway when all three services are enabled
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: RELEASE-NAME-connection-proxy-nginx
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: RELEASE-NAME-connection-proxy-guac
+      - equal:
+          path: spec.template.spec.containers[2].name
+          value: RELEASE-NAME-connection-proxy-rdp-gateway
+      - equal:
+          path: spec.template.spec.containers[3].name
+          value: RELEASE-NAME-connection-proxy-rdp-https-gateway
+
+  - it: nginx container exposes the consolidated port 8443
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            name: cp-nginx-pt
+            containerPort: 8443
+            protocol: TCP
+
+  - it: guac SERVER_PORT is the consolidated nginx port 8443
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: SERVER_PORT
+            value: "8443"
+
+  - it: guac SERVER_ADDRESS is the full per-pod FQDN via the headless service
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: SERVER_ADDRESS
+            value: "$(HOSTNAME).RELEASE-NAME-connection-proxy-default.$(POD_NAMESPACE).svc.cluster.local"
+
+  - it: HOSTNAME is injected via downward API on the guac container for env var substitution
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: HOSTNAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+
+  - it: POD_NAMESPACE is injected via downward API on the guac container
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+
+  - it: tmp-data is a volumeClaimTemplate with ReadWriteOnce
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].metadata.name
+          value: tmp-data
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.accessModes[0]
+          value: ReadWriteOnce
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
+          value: 10Gi
+
+  - it: guac container mounts tmp-data at /tmp
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].volumeMounts
+          content:
+            name: tmp-data
+            mountPath: /tmp
+
+  - it: pvcSize override is honored in the volumeClaimTemplate
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      components:
+        connectionProxy:
+          guac:
+            recordingData:
+              pvcSize: 25
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
+          value: 25Gi
+
+  - it: storageClassName override is honored in the volumeClaimTemplate
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      components:
+        connectionProxy:
+          guac:
+            recordingData:
+              storageClassName: fast-ssd
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.storageClassName
+          value: fast-ssd
+
+  - it: nginx container mounts connection-proxy-nginx-settings at /etc/nginx/conf.d
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: kasm-connection-proxy-nginx-settings
+            mountPath: /etc/nginx/conf.d
+
+  - it: nginx container mounts connection-proxy-services at conf.d/services.d
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: kasm-connection-proxy-services
+            mountPath: /etc/nginx/conf.d/services.d
+
+  - it: nginx container mounts nginx-shared nginx.conf via subPath
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: kasm-connection-proxy-nginx-shared
+            mountPath: /etc/nginx/nginx.conf
+            subPath: nginx.conf
+
+  - it: nginx container uses the chart's default resource preset by default
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 500m
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 256Mi
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: 500m
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 256Mi
+
+  - it: components.connectionProxy.nginx.resources overrides the preset
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      components:
+        connectionProxy:
+          nginx:
+            resources:
+              requests:
+                cpu: 25m
+                memory: 64Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 25m
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 64Mi
+      - notExists:
+          path: spec.template.spec.containers[0].resources.limits
+
+  - it: rdp-gateway SERVER_HOSTNAME is the full per-pod FQDN via the headless service
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[2].env
+          content:
+            name: SERVER_HOSTNAME
+            value: "$(HOSTNAME).RELEASE-NAME-connection-proxy-default.$(POD_NAMESPACE).svc.cluster.local"
+
+  - it: rdp-gateway RDP_ACCESS_URLS is empty when directRdpService is disabled
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[2].env
+          content:
+            name: RDP_ACCESS_URLS
+            value: ""
+
+  - it: rdp-gateway container exposes cluster port 5555 and direct RDP port 3389
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[2].ports
+          content:
+            name: cp-rdp-gw-pt
+            containerPort: 5555
+            protocol: TCP
+      - contains:
+          path: spec.template.spec.containers[2].ports
+          content:
+            name: cp-rdp-drct-pt
+            containerPort: 3389
+            protocol: TCP
+
+  - it: rdp-gateway container wraps /start.sh to pick its ordinal's RDP_ACCESS_URLS entry
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[2].command
+          value: ["/bin/sh", "-c"]
+      - matchRegex:
+          path: spec.template.spec.containers[2].args[0]
+          pattern: "exec /start.sh"
+
+  - it: rdp-gateway container uses the chart's default resource preset by default
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[2].resources.requests.cpu
+          value: 500m
+      - equal:
+          path: spec.template.spec.containers[2].resources.requests.memory
+          value: 512Mi
+      - equal:
+          path: spec.template.spec.containers[2].resources.limits.cpu
+          value: 500m
+      - equal:
+          path: spec.template.spec.containers[2].resources.limits.memory
+          value: 512Mi
+
+  - it: components.connectionProxy.rdpGateway.resources overrides the preset
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      components:
+        connectionProxy:
+          rdpGateway:
+            resources:
+              requests:
+                cpu: 25m
+                memory: 64Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[2].resources.requests.cpu
+          value: 25m
+      - equal:
+          path: spec.template.spec.containers[2].resources.requests.memory
+          value: 64Mi
+      - notExists:
+          path: spec.template.spec.containers[2].resources.limits
+
+  - it: rdp-https-gateway SERVER_HOSTNAME is the full per-pod FQDN via the headless service
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[3].env
+          content:
+            name: SERVER_HOSTNAME
+            value: "$(HOSTNAME).RELEASE-NAME-connection-proxy-default.$(POD_NAMESPACE).svc.cluster.local"
+
+  - it: rdp-https-gateway SERVER_PORT is the consolidated nginx port 8443
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[3].env
+          content:
+            name: SERVER_PORT
+            value: "8443"
+
+  - it: rdp-https-gateway container exposes no ports (nginx handles all ingress)
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[3].ports
+
+  - it: rdp-https-gateway container uses the chart's default resource preset by default
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[3].resources.requests.cpu
+          value: 500m
+      - equal:
+          path: spec.template.spec.containers[3].resources.requests.memory
+          value: 512Mi
+      - equal:
+          path: spec.template.spec.containers[3].resources.limits.cpu
+          value: 500m
+      - equal:
+          path: spec.template.spec.containers[3].resources.limits.memory
+          value: 512Mi
+
+  - it: components.connectionProxy.rdpHttpsGateway.resources overrides the preset
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      components:
+        connectionProxy:
+          rdpHttpsGateway:
+            resources:
+              requests:
+                cpu: 25m
+                memory: 64Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[3].resources.requests.cpu
+          value: 25m
+      - equal:
+          path: spec.template.spec.containers[3].resources.requests.memory
+          value: 64Mi
+      - notExists:
+          path: spec.template.spec.containers[3].resources.limits
+
+  - it: does not render when connectionProxy.enabled is false
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      components:
+        connectionProxy:
+          enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: does not render when all three service containers are disabled
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      components:
+        connectionProxy:
+          guac:
+            enabled: false
+          rdpGateway:
+            enabled: false
+          rdpHttpsGateway:
+            enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders replicas.preset small=1/medium=2/large=3 for connection-proxy
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      deploymentSize: large
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 3
+
+  # components.connectionProxy.labels/annotations must reach the StatefulSet. kasm.metadata looks
+  # up component-scoped labels/annotations by exact key against .Values.components, so the caller
+  # must pass "connectionProxy" (matching the values.yaml key), not the kebab-case "connection-proxy".
+  - it: components.connectionProxy.labels/annotations propagate to the StatefulSet
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      components:
+        connectionProxy:
+          labels:
+            test-label: should-appear
+          annotations:
+            test-annotation: should-appear
+    asserts:
+      - equal:
+          path: metadata.labels.test-label
+          value: should-appear
+      - equal:
+          path: metadata.annotations.test-annotation
+          value: should-appear
+
+  - it: RDP_ACCESS_URLS is resolved per zone when multiple primary-region zones are configured
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      kasmZones:
+        - name: zonea
+          proxyAddress: zonea.example.com
+          primary: true
+          region_name: us-east
+        - name: zoneb
+          proxyAddress: zoneb.example.com
+          region_name: us-east
+      directRdpService:
+        enabled: true
+        type: LoadBalancer
+        perServiceSettings:
+          - zone: zonea
+            rdpAccessURL: rdp0.zonea.example.com
+          - zone: zoneb
+            rdpAccessURL: rdp0.zoneb.example.com
+    asserts:
+      - hasDocuments:
+          count: 2
+      - contains:
+          path: spec.template.spec.containers[2].env
+          content:
+            name: RDP_ACCESS_URLS
+            value: rdp0.zonea.example.com
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[2].env
+          content:
+            name: RDP_ACCESS_URLS
+            value: rdp0.zoneb.example.com
+        documentIndex: 1

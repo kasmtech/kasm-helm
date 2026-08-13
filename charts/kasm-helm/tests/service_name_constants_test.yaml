@@ -4,11 +4,9 @@ templates:
   - templates/api-service.yaml
   - templates/db-init-job.yaml
   - templates/db-service.yaml
-  - templates/guac-service.yaml
   - templates/manager-service.yaml
   - templates/proxy-service.yaml
-  - templates/rdp-gateway-service.yaml
-  - templates/rdp-https-gateway-service.yaml
+  - templates/connection-proxy-services.yaml
 
 tests:
   - it: api service uses constants svc name
@@ -49,12 +47,18 @@ tests:
             name: POSTGRES_HOST
             value: RELEASE-NAME-db
 
-  - it: guac service uses constants svc name
-    template: templates/guac-service.yaml
+  # guac, rdp-gateway, and rdp-https-gateway were separate Services in three separate
+  # workloads; they now share one headless Service backing the consolidated
+  # connection-proxy StatefulSet.
+  - it: connection-proxy headless service uses the consolidated svc name
+    template: templates/connection-proxy-services.yaml
+    documentIndex: 0
+    values:
+      - ../../../tests/values/components-all.yaml
     asserts:
       - equal:
           path: metadata.name
-          value: RELEASE-NAME-guac-default
+          value: RELEASE-NAME-connection-proxy-default
 
   - it: manager service uses constants svc name
     template: templates/manager-service.yaml
@@ -72,16 +76,19 @@ tests:
           path: metadata.name
           value: RELEASE-NAME-proxy-default
 
-  - it: rdp gateway service uses constants svc name
-    template: templates/rdp-gateway-service.yaml
+  # Per-ordinal direct RDP Services get a distinct, ordinal-suffixed name.
+  - it: direct RDP service uses the consolidated svc name with an ordinal suffix
+    template: templates/connection-proxy-services.yaml
+    documentIndex: 1
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      directRdpService:
+        enabled: true
+        type: LoadBalancer
+        perServiceSettings:
+          - rdpAccessURL: rdp0.example.com
     asserts:
       - equal:
           path: metadata.name
-          value: RELEASE-NAME-rdp-gateway-default
-
-  - it: rdp https gateway service uses constants svc name
-    template: templates/rdp-https-gateway-service.yaml
-    asserts:
-      - equal:
-          path: metadata.name
-          value: RELEASE-NAME-rdp-https-gateway-default
+          value: RELEASE-NAME-connection-proxy-default-rdp-0

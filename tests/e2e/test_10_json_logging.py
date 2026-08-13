@@ -70,6 +70,7 @@ def _assert_json_logs(component: str, raw_logs: str) -> None:
 def test_json_log_format(installer, temp_workdir: Path) -> None:
     e2e_config = installer["config"]
     namespace = installer["namespace"]
+    release = e2e_config.release_name
 
     low_resources = {"requests": {"cpu": "50m", "memory": "256Mi"}}
     low_resources_proxy = {"requests": {"cpu": "50m", "memory": "128Mi"}}
@@ -85,9 +86,12 @@ def test_json_log_format(installer, temp_workdir: Path) -> None:
             "api": {"resources": low_resources},
             "manager": {"resources": low_resources},
             "proxy": {"resources": low_resources_proxy},
-            "guac": {"resources": low_resources},
-            "rdpGateway": {"resources": low_resources_gw},
-            "rdpHttpsGateway": {"resources": low_resources_gw},
+            "connectionProxy": {
+                "nginx": {"resources": low_resources_proxy},
+                "guac": {"resources": low_resources},
+                "rdpGateway": {"resources": low_resources_gw},
+                "rdpHttpsGateway": {"resources": low_resources_gw},
+            },
         },
     }
     values_path = temp_workdir / "values.yaml"
@@ -112,31 +116,42 @@ def test_json_log_format(installer, temp_workdir: Path) -> None:
 
     # Unlike api/manager (which emit periodic JSON diagnostic lines regardless
     # of traffic) and rdp-gateway/rdp-https-gateway (whose sampled container is
-    # the app binary, not the nginx sidecar), the proxy component's only
-    # container is nginx itself: its json_combined access log line is only
+    # the app binary, not the connection-proxy pod's shared nginx container),
+    # the proxy component's only container is nginx itself: its json_combined
+    # access log line is only
     # written in response to an actual HTTP request. Generate one before
     # sampling so the JSON-format assertion below has something to observe.
     proxy_pod_for_warmup = get_first_pod_by_selector(namespace, "app.kubernetes.io/component=proxy")
     warmup_status, _ = curl_from_pod(namespace, proxy_pod_for_warmup, "https://localhost:8443/", insecure=True)
     assert warmup_status == 200
 
-    # Each tuple: (component label, container name or None for pod default)
+    # Each tuple: (log label, component selector label, container name or None for pod
+    # default). rdp-gateway and rdp-https-gateway are now service containers inside the single
+    # connection-proxy pod, so both select on component=connection-proxy but sample different
+    # containers.
     #
-    # H2 (see docs/otel-integration-plan.md §4) narrowed logFormat's scope: api_server/server.py
-    # no longer calls logging.config.dictConfig, so api/manager's console output is always
-    # human-readable text now regardless of logFormat — their structured logs are exported over
-    # OpenTelemetry instead (see otel_env_test.yaml / test_12_observability.py). rdp-gateway and
-    # rdp-https-gateway were never logFormat-controlled for their sampled container (the Go/C++
-    # app binary, not the nginx sidecar) in the first place. Only the proxy (nginx json_combined,
-    # now forced on whenever observability.enabled — see log_format_test.yaml) and the bundled DB
-    # remain in logFormat's actual scope. Do not "fix" this back — see the doc reference above.
+    # api and manager are excluded: H2 (see docs/otel-integration-plan.md §4) narrowed
+    # logFormat's scope by removing api_server/server.py's logging.config.dictConfig call, so
+    # api/manager's console output is always human-readable text now regardless of logFormat —
+    # their structured logs are exported over OpenTelemetry instead (see otel_env_test.yaml /
+    # test_12_observability.py). This did not touch rdp-gateway/rdp-https-gateway's own
+    # app-config-driven formatter switch, so those two remain in logFormat's scope. Do not
+    # "fix" this back to include api/manager — see the doc reference above.
+    #
+    # Guac is intentionally excluded — its log format is not configurable via logFormat in
+    # this release.
     components = [
-        ("proxy", None),
-        ("db",    None),
+        ("proxy",             "proxy",             None),
+        ("rdp-gateway",       "connection-proxy",  f"{release}-connection-proxy-rdp-gateway"),
+        ("rdp-https-gateway", "connection-proxy",  f"{release}-connection-proxy-rdp-https-gateway"),
+        ("db",                "db",                None),
     ]
 
-    for component, container in components:
-        pod = get_first_pod_by_selector(namespace, f"app.kubernetes.io/component={component}")
-        LOGGER.info("[json-logging] sampling %s pod %s (container: %s)", component, pod, container or "default")
+    for log_label, component_selector, container in components:
+        pod = get_first_pod_by_selector(namespace, f"app.kubernetes.io/component={component_selector}")
+        LOGGER.info(
+            "[json-logging] sampling %s pod %s (container: %s)",
+            log_label, pod, container or "default",
+        )
         raw_logs = _collect_logs(namespace, pod, container)
-        _assert_json_logs(component, raw_logs)
+        _assert_json_logs(log_label, raw_logs)

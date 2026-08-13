@@ -1,0 +1,521 @@
+suite: connection-proxy consolidation
+# New suite covering behavior specific to the guac/rdp-gateway/rdp-https-gateway consolidation
+# into one connection-proxy StatefulSet that no single pre-consolidation suite covered:
+#   1. per-service enable/disable matrix: containers, volumes, and nginx locations/upstreams
+#      all toggle together with each service's own `enabled` flag.
+#   2. disabling all three (or connectionProxy itself) renders nothing at all.
+#   3. registration env (SERVER_ADDRESS/SERVER_HOSTNAME/SERVER_PORT) for all three services.
+#   4. the headless Service is clusterIP: None and its selector matches the StatefulSet pods.
+#   5. per-pod direct RDP Services: count per deploymentSize, per-ordinal names, pod-name selector.
+#   6. directRdpService validation failures.
+#   7. the guac volumeClaimTemplates only renders when guac is enabled.
+
+templates:
+  - templates/connection-proxy-statefulset.yaml
+  - templates/connection-proxy-services.yaml
+  - templates/connection-proxy-configmaps.yaml
+
+tests:
+  # ---------- 1. per-service toggle matrix ----------
+  - it: disabling guac (others enabled) removes its container, its volumes, its upstream, and its location blocks
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      components:
+        connectionProxy:
+          guac:
+            enabled: false
+    asserts:
+      - template: templates/connection-proxy-statefulset.yaml
+        notExists:
+          path: spec.template.spec.containers[?(@.name=="RELEASE-NAME-connection-proxy-guac")]
+      - template: templates/connection-proxy-statefulset.yaml
+        notExists:
+          path: spec.template.spec.volumes[?(@.name=="kasm-connection-proxy-guac-log")]
+      - template: templates/connection-proxy-statefulset.yaml
+        notExists:
+          path: spec.template.spec.volumes[?(@.name=="kasm-connection-proxy-guac-data")]
+      - template: templates/connection-proxy-statefulset.yaml
+        notExists:
+          path: spec.volumeClaimTemplates
+      - template: templates/connection-proxy-configmaps.yaml
+        documentIndex: 0
+        notMatchRegex:
+          path: data["upstreams.conf"]
+          pattern: "upstream kasm_guac "
+      - template: templates/connection-proxy-configmaps.yaml
+        documentIndex: 1
+        notMatchRegex:
+          path: data["connection_proxy.conf"]
+          pattern: "location /guac/ \\{"
+
+  - it: disabling rdpGateway (others enabled) removes its container, its volumes, its upstream, and its location blocks
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      components:
+        connectionProxy:
+          rdpGateway:
+            enabled: false
+    asserts:
+      - template: templates/connection-proxy-statefulset.yaml
+        notExists:
+          path: spec.template.spec.containers[?(@.name=="RELEASE-NAME-connection-proxy-rdp-gateway")]
+      - template: templates/connection-proxy-statefulset.yaml
+        notExists:
+          path: spec.template.spec.volumes[?(@.name=="kasm-connection-proxy-rdp-gateway-data")]
+      - template: templates/connection-proxy-statefulset.yaml
+        notExists:
+          path: spec.template.spec.volumes[?(@.name=="kasm-connection-proxy-rdp-gateway-config")]
+      - template: templates/connection-proxy-configmaps.yaml
+        documentIndex: 0
+        notMatchRegex:
+          path: data["upstreams.conf"]
+          pattern: "upstream rdp_gateway"
+      - template: templates/connection-proxy-configmaps.yaml
+        documentIndex: 1
+        notMatchRegex:
+          path: data["connection_proxy.conf"]
+          pattern: "location /rdp-gateway/"
+      - template: templates/connection-proxy-configmaps.yaml
+        documentIndex: 1
+        notMatchRegex:
+          path: data["connection_proxy.conf"]
+          pattern: "location = /rdp-gateway/__healthcheck"
+
+  - it: disabling rdpHttpsGateway (others enabled) removes its container, its volumes, its upstream, and its location blocks
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      components:
+        connectionProxy:
+          rdpHttpsGateway:
+            enabled: false
+    asserts:
+      - template: templates/connection-proxy-statefulset.yaml
+        notExists:
+          path: spec.template.spec.containers[?(@.name=="RELEASE-NAME-connection-proxy-rdp-https-gateway")]
+      - template: templates/connection-proxy-statefulset.yaml
+        notExists:
+          path: spec.template.spec.volumes[?(@.name=="kasm-connection-proxy-rdp-https-gateway-data")]
+      - template: templates/connection-proxy-configmaps.yaml
+        documentIndex: 0
+        notMatchRegex:
+          path: data["upstreams.conf"]
+          pattern: "upstream kasm_rdp_https_gateway"
+      - template: templates/connection-proxy-configmaps.yaml
+        documentIndex: 1
+        notMatchRegex:
+          path: data["connection_proxy.conf"]
+          pattern: "location /rdp-https-gateway/"
+      - template: templates/connection-proxy-configmaps.yaml
+        documentIndex: 1
+        notMatchRegex:
+          path: data["connection_proxy.conf"]
+          pattern: "location = /rdp-https-gateway/__healthcheck"
+
+  - it: /guac/vm_disconnect is emitted once and survives even when guac itself is disabled, as long as an RDP service is enabled
+    template: templates/connection-proxy-configmaps.yaml
+    documentIndex: 1
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      components:
+        connectionProxy:
+          guac:
+            enabled: false
+    asserts:
+      - matchRegex:
+          path: data["connection_proxy.conf"]
+          pattern: "location /guac/vm_disconnect \\{"
+
+  - it: /guac/vm_disconnect is absent when neither RDP service is enabled
+    template: templates/connection-proxy-configmaps.yaml
+    documentIndex: 1
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      components:
+        connectionProxy:
+          rdpGateway:
+            enabled: false
+          rdpHttpsGateway:
+            enabled: false
+    asserts:
+      - notMatchRegex:
+          path: data["connection_proxy.conf"]
+          pattern: "location /guac/vm_disconnect"
+
+  # ---------- 2. fully disabled ----------
+  - it: renders nothing at all when all three services are disabled
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      components:
+        connectionProxy:
+          guac:
+            enabled: false
+          rdpGateway:
+            enabled: false
+          rdpHttpsGateway:
+            enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders nothing at all when connectionProxy.enabled is false
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      components:
+        connectionProxy:
+          enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # ---------- 3. registration env ----------
+  - it: all three service containers register the per-pod FQDN and port 8443
+    template: templates/connection-proxy-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: SERVER_ADDRESS
+            value: "$(HOSTNAME).RELEASE-NAME-connection-proxy-default.$(POD_NAMESPACE).svc.cluster.local"
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: SERVER_PORT
+            value: "8443"
+      - contains:
+          path: spec.template.spec.containers[2].env
+          content:
+            name: SERVER_HOSTNAME
+            value: "$(HOSTNAME).RELEASE-NAME-connection-proxy-default.$(POD_NAMESPACE).svc.cluster.local"
+      - contains:
+          path: spec.template.spec.containers[2].env
+          content:
+            name: SERVER_PORT
+            value: "8443"
+      - contains:
+          path: spec.template.spec.containers[3].env
+          content:
+            name: SERVER_HOSTNAME
+            value: "$(HOSTNAME).RELEASE-NAME-connection-proxy-default.$(POD_NAMESPACE).svc.cluster.local"
+      - contains:
+          path: spec.template.spec.containers[3].env
+          content:
+            name: SERVER_PORT
+            value: "8443"
+
+  # ---------- 4. headless Service ----------
+  - it: the headless Service is clusterIP None and its selector matches the StatefulSet's pod labels
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - template: templates/connection-proxy-services.yaml
+        documentIndex: 0
+        equal:
+          path: spec.clusterIP
+          value: None
+      - template: templates/connection-proxy-services.yaml
+        documentIndex: 0
+        equal:
+          path: spec.selector
+          value:
+            app.kubernetes.io/name: RELEASE-NAME-connection-proxy-default
+            app.kubernetes.io/component: connection-proxy
+            app.kubernetes.io/instance: RELEASE-NAME
+      - template: templates/connection-proxy-statefulset.yaml
+        equal:
+          path: spec.selector.matchLabels
+          value:
+            app.kubernetes.io/name: RELEASE-NAME-connection-proxy-default
+            app.kubernetes.io/component: connection-proxy
+            app.kubernetes.io/instance: RELEASE-NAME
+
+  # ---------- 5. per-pod direct RDP Services ----------
+  - it: renders one direct RDP Service per replica at deploymentSize small (1 replica)
+    template: templates/connection-proxy-services.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      deploymentSize: small
+      directRdpService:
+        enabled: true
+        type: LoadBalancer
+        rdpAccessURL: rdp.example.com
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: renders one direct RDP Service per replica at deploymentSize medium (2 replicas)
+    template: templates/connection-proxy-services.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      deploymentSize: medium
+      directRdpService:
+        enabled: true
+        type: LoadBalancer
+        perServiceSettings:
+          - rdpAccessURL: rdp0.example.com
+          - rdpAccessURL: rdp1.example.com
+    asserts:
+      - hasDocuments:
+          count: 3
+
+  - it: renders one direct RDP Service per replica at deploymentSize large (3 replicas)
+    template: templates/connection-proxy-services.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      deploymentSize: large
+      directRdpService:
+        enabled: true
+        type: LoadBalancer
+        perServiceSettings:
+          - rdpAccessURL: rdp0.example.com
+          - rdpAccessURL: rdp1.example.com
+          - rdpAccessURL: rdp2.example.com
+    asserts:
+      - hasDocuments:
+          count: 4
+
+  - it: per-ordinal direct RDP Service names and pod-name selectors are correct
+    template: templates/connection-proxy-services.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      deploymentSize: medium
+      directRdpService:
+        enabled: true
+        type: LoadBalancer
+        perServiceSettings:
+          - rdpAccessURL: rdp0.example.com
+          - rdpAccessURL: rdp1.example.com
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-connection-proxy-default-rdp-0
+        documentIndex: 1
+      - equal:
+          path: spec.selector["statefulset.kubernetes.io/pod-name"]
+          value: RELEASE-NAME-connection-proxy-default-0
+        documentIndex: 1
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-connection-proxy-default-rdp-1
+        documentIndex: 2
+      - equal:
+          path: spec.selector["statefulset.kubernetes.io/pod-name"]
+          value: RELEASE-NAME-connection-proxy-default-1
+        documentIndex: 2
+
+  # ---------- 5b. per-service annotations/labels (regression test for kasm-helm-d22) ----------
+  # Before this fix, ONE shared directRdpService.annotations map was merged into EVERY per-ordinal
+  # Service, so identity-bearing annotations (external-dns hostname, aws-load-balancer-name, etc)
+  # collided across all replicas. These assertions prove each ordinal's Service carries its OWN
+  # distinct annotation values.
+  - it: two ordinals render DIFFERENT external-dns hostname and aws-load-balancer-name annotations
+    template: templates/connection-proxy-services.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      deploymentSize: medium
+      directRdpService:
+        enabled: true
+        type: LoadBalancer
+        perServiceSettings:
+          - rdpAccessURL: rdp0.kasm.example.com
+            annotations:
+              external-dns.alpha.kubernetes.io/hostname: rdp0.kasm.example.com
+              service.beta.kubernetes.io/aws-load-balancer-name: kasm-rdp-0
+          - rdpAccessURL: rdp1.kasm.example.com
+            annotations:
+              external-dns.alpha.kubernetes.io/hostname: rdp1.kasm.example.com
+              service.beta.kubernetes.io/aws-load-balancer-name: kasm-rdp-1
+    asserts:
+      - equal:
+          path: metadata.annotations["external-dns.alpha.kubernetes.io/hostname"]
+          value: rdp0.kasm.example.com
+        documentIndex: 1
+      - equal:
+          path: metadata.annotations["service.beta.kubernetes.io/aws-load-balancer-name"]
+          value: kasm-rdp-0
+        documentIndex: 1
+      - equal:
+          path: metadata.annotations["external-dns.alpha.kubernetes.io/hostname"]
+          value: rdp1.kasm.example.com
+        documentIndex: 2
+      - equal:
+          path: metadata.annotations["service.beta.kubernetes.io/aws-load-balancer-name"]
+          value: kasm-rdp-1
+        documentIndex: 2
+
+  - it: shared directRdpService.annotations/labels land on every per-service Service
+    template: templates/connection-proxy-services.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      deploymentSize: medium
+      directRdpService:
+        enabled: true
+        type: LoadBalancer
+        annotations:
+          shared.example.com/note: applies-to-all
+        labels:
+          shared-label: applies-to-all
+        perServiceSettings:
+          - rdpAccessURL: rdp0.kasm.example.com
+          - rdpAccessURL: rdp1.kasm.example.com
+    asserts:
+      - equal:
+          path: metadata.annotations["shared.example.com/note"]
+          value: applies-to-all
+        documentIndex: 1
+      - equal:
+          path: metadata.labels["shared-label"]
+          value: applies-to-all
+        documentIndex: 1
+      - equal:
+          path: metadata.annotations["shared.example.com/note"]
+          value: applies-to-all
+        documentIndex: 2
+      - equal:
+          path: metadata.labels["shared-label"]
+          value: applies-to-all
+        documentIndex: 2
+
+  - it: a per-service annotation overrides a shared annotation of the same key
+    template: templates/connection-proxy-services.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      deploymentSize: small
+      directRdpService:
+        enabled: true
+        type: LoadBalancer
+        annotations:
+          shared.example.com/note: shared-value
+        perServiceSettings:
+          - rdpAccessURL: rdp0.kasm.example.com
+            annotations:
+              shared.example.com/note: per-service-value
+    asserts:
+      - equal:
+          path: metadata.annotations["shared.example.com/note"]
+          value: per-service-value
+        documentIndex: 1
+
+  - it: a per-service loadBalancerPort overrides the shared default for that Service only
+    template: templates/connection-proxy-services.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      deploymentSize: medium
+      directRdpService:
+        enabled: true
+        type: LoadBalancer
+        loadBalancerPort: 3389
+        perServiceSettings:
+          - rdpAccessURL: rdp0.kasm.example.com
+            loadBalancerPort: 3390
+          - rdpAccessURL: rdp1.kasm.example.com
+    asserts:
+      - equal:
+          path: spec.ports[0].port
+          value: 3390
+        documentIndex: 1
+      - equal:
+          path: spec.ports[0].targetPort
+          value: 3389
+        documentIndex: 1
+      - equal:
+          path: spec.ports[0].port
+          value: 3389
+        documentIndex: 2
+
+  # ---------- 6. directRdpService validation failures ----------
+  - it: fails when directRdpService.type is not NodePort or LoadBalancer
+    template: templates/connection-proxy-services.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      directRdpService:
+        enabled: true
+        type: ClusterIP
+        rdpAccessURL: rdp.example.com
+    asserts:
+      - failedTemplate:
+          errorPattern: "(value must be one of 'NodePort', 'LoadBalancer'|The RDP service type is not valid)"
+
+  - it: fails when the effective perServiceSettings list is shorter than the replica count
+    template: templates/connection-proxy-services.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      deploymentSize: large
+      directRdpService:
+        enabled: true
+        type: LoadBalancer
+        perServiceSettings:
+          - rdpAccessURL: rdp0.example.com
+    asserts:
+      - failedTemplate:
+          errorPattern: "only 1 entr\\(y/ies\\) are configured in directRdpService\\.perServiceSettings .* while components\\.connectionProxy has 3 replica\\(s\\)"
+
+  - it: fails when the legacy singular rdpAccessURL and a non-empty perServiceSettings are both set
+    template: templates/connection-proxy-services.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      directRdpService:
+        enabled: true
+        type: LoadBalancer
+        rdpAccessURL: rdp.example.com
+        perServiceSettings:
+          - rdpAccessURL: rdp0.example.com
+    asserts:
+      - failedTemplate:
+          errorMessage: "directRdpService.rdpAccessURL (legacy singular) and directRdpService.perServiceSettings are both set. This is ambiguous: remove rdpAccessURL and configure every replica via perServiceSettings instead."
+
+  - it: fails when the legacy singular rdpAccessURL is used with more than 1 replica
+    template: templates/connection-proxy-services.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      deploymentSize: medium
+      directRdpService:
+        enabled: true
+        type: LoadBalancer
+        rdpAccessURL: rdp.example.com
+    asserts:
+      - failedTemplate:
+          errorPattern: "directRdpService\\.rdpAccessURL \\(legacy singular\\) is set but components\\.connectionProxy has 2 replica\\(s\\)"
+
+  # ---------- 7. guac volumeClaimTemplates gating ----------
+  - it: volumeClaimTemplates renders only when guac is enabled
+    template: templates/connection-proxy-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].metadata.name
+          value: tmp-data
+
+  - it: volumeClaimTemplates is absent when guac is disabled even though other services remain enabled
+    template: templates/connection-proxy-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      components:
+        connectionProxy:
+          guac:
+            enabled: false
+    asserts:
+      - notExists:
+          path: spec.volumeClaimTemplates

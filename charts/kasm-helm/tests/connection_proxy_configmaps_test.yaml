@@ -1,0 +1,215 @@
+suite: connection-proxy nginx configmaps
+
+templates:
+  - templates/connection-proxy-configmaps.yaml
+  - templates/nginx-shared-configmap.yaml
+
+tests:
+  - it: renders 3 ConfigMaps by default (settings, services, rdp-gateway app config)
+    template: templates/connection-proxy-configmaps.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - hasDocuments:
+          count: 3
+
+  - it: renders a 4th ConfigMap (rdp-https-gateway app config) when logFormat is json
+    template: templates/connection-proxy-configmaps.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      logFormat: json
+    asserts:
+      - hasDocuments:
+          count: 4
+
+  - it: first document is the nginx-settings ConfigMap
+    template: templates/connection-proxy-configmaps.yaml
+    documentIndex: 0
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-cpx-nginx-settings
+
+  - it: nginx-settings connection-proxy.conf listens on the consolidated port 8443
+    template: templates/connection-proxy-configmaps.yaml
+    documentIndex: 0
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - matchRegex:
+          path: data["connection-proxy.conf"]
+          pattern: "listen 8443 ssl"
+
+  - it: nginx-settings upstreams.conf declares kasm_guac and kasm_guac_backend with localhost servers
+    template: templates/connection-proxy-configmaps.yaml
+    documentIndex: 0
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - matchRegex:
+          path: data["upstreams.conf"]
+          pattern: "server 127\\.0\\.0\\.1:3000"
+      - matchRegex:
+          path: data["upstreams.conf"]
+          pattern: "server 127\\.0\\.0\\.1:3004"
+
+  - it: nginx-settings upstreams.conf declares rdp_gateway and kasm_rdp_https_gateway upstreams
+    template: templates/connection-proxy-configmaps.yaml
+    documentIndex: 0
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - matchRegex:
+          path: data["upstreams.conf"]
+          pattern: "upstream rdp_gateway \\{[\\s\\S]*server 127\\.0\\.0\\.1:5555"
+      - matchRegex:
+          path: data["upstreams.conf"]
+          pattern: "upstream kasm_rdp_https_gateway \\{[\\s\\S]*server 127\\.0\\.0\\.1:9443"
+
+  - it: nginx-settings does not contain compress.conf or logging.conf (those live in nginx-shared)
+    template: templates/connection-proxy-configmaps.yaml
+    documentIndex: 0
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - notExists:
+          path: data["compress.conf"]
+      - notExists:
+          path: data["logging.conf"]
+
+  - it: second document is the connection-proxy-services ConfigMap
+    template: templates/connection-proxy-configmaps.yaml
+    documentIndex: 1
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-cpx-services
+
+  - it: connection_proxy.conf references the kasm_guac upstream, not a raw release-scoped hostname
+    template: templates/connection-proxy-configmaps.yaml
+    documentIndex: 1
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - matchRegex:
+          path: data["connection_proxy.conf"]
+          pattern: "proxy_pass\\s+http://kasm_guac/"
+      - notMatchRegex:
+          path: data["connection_proxy.conf"]
+          pattern: "RELEASE-NAME-connection-proxy"
+
+  - it: connection_proxy.conf namespaces the rdp-gateway and rdp-https-gateway healthchecks to avoid colliding with nginx's own /__healthcheck
+    template: templates/connection-proxy-configmaps.yaml
+    documentIndex: 1
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - matchRegex:
+          path: data["connection_proxy.conf"]
+          pattern: "location = /__healthcheck \\{"
+      - matchRegex:
+          path: data["connection_proxy.conf"]
+          pattern: "location = /rdp-gateway/__healthcheck \\{"
+      - matchRegex:
+          path: data["connection_proxy.conf"]
+          pattern: "location = /rdp-https-gateway/__healthcheck \\{"
+
+  - it: third document is the rdp-gateway app config ConfigMap
+    template: templates/connection-proxy-configmaps.yaml
+    documentIndex: 2
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-cpx-rdp-gw-app-config
+
+  - it: does not render any connection-proxy ConfigMap when all three service containers are disabled
+    template: templates/connection-proxy-configmaps.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      components:
+        connectionProxy:
+          guac:
+            enabled: false
+          rdpGateway:
+            enabled: false
+          rdpHttpsGateway:
+            enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: does not render any connection-proxy ConfigMap when connectionProxy.enabled is false
+    template: templates/connection-proxy-configmaps.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      components:
+        connectionProxy:
+          enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: nginx-shared ConfigMap is always rendered independently of connection-proxy
+    template: templates/nginx-shared-configmap.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-nginx-shared
+
+  - it: nginx-shared has compress.conf and logging.conf
+    template: templates/nginx-shared-configmap.yaml
+    asserts:
+      - exists:
+          path: data["compress.conf"]
+      - exists:
+          path: data["logging.conf"]
+
+  - it: nginx-shared has shared map blocks in orchestrator.conf
+    template: templates/nginx-shared-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["orchestrator.conf"]
+          pattern: "x_forwarded_proto"
+      - matchRegex:
+          path: data["orchestrator.conf"]
+          pattern: "real_request_port"
+
+  # ---------------------------------------------------------------------------
+  # app.kubernetes.io/name label value has a 63-char Kubernetes limit. Short
+  # local release names mask this; CI's long "kasm-e2e-<job-id>" release names
+  # do not. The rdp-https-gateway-app-config ConfigMap's component name was
+  # the longest of the four and broke first under CI's release name length.
+  # ---------------------------------------------------------------------------
+
+  - it: rdp-https-gateway app config label stays within 63 chars under a long CI release name
+    template: templates/connection-proxy-configmaps.yaml
+    documentIndex: 3
+    release:
+      name: kasm-e2e-15864505241
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      logFormat: json
+    asserts:
+      - matchRegex:
+          path: metadata.labels["app.kubernetes.io/name"]
+          pattern: "^.{1,63}$"

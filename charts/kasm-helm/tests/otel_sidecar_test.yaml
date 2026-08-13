@@ -4,7 +4,7 @@ templates:
   - templates/proxy-deployment.yaml
   - templates/api-deployment.yaml
   - templates/manager-deployment.yaml
-  - templates/guac-statefulset.yaml
+  - templates/connection-proxy-statefulset.yaml
   - templates/otel-collector-configmap.yaml
 
 tests:
@@ -104,13 +104,13 @@ tests:
           value: otel-sidecar
 
   - it: guac gets an otel-sidecar container when fileLogs.enabled and guac is in fileLogs.components
-    template: templates/guac-statefulset.yaml
+    template: templates/connection-proxy-statefulset.yaml
     documentIndex: 0
     set:
       observability.fileLogs.enabled: true
     asserts:
       - equal:
-          path: spec.template.spec.containers[1].name
+          path: spec.template.spec.containers[2].name
           value: otel-sidecar
 
   - it: a component removed from fileLogs.components gets no sidecar (api excluded)

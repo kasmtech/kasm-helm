@@ -1,15 +1,16 @@
 suite: kasm zones logic tests
 templates:
-  - templates/guac-statefulset.yaml
+  - templates/connection-proxy-statefulset.yaml
   - templates/proxy-deployment.yaml
   - templates/proxy-configmaps.yaml
   - templates/manager-deployment.yaml
 
 tests:
-  - it: injects primary zone into guac deployment
-    template: templates/guac-statefulset.yaml
+  - it: injects primary zone into connection-proxy guac container
+    template: templates/connection-proxy-statefulset.yaml
     values:
       - ../../../tests/values/multizone-config.yaml
+      - ../../../tests/values/components-all.yaml
     asserts:
       - exists:
           path: spec.template.spec.containers[*].env[?(@.name=="ZONE" && @.value=="zonea")]

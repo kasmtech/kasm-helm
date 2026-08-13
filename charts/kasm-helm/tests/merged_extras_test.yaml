@@ -4,9 +4,7 @@ templates:
   - templates/api-deployment.yaml
   - templates/proxy-deployment.yaml
   - templates/db-statefulset.yaml
-  - templates/guac-statefulset.yaml
-  - templates/rdp-gateway-deployment.yaml
-  - templates/rdp-https-gateway-statefulset.yaml
+  - templates/connection-proxy-statefulset.yaml
 
 tests:
   - it: supports component-specific extras using proxy as example
@@ -102,99 +100,76 @@ tests:
       - exists:
           path: spec.template.spec.containers[?(@.name=="shared-sidecar-global" && @.image=="busybox:1.36")]
 
-  # ---------- nginxSidecar extraVolumes/extraVolumeMounts (guac/rdp-gateway/rdp-https-gateway) ----------
+  # ---------- connectionProxy extraVolumes/extraVolumeMounts (pod-level, componentName "connectionProxy") ----------
+  # extraVolumes/extraVolumeMounts/extraContainers/extraInitContainers moved from three
+  # per-service trees (guac/rdpGateway/rdpHttpsGateway nginxSidecar.*) to a single
+  # pod-level components.connectionProxy.* tree, since the StatefulSet now runs one
+  # pod with up to four containers instead of three separate pods each with their own
+  # nginx sidecar. kasm.mergedValues dedup/merge semantics are otherwise unchanged.
 
-  - it: guac nginxSidecar extraVolumeMounts/extraVolumes attach to the nginx sidecar container only
-    template: templates/guac-statefulset.yaml
+  - it: connectionProxy extraVolumes/extraVolumeMounts attach to every container via extraContainerVolumeMounts-style global mount, and to a named container via extraVolumeMounts on the pod spec
+    template: templates/connection-proxy-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
     set:
       components:
-        guac:
-          enabled: true
-          nginxSidecar:
-            extraVolumes:
-              - name: guac-nginx-extra
-                secret:
-                  secretName: guac-nginx-extra-secret
-            extraVolumeMounts:
-              - name: guac-nginx-extra
-                mountPath: /etc/nginx/extra
-                readOnly: true
+        connectionProxy:
+          extraVolumes:
+            - name: cp-extra
+              secret:
+                secretName: cp-extra-secret
+          extraVolumeMounts:
+            - name: cp-extra
+              mountPath: /etc/cp-extra
+              readOnly: true
     asserts:
       - exists:
-          path: spec.template.spec.volumes[?(@.name=="guac-nginx-extra")]
+          path: spec.template.spec.volumes[?(@.name=="cp-extra")]
       - exists:
-          path: spec.template.spec.containers[?(@.name=="RELEASE-NAME-guac-nginx")].volumeMounts[?(@.name=="guac-nginx-extra" && @.mountPath=="/etc/nginx/extra")]
-      - notExists:
-          path: spec.template.spec.containers[?(@.name=="RELEASE-NAME-guac")].volumeMounts[?(@.name=="guac-nginx-extra")]
+          path: spec.template.spec.containers[1].volumeMounts[?(@.name=="cp-extra" && @.mountPath=="/etc/cp-extra")]
+      - exists:
+          path: spec.template.spec.containers[2].volumeMounts[?(@.name=="cp-extra" && @.mountPath=="/etc/cp-extra")]
 
-  - it: rdp-gateway nginxSidecar extraVolumeMounts/extraVolumes attach to the nginx sidecar container only
-    template: templates/rdp-gateway-deployment.yaml
+  - it: connectionProxy extraContainers/extraInitContainers are added once to the single consolidated pod
+    template: templates/connection-proxy-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
     set:
       components:
-        rdpGateway:
-          enabled: true
-          nginxSidecar:
-            extraVolumes:
-              - name: rdpgw-nginx-extra
-                secret:
-                  secretName: rdpgw-nginx-extra-secret
-            extraVolumeMounts:
-              - name: rdpgw-nginx-extra
-                mountPath: /etc/nginx/extra
-                readOnly: true
+        connectionProxy:
+          extraContainers:
+            - name: cp-sidecar
+              image: busybox
+          extraInitContainers:
+            - name: cp-init
+              image: busybox
     asserts:
       - exists:
-          path: spec.template.spec.volumes[?(@.name=="rdpgw-nginx-extra")]
+          path: spec.template.spec.containers[?(@.name=="cp-sidecar")]
       - exists:
-          path: spec.template.spec.containers[?(@.name=="RELEASE-NAME-rdp-gateway-nginx")].volumeMounts[?(@.name=="rdpgw-nginx-extra" && @.mountPath=="/etc/nginx/extra")]
-      - notExists:
-          path: spec.template.spec.containers[?(@.name=="RELEASE-NAME-rdp-gateway")].volumeMounts[?(@.name=="rdpgw-nginx-extra")]
+          path: spec.template.spec.initContainers[?(@.name=="cp-init")]
+      # nginx, guac, rdp-gateway, rdp-https-gateway, cp-sidecar: exactly one of each,
+      # proving the extra container is added once to the single consolidated pod
+      # rather than once per former per-service workload.
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 5
 
-  - it: rdp-https-gateway nginxSidecar extraVolumeMounts/extraVolumes attach to the nginx sidecar container only
-    template: templates/rdp-https-gateway-statefulset.yaml
+  - it: global extraVolumes/extraContainers merge with connectionProxy-scoped extras, component-scoped wins on name collision
+    template: templates/connection-proxy-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
     set:
+      extraContainers:
+        - name: shared-sidecar-global
+          image: busybox:1.36
       components:
-        rdpHttpsGateway:
-          enabled: true
-          nginxSidecar:
-            extraVolumes:
-              - name: rdphttps-nginx-extra
-                secret:
-                  secretName: rdphttps-nginx-extra-secret
-            extraVolumeMounts:
-              - name: rdphttps-nginx-extra
-                mountPath: /etc/nginx/extra
-                readOnly: true
+        connectionProxy:
+          extraContainers:
+            - name: shared-sidecar-global
+              image: alpine:3.20
     asserts:
       - exists:
-          path: spec.template.spec.volumes[?(@.name=="rdphttps-nginx-extra")]
-      - exists:
-          path: spec.template.spec.containers[?(@.name=="RELEASE-NAME-rdp-https-gateway-nginx")].volumeMounts[?(@.name=="rdphttps-nginx-extra" && @.mountPath=="/etc/nginx/extra")]
+          path: spec.template.spec.containers[?(@.name=="shared-sidecar-global" && @.image=="alpine:3.20")]
       - notExists:
-          path: spec.template.spec.containers[?(@.name=="RELEASE-NAME-rdp-https-gateway")].volumeMounts[?(@.name=="rdphttps-nginx-extra")]
-
-  - it: nginxSidecar extras do not leak between guac and rdp-gateway components
-    templates:
-      - templates/guac-statefulset.yaml
-      - templates/rdp-gateway-deployment.yaml
-    set:
-      components:
-        guac:
-          enabled: true
-          nginxSidecar:
-            extraVolumes:
-              - name: guac-nginx-extra
-                secret:
-                  secretName: guac-nginx-extra-secret
-            extraVolumeMounts:
-              - name: guac-nginx-extra
-                mountPath: /etc/nginx/extra
-        rdpGateway:
-          enabled: true
-    asserts:
-      - exists:
-          path: spec.template.spec.volumes[?(@.name=="guac-nginx-extra")]
-        template: templates/guac-statefulset.yaml
-      - notExists:
-          path: spec.template.spec.volumes[?(@.name=="guac-nginx-extra")]
-        template: templates/rdp-gateway-deployment.yaml
+          path: spec.template.spec.containers[?(@.name=="shared-sidecar-global" && @.image=="busybox:1.36")]
