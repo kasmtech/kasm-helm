@@ -1,38 +1,45 @@
-suite: rdp-gateway custom rdpproxy.ini ConfigMap mount
+suite: connection-proxy rdp-gateway custom rdpproxy.ini mount
+# Retargeted: the rdp-gateway container (containers[2] with all three services enabled, per
+# components-all.yaml) now lives inside the connection-proxy StatefulSet.
 
 templates:
-  - templates/rdp-gateway-deployment.yaml
+  - templates/connection-proxy-statefulset.yaml
 
 tests:
   - it: does not mount rdpproxy.ini when iniConfigMapName is unset
+    values:
+      - ../../../tests/values/components-all.yaml
     asserts:
       - notContains:
-          path: spec.template.spec.containers[0].volumeMounts
+          path: spec.template.spec.containers[2].volumeMounts
           any: true
           content:
-            name: kasm-rdp-gateway-ini
+            name: kasm-connection-proxy-rdp-gateway-ini
       - notContains:
           path: spec.template.spec.volumes
           any: true
           content:
-            name: kasm-rdp-gateway-ini
+            name: kasm-connection-proxy-rdp-gateway-ini
 
   - it: mounts rdpproxy.ini from the named ConfigMap when iniConfigMapName is set
+    values:
+      - ../../../tests/values/components-all.yaml
     set:
       components:
-        rdpGateway:
-          iniConfigMapName: my-rdpproxy-ini
+        connectionProxy:
+          rdpGateway:
+            iniConfigMapName: my-rdpproxy-ini
     asserts:
       - contains:
-          path: spec.template.spec.containers[0].volumeMounts
+          path: spec.template.spec.containers[2].volumeMounts
           content:
-            name: kasm-rdp-gateway-ini
+            name: kasm-connection-proxy-rdp-gateway-ini
             mountPath: /usr/local/etc/rdpproxy/conf/rdpproxy.ini
             subPath: rdpproxy.ini
       - contains:
           path: spec.template.spec.volumes
           content:
-            name: kasm-rdp-gateway-ini
+            name: kasm-connection-proxy-rdp-gateway-ini
             configMap:
               name: my-rdpproxy-ini
               items:
@@ -40,23 +47,28 @@ tests:
                   path: rdpproxy.ini
 
   - it: existing passthrough config volume is not affected when iniConfigMapName is set
+    values:
+      - ../../../tests/values/components-all.yaml
     set:
       components:
-        rdpGateway:
-          iniConfigMapName: my-rdpproxy-ini
+        connectionProxy:
+          rdpGateway:
+            iniConfigMapName: my-rdpproxy-ini
     asserts:
       - contains:
-          path: spec.template.spec.containers[0].volumeMounts
+          path: spec.template.spec.containers[2].volumeMounts
           content:
-            name: kasm-rdp-gateway-config
+            name: kasm-connection-proxy-rdp-gateway-config
             mountPath: /usr/local/etc/rdpproxy/conf/passthrough.app.config.yaml
             subPath: passthrough.app.config.yaml
 
-  - it: passthrough config volume references the rdpGateway-app-config ConfigMap
+  - it: passthrough config volume references the connection-proxy rdp-gateway-app-config ConfigMap
+    values:
+      - ../../../tests/values/components-all.yaml
     asserts:
       - contains:
           path: spec.template.spec.volumes
           content:
-            name: kasm-rdp-gateway-config
+            name: kasm-connection-proxy-rdp-gateway-config
             configMap:
-              name: RELEASE-NAME-rdp-gateway-app-config
+              name: RELEASE-NAME-cpx-rdp-gw-app-config
