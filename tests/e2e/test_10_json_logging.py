@@ -86,9 +86,12 @@ def test_json_log_format(installer, temp_workdir: Path) -> None:
             "api": {"resources": low_resources},
             "manager": {"resources": low_resources},
             "proxy": {"resources": low_resources_proxy},
-            "guac": {"resources": low_resources},
-            "rdpGateway": {"resources": low_resources_gw},
-            "rdpHttpsGateway": {"resources": low_resources_gw},
+            "connectionProxy": {
+                "nginx": {"resources": low_resources_proxy},
+                "guac": {"resources": low_resources},
+                "rdpGateway": {"resources": low_resources_gw},
+                "rdpHttpsGateway": {"resources": low_resources_gw},
+            },
         },
     }
     values_path = temp_workdir / "values.yaml"
@@ -113,28 +116,35 @@ def test_json_log_format(installer, temp_workdir: Path) -> None:
 
     # Unlike api/manager (which emit periodic JSON diagnostic lines regardless
     # of traffic) and rdp-gateway/rdp-https-gateway (whose sampled container is
-    # the app binary, not the nginx sidecar), the proxy component's only
-    # container is nginx itself: its json_combined access log line is only
+    # the app binary, not the connection-proxy pod's shared nginx container),
+    # the proxy component's only container is nginx itself: its json_combined
+    # access log line is only
     # written in response to an actual HTTP request. Generate one before
     # sampling so the JSON-format assertion below has something to observe.
     proxy_pod_for_warmup = get_first_pod_by_selector(namespace, "app.kubernetes.io/component=proxy")
     warmup_status, _ = curl_from_pod(namespace, proxy_pod_for_warmup, "https://localhost:8443/", insecure=True)
     assert warmup_status == 200
 
-    # Each tuple: (component label, container name or None for pod default)
+    # Each tuple: (log label, component selector label, container name or
+    # None for pod default). rdp-gateway and rdp-https-gateway are now
+    # service containers inside the single connection-proxy pod, so both
+    # select on component=connection-proxy but sample different containers.
     # Guac is intentionally excluded — its log format is not configurable
     # via logFormat in this release.
     components = [
-        ("api",               None),
-        ("manager",           None),
-        ("proxy",             None),
-        ("rdp-gateway",       f"{release}-rdp-gateway"),
-        ("rdp-https-gateway", f"{release}-rdp-https-gateway"),
-        ("db",                None),
+        ("api",               "api",               None),
+        ("manager",           "manager",           None),
+        ("proxy",             "proxy",             None),
+        ("rdp-gateway",       "connection-proxy",  f"{release}-connection-proxy-rdp-gateway"),
+        ("rdp-https-gateway", "connection-proxy",  f"{release}-connection-proxy-rdp-https-gateway"),
+        ("db",                "db",                None),
     ]
 
-    for component, container in components:
-        pod = get_first_pod_by_selector(namespace, f"app.kubernetes.io/component={component}")
-        LOGGER.info("[json-logging] sampling %s pod %s (container: %s)", component, pod, container or "default")
+    for log_label, component_selector, container in components:
+        pod = get_first_pod_by_selector(namespace, f"app.kubernetes.io/component={component_selector}")
+        LOGGER.info(
+            "[json-logging] sampling %s pod %s (container: %s)",
+            log_label, pod, container or "default",
+        )
         raw_logs = _collect_logs(namespace, pod, container)
-        _assert_json_logs(component, raw_logs)
+        _assert_json_logs(log_label, raw_logs)

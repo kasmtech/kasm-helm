@@ -2,12 +2,15 @@ suite: nginx resolver directive across all sidecar ConfigMaps
 
 templates:
   - templates/proxy-configmaps.yaml
-  - templates/guac-nginx-configmap.yaml
-  - templates/rdp-gateway-nginx-configmap.yaml
-  - templates/rdp-https-gateway-nginx-configmap.yaml
+  - templates/connection-proxy-configmaps.yaml
 
 tests:
+  # The resolver directive used to appear three times (once each in the guac,
+  # rdp-gateway, and rdp-https-gateway nginx sidecar ConfigMaps). It now appears once,
+  # in the consolidated connection-proxy-nginx-settings ConfigMap's resolver.conf key
+  # (documentIndex 0 of connection-proxy-configmaps.yaml).
   - it: defaults to 127.0.0.11 when nginxResolver is unset (no live cluster to auto-detect against)
+    template: templates/connection-proxy-configmaps.yaml
     values:
       - ../../../tests/values/components-all.yaml
     documentIndex: 0
@@ -17,6 +20,7 @@ tests:
           pattern: "resolver 127\\.0\\.0\\.11 valid=10s ipv6=off;"
 
   - it: uses the explicit nginxResolver override when set
+    template: templates/connection-proxy-configmaps.yaml
     set:
       nginxResolver: "10.96.0.10"
     values:
