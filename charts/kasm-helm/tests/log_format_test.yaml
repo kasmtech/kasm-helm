@@ -3,7 +3,7 @@ suite: logFormat rendering
 templates:
   - templates/api-app-configmap.yaml
   - templates/manager-app-configmap.yaml
-  - templates/rdp-gateway-configmap.yaml
+  - templates/connection-proxy-configmaps.yaml
   - templates/nginx-shared-configmap.yaml
   - templates/db-configmap.yaml
 
@@ -61,25 +61,46 @@ tests:
           path: data["api.app.config.yaml"]
           pattern: "formatter: pythonjsonlogger"
 
-  # ---------- rdp-gateway-configmap ----------
+  # ---------- connection-proxy-configmaps: rdp-gateway app-config (documentIndex 2) ----------
   # The configmap always contains both formatter *definitions* (pythonjsonlogger
   # and standard). Only the stream handler's formatter: assignment is controlled
   # by logFormat. Tests verify which value the stream handler uses.
-  - it: rdp-gateway configmap stream handler uses standard formatter by default
-    template: templates/rdp-gateway-configmap.yaml
+  - it: connection-proxy rdp-gateway app-config stream handler uses standard formatter by default
+    template: templates/connection-proxy-configmaps.yaml
+    documentIndex: 2
     asserts:
       - matchRegex:
           path: data["passthrough.app.config.yaml"]
           pattern: "formatter: standard"
 
-  - it: rdp-gateway configmap stream handler uses pythonjsonlogger formatter when logFormat is json
-    template: templates/rdp-gateway-configmap.yaml
+  - it: connection-proxy rdp-gateway app-config stream handler uses pythonjsonlogger formatter when logFormat is json
+    template: templates/connection-proxy-configmaps.yaml
+    documentIndex: 2
     set:
       logFormat: json
     asserts:
       - matchRegex:
           path: data["passthrough.app.config.yaml"]
           pattern: "formatter: pythonjsonlogger"
+
+  # ---------- connection-proxy-configmaps: rdp-https-gateway app-config ----------
+  # This ConfigMap only renders when logFormat is "json" (unchanged behavior).
+  - it: connection-proxy rdp-https-gateway app-config is not rendered when logFormat is log (default)
+    template: templates/connection-proxy-configmaps.yaml
+    asserts:
+      - hasDocuments:
+          count: 3
+
+  - it: connection-proxy rdp-https-gateway app-config is rendered when logFormat is json
+    template: templates/connection-proxy-configmaps.yaml
+    set:
+      logFormat: json
+    documentIndex: 3
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - exists:
+          path: data["rdp_https_gateway.app.config.yaml"]
 
   # ---------- nginx-shared-configmap ----------
   # The access_log switching lives in data["logging.conf"], not data["nginx.conf"].

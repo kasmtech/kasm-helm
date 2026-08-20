@@ -2,6 +2,39 @@
 
 All notable changes to the kasm-helm chart are documented here.
 
+## [Unreleased]
+
+### Breaking Changes
+
+- Guac (StatefulSet), RDP Gateway (Deployment), and RDP HTTPS Gateway (StatefulSet), each previously running its own nginx sidecar on its own port (9000/9001/9002), are consolidated into **one** zone-scoped StatefulSet, `<release>-connection-proxy-<zone>`, running a single nginx container on **8443** in front of up to three service containers (guac, rdp-gateway, rdp-https-gateway). This mirrors the VM deployment paradigm the Kasm backend models: one nginx, one hostname, three separate service-type registrations. <!-- hash:a5a100c96fdc34e08c415ae7337da9485ad14ebc -->
+
+- `components.guac`, `components.rdpGateway`, and `components.rdpHttpsGateway` are **removed** from `values.yaml` and `values.schema.json`, replaced by a single nested `components.connectionProxy` tree. <!-- hash:a5a100c96fdc34e08c415ae7337da9485ad14ebc -->
+
+The three independent replica counts (`components.guac.replicas`, `components.rdpGateway.replicas`, `components.rdpHttpsGateway.replicas`) collapse into one: `components.connectionProxy.replicas`. <!-- hash:a5a100c96fdc34e08c415ae7337da9485ad14ebc -->
+
+- The legacy singular `directRdpService.rdpAccessURL` is still honored, but only when `components.connectionProxy` resolves to 1 replica and `perServiceSettings` is empty; the chart fails at render time if `rdpAccessURL` and a non-empty `perServiceSettings` are both set, if `rdpAccessURL` is used with more than 1 replica, or if `perServiceSettings` has fewer entries than there are replicas. <!-- hash:a5a100c96fdc34e08c415ae7337da9485ad14ebc -->
+
+- `directRdpService.annotations`/`labels` remain a shared base merged into every per-replica Service alongside the chart's usual global/component labels and annotations, but `perServiceSettings[i]`'s own `annotations`/`labels` take precedence over that shared base on a key collision (most specific wins). <!-- hash:a5a100c96fdc34e08c415ae7337da9485ad14ebc -->
+
+See [Migrating to connection-proxy](./README.md#migrating-to-connection-proxy) for the full old-key-to-new-key mapping.
+
+### Changed
+
+- Health check paths served through nginx changed to avoid a path collision now that both RDP services share one nginx: `/__healthcheck` was previously served twice, once per sidecar, on two different ports. It is now namespaced per service, and nginx itself serves a bare pod-readiness endpoint: <!-- hash:a5a100c96fdc34e08c415ae7337da9485ad14ebc -->
+
+  - `/__healthcheck` (RDP Gateway) → `/rdp-gateway/__healthcheck`
+  - `/__healthcheck` (RDP HTTPS Gateway) → `/rdp-https-gateway/__healthcheck`
+  - `/__healthcheck` (new) → served directly by nginx itself, for pod readiness; Guac keeps its existing
+
+- The previous restriction limiting `rdpGateway` to a single replica is removed; connection-proxy now scales 1/2/3 by `deploymentSize` like every other zone-scoped component. <!-- hash:a5a100c96fdc34e08c415ae7337da9485ad14ebc -->
+
+### Fixed
+
+- A `directRdpService.perServiceSettings` entry with an empty `rdpAccessURL` (schema allowed it) silently overwrote the rdp-gateway container's `SERVER_HOSTNAME` with an empty value instead of falling back to the per-pod FQDN. Rendering now fails with a clear message instead. <!-- hash:cb83115f48e0be49c373052ae0276c4468ad769f -->
+- `components.connectionProxy.labels`/`annotations` were never applied to the connection-proxy StatefulSet: `kasm.metadata` looks up component-scoped values by exact key against `values.yaml`, and the template passed the kebab-case `connection-proxy` instead of `connectionProxy`. <!-- hash:cb83115f48e0be49c373052ae0276c4468ad769f -->
+- With more than one primary-region zone, every zone's connection-proxy replicas silently reused the same `directRdpService.perServiceSettings` list and the same `RDP_ACCESS_URLS`, so every zone advertised identical RDP addresses. `perServiceSettings` entries now take a `zone` field; with more than one zone, every entry must set it, and rendering fails if it's missing, unrecognized, or a zone ends up short of entries for its replica count. <!-- hash:cb83115f48e0be49c373052ae0276c4468ad769f -->
+- The rdp-https-gateway app-config ConfigMap's `app.kubernetes.io/name` label exceeded Kubernetes' 63-character label-value limit under CI's long `kasm-e2e-<job-id>` release names, failing installs with `logFormat: json`. Shortened the four connection-proxy ConfigMap component identifiers. <!-- hash:29475046a26a06c9f16b585fdc33e0e6703b3392 -->
+
 ## [1.1190.6] - 2026-07-28
 
 ### Changed

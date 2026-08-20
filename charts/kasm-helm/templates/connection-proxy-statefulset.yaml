@@ -1,0 +1,467 @@
+{{/*
+Deploy the consolidated Kasm Connection Proxy StatefulSet if .Values.components.connectionProxy.enabled
+is true and at least one of guac/rdpGateway/rdpHttpsGateway is enabled. Each pod runs a single nginx
+container (port 8443) fronting up to three localhost-only service containers: guac, rdp-gateway, and
+rdp-https-gateway. Sessions pin to the pod's stable per-pod DNS name via the headless Service.
+*/}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $cp := .Values.components.connectionProxy -}}
+{{- $cpReplicas := ternary $cp.replicas (include "replicas.preset" (dict "node" $constants.connectionProxy.component "size" .Values.deploymentSize)) (gt (int $cp.replicas) 0) -}}
+{{- $merged := fromYaml (include "kasm.mergedValues" (dict "root" . "componentName" "connectionProxy")) -}}
+{{- if and $cp.enabled (or $cp.guac.enabled $cp.rdpGateway.enabled $cp.rdpHttpsGateway.enabled) }}
+{{- range $zone := (include "kasm.primaryRegionZones" $ | fromYamlArray) }}
+{{/*
+  RDP_ACCESS_URLS is a comma-separated, ordinal-ordered list of directly-reachable RDP hostnames, one
+  per connection-proxy replica in THIS zone. Resolved per zone (not once globally) because each
+  primary-region zone needs its own addresses -- see kasm.directRdpEntriesForZone. Empty (and therefore
+  inert) when directRdpService is disabled. Validation of list length vs. replica count lives in
+  connection-proxy-services.yaml; this StatefulSet renders fine even with a short/empty list.
+*/}}
+{{- $rdpAccessURLs := list -}}
+{{- if $.Values.directRdpService.enabled -}}
+  {{- range (include "kasm.directRdpEntriesForZone" (list $ $zone.name) | fromYamlArray) -}}
+    {{- $rdpAccessURLs = append $rdpAccessURLs (.rdpAccessURL | default "") -}}
+  {{- end -}}
+{{- end -}}
+---
+{{ $cpSvc := printf "%s-connection-proxy-%s" $.Release.Name (include "kasm.zoneName" $zone.name) -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  {{- include "kasm.metadata" (dict "context" $ "component" "connectionProxy" "resource" "statefulSet" "zone" $zone.name "include" "all") | indent 2 }}
+spec:
+  replicas: {{ $cpReplicas }}
+  serviceName: {{ $cpSvc }}
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      {{- include "kasm.metadata" (dict "context" $ "component" "connectionProxy" "resource" "deployment" "zone" $zone.name "include" "match") | indent 6 }}
+  template:
+    metadata:
+      {{- include "kasm.metadata" (dict "context" $ "component" "connectionProxy" "resource" "pod" "zone" $zone.name "include" "la") | indent 6 }}
+    spec:
+      restartPolicy: {{ $.Values.restartPolicy }}
+      {{- if $.Values.imagePullSecrets.enabled }}
+      imagePullSecrets:
+        - name: {{ $.Values.imagePullSecrets.name | default (printf "%s-image-pull-secret" $.Release.Name) }}
+      {{- end }}
+      {{- include "kasm.securityContext" (list $ 1000 "pod") | nindent 6 }}
+      {{- with $.Values.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $.Values.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        {{- include "kasm.trustedCaInit" (list $ "connection-proxy") | nindent 8 }}
+        {{- include "kasm.initContainer" (dict "context" $ "serviceName" (printf "%s-%s" $constants.proxy.svc (include "kasm.zoneName" $zone.name)) "servicePort" ($constants.proxy.http) "path" "/api/__healthcheck" "schema" "http" "image" ($constants.api.image) "component" "api") | nindent 8 }}
+        {{- with $merged.extraInitContainers }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      containers:
+        - name: {{ printf "%s-connection-proxy-nginx" $.Release.Name }}
+          image: {{ $constants.connectionProxy.image }}
+          imagePullPolicy: {{ $.Values.imagePullPolicy }}
+          ports:
+            - name: {{ $constants.connectionProxy.portName }}
+              containerPort: {{ $constants.connectionProxy.nginxPort }}
+              protocol: TCP
+          volumeMounts:
+            - name: kasm-connection-proxy-nginx-shared
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+            - name: kasm-connection-proxy-nginx-shared
+              mountPath: /etc/nginx/compress.conf
+              subPath: compress.conf
+            - name: kasm-connection-proxy-nginx-shared
+              mountPath: /etc/nginx/logging.conf
+              subPath: logging.conf
+            - name: kasm-connection-proxy-nginx-shared
+              mountPath: /etc/nginx/orchestrator.conf
+              subPath: orchestrator.conf
+            - name: kasm-connection-proxy-nginx-settings
+              mountPath: /etc/nginx/conf.d
+            - name: kasm-connection-proxy-services
+              mountPath: /etc/nginx/conf.d/services.d
+            - name: kasm-connection-proxy-nginx-data
+              mountPath: /var/cache/nginx
+            - name: kasm-connection-proxy-nginx-data
+              mountPath: /run
+            - name: kasm-connection-proxy-nginx-log-tmp
+              mountPath: /var/log/nginx
+            - name: kasm-connection-proxy-cert
+              mountPath: /etc/nginx/ssl/tls.crt
+              subPath: tls.crt
+              readOnly: true
+            - name: kasm-connection-proxy-cert
+              mountPath: /etc/nginx/ssl/tls.key
+              subPath: tls.key
+              readOnly: true
+            {{- include "kasm.trustedCaVolumeMounts" $ | nindent 12 }}
+          {{- if $.Values.applyHealthChecks }}
+          livenessProbe:
+            {{- include "health.probe" (dict "root" $ "component" "connectionProxy" "timingScope" "nginx" "probeType" "livenessProbe" "type" "tcp" "portName" $constants.connectionProxy.portName) | nindent 12 }}
+          readinessProbe:
+            {{- include "health.probe" (dict "root" $ "component" "connectionProxy" "timingScope" "nginx" "probeType" "readinessProbe" "type" "https" "path" "/__healthcheck" "portName" $constants.connectionProxy.portName) | nindent 12 }}
+          {{- end }}
+          {{- if $cp.nginx.resources }}
+          resources: {{- toYaml $cp.nginx.resources | nindent 12 }}
+          {{- else }}
+          resources: {{- include "resources.preset" (dict "node" "connection-proxy-nginx" "size" $.Values.deploymentSize) | nindent 12 }}
+          {{- end }}
+          {{- include "kasm.securityContext" (list $ 1000 "container") | nindent 10 }}
+        {{- if $cp.guac.enabled }}
+        - name: {{ printf "%s-connection-proxy-guac" $.Release.Name }}
+          image: {{ $constants.connectionProxy.guac.image }}
+          imagePullPolicy: {{ $.Values.imagePullPolicy }}
+          env:
+            - name: CLUSTER_SIZE
+              value: "4"
+            - name: REGISTRATION_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $constants.secrets.name }}
+                  key: service-token
+            - name: ZONE
+              value: {{ $zone.name | quote }}
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: HOSTNAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: SERVER_ADDRESS
+              value: "$(HOSTNAME).{{ $cpSvc }}.$(POD_NAMESPACE).svc.cluster.local"
+            - name: SERVER_PORT
+              value: {{ $constants.connectionProxy.nginxPort | quote }}
+            - name: API_SCHEMA
+              value: "http"
+            {{/*
+              Connection proxies must reach the manager's /manager_api/ endpoint
+              (support-bundle uploads) as well as /api/ (registration/heartbeat).
+              Only the kasm-proxy nginx service serves both on one port, so point
+              the API endpoint at the Kasm Proxy rather than the api (CherryPy) service.
+            */}}
+            - name: API_HOSTNAME
+              value: {{ printf "%s-%s" $constants.proxy.svc (include "kasm.zoneName" $zone.name) | quote }}
+            - name: API_PORT
+              value: {{ $constants.proxy.http | quote }}
+            - name: KASM_EPHEMERAL
+              value: "true"
+          ports:
+            - name: {{ $constants.connectionProxy.guac.portName }}
+              containerPort: {{ $constants.connectionProxy.guac.port }}
+              protocol: TCP
+          volumeMounts:
+            - name: tmp-data
+              mountPath: /tmp
+            - name: kasm-connection-proxy-guac-log
+              mountPath: /opt/kasm/current/log
+              readOnly: true
+            - name: kasm-connection-proxy-guac-data
+              mountPath: /opt/kasm/current/tmp/guac
+            {{- include "kasm.trustedCaVolumeMounts" $ | nindent 12 }}
+            {{- with $merged.containerMounts }}
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- if $.Values.applyHealthChecks }}
+          livenessProbe:
+            {{- include "health.probe" (dict "root" $ "component" "connectionProxy" "timingScope" "guac" "probeType" "livenessProbe" "type" "tcp" "portName" $constants.connectionProxy.guac.portName) | nindent 12 }}
+          readinessProbe:
+            {{- include "health.probe" (dict "root" $ "component" "connectionProxy" "timingScope" "guac" "probeType" "readinessProbe" "type" "http" "path" "/__healthcheck" "portName" $constants.connectionProxy.guac.portName) | nindent 12 }}
+          {{- end }}
+          {{- if $cp.guac.resources }}
+          resources: {{- toYaml $cp.guac.resources | nindent 12 }}
+          {{- else }}
+          resources: {{- include "resources.preset" (dict "node" "connection-proxy-guac" "size" $.Values.deploymentSize) | nindent 12 }}
+          {{- end }}
+          {{- include "kasm.securityContext" (list $ 1000 "container") | nindent 10 }}
+        {{- end }}
+        {{- if $cp.rdpGateway.enabled }}
+        - name: {{ printf "%s-connection-proxy-rdp-gateway" $.Release.Name }}
+          image: {{ $constants.connectionProxy.rdpGateway.image }}
+          imagePullPolicy: {{ $.Values.imagePullPolicy }}
+          {{/*
+            The rdp-gateway image declares CMD ["/start.sh"] with no ENTRYPOINT and runs as UID 1000
+            with /bin/sh, awk, sed, and cut available. Wrap it so each StatefulSet ordinal can pick
+            its own externally-reachable RDP hostname out of RDP_ACCESS_URLS (ordinal-indexed, 1-based
+            cut field). When RDP_ACCESS_URLS is empty (directRdpService disabled), SERVER_HOSTNAME keeps
+            the per-pod FQDN set via the env var below.
+          */}}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              ORD="${HOSTNAME##*-}"
+              # RDP_ACCESS_URLS is a comma-separated, ordinal-ordered list; empty when directRdpService is off.
+              # Only override SERVER_HOSTNAME if this ordinal's field is non-empty, so a blank entry in the
+              # list doesn't wipe out the per-pod FQDN set via the env var below.
+              if [ -n "$RDP_ACCESS_URLS" ]; then
+                RDP_ACCESS_URL_ORDINAL="$(echo "$RDP_ACCESS_URLS" | cut -d, -f"$((ORD + 1))")"
+                if [ -n "$RDP_ACCESS_URL_ORDINAL" ]; then
+                  SERVER_HOSTNAME="$RDP_ACCESS_URL_ORDINAL"
+                fi
+              fi
+              export SERVER_HOSTNAME
+              exec /start.sh
+          env:
+            - name: SERVER_ZONE_NAME
+              value: {{ $zone.name | quote }}
+            - name: REGISTRATION_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $constants.secrets.name }}
+                  key: service-token
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: HOSTNAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: SERVER_HOSTNAME
+              value: "$(HOSTNAME).{{ $cpSvc }}.$(POD_NAMESPACE).svc.cluster.local"
+            - name: RDP_ACCESS_URLS
+              value: {{ join "," $rdpAccessURLs | quote }}
+            - name: KASM_EPHEMERAL
+              value: "true"
+            - name: API_SCHEMA
+              value: "http"
+            {{/*
+              Connection proxies must reach the manager's /manager_api/ endpoint
+              (support-bundle uploads) as well as /api/ (registration/heartbeat).
+              Only the kasm-proxy nginx service serves both on one port, so point
+              the API endpoint at the Kasm Proxy rather than the api (CherryPy) service.
+            */}}
+            - name: API_HOSTNAME
+              value: {{ printf "%s-%s" $constants.proxy.svc (include "kasm.zoneName" $zone.name) | quote }}
+            - name: API_PORT
+              value: {{ $constants.proxy.http | quote }}
+            - name: API_REFRESH_INTERVAL
+              value: "30"
+            - name: SERVER_ID
+              value: "auto"
+            - name: PROXY_PORT
+              value: "3389"
+            - name: SERVER_PORT
+              value: {{ $constants.connectionProxy.nginxPort | quote }}
+            - name: SERVER_THREADS
+              value: "10"
+            - name: SESSION_WATCH_INTERVAL
+              value: "60"
+            - name: KEEPALIVE_LOOP_INTERVAL
+              value: "30"
+            - name: FORWARD_LOGS
+              value: "true"
+          ports:
+            - name: {{ $constants.connectionProxy.rdpGateway.portName }}
+              containerPort: {{ $constants.connectionProxy.rdpGateway.port }}
+              protocol: TCP
+            - name: {{ $constants.connectionProxy.rdpGateway.directPortName }}
+              containerPort: {{ $constants.connectionProxy.rdpGateway.directPort }}
+              protocol: TCP
+          {{- if $.Values.applyHealthChecks }}
+          livenessProbe:
+            {{- include "health.probe" (dict "root" $ "component" "connectionProxy" "timingScope" "rdpGateway" "probeType" "livenessProbe" "type" "tcp" "portName" $constants.connectionProxy.rdpGateway.portName) | nindent 12 }}
+          readinessProbe:
+            {{- include "health.probe" (dict "root" $ "component" "connectionProxy" "timingScope" "rdpGateway" "probeType" "readinessProbe" "type" "http" "path" "/__healthcheck" "portName" $constants.connectionProxy.rdpGateway.portName) | nindent 12 }}
+          {{- end }}
+          {{- if $cp.rdpGateway.resources }}
+          resources: {{- toYaml $cp.rdpGateway.resources | nindent 12 }}
+          {{- else }}
+          resources: {{- include "resources.preset" (dict "node" "connection-proxy-rdp-gateway" "size" $.Values.deploymentSize) | nindent 12 }}
+          {{- end }}
+          {{- include "kasm.securityContext" (list $ 1000 "container") | nindent 10 }}
+          volumeMounts:
+            - name: kasm-connection-proxy-cert
+              mountPath: /usr/local/etc/rdpproxy/rdpproxy.crt
+              subPath: tls.crt
+            - name: kasm-connection-proxy-cert
+              mountPath: /usr/local/etc/rdpproxy/rdpproxy.key
+              subPath: tls.key
+            - name: kasm-connection-proxy-rdp-gateway-data
+              mountPath: /usr/local/etc/rdpproxy/var
+            - name: kasm-connection-proxy-rdp-gateway-data
+              mountPath: /opt/kasm/current/log
+            - name: kasm-connection-proxy-rdp-gateway-data
+              mountPath: /tmp
+            - name: kasm-connection-proxy-rdp-gateway-config
+              mountPath: /usr/local/etc/rdpproxy/conf/passthrough.app.config.yaml
+              subPath: passthrough.app.config.yaml
+            {{- if $cp.rdpGateway.iniConfigMapName }}
+            - name: kasm-connection-proxy-rdp-gateway-ini
+              mountPath: /usr/local/etc/rdpproxy/conf/rdpproxy.ini
+              subPath: rdpproxy.ini
+            {{- end }}
+            {{- with $merged.containerMounts }}
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- include "kasm.trustedCaVolumeMounts" $ | nindent 12 }}
+        {{- end }}
+        {{- if $cp.rdpHttpsGateway.enabled }}
+        - name: {{ printf "%s-connection-proxy-rdp-https-gateway" $.Release.Name }}
+          image: {{ $constants.connectionProxy.rdpHttpsGateway.image }}
+          imagePullPolicy: {{ $.Values.imagePullPolicy }}
+          env:
+            - name: SERVER_ZONE_NAME
+              value: {{ $zone.name | quote }}
+            - name: REGISTRATION_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $constants.secrets.name }}
+                  key: service-token
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: HOSTNAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: SERVER_HOSTNAME
+              value: "$(HOSTNAME).{{ $cpSvc }}.$(POD_NAMESPACE).svc.cluster.local"
+            - name: KASM_EPHEMERAL
+              value: "true"
+            - name: API_SCHEMA
+              value: http
+            {{/*
+              Connection proxies must reach the manager's /manager_api/ endpoint
+              (support-bundle uploads) as well as /api/ (registration/heartbeat).
+              Only the kasm-proxy nginx service serves both on one port, so point
+              the API endpoint at the Kasm Proxy rather than the api (CherryPy) service.
+            */}}
+            - name: API_HOSTNAME
+              value: {{ printf "%s-%s" $constants.proxy.svc (include "kasm.zoneName" $zone.name) | quote }}
+            - name: API_PORT
+              value: {{ $constants.proxy.http | quote }}
+            - name: API_REFRESH_INTERVAL
+              value: "30"
+            - name: SERVER_ID
+              value: "auto"
+            - name: PROXY_PORT
+              value: "3389"
+            - name: SERVER_PORT
+              value: {{ $constants.connectionProxy.nginxPort | quote }}
+            - name: SERVER_THREADS
+              value: "10"
+            - name: SESSION_WATCH_INTERVAL
+              value: "60"
+            - name: KEEPALIVE_LOOP_INTERVAL
+              value: "30"
+            - name: FORWARD_LOGS
+              value: "true"
+          {{- if $.Values.applyHealthChecks }}
+          livenessProbe:
+            {{- include "health.probe" (dict "root" $ "component" "connectionProxy" "timingScope" "rdpHttpsGateway" "probeType" "livenessProbe" "type" "tcp" "port" $constants.connectionProxy.rdpHttpsGateway.port) | nindent 12 }}
+          readinessProbe:
+            {{- include "health.probe" (dict "root" $ "component" "connectionProxy" "timingScope" "rdpHttpsGateway" "probeType" "readinessProbe" "type" "https" "path" "/rdp-https-gateway/__healthcheck" "port" $constants.connectionProxy.rdpHttpsGateway.port) | nindent 12 }}
+          {{- end }}
+          {{- if $cp.rdpHttpsGateway.resources }}
+          resources: {{- toYaml $cp.rdpHttpsGateway.resources | nindent 12 }}
+          {{- else }}
+          resources: {{- include "resources.preset" (dict "node" "connection-proxy-rdp-https-gateway" "size" $.Values.deploymentSize) | nindent 12 }}
+          {{- end }}
+          {{- include "kasm.securityContext" (list $ 1000 "container") | nindent 10 }}
+          volumeMounts:
+            - name: kasm-connection-proxy-cert
+              mountPath: /opt/rdpgw/server.pem
+              subPath: tls.crt
+            - name: kasm-connection-proxy-cert
+              mountPath: /opt/rdpgw/key.pem
+              subPath: tls.key
+            - name: kasm-connection-proxy-rdp-https-gateway-data
+              mountPath: /opt/kasm/current/log
+            - name: kasm-connection-proxy-rdp-https-gateway-data
+              mountPath: /tmp
+            {{- if eq $.Values.logFormat "json" }}
+            - name: kasm-connection-proxy-rdp-https-gateway-app-config
+              mountPath: /opt/rdpgw/conf/rdp_https_gateway.app.config.yaml
+              subPath: rdp_https_gateway.app.config.yaml
+            {{- end }}
+            {{- with $merged.containerMounts }}
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- include "kasm.trustedCaVolumeMounts" $ | nindent 12 }}
+        {{- end }}
+        {{- with $merged.extraContainers }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      volumes:
+        - name: kasm-connection-proxy-cert
+          secret:
+            secretName: {{ $.Values.certificate.secretName | default (include "kasm.name" (list $ "cert-manager" "secret")) }}
+        - name: kasm-connection-proxy-nginx-shared
+          configMap:
+            name: {{ include "kasm.name" (list $ "nginx-shared") }}
+        - name: kasm-connection-proxy-nginx-settings
+          configMap:
+            name: {{ include "kasm.name" (list $ "cpx-nginx-settings") }}
+        - name: kasm-connection-proxy-services
+          configMap:
+            name: {{ include "kasm.name" (list $ "cpx-services") }}
+        - name: kasm-connection-proxy-nginx-data
+          emptyDir:
+            sizeLimit: 100Mi
+        - name: kasm-connection-proxy-nginx-log-tmp
+          emptyDir:
+            sizeLimit: 1Gi
+        {{- if $cp.guac.enabled }}
+        - name: kasm-connection-proxy-guac-log
+          emptyDir:
+            sizeLimit: 1Mi
+        - name: kasm-connection-proxy-guac-data
+          emptyDir:
+            sizeLimit: 256Mi
+        {{- end }}
+        {{- if $cp.rdpGateway.enabled }}
+        - name: kasm-connection-proxy-rdp-gateway-data
+          emptyDir:
+            sizeLimit: 1Gi
+        - name: kasm-connection-proxy-rdp-gateway-config
+          configMap:
+            name: {{ include "kasm.name" (list $ "cpx-rdp-gw-app-config") }}
+        {{- if $cp.rdpGateway.iniConfigMapName }}
+        - name: kasm-connection-proxy-rdp-gateway-ini
+          configMap:
+            name: {{ $cp.rdpGateway.iniConfigMapName }}
+            items:
+              - key: rdpproxy.ini
+                path: rdpproxy.ini
+        {{- end }}
+        {{- end }}
+        {{- if $cp.rdpHttpsGateway.enabled }}
+        - name: kasm-connection-proxy-rdp-https-gateway-data
+          emptyDir:
+            sizeLimit: 150Mi
+        {{- if eq $.Values.logFormat "json" }}
+        - name: kasm-connection-proxy-rdp-https-gateway-app-config
+          configMap:
+            name: {{ include "kasm.name" (list $ "cpx-rdp-https-gw-app-config") }}
+        {{- end }}
+        {{- end }}
+        {{- with $merged.volumes }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- include "kasm.trustedCaVolumes" $ | nindent 8 }}
+  {{- if $cp.guac.enabled }}
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Delete
+    whenScaled: Retain
+  volumeClaimTemplates:
+    - metadata:
+        name: tmp-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        {{- with $cp.guac.recordingData.storageClassName }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ printf "%sGi" (($cp.guac.recordingData.pvcSize | default 10) | toString) }}
+  {{- end }}
+{{- end }}
+{{- end }}

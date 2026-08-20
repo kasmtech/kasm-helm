@@ -9,7 +9,8 @@
   Call with a three-element list: (list <root context> <componentTag> <componentName>)
   where <componentTag> is e.g. .Values.components.api.image.tag and <componentName>
   is the values-path component name used in the fail message ("api", "manager",
-  "proxy", "guac", "rdpGateway", "rdpHttpsGateway", or "database").
+  "proxy", "connectionProxy.nginx", "connectionProxy.guac", "connectionProxy.rdpGateway",
+  "connectionProxy.rdpHttpsGateway", or "database").
 */}}
 {{- define "kasm.imageTag" -}}
 {{- $ctx := index . 0 -}}
@@ -28,7 +29,7 @@
 
 {{/*
   Resolve the IP address nginx's `resolver` directive should use for dynamic upstream DNS
-  resolution (proxy, guac, rdp-gateway, and rdp-https-gateway nginx sidecar ConfigMaps).
+  resolution (proxy and connection-proxy nginx ConfigMaps).
 
   Precedence:
     1. .Values.nginxResolver if explicitly set (always wins)
@@ -88,33 +89,32 @@ db:
   portName: db-pt
   image: {{ printf "%s/%s:%s" .Values.database.image.registry .Values.database.image.repository (include "kasm.imageTag" (list . .Values.database.image.tag "database")) }}
   port: {{ .Values.database.port }}
-guac:
-  component: guac
-  svc: {{ if .Values.kasmZones }}{{ printf "%s-guac-%s" .Release.Name (include "kasm.zoneName" (include "kasm.primaryZone" . | fromYaml).name) }}{{ else }}{{ printf "%s-guac-default" .Release.Name }}{{ end }}
-  portName: guac-pt
-  name: {{ if .Values.kasmZones }}{{ printf "%s-guac-%s" .Release.Name (include "kasm.zoneName" (include "kasm.primaryZone" . | fromYaml).name) }}{{ else }}{{ printf "%s-guac-default" .Release.Name }}{{ end }}
-  image: {{ printf "%s/%s:%s" .Values.components.guac.image.registry .Values.components.guac.image.repository (include "kasm.imageTag" (list . .Values.components.guac.image.tag "guac")) }}
-  port: 3000
-  nginxPort: 9000
-  ports:
-    {{- $clusterSize := ternary .Values.components.guac.guacClusterSize (include "resources.preset" (dict "node" "guac-processes" "size" .Values.deploymentSize "context" .Values)) (gt (int .Values.components.guac.guacClusterSize) 0) }}
-    {{- range $idx := until (int $clusterSize) }}
-    - {{ printf "300%d" (add $idx 1) }}
-    {{- end }}
-rdpGateway:
-  component: rdp-gateway
-  svc: {{ if .Values.kasmZones }}{{ printf "%s-rdp-gateway-%s" .Release.Name (include "kasm.zoneName" (include "kasm.primaryZone" . | fromYaml).name) }}{{ else }}{{ printf "%s-rdp-gateway-default" .Release.Name }}{{ end }}
-  portName: rdp-gw-pt
-  image: {{ printf "%s/%s:%s" .Values.components.rdpGateway.image.registry .Values.components.rdpGateway.image.repository (include "kasm.imageTag" (list . .Values.components.rdpGateway.image.tag "rdpGateway")) }}
-  port: 5555
-  nginxPort: 9001
-rdpHttpsGateway:
-  component: rdp-https-gateway
-  svc: {{ if .Values.kasmZones }}{{ printf "%s-rdp-https-gateway-%s" .Release.Name (include "kasm.zoneName" (include "kasm.primaryZone" . | fromYaml).name) }}{{ else }}{{ printf "%s-rdp-https-gateway-default" .Release.Name }}{{ end }}
-  portName: rdp-tls-ngnx-pt
-  image: {{ printf "%s/%s:%s" .Values.components.rdpHttpsGateway.image.registry .Values.components.rdpHttpsGateway.image.repository (include "kasm.imageTag" (list . .Values.components.rdpHttpsGateway.image.tag "rdpHttpsGateway")) }}
-  port: 9443
-  nginxPort: 9002
+connectionProxy:
+  component: connection-proxy
+  svc: {{ if .Values.kasmZones }}{{ printf "%s-connection-proxy-%s" .Release.Name (include "kasm.zoneName" (include "kasm.primaryZone" . | fromYaml).name) }}{{ else }}{{ printf "%s-connection-proxy-default" .Release.Name }}{{ end }}
+  portName: cp-nginx-pt
+  nginxPort: 8443
+  {{- $cp := .Values.components.connectionProxy }}
+  image: {{ if and $cp.nginx.image.registry $cp.nginx.image.repository }}{{ printf "%s/%s:%s" $cp.nginx.image.registry $cp.nginx.image.repository (include "kasm.imageTag" (list . $cp.nginx.image.tag "connectionProxy.nginx")) }}{{ end }}
+  guac:
+    port: 3000
+    portName: cp-guac-pt
+    image: {{ if and $cp.guac.image.registry $cp.guac.image.repository }}{{ printf "%s/%s:%s" $cp.guac.image.registry $cp.guac.image.repository (include "kasm.imageTag" (list . $cp.guac.image.tag "connectionProxy.guac")) }}{{ end }}
+    ports:
+      {{- $cpClusterSize := ternary $cp.guac.guacClusterSize (include "resources.preset" (dict "node" "guac-processes" "size" .Values.deploymentSize "context" .Values)) (gt (int $cp.guac.guacClusterSize) 0) }}
+      {{- range $idx := until (int $cpClusterSize) }}
+      - {{ printf "300%d" (add $idx 1) }}
+      {{- end }}
+  rdpGateway:
+    port: 5555
+    portName: cp-rdp-gw-pt
+    directPort: 3389
+    directPortName: cp-rdp-drct-pt
+    image: {{ if and $cp.rdpGateway.image.registry $cp.rdpGateway.image.repository }}{{ printf "%s/%s:%s" $cp.rdpGateway.image.registry $cp.rdpGateway.image.repository (include "kasm.imageTag" (list . $cp.rdpGateway.image.tag "connectionProxy.rdpGateway")) }}{{ end }}
+  rdpHttpsGateway:
+    port: 9443
+    portName: cp-rdp-tls-pt
+    image: {{ if and $cp.rdpHttpsGateway.image.registry $cp.rdpHttpsGateway.image.repository }}{{ printf "%s/%s:%s" $cp.rdpHttpsGateway.image.registry $cp.rdpHttpsGateway.image.repository (include "kasm.imageTag" (list . $cp.rdpHttpsGateway.image.tag "connectionProxy.rdpHttpsGateway")) }}{{ end }}
 {{- end }}
 
 {{/*
@@ -244,6 +244,116 @@ true
 {{- end -}}
 
 {{/*
+  Resolve directRdpService.perServiceSettings entries for one zone, WITHOUT validation (no `fail` calls).
+  Validation lives in kasm.directRdpServiceValidateZone, called only from connection-proxy-services.yaml,
+  so any render failure always attributes to that template (helm-unittest's failedTemplate assertions
+  require the failure to originate from the template under test, and Helm renders every template file in
+  one pass, so a `fail` reachable from two files could attribute to whichever one Go evaluates first).
+
+  Call with (list <root context> <zone name>); returns a YAML array (parse with fromYamlArray) of
+  perServiceSettings-shaped entries. List order is the ordinal (index 0 is pod ordinal 0, etc), scoped to
+  entries for this zone.
+
+  With exactly one primary-region zone, every entry applies regardless of its `zone` field -- backward
+  compatible with configs from before multi-zone support, where `zone` was never set. With more than one
+  primary-region zone, only entries whose `zone` field matches this zone name are included; position
+  within that filtered subset is the ordinal, so entries for other zones interleaved in the list don't
+  shift it.
+*/}}
+{{- define "kasm.directRdpEntriesForZone" -}}
+{{- $ctx := index . 0 -}}
+{{- $zoneName := index . 1 -}}
+{{- $zoneCount := len (include "kasm.primaryRegionZones" $ctx | fromYamlArray) -}}
+{{- $flat := $ctx.Values.directRdpService.perServiceSettings | default list -}}
+{{- $entries := list -}}
+{{- if le $zoneCount 1 -}}
+  {{- if $flat -}}
+    {{- $entries = $flat -}}
+  {{- else if $ctx.Values.directRdpService.rdpAccessURL -}}
+    {{- $entries = list (dict "rdpAccessURL" $ctx.Values.directRdpService.rdpAccessURL) -}}
+  {{- end -}}
+{{- else -}}
+  {{- range $flat -}}
+    {{- if eq (.zone | default "") $zoneName -}}
+      {{- $entries = append $entries . -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+{{- $entries | toYaml -}}
+{{- end -}}
+
+{{/*
+  Validate directRdpService settings for one zone against components.connectionProxy's replica count.
+  Call with (list <root context> <zone name>). No-op when directRdpService is disabled. Only called from
+  connection-proxy-services.yaml -- see kasm.directRdpEntriesForZone for why that matters.
+
+  With more than one primary-region zone, a flat list without a `zone` per entry can't express distinct
+  addresses per zone, so the legacy singular rdpAccessURL and zone-less perServiceSettings entries are
+  rejected outright rather than silently reused across every zone.
+*/}}
+{{- define "kasm.directRdpServiceValidateZone" -}}
+{{- $ctx := index . 0 -}}
+{{- $zoneName := index . 1 -}}
+{{- if $ctx.Values.directRdpService.enabled -}}
+  {{- $constants := include "kasm.constants" $ctx | fromYaml -}}
+  {{- $cp := $ctx.Values.components.connectionProxy -}}
+  {{- $cpReplicas := ternary $cp.replicas (include "replicas.preset" (dict "node" $constants.connectionProxy.component "size" $ctx.Values.deploymentSize)) (gt (int $cp.replicas) 0) -}}
+  {{- $zoneCount := len (include "kasm.primaryRegionZones" $ctx | fromYamlArray) -}}
+  {{- $multiZone := gt $zoneCount 1 -}}
+  {{- $flat := $ctx.Values.directRdpService.perServiceSettings | default list -}}
+  {{- if $multiZone -}}
+    {{- if $ctx.Values.directRdpService.rdpAccessURL -}}
+      {{- fail (printf "directRdpService.rdpAccessURL (legacy singular) cannot be used with more than one primary-region zone (%d configured): set a zone field on every directRdpService.perServiceSettings entry instead." $zoneCount) -}}
+    {{- end -}}
+    {{- $validZones := dict -}}
+    {{- range (include "kasm.primaryRegionZones" $ctx | fromYamlArray) -}}
+      {{- $validZones = set $validZones .name true -}}
+    {{- end -}}
+    {{- range $i, $entry := $flat -}}
+      {{- $entryZone := $entry.zone | default "" -}}
+      {{- if not $entryZone -}}
+        {{- fail (printf "directRdpService.perServiceSettings[%d] has no zone set, but %d primary-region zones are configured. Every entry needs a zone field naming which zone it belongs to." $i $zoneCount) -}}
+      {{- end -}}
+      {{- if not (hasKey $validZones $entryZone) -}}
+        {{- fail (printf "directRdpService.perServiceSettings[%d].zone %q does not match any configured primary-region zone." $i $entryZone) -}}
+      {{- end -}}
+    {{- end -}}
+  {{- else -}}
+    {{- if and $ctx.Values.directRdpService.rdpAccessURL $flat -}}
+      {{- fail "directRdpService.rdpAccessURL (legacy singular) and directRdpService.perServiceSettings are both set. This is ambiguous: remove rdpAccessURL and configure every replica via perServiceSettings instead." -}}
+    {{- end -}}
+    {{- if and $ctx.Values.directRdpService.rdpAccessURL (gt (int $cpReplicas) 1) -}}
+      {{- fail (printf "directRdpService.rdpAccessURL (legacy singular) is set but components.connectionProxy has %d replica(s). The legacy singular URL is only honored at 1 replica: move to directRdpService.perServiceSettings, with one ordinal-indexed entry per replica." (int $cpReplicas)) -}}
+    {{- end -}}
+  {{- end -}}
+  {{- $entries := include "kasm.directRdpEntriesForZone" (list $ctx $zoneName) | fromYamlArray -}}
+  {{- if lt (len $entries) (int $cpReplicas) -}}
+    {{- if $multiZone -}}
+      {{- fail (printf "directRdpService.enabled is true but only %d entr(y/ies) are configured for zone %q while components.connectionProxy has %d replica(s). Each connection-proxy replica needs its own externally reachable RDP address: add more directRdpService.perServiceSettings entries with zone: %s." (len $entries) $zoneName (int $cpReplicas) $zoneName) -}}
+    {{- else -}}
+      {{- fail (printf "directRdpService.enabled is true but only %d entr(y/ies) are configured in directRdpService.perServiceSettings (or the legacy singular directRdpService.rdpAccessURL) while components.connectionProxy has %d replica(s). Each connection-proxy replica needs its own externally reachable RDP address: set directRdpService.perServiceSettings to a list with at least %d entries, ordinal-indexed (perServiceSettings[0] for pod ordinal 0, perServiceSettings[1] for ordinal 1, etc)." (len $entries) (int $cpReplicas) (int $cpReplicas)) -}}
+    {{- end -}}
+  {{- end -}}
+  {{- range $i, $entry := $entries -}}
+    {{- if not (hasKey $entry "rdpAccessURL") -}}
+      {{- if $multiZone -}}
+        {{- fail (printf "directRdpService.perServiceSettings has no rdpAccessURL for zone %q ordinal %d." $zoneName $i) -}}
+      {{- else -}}
+        {{- fail (printf "directRdpService.perServiceSettings[%d] is missing the required key rdpAccessURL." $i) -}}
+      {{- end -}}
+    {{- end -}}
+    {{- if not (trim ($entry.rdpAccessURL | toString)) -}}
+      {{- if $multiZone -}}
+        {{- fail (printf "directRdpService.perServiceSettings has an empty rdpAccessURL for zone %q ordinal %d. Each connection-proxy replica needs its own non-empty externally reachable RDP address." $zoneName $i) -}}
+      {{- else -}}
+        {{- fail (printf "directRdpService.perServiceSettings[%d].rdpAccessURL is empty. Each connection-proxy replica needs its own non-empty externally reachable RDP address." $i) -}}
+      {{- end -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
   Pre-upgrade DB backup PVC name. Embeds Chart.AppVersion with dots replaced
   so the resulting name is safe for DNS-1035 contexts and matches the
   normalization used for the DB StatefulSet name.
@@ -345,12 +455,6 @@ Where:
   {{- end -}}
 {{- end -}}
 
-{{- if and (eq $component "rdpGateway") (eq $resource "service") -}}
-  {{- with $ctx.Values.directRdpService.labels -}}
-    {{- $labels = merge $labels . -}}
-  {{- end -}}
-{{- end -}}
-
 {{- if eq $resource "ingress" -}}
   {{- with $ctx.Values.ingress.labels -}}
     {{- $labels = merge $labels . -}}
@@ -428,12 +532,6 @@ Where:
   {{- with (get $ctx.Values.extraAnnotations .resource) -}}
     {{- $annotations = merge $annotations . -}}
   {{- end }}
-{{- end -}}
-
-{{- if and (eq $component "rdpGateway") (eq $resource "service") -}}
-  {{- with $ctx.Values.directRdpService.annotations -}}
-    {{- $annotations = merge $annotations . -}}
-  {{- end -}}
 {{- end -}}
 
 {{- if and (or (eq $component "proxy") (eq $component "proxy-ext")) (eq $resource "service") -}}
@@ -984,17 +1082,7 @@ successThreshold: {{ $successThreshold }}
     "medium" 2
     "large" 3
   )
-  "guac" (dict
-    "small" 1
-    "medium" 2
-    "large" 3
-  )
-  "rdp-gateway" (dict
-    "small" 1
-    "medium" 1
-    "large" 1
-  )
-  "rdp-https-gateway" (dict
+  "connection-proxy" (dict
     "small" 1
     "medium" 2
     "large" 3
@@ -1081,49 +1169,21 @@ successThreshold: {{ $successThreshold }}
       )
     )
     "guac-processes" (dict "small" 4 "medium" 6 "large" 8)
-    "guac" (dict
-      "small" (dict 
-        "requests" (dict "cpu" "1000m" "memory" "512Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "1000m" "memory" "1Gi" "ephemeral-storage" "2Gi")
-      )
-      "medium" (dict 
-        "requests" (dict "cpu" "1500m" "memory" "512Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "1500m" "memory" "2Gi" "ephemeral-storage" "2Gi")
-      )
-      "large" (dict 
-        "requests" (dict "cpu" "2000m" "memory" "1Gi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "2000m" "memory" "4Gi" "ephemeral-storage" "2Gi")
-      )
-    )
-    "rdp-gateway" (dict
-      "small" (dict 
-        "requests" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
-      )
-      "medium" (dict 
-        "requests" (dict "cpu" "1000m" "memory" "512Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "1000m" "memory" "512Mi" "ephemeral-storage" "2Gi")
-      )
-      "large" (dict 
-        "requests" (dict "cpu" "1500m" "memory" "512Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "1500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
-      )
-    )
-    "rdp-https-gateway" (dict
+    "nginx-conf-init" (dict
       "small" (dict
-        "requests" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
+        "requests" (dict "cpu" "100m" "memory" "64Mi")
+        "limits" (dict "cpu" "100m" "memory" "64Mi")
       )
       "medium" (dict
-        "requests" (dict "cpu" "1000m" "memory" "512Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "1000m" "memory" "512Mi" "ephemeral-storage" "2Gi")
+        "requests" (dict "cpu" "100m" "memory" "64Mi")
+        "limits" (dict "cpu" "100m" "memory" "64Mi")
       )
       "large" (dict
-        "requests" (dict "cpu" "1500m" "memory" "512Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "1500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
+        "requests" (dict "cpu" "100m" "memory" "64Mi")
+        "limits" (dict "cpu" "100m" "memory" "64Mi")
       )
     )
-    "nginx-sidecar" (dict
+    "connection-proxy-nginx" (dict
       "small" (dict
         "requests" (dict "cpu" "500m" "memory" "256Mi")
         "limits" (dict "cpu" "500m" "memory" "256Mi")
@@ -1137,18 +1197,46 @@ successThreshold: {{ $successThreshold }}
         "limits" (dict "cpu" "1000m" "memory" "512Mi")
       )
     )
-    "nginx-conf-init" (dict
+    "connection-proxy-guac" (dict
       "small" (dict
-        "requests" (dict "cpu" "100m" "memory" "64Mi")
-        "limits" (dict "cpu" "100m" "memory" "64Mi")
+        "requests" (dict "cpu" "1000m" "memory" "512Mi" "ephemeral-storage" "50Mi")
+        "limits" (dict "cpu" "1000m" "memory" "1Gi" "ephemeral-storage" "2Gi")
       )
       "medium" (dict
-        "requests" (dict "cpu" "100m" "memory" "64Mi")
-        "limits" (dict "cpu" "100m" "memory" "64Mi")
+        "requests" (dict "cpu" "1500m" "memory" "512Mi" "ephemeral-storage" "50Mi")
+        "limits" (dict "cpu" "1500m" "memory" "2Gi" "ephemeral-storage" "2Gi")
       )
       "large" (dict
-        "requests" (dict "cpu" "100m" "memory" "64Mi")
-        "limits" (dict "cpu" "100m" "memory" "64Mi")
+        "requests" (dict "cpu" "2000m" "memory" "1Gi" "ephemeral-storage" "50Mi")
+        "limits" (dict "cpu" "2000m" "memory" "4Gi" "ephemeral-storage" "2Gi")
+      )
+    )
+    "connection-proxy-rdp-gateway" (dict
+      "small" (dict
+        "requests" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "50Mi")
+        "limits" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
+      )
+      "medium" (dict
+        "requests" (dict "cpu" "1000m" "memory" "512Mi" "ephemeral-storage" "50Mi")
+        "limits" (dict "cpu" "1000m" "memory" "512Mi" "ephemeral-storage" "2Gi")
+      )
+      "large" (dict
+        "requests" (dict "cpu" "1500m" "memory" "512Mi" "ephemeral-storage" "50Mi")
+        "limits" (dict "cpu" "1500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
+      )
+    )
+    "connection-proxy-rdp-https-gateway" (dict
+      "small" (dict
+        "requests" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "50Mi")
+        "limits" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
+      )
+      "medium" (dict
+        "requests" (dict "cpu" "1000m" "memory" "512Mi" "ephemeral-storage" "50Mi")
+        "limits" (dict "cpu" "1000m" "memory" "512Mi" "ephemeral-storage" "2Gi")
+      )
+      "large" (dict
+        "requests" (dict "cpu" "1500m" "memory" "512Mi" "ephemeral-storage" "50Mi")
+        "limits" (dict "cpu" "1500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
       )
     )
   }}

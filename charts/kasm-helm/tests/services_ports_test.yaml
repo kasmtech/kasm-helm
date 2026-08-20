@@ -3,12 +3,10 @@ suite: service ports, types, and zone fan-out
 templates:
   - templates/api-service.yaml
   - templates/manager-service.yaml
-  - templates/guac-service.yaml
   - templates/db-service.yaml
   - templates/proxy-service.yaml
   - templates/proxy-service-external.yaml
-  - templates/rdp-gateway-service.yaml
-  - templates/rdp-https-gateway-service.yaml
+  - templates/connection-proxy-services.yaml
 
 tests:
   - it: api Service exposes port 8080/TCP
@@ -90,96 +88,98 @@ tests:
           path: spec.ports[0].targetPort
           value: proxy-pt-https
 
-  - it: guac Service is headless and exposes only the nginx sidecar port 9000
-    template: templates/guac-service.yaml
+  # guac, rdp-gateway, and rdp-https-gateway previously exposed separate Services on
+  # separate nginx sidecar ports (9000/9001/9002). They now share one consolidated
+  # nginx container on port 8443, fronted by a single headless Service. The three
+  # app ports (3000/5555/9443) never appear on this Service — they're localhost-only
+  # inside the pod and are reached exclusively through the 8443 nginx listener.
+  - it: connection-proxy headless Service is headless and exposes only the consolidated nginx port 8443
+    template: templates/connection-proxy-services.yaml
+    documentIndex: 0
+    values:
+      - ../../../tests/values/components-all.yaml
     asserts:
+      - isKind:
+          of: Service
       - equal:
           path: spec.clusterIP
           value: None
       - equal:
           path: spec.ports[0].port
-          value: 9000
+          value: 8443
       - notExists:
           path: spec.ports[1]
 
-  - it: rdp gateway Service is rendered when component enabled (default)
-    template: templates/rdp-gateway-service.yaml
+  - it: direct RDP Service is not rendered when directRdpService.enabled=false (default)
+    template: templates/connection-proxy-services.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  - it: direct RDP Service renders per replica ordinal and is LoadBalancer by default type, targeting 3389
+    template: templates/connection-proxy-services.yaml
+    documentIndex: 1
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      directRdpService:
+        enabled: true
+        type: LoadBalancer
+        perServiceSettings:
+          - rdpAccessURL: rdp0.example.com
     asserts:
       - isKind:
           of: Service
-
-  - it: rdp gateway Service is ClusterIP by default and exposes nginx :9001 + RDP :3389 (5555 stays intra-pod)
-    template: templates/rdp-gateway-service.yaml
-    asserts:
       - equal:
-          path: spec.type
-          value: ClusterIP
-      - equal:
-          path: spec.ports[0].port
-          value: 9001
-      - equal:
-          path: spec.ports[0].targetPort
-          value: 9001
-      - equal:
-          path: spec.ports[1].port
-          value: 3389
-      - equal:
-          path: spec.ports[1].targetPort
-          value: 3389
-      # The app port (5555) must NOT appear on the Service. Cross-pod
-      # consumers (notably the proxy wait-for-rdp-gateway init container) talk
-      # to the nginx sidecar on 9001 which proxies /__healthcheck through to
-      # the app on localhost. Putting 5555 on the Service publishes the app
-      # port to any LoadBalancer/NodePort exposure (directRdpService=true) and
-      # bypasses the sidecar contract — both regressions we don't want.
-      - notExists:
-          path: spec.ports[2]
-
-  - it: rdp gateway Service becomes LoadBalancer when directRdpService.enabled=true
-    template: templates/rdp-gateway-service.yaml
-    set:
-      directRdpService:
-        enabled: true
-        rdpAccessURL: rdp.example.com
-        type: LoadBalancer
-    asserts:
+          path: metadata.name
+          value: RELEASE-NAME-connection-proxy-default-rdp-0
       - equal:
           path: spec.type
           value: LoadBalancer
+      - equal:
+          path: spec.ports[0].port
+          value: 3389
+      - equal:
+          path: spec.ports[0].targetPort
+          value: 3389
 
-  - it: rdp gateway Service becomes NodePort when directRdpService.type=NodePort
-    template: templates/rdp-gateway-service.yaml
+  - it: direct RDP Service becomes NodePort when directRdpService.type=NodePort
+    template: templates/connection-proxy-services.yaml
+    documentIndex: 1
+    values:
+      - ../../../tests/values/components-all.yaml
     set:
       directRdpService:
         enabled: true
-        rdpAccessURL: rdp.example.com
         type: NodePort
+        perServiceSettings:
+          - rdpAccessURL: rdp0.example.com
     asserts:
       - equal:
           path: spec.type
           value: NodePort
 
-  - it: rdp gateway Service public RDP port is configurable via directRdpService.loadBalancerPort
-    template: templates/rdp-gateway-service.yaml
+  - it: direct RDP Service public port is configurable via directRdpService.loadBalancerPort
+    template: templates/connection-proxy-services.yaml
+    documentIndex: 1
+    values:
+      - ../../../tests/values/components-all.yaml
     set:
       directRdpService:
         enabled: true
-        rdpAccessURL: rdp.example.com
         type: LoadBalancer
         loadBalancerPort: 443
+        perServiceSettings:
+          - rdpAccessURL: rdp0.example.com
     asserts:
       - equal:
-          path: spec.ports[1].port
+          path: spec.ports[0].port
           value: 443
       - equal:
-          path: spec.ports[1].targetPort
+          path: spec.ports[0].targetPort
           value: 3389
-
-  - it: rdp https gateway Service is rendered when component enabled (default)
-    template: templates/rdp-https-gateway-service.yaml
-    asserts:
-      - isKind:
-          of: Service
 
   - it: api Service fans out one Service per kasmZone
     template: templates/api-service.yaml
@@ -229,13 +229,17 @@ tests:
           path: metadata.name
           value: RELEASE-NAME-proxy-zoneb
 
-  - it: guac Service uses the primary zone name in multizone deployments
-    template: templates/guac-service.yaml
+  # connection-proxy (like the old guac/rdp-gateway/rdp-https-gateway) only deploys in
+  # primary-region zones, so it renders one document for the primary zone even when
+  # more than one kasmZone is configured.
+  - it: connection-proxy headless Service uses the primary zone name in multizone deployments
+    template: templates/connection-proxy-services.yaml
     values:
       - ../../../tests/values/multizone-config.yaml
+      - ../../../tests/values/components-all.yaml
     asserts:
       - hasDocuments:
           count: 1
       - equal:
           path: metadata.name
-          value: RELEASE-NAME-guac-zonea
+          value: RELEASE-NAME-connection-proxy-zonea
