@@ -87,6 +87,25 @@ def helm(command_args: list[str], *, check: bool = True) -> CommandResult:
     return run_command(["helm"] + command_args, timeout_seconds=900, check=check)
 
 
+def api_image_override_args() -> list[str]:
+    """--set args overriding the api component's image, if KASM_API_IMAGE is set.
+
+    Mirrors the split kind-load-images uses (Makefile's `${KASM_API_IMAGE%:*}`
+    / `${KASM_API_IMAGE##*:}`) so the same image reference resolves to the
+    same repository/tag for both the images kind pulls and the chart install.
+    """
+    image = os.environ.get("KASM_API_IMAGE")
+    if not image:
+        return []
+    repository, _, tag = image.rpartition(":")
+    if not repository:
+        repository, tag = tag, ""
+    args = ["--set", f"components.api.image.repository={repository}"]
+    if tag:
+        args += ["--set", f"components.api.image.tag={tag}"]
+    return args
+
+
 def get_api_image() -> str:
     image = os.environ.get("KASM_API_IMAGE")
     if image:

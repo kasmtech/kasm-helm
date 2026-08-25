@@ -67,6 +67,8 @@ api:
   portName: api-pt
   image: {{ printf "%s/%s:%s" .Values.components.api.image.registry .Values.components.api.image.repository (include "kasm.imageTag" (list . .Values.components.api.image.tag "api")) }}
   port: 8080
+  livenessPortName: api-liveness-pt
+  livenessPort: 8081
 manager:
   component: manager
   svc: {{ printf "%s-manager" .Release.Name }}
@@ -687,7 +689,7 @@ securityContext:
     component: Component selector used to locate healthCheckTiming in values.yaml. Standard components resolve from:
                 .Values.components.<component>.healthCheckTiming. The database component is special-cased: component: db
                 resolves from: .Values.database.healthCheckTiming
-    probeType: Probe timing selector under healthCheckTiming. Expected values: livenessProbe, readinessProbe type: Kubernetes
+    probeType: Probe timing selector under healthCheckTiming. Expected values: livenessProbe, readinessProbe, startupProbe type: Kubernetes
               probe implementation type. Allowed values: http, https, tcp, command
 
   Optional args:

@@ -284,6 +284,8 @@ data:
       zone_name: default
       sanitize_errors: true
       internal_schema: https
+      liveness_port: {{ $constants.api.livenessPort }}
+      liveness_stall_seconds: 90
     share:
       share_id: null
 {{- end }}

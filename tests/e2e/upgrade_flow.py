@@ -11,6 +11,7 @@ import yaml
 
 from .conftest import E2EConfig
 from .helpers import (
+    api_image_override_args,
     assert_login_page,
     curl_from_pod,
     get_chart_app_version,
@@ -547,6 +548,7 @@ def run_upgrade_flow(
         "-n", namespace,
         "--timeout", "15m",
         "--set", "imagePullPolicy=Never",
+        *api_image_override_args(),
         "-f", str(upgrade_values_path),
     ])
 

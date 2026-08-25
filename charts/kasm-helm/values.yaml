@@ -584,11 +584,17 @@ components:
       tag: ""
     # components.api.replicas -- Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset (default).
     replicas: 0
-    # components.api.healthCheckTiming -- Override the pod's default healthcheck timing values for liveness and/or readiness probes.
-    #  Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only
-    #  the timeoutSeconds value of the livenessProbe.
+    # components.api.healthCheckTiming -- Override the pod's default healthcheck timing values for startup, liveness, and/or
+    #  readiness probes. Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10
+    #  will override only the timeoutSeconds value of the livenessProbe. Migrations run before this pod's main container ever
+    #  starts (a separate initContainer blocks until the DB is at head), so the startupProbe only needs to cover the api
+    #  process's own boot (a bounded DB connectivity retry plus imports/settings load); its failureThreshold * periodSeconds
+    #  is a safety margin, not a migration budget.
     #  Example:
     #    healthCheckTiming:
+    #      startupProbe:
+    #        periodSeconds: 10
+    #        failureThreshold: 60
     #      livenessProbe:
     #        timeoutSeconds: 10
     #        initialDelaySeconds: 20
@@ -598,7 +604,11 @@ components:
     #        periodSeconds: 60
     #        successThreshold: 3
     healthCheckTiming:
-      livenessProbe: {}
+      startupProbe:
+        periodSeconds: 10
+        failureThreshold: 18
+      livenessProbe:
+        periodSeconds: 10
       readinessProbe: {}
     # components.api.annotations -- Custom annotations to add to the Kasm api Deployment
     annotations: {}
