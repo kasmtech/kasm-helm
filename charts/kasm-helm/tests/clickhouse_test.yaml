@@ -68,7 +68,7 @@ tests:
   - it: PVC size honours storage.pvcSize
     template: templates/clickhouse-statefulset.yaml
     set:
-      observability.clickhouse.storage.pvcSize: 100
+      components.clickhouse.storage.pvcSize: 100
     asserts:
       - equal:
           path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
@@ -77,7 +77,7 @@ tests:
   - it: PVC storageClass honoured
     template: templates/clickhouse-statefulset.yaml
     set:
-      observability.clickhouse.storage.storageClassName: fast-ssd
+      components.clickhouse.storage.storageClassName: fast-ssd
     asserts:
       - equal:
           path: spec.volumeClaimTemplates[0].spec.storageClassName

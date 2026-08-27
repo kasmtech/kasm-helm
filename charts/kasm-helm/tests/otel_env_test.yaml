@@ -41,30 +41,49 @@ tests:
       - exists:
           path: spec.template.spec.containers[3].env[?(@.name=="OTEL_SERVICE_NAME" && @.value=="kasm-rdp-https-gateway")]
 
-  # ---------- endpoint points at the per-zone collector Service ----------
-  - it: api OTEL_EXPORTER_OTLP_ENDPOINT points at the default-zone forwarder Collector
+  # ---------- endpoint: forwarder Service for pods without a sidecar, loopback for pods with one ----------
+  - it: api exports to the cluster-wide forwarder Service
     template: templates/api-deployment.yaml
     asserts:
       - exists:
-          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_EXPORTER_OTLP_ENDPOINT" && @.value=="http://RELEASE-NAME-otel-collector-default:4318")]
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_EXPORTER_OTLP_ENDPOINT" && @.value=="http://RELEASE-NAME-otel-forwarder:4318")]
 
-  - it: api OTEL_EXPORTER_OTLP_ENDPOINT is zone-scoped with two kasmZones
+  # Zones no longer select an endpoint; there is one forwarder and zone identity travels as a
+  # resource attribute on the telemetry instead.
+  - it: api endpoint is identical in a multi-zone install
     template: templates/api-deployment.yaml
     values:
       - ../../../tests/values/multizone-config.yaml
     documentIndex: 0
     asserts:
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_EXPORTER_OTLP_ENDPOINT" && @.value=="http://RELEASE-NAME-otel-forwarder:4318")]
       - matchRegex:
-          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_EXPORTER_OTLP_ENDPOINT")].value
-          pattern: "http://RELEASE-NAME-otel-collector-zonea:4318"
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_RESOURCE_ATTRIBUTES")].value
+          pattern: "kasm\\.zone=zonea"
 
-  - it: api endpoint follows externalEndpoint when set
+  - it: api endpoint follows forwarder.externalEndpoint when set
     template: templates/api-deployment.yaml
     set:
-      observability.collector.externalEndpoint: http://alloy.observability:4318
+      observability.collector.forwarder.externalEndpoint: http://alloy.observability:4318
     asserts:
       - exists:
           path: spec.template.spec.containers[0].env[?(@.name=="OTEL_EXPORTER_OTLP_ENDPOINT" && @.value=="http://alloy.observability:4318")]
+
+  # Containers co-located with a sidecar export to it over loopback; the sidecar is the pod's
+  # single egress point.
+  - it: guac, rdp-gateway and rdp-https-gateway export to the pod-local sidecar
+    template: templates/connection-proxy-statefulset.yaml
+    documentIndex: 0
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[1].env[?(@.name=="OTEL_EXPORTER_OTLP_ENDPOINT" && @.value=="http://localhost:4318")]
+      - exists:
+          path: spec.template.spec.containers[2].env[?(@.name=="OTEL_EXPORTER_OTLP_ENDPOINT" && @.value=="http://localhost:4318")]
+      - exists:
+          path: spec.template.spec.containers[3].env[?(@.name=="OTEL_EXPORTER_OTLP_ENDPOINT" && @.value=="http://localhost:4318")]
 
   # ---------- OTEL_PYTHON_EXCLUDED_URLS only on api+manager ----------
   - it: OTEL_PYTHON_EXCLUDED_URLS present on api
@@ -149,27 +168,23 @@ tests:
       - notExists:
           path: spec.template.spec.containers[0].env[?(@.name=="OTEL_SERVICE_NAME")]
 
-  # ---------- fileLogs.enabled=true yields true + KASM_LOG_FILE_PATH ----------
-  - it: fileLogs.enabled=true yields KASM_LOG_FILE_ENABLED=true and KASM_LOG_FILE_PATH on api
+  # ---------- file logging is always off ----------
+  # Kasm services export logs over OTLP. A file-shaped copy inside the pod would store every line
+  # twice, so KASM_LOG_FILE_ENABLED is false everywhere and KASM_LOG_FILE_PATH is never emitted.
+  - it: KASM_LOG_FILE_PATH is never set on api
     template: templates/api-deployment.yaml
-    set:
-      observability.fileLogs.enabled: true
     asserts:
-      - exists:
-          path: spec.template.spec.containers[0].env[?(@.name=="KASM_LOG_FILE_ENABLED" && @.value=="true")]
-      - exists:
-          path: spec.template.spec.containers[0].env[?(@.name=="KASM_LOG_FILE_PATH" && @.value=="/opt/kasm/current/log/kasm-api.log")]
+      - notExists:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_LOG_FILE_PATH")]
 
-  - it: fileLogs.enabled=true but component removed from the list falls back to false
-    template: templates/api-deployment.yaml
-    set:
-      observability.fileLogs.enabled: true
-      observability.fileLogs.components:
-        - manager
-        - guac
+  - it: KASM_LOG_FILE_PATH is never set on guac
+    template: templates/connection-proxy-statefulset.yaml
+    documentIndex: 0
+    values:
+      - ../../../tests/values/components-all.yaml
     asserts:
-      - exists:
-          path: spec.template.spec.containers[0].env[?(@.name=="KASM_LOG_FILE_ENABLED" && @.value=="false")]
+      - notExists:
+          path: spec.template.spec.containers[1].env[?(@.name=="KASM_LOG_FILE_PATH")]
 
   # ---------- KASM_CLICKHOUSE_* on api+manager only ----------
   - it: KASM_CLICKHOUSE_ENDPOINT present on api

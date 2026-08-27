@@ -75,12 +75,11 @@ data:
 
   {{- if $.Values.observability.enabled }}
   otel.conf: |
-    # http-context OTel tracing for this zone's proxy nginx. Points at the per-zone
-    # forwarder Collector on 4316 (unauthenticated OTLP/gRPC) — never the cluster-wide
-    # gateway, which only exposes 4317-with-bearer and cannot be reached by
-    # ngx_otel_module (gRPC-only, cannot present a bearer token).
+    # http-context OTel tracing. Exports to the Collector sidecar in this pod over loopback:
+    # ngx_otel_module is gRPC-only and cannot present a bearer token, so it needs an
+    # unauthenticated receiver, and a loopback one is unreachable from anywhere else.
     otel_exporter {
-      endpoint {{ printf "%s-otel-collector-%s" $.Release.Name (include "kasm.zoneName" $zone.name) }}:4316;
+      endpoint 127.0.0.1:{{ $constants.otel.otlpNginx }};
     }
 
     otel_service_name  kasm-proxy;
@@ -89,13 +88,12 @@ data:
 
   stub_status.conf: |
     server {
-      listen 0.0.0.0:8090;
+      listen 127.0.0.1:{{ $constants.proxyStubStatus }};
       location = /stub_status {
         otel_trace off;
         stub_status;
-        # loopback-only: the only in-cluster consumer is the optional nginxLogs sidecar,
-        # which shares this pod's network namespace. Anything else must be explicitly
-        # allowed by the operator.
+        # loopback-only: the only consumer is the Collector sidecar, which shares this pod's
+        # network namespace. Anything else must be explicitly allowed by the operator.
         allow 127.0.0.1;
         deny  all;
       }

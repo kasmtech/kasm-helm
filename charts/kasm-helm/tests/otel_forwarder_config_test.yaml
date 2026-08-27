@@ -1,7 +1,7 @@
 suite: OTel Collector config content — forwarder/gateway split regression
 
 templates:
-  - templates/otel-collector-configmap.yaml
+  - templates/otel-forwarder-configmap.yaml
   - templates/otel-gateway-configmap.yaml
 
 tests:
@@ -49,15 +49,15 @@ tests:
       - notMatchRegex:
           path: data["config.yaml"]
           pattern: "tail_sampling:"
-        template: templates/otel-collector-configmap.yaml
+        template: templates/otel-forwarder-configmap.yaml
       - notMatchRegex:
           path: data["config.yaml"]
           pattern: "clickhouse/(logs|traces|metrics):"
-        template: templates/otel-collector-configmap.yaml
+        template: templates/otel-forwarder-configmap.yaml
 
   - it: tail_sampling and each clickhouse exporter appear exactly once with forwarder replicas=3
     set:
-      observability.collector.forwarder.replicas: 3
+      components.otelForwarder.replicas: 3
     asserts:
       - matchRegex:
           path: data["config.yaml"]
@@ -94,21 +94,50 @@ tests:
       - notMatchRegex:
           path: data["config.yaml"]
           pattern: "tail_sampling:"
-        template: templates/otel-collector-configmap.yaml
+        template: templates/otel-forwarder-configmap.yaml
 
-  # ---------- forwarder points at the gateway ----------
-  - it: forwarder otlp exporter targets the gateway Service on 4317 with the bearer token
-    template: templates/otel-collector-configmap.yaml
+  # ---------- forwarder reaches the gateway through the loadbalancing exporter ----------
+  # This is what makes tail_sampling correct with more than one gateway replica: a plain otlp
+  # exporter against the gateway's ClusterIP would pin one gRPC connection to one pod and split
+  # a trace's spans across independent samplers.
+  - it: forwarder uses loadbalancing exporters resolving the headless gateway Service
+    template: templates/otel-forwarder-configmap.yaml
     asserts:
       - matchRegex:
           path: data["config.yaml"]
-          pattern: 'endpoint: "RELEASE-NAME-otel-gateway:4317"'
+          pattern: 'hostname: "RELEASE-NAME-otel-gateway-headless\.NAMESPACE\.svc\.cluster\.local"'
       - matchRegex:
           path: data["config.yaml"]
           pattern: '\$\{env:OTEL_BEARER_TOKEN\}'
+      # Traces MUST route on traceID; anything else breaks tail_sampling.
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "(?s)loadbalancing/traces:\\s+routing_key: traceID"
+      # Logs and metrics must NOT route on traceID: nginx and PostgreSQL logs carry no trace ID
+      # and would hash to a single gateway pod, and metric points have none at all.
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "(?s)loadbalancing/logs:\\s+routing_key: service"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "(?s)loadbalancing/metrics:\\s+routing_key: service"
       - notMatchRegex:
           path: data["config.yaml"]
           pattern: "filelog|nginx/metrics"
+
+  # nginx now exports to its pod-local sidecar, so no unauthenticated receiver is exposed here.
+  - it: forwarder exposes no unauthenticated 4316 receiver
+    template: templates/otel-forwarder-configmap.yaml
+    asserts:
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "4316|otlp/nginx"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'endpoint: "0.0.0.0:4318"'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'endpoint: "0.0.0.0:4317"'
 
   # ---------- no filelog/nginx receivers in the central configs ----------
   - it: no filelog or nginx/metrics receiver in the gateway config
@@ -119,10 +148,10 @@ tests:
           pattern: "filelog|nginx/metrics"
 
   # ---------- sampling_percentage tracks tailSamplePercentage ----------
-  - it: sampling_percentage tracks observability.collector.tailSamplePercentage
+  - it: sampling_percentage tracks observability.collector.gateway.tailSamplePercentage
     template: templates/otel-gateway-configmap.yaml
     set:
-      observability.collector.tailSamplePercentage: 42
+      observability.collector.gateway.tailSamplePercentage: 42
     asserts:
       - matchRegex:
           path: data["config.yaml"]
@@ -161,7 +190,7 @@ tests:
           pattern: 'password: "[^$]'
 
   - it: forwarder config references the bearer token via env substitution only
-    template: templates/otel-collector-configmap.yaml
+    template: templates/otel-forwarder-configmap.yaml
     asserts:
       - matchRegex:
           path: data["config.yaml"]
@@ -184,7 +213,7 @@ tests:
   - it: otlphttp/external is appended to all three pipelines when forwarding is set
     template: templates/otel-gateway-configmap.yaml
     set:
-      observability.collector.forward.endpoint: https://otlp-gateway.example.com/otlp
+      observability.collector.gateway.forward.endpoint: https://otlp-gateway.example.com/otlp
     asserts:
       - matchRegex:
           path: data["config.yaml"]

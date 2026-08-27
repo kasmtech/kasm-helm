@@ -10,10 +10,6 @@ connection-proxy-services — mounted at /etc/nginx/conf.d/services.d/ — conta
   connection_proxy.conf with all guac/rdp-gateway/rdp-https-gateway location blocks
 
 connection-proxy-rdp-gateway-app-config — the rdp-gateway app's own config.
-
-connection-proxy-rdp-https-gateway-app-config — the rdp-https-gateway app's own config,
-  only rendered when logFormat is "json" (matches existing rdp-https-gateway-app-configmap
-  behavior).
 */}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- $serviceKeepalive := 16 -}}
@@ -61,17 +57,30 @@ data:
     # ngx_otel_module requires an otel_exporter block wherever otel_trace/otel_span_attr are
     # used (verified: nginx -t fails with "otel_exporter block is missing" without this), so
     # connection_proxy.conf's directives need this even though not all of guac/rdp-gateway/
-    # rdp-https-gateway traffic is otherwise instrumented. Not zone-scoped (this ConfigMap is
-    # shared by every zone's connection-proxy StatefulSet, per kasm.primaryRegionZones), so this
-    # always points at the primary zone's forwarder rather than each pod's own zone — a minor
-    # cross-zone hop for pods in a non-primary zone within the same region, not a correctness bug.
+    # rdp-https-gateway traffic is otherwise instrumented.
+    #
+    # Exports to the Collector sidecar in this pod over loopback, so this ConfigMap no longer has
+    # to pick a zone's forwarder. That removes the cross-zone hop non-primary-zone pods used to
+    # take.
     otel_exporter {
-      endpoint {{ printf "%s-otel-collector-%s" .Release.Name (include "kasm.zoneName" (include "kasm.primaryZone" . | fromYaml).name) }}:4316;
+      endpoint 127.0.0.1:{{ $constants.otel.otlpNginx }};
     }
 
     otel_service_name  kasm-connection-proxy;
     otel_trace          off;
     otel_trace_context  propagate;
+
+  stub_status.conf: |
+    # nginx connection metrics, scraped by this pod's Collector sidecar over loopback.
+    server {
+      listen 127.0.0.1:{{ $constants.proxyStubStatus }};
+      location = /stub_status {
+        otel_trace off;
+        stub_status;
+        allow 127.0.0.1;
+        deny  all;
+      }
+    }
   {{- end }}
 
   connection-proxy.conf: |
@@ -411,7 +420,7 @@ data:
             maxBytes: 10485760
           stream:
             class: logging.StreamHandler
-            formatter: {{ ternary "pythonjsonlogger" "standard" (eq .Values.logFormat "json") }}
+            formatter: standard
             level: DEBUG
           syslog:
             class: logging.handlers.SysLogHandler
@@ -428,47 +437,5 @@ data:
             level: INFO
         version: 1
 {{- end }}
----
-{{- $zoneName := "default" -}}
-{{- if .Values.kasmZones }}
-  {{- $zoneName = (index .Values.kasmZones 0).name -}}
-{{- end }}
-{{- if and $cp.rdpHttpsGateway.enabled (eq .Values.logFormat "json") }}
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  {{- include "kasm.metadata" (dict "context" . "component" "cpx-rdp-https-gw-app-config" "resource" "configMap" "include" "all") | indent 2 }}
-data:
-  rdp_https_gateway.app.config.yaml: |
-    api:
-      auth_token: JWTTOKEN
-      public_jwt_cert: PUBLICCERT
-      hostnames: [ {{ printf "%s-%s" $constants.proxy.svc $zoneName | quote }} ]
-      port: {{ $constants.proxy.http }}
-      hostname_refresh_interval: 30
-      schema: http
-    rdp-gateway:
-      id: auto
-      registration_token: REGISTRATION_TOKEN
-      server_address: {{ .Values.publicAddr }}
-      server_port: {{ $constants.connectionProxy.rdpHttpsGateway.port }}
-      zone: {{ $zoneName }}
-      keepalive_loop_interval: 30
-      ephemeral: true
-      kasm_delete_session_watch_interval: 60
-    logging:
-      console_level: "ERROR"
-      file_logging:
-        filename: "/dev/null"
-        level: "DEBUG"
-        backupCount: 20
-        maxMegaBytes: 10
-      json_file_logging:
-        filename: "/dev/stdout"
-        level: "DEBUG"
-        backupCount: 20
-        maxMegaBytes: 10
-      network_logging:
-        level: "DEBUG"
-{{- end }}
+
 {{- end }}

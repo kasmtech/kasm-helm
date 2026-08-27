@@ -1,0 +1,176 @@
+{{/*
+Kasm OTel Collector forwarder ConfigMap — one per release.
+
+Ported from kasm_backend/install/conf/otel/otel-collector-remote.yaml. No tail_sampling and no
+ClickHouse exporters here: those live only in otel-gateway-configmap.yaml, which keeps ClickHouse
+credentials on the one workload that writes to it.
+*/}}
+{{- include "kasm.observabilityValidate" . }}
+{{- $obs := .Values.observability -}}
+{{- if and $obs.enabled (not $obs.collector.forwarder.existingConfigMap) (not $obs.collector.forwarder.externalEndpoint) }}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  {{- include "kasm.metadata" (dict "context" . "component" "otel-forwarder" "resource" "configMap" "include" "all") | indent 2 }}
+data:
+  config.yaml: |
+    extensions:
+      bearertokenauth/server:
+        token: "${env:OTEL_BEARER_TOKEN}"
+
+      health_check:
+        endpoint: "0.0.0.0:13133"
+
+    receivers:
+      # In-cluster senders (Collector sidecars, and the Kasm services that export directly) send
+      # OTLP over HTTP. No auth: this port is only reachable inside the cluster.
+      otlp/local:
+        protocols:
+          http:
+            endpoint: "0.0.0.0:4318"
+
+      # Out-of-cluster senders (Kasm resources on VMs, external Collectors) forward OTLP over gRPC
+      # with bearer token auth. This is the only receiver reachable from outside the cluster, via
+      # observability.collector.forwarder.externalService.
+      otlp/remote:
+        protocols:
+          grpc:
+            endpoint: "0.0.0.0:4317"
+            auth:
+              authenticator: bearertokenauth/server
+{{- if and $obs.collector.forwarder.externalService.enabled $obs.collector.forwarder.externalService.tls }}
+            # The bearer token is sent on every export, so the externally reachable port is served
+            # over TLS using the same certificate as the rest of Kasm.
+            tls:
+              cert_file: /etc/otelcol-contrib/certs/tls.crt
+              key_file: /etc/otelcol-contrib/certs/tls.key
+{{- end }}
+
+    processors:
+      batch:
+        send_batch_size: 5000
+        timeout: 10s
+
+      memory_limiter:
+        check_interval: 5s
+        limit_mib: 256
+        spike_limit_mib: 64
+
+    exporters:
+      # Forward everything to the gateway tier, which makes the sampling decision and writes to
+      # ClickHouse. This tier neither samples nor stores anything, so it holds no cross-request
+      # state and scales freely.
+      #
+      # These are loadbalancing exporters, not a plain otlp exporter pointed at the gateway's
+      # ClusterIP. tail_sampling on the gateway has to see every span of a trace in one process;
+      # a ClusterIP Service cannot guarantee that, because gRPC pins one HTTP/2 connection to one
+      # backend and a trace's spans arrive through several forwarder pods. The loadbalancing
+      # exporter resolves the headless Service and hashes each trace ID to one backend, so every
+      # forwarder independently agrees on which gateway owns a given trace.
+      #
+      # routing_key differs per signal, so each pipeline gets its own exporter instance:
+      #   traces  -> traceID, which is the property tail_sampling depends on
+      #   logs    -> service. Most log volume here (nginx, PostgreSQL) carries no trace ID at all,
+      #              and records without one would hash to a single backend, hot-spotting one
+      #              gateway pod. Nothing about correctness needs a log co-located with its trace.
+      #   metrics -> service. Metric points carry no trace ID.
+      loadbalancing/traces:
+        routing_key: traceID
+        resolver:
+          dns:
+            hostname: "{{ $constants.otel.gatewayHeadlessFqdn }}"
+            port: {{ $constants.otel.otlpGrpc }}
+        protocol:
+          otlp:
+            headers:
+              Authorization: "Bearer ${env:OTEL_BEARER_TOKEN}"
+            # In-cluster traffic; not attempting mTLS between tiers.
+            tls:
+              insecure: true
+            retry_on_failure:
+              enabled: true
+              initial_interval: 5s
+              max_interval: 30s
+              max_elapsed_time: 300s
+            sending_queue:
+              enabled: true
+              num_consumers: 4
+              queue_size: 1000
+
+      loadbalancing/logs:
+        routing_key: service
+        resolver:
+          dns:
+            hostname: "{{ $constants.otel.gatewayHeadlessFqdn }}"
+            port: {{ $constants.otel.otlpGrpc }}
+        protocol:
+          otlp:
+            headers:
+              Authorization: "Bearer ${env:OTEL_BEARER_TOKEN}"
+            tls:
+              insecure: true
+            retry_on_failure:
+              enabled: true
+              initial_interval: 5s
+              max_interval: 30s
+              max_elapsed_time: 300s
+            sending_queue:
+              enabled: true
+              num_consumers: 4
+              queue_size: 1000
+
+      loadbalancing/metrics:
+        routing_key: service
+        resolver:
+          dns:
+            hostname: "{{ $constants.otel.gatewayHeadlessFqdn }}"
+            port: {{ $constants.otel.otlpGrpc }}
+        protocol:
+          otlp:
+            headers:
+              Authorization: "Bearer ${env:OTEL_BEARER_TOKEN}"
+            tls:
+              insecure: true
+            retry_on_failure:
+              enabled: true
+              initial_interval: 5s
+              max_interval: 30s
+              max_elapsed_time: 300s
+            sending_queue:
+              enabled: true
+              num_consumers: 4
+              queue_size: 1000
+
+    service:
+      extensions: [bearertokenauth/server, health_check]
+
+      pipelines:
+        logs:
+          receivers: [otlp/local, otlp/remote]
+          processors: [memory_limiter, batch]
+          exporters: [loadbalancing/logs]
+
+        traces:
+          receivers: [otlp/local, otlp/remote]
+          processors: [memory_limiter, batch]
+          exporters: [loadbalancing/traces]
+
+        metrics:
+          receivers: [otlp/local, otlp/remote]
+          processors: [memory_limiter, batch]
+          exporters: [loadbalancing/metrics]
+
+      telemetry:
+        logs:
+          level: info
+        # Collector self-metrics. The flat `address:` form was removed in
+        # collector v0.123+; this is the replacement syntax.
+        metrics:
+          readers:
+            - pull:
+                exporter:
+                  prometheus:
+                    host: "0.0.0.0"
+                    port: 8888
+{{- end }}

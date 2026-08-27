@@ -1,88 +1,21 @@
-suite: otel-sidecar — nginxLogs proxy sidecar and fileLogs app sidecars
+suite: otel-sidecar — Collector sidecars in the nginx and DB pods
 
 templates:
   - templates/proxy-deployment.yaml
   - templates/api-deployment.yaml
   - templates/manager-deployment.yaml
   - templates/connection-proxy-statefulset.yaml
-  - templates/otel-collector-configmap.yaml
+  - templates/db-statefulset.yaml
+  - templates/otel-nginx-sidecar-configmap.yaml
+  - templates/otel-db-sidecar-configmap.yaml
 
 tests:
-  # ---------- default: no sidecars anywhere ----------
-  - it: no sidecar in the proxy pod by default
+  # ---------- where sidecars go, and where they deliberately do not ----------
+  # A sidecar exists only where telemetry can be read solely from inside the pod: nginx log files
+  # and PostgreSQL log files. API and Manager export OTLP themselves and get none.
+  - it: proxy pod gets a sidecar by default
     template: templates/proxy-deployment.yaml
     documentIndex: 0
-    asserts:
-      - lengthEqual:
-          path: spec.template.spec.containers
-          count: 1
-
-  - it: app pods have no sidecar by default (fileLogs.enabled=false)
-    template: templates/api-deployment.yaml
-    asserts:
-      - lengthEqual:
-          path: spec.template.spec.containers
-          count: 1
-
-  # ---------- nginxLogs sidecar ----------
-  - it: sidecar + shared emptyDir + nginx/metrics scrape present when nginxLogs.enabled=true
-    template: templates/proxy-deployment.yaml
-    documentIndex: 0
-    set:
-      observability.hostLogs.enabled: false
-      observability.nginxLogs.enabled: true
-    asserts:
-      - lengthEqual:
-          path: spec.template.spec.containers
-          count: 2
-      - equal:
-          path: spec.template.spec.containers[1].name
-          value: otel-sidecar
-      - contains:
-          path: spec.template.spec.volumes
-          content:
-            name: kasm-proxy-otel-logs
-          any: true
-
-  - it: proxy sidecar mounts the shared log volume read-only
-    template: templates/proxy-deployment.yaml
-    documentIndex: 0
-    set:
-      observability.hostLogs.enabled: false
-      observability.nginxLogs.enabled: true
-    asserts:
-      - equal:
-          path: spec.template.spec.containers[1].volumeMounts[0].name
-          value: kasm-proxy-otel-logs
-      - equal:
-          path: spec.template.spec.containers[1].volumeMounts[0].readOnly
-          value: true
-
-  - it: proxy has no sidecar when nginxLogs.enabled=false (default)
-    template: templates/proxy-deployment.yaml
-    documentIndex: 0
-    set:
-      observability.nginxLogs.enabled: false
-    asserts:
-      - lengthEqual:
-          path: spec.template.spec.containers
-          count: 1
-
-  # ---------- mutual exclusion ----------
-  - it: hostLogs.enabled=true + nginxLogs.enabled=true fails render with the mutual-exclusion message
-    template: templates/otel-collector-configmap.yaml
-    set:
-      observability.hostLogs.enabled: true
-      observability.nginxLogs.enabled: true
-    asserts:
-      - failedTemplate:
-          errorMessage: "observability.hostLogs.enabled and observability.nginxLogs.enabled are mutually exclusive: hostLogs runs a node-level DaemonSet reading container-runtime log files, nginxLogs runs a sidecar in the proxy pod reading a shared volume. Enabling both would store every nginx log line twice. Use nginxLogs in namespaces that enforce the baseline/restricted Pod Security Standards; use hostLogs otherwise."
-
-  # ---------- fileLogs sidecars ----------
-  - it: api gets an otel-sidecar container when fileLogs.enabled and api is in fileLogs.components
-    template: templates/api-deployment.yaml
-    set:
-      observability.fileLogs.enabled: true
     asserts:
       - lengthEqual:
           path: spec.template.spec.containers
@@ -91,46 +24,189 @@ tests:
           path: spec.template.spec.containers[1].name
           value: otel-sidecar
 
-  - it: manager gets an otel-sidecar container when fileLogs.enabled and manager is in fileLogs.components
-    template: templates/manager-deployment.yaml
-    set:
-      observability.fileLogs.enabled: true
-    asserts:
-      - lengthEqual:
-          path: spec.template.spec.containers
-          count: 2
-      - equal:
-          path: spec.template.spec.containers[1].name
-          value: otel-sidecar
-
-  - it: guac gets an otel-sidecar container when fileLogs.enabled and guac is in fileLogs.components
+  - it: connection-proxy pod gets exactly one sidecar for all its containers
     template: templates/connection-proxy-statefulset.yaml
     documentIndex: 0
-    set:
-      observability.fileLogs.enabled: true
+    values:
+      - ../../../tests/values/components-all.yaml
     asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 5
       - equal:
-          path: spec.template.spec.containers[2].name
+          path: spec.template.spec.containers[4].name
           value: otel-sidecar
 
-  - it: a component removed from fileLogs.components gets no sidecar (api excluded)
-    template: templates/api-deployment.yaml
-    set:
-      observability.fileLogs.enabled: true
-      observability.fileLogs.components:
-        - manager
-        - guac
+  - it: db pod gets a sidecar
+    template: templates/db-statefulset.yaml
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 2
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: otel-sidecar
+
+  - it: api and manager get no sidecar, because they export OTLP directly
     asserts:
       - lengthEqual:
           path: spec.template.spec.containers
           count: 1
+        template: templates/api-deployment.yaml
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 1
+        template: templates/manager-deployment.yaml
 
-  - it: fileLogs sidecar env carries OTEL_EXPORTER_OTLP_ENDPOINT and OTEL_SERVICE_NAME
-    template: templates/api-deployment.yaml
-    set:
-      observability.fileLogs.enabled: true
+  # ---------- uid: the DB sidecar cannot use the collector image's user ----------
+  # PostgreSQL writes its log files 0600 owned by uid 70, so a sidecar running as 10001 would
+  # silently read nothing.
+  - it: nginx sidecars run as 10001 and the DB sidecar runs as 70
     asserts:
+      - equal:
+          path: spec.template.spec.containers[1].securityContext.runAsUser
+          value: 10001
+        template: templates/proxy-deployment.yaml
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[1].securityContext.runAsUser
+          value: 70
+        template: templates/db-statefulset.yaml
+
+  - it: sidecars keep the chart's container hardening
+    template: templates/proxy-deployment.yaml
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.containers[1].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[1].securityContext.allowPrivilegeEscalation
+          value: false
+
+  # ---------- egress ----------
+  - it: sidecars export to the cluster-wide forwarder
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].env[?(@.name=="OTEL_EXPORTER_OTLP_ENDPOINT")].value
+          value: http://RELEASE-NAME-otel-forwarder:4318
+        template: templates/proxy-deployment.yaml
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[1].env[?(@.name=="OTEL_EXPORTER_OTLP_ENDPOINT")].value
+          value: http://RELEASE-NAME-otel-forwarder:4318
+        template: templates/db-statefulset.yaml
+
+  - it: sidecars follow forwarder.externalEndpoint when the chart renders no forwarder
+    template: templates/proxy-deployment.yaml
+    documentIndex: 0
+    values:
+      - ../../../tests/values/observability-external-forwarder.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].env[?(@.name=="OTEL_EXPORTER_OTLP_ENDPOINT")].value
+          value: http://alloy.observability:4318
+
+  # ---------- sidecar config: loopback only ----------
+  # These receivers must never be reachable from outside the pod. They are bound to 127.0.0.1 and
+  # are deliberately absent from containerPorts and from every Service.
+  - it: nginx sidecar OTLP receivers bind loopback only
+    template: templates/otel-nginx-sidecar-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'endpoint: "127.0.0.1:4316"'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'endpoint: "127.0.0.1:4318"'
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: '0\.0\.0\.0:431'
+
+  - it: sidecar listeners are not published as containerPorts
+    template: templates/proxy-deployment.yaml
+    documentIndex: 0
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[1].ports
+
+  - it: nginx sidecar tails both log files, scrapes stub_status, and checkpoints offsets
+    template: templates/otel-nginx-sidecar-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "/var/log/nginx/otel/access_json.log"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "/var/log/nginx/otel/error.log"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "http://localhost:8090/stub_status"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "storage: file_storage/checkpoints"
+
+  # The DB's log files outlive the pod, so its offsets go on the PVC rather than an emptyDir.
+  - it: db sidecar tails the JSON log and checkpoints onto the data volume
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "/var/log/postgres/postgresql.json"
+        template: templates/otel-db-sidecar-configmap.yaml
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "directory: /var/lib/otelcol/checkpoints"
+        template: templates/otel-db-sidecar-configmap.yaml
       - exists:
-          path: spec.template.spec.containers[1].env[?(@.name=="OTEL_EXPORTER_OTLP_ENDPOINT")]
-      - exists:
-          path: spec.template.spec.containers[1].env[?(@.name=="OTEL_SERVICE_NAME" && @.value=="kasm-api")]
+          path: spec.template.spec.containers[1].volumeMounts[?(@.mountPath=="/var/lib/otelcol/checkpoints")]
+        template: templates/db-statefulset.yaml
+
+  - it: sidecar resources honour components.otelSidecar.resources
+    template: templates/proxy-deployment.yaml
+    documentIndex: 0
+    set:
+      components.otelSidecar.resources:
+        limits:
+          cpu: 500m
+          memory: 256Mi
+        requests:
+          cpu: 100m
+          memory: 128Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].resources.limits.memory
+          value: 256Mi
+
+  - it: nginx log volume size honours components.otelSidecar.logSizeLimit
+    template: templates/proxy-deployment.yaml
+    documentIndex: 0
+    set:
+      components.otelSidecar.logSizeLimit: 2Gi
+    asserts:
+      - equal:
+          path: spec.template.spec.volumes[?(@.name=="kasm-proxy-otel-logs")].emptyDir.sizeLimit
+          value: 2Gi
+
+  # ---------- disabled ----------
+  - it: observability.enabled=false removes every sidecar and its config
+    values:
+      - ../../../tests/values/observability-disabled.yaml
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 1
+        template: templates/proxy-deployment.yaml
+        documentIndex: 0
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 1
+        template: templates/db-statefulset.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/otel-nginx-sidecar-configmap.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/otel-db-sidecar-configmap.yaml

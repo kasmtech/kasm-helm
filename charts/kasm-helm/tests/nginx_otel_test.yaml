@@ -19,7 +19,7 @@ tests:
           pattern: "otel_exporter \\{"
       - matchRegex:
           path: data["otel.conf"]
-          pattern: "endpoint RELEASE-NAME-otel-collector-default:4316;"
+          pattern: "endpoint 127\\.0\\.0\\.1:4316;"
       - matchRegex:
           path: data["otel.conf"]
           pattern: "otel_service_name  kasm-proxy;"
@@ -40,7 +40,7 @@ tests:
     asserts:
       - matchRegex:
           path: data["stub_status.conf"]
-          pattern: "listen 0\\.0\\.0\\.0:8090;"
+          pattern: "listen 127\\.0\\.0\\.1:8090;"
       - matchRegex:
           path: data["stub_status.conf"]
           pattern: "stub_status;"
@@ -118,49 +118,36 @@ tests:
           pattern: 'otel_span_attr          kasm\.kasm_user_name     "\$cookie_username";'
 
   # ---------- stdout access_log format ----------
-  - it: stdout access_log is json_combined when telemetry is on even with logFormat=log
+  # The console is always human-readable now. Structured logs are the sidecar's job, and a sidecar
+  # cannot read another container's stdout, so nginx writes them to files on the shared volume.
+  - it: stdout access_log is always the human-readable format
     template: templates/nginx-shared-configmap.yaml
-    set:
-      logFormat: log
     asserts:
       - matchRegex:
           path: data["logging.conf"]
-          pattern: "access_log /dev/stdout json_combined;"
-
-  - it: stdout access_log honours logFormat when telemetry is off
-    template: templates/nginx-shared-configmap.yaml
-    set:
-      observability.enabled: false
-      logFormat: json
-    asserts:
-      - matchRegex:
+          pattern: "access_log /dev/stdout main;"
+      - notMatchRegex:
           path: data["logging.conf"]
           pattern: "access_log /dev/stdout json_combined;"
 
-  - it: stdout access_log honours logFormat=log when telemetry is off
+  - it: stdout access_log stays human-readable when telemetry is off
     template: templates/nginx-shared-configmap.yaml
-    set:
-      observability.enabled: false
-      logFormat: log
+    values:
+      - ../../../tests/values/observability-disabled.yaml
     asserts:
       - matchRegex:
           path: data["logging.conf"]
           pattern: "access_log /dev/stdout main;"
 
-  # ---------- error_log to stderr ----------
-  - it: error_log goes to /dev/stderr on the default path (hostLogs DaemonSet tails stdout/stderr)
+  - it: error_log goes to stderr for the console
     template: templates/nginx-shared-configmap.yaml
     asserts:
       - matchRegex:
           path: data["logging.conf"]
           pattern: "error_log  /dev/stderr warn;"
 
-  # ---------- extra file destinations only when nginxLogs.enabled ----------
-  - it: extra access/error file destinations present when nginxLogs.enabled=true
+  - it: JSON access log and error log are written to the sidecar volume when telemetry is on
     template: templates/nginx-shared-configmap.yaml
-    set:
-      observability.hostLogs.enabled: false
-      observability.nginxLogs.enabled: true
     asserts:
       - matchRegex:
           path: data["logging.conf"]
@@ -169,17 +156,15 @@ tests:
           path: data["logging.conf"]
           pattern: "error_log  /var/log/nginx/otel/error\\.log warn;"
 
-  - it: no extra file destinations when nginxLogs.enabled=false (default)
+  - it: no file destinations when telemetry is off
     template: templates/nginx-shared-configmap.yaml
+    values:
+      - ../../../tests/values/observability-disabled.yaml
     asserts:
       - notMatchRegex:
           path: data["logging.conf"]
           pattern: "/var/log/nginx/otel/"
 
-  # ---------- zero otel_ directives when disabled ----------
-  # A raw `grep -c 'otel_'` is imprecise (load_module's filename contains the substring "otel_"
-  # even when observability is disabled) — see the H5 amendment note in PROGRESS.md. Scope the
-  # pattern to actual directives instead.
   - it: zero otel_ directives (not counting load_module's filename) when observability.enabled=false
     template: templates/nginx-shared-configmap.yaml
     set:

@@ -14,6 +14,7 @@ base image's docker-entrypoint.sh has non-obvious behavior around these):
 */}}
 {{- if and .Values.observability.enabled .Values.observability.clickhouse.enabled (not .Values.observability.clickhouse.standalone) }}
 {{- $ch := .Values.observability.clickhouse }}
+{{- $chc := .Values.components.clickhouse }}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- $secretName := default $constants.secrets.name $ch.existingSecret.name -}}
 {{- $secretKey := default "clickhouse-password" $ch.existingSecret.key -}}
@@ -90,12 +91,12 @@ spec:
             {{- end }}
           {{- if .Values.applyHealthChecks }}
           livenessProbe:
-            {{- include "health.probe" (dict "root" $ "component" "clickhouse" "probeType" "livenessProbe" "type" "http" "path" "/ping" "port" $constants.clickhouse.http "timingParent" $ch) | nindent 12 }}
+            {{- include "health.probe" (dict "root" $ "component" "clickhouse" "probeType" "livenessProbe" "type" "http" "path" "/ping" "port" $constants.clickhouse.http "timingParent" $chc) | nindent 12 }}
           readinessProbe:
-            {{- include "health.probe" (dict "root" $ "component" "clickhouse" "probeType" "readinessProbe" "type" "http" "path" "/ping" "port" $constants.clickhouse.http "timingParent" $ch) | nindent 12 }}
+            {{- include "health.probe" (dict "root" $ "component" "clickhouse" "probeType" "readinessProbe" "type" "http" "path" "/ping" "port" $constants.clickhouse.http "timingParent" $chc) | nindent 12 }}
           {{- end }}
-          {{- if $ch.resources }}
-          resources: {{- toYaml $ch.resources | nindent 12 }}
+          {{- if $chc.resources }}
+          resources: {{- toYaml $chc.resources | nindent 12 }}
           {{- else }}
           resources: {{- include "resources.preset" (dict "node" $constants.clickhouse.component "size" .Values.deploymentSize) | nindent 12 }}
           {{- end }}
@@ -140,10 +141,10 @@ spec:
         - name: kasm-clickhouse-log
           emptyDir: {}
         {{- include "kasm.trustedCaVolumes" . | nindent 8 }}
-  {{- if $ch.storage.retentionPolicy }}
+  {{- if $chc.storage.retentionPolicy }}
   persistentVolumeClaimRetentionPolicy:
-    whenDeleted: {{ $ch.storage.retentionPolicy.whenDeleted }}
-    whenScaled: {{ $ch.storage.retentionPolicy.whenScaled }}
+    whenDeleted: {{ $chc.storage.retentionPolicy.whenDeleted }}
+    whenScaled: {{ $chc.storage.retentionPolicy.whenScaled }}
   {{- end }}
   volumeClaimTemplates:
     - apiVersion: v1
@@ -153,10 +154,10 @@ spec:
       spec:
         accessModes:
           - ReadWriteOnce
-        {{- with $ch.storage.storageClassName }}
+        {{- with $chc.storage.storageClassName }}
         storageClassName: {{ . }}
         {{- end }}
         resources:
           requests:
-            storage: {{ printf "%sGi" ($ch.storage.pvcSize | toString) }}
+            storage: {{ printf "%sGi" ($chc.storage.pvcSize | toString) }}
 {{- end }}

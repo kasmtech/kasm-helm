@@ -1,19 +1,24 @@
 {{/*
-Collector config for the proxy pod's nginxLogs sidecar (§7 of H5-nginx-sidecars.md) — the
-restricted-namespace fallback to the hostLogs DaemonSet. Reads the two files nginx writes to the
-shared kasm-proxy-otel-logs emptyDir (see nginx-shared-configmap.yaml's logging.conf) instead of
-the container runtime's log files, so it needs no hostPath and no root.
+Collector config for the nginx pods' sidecar, shared by the Kasm Proxy Deployment and the Kasm
+Connection Proxy StatefulSet. One rendered ConfigMap covers both: the forwarder endpoint is supplied
+per-pod through OTEL_EXPORTER_OTLP_ENDPOINT by kasm.otelSidecar.
 
-Not zone-scoped: the exporter endpoint is supplied per-pod via the OTEL_EXPORTER_OTLP_ENDPOINT env
-var that kasm.otelSidecar sets on the container (same convention as kasm.otelEnv), so one rendered
-ConfigMap is shared by every zone's proxy pods.
+The sidecar is the pod's single egress point. It:
+  - tails the two log files nginx writes to the shared emptyDir (a sidecar cannot read another
+    container's stdout, which is why nginx writes files at all)
+  - scrapes nginx connection metrics from stub_status over the pod's loopback interface
+  - receives OTLP/gRPC from ngx_otel_module on 127.0.0.1:4316 (the module is gRPC-only and cannot
+    present a bearer token, so it gets an unauthenticated receiver; binding loopback keeps it
+    unreachable from outside the pod)
+  - receives OTLP/HTTP from the co-located Kasm services on 127.0.0.1:4318 (Connection Proxy only;
+    the listener is idle in the Proxy pod)
 
-Unlike the hostLogs DaemonSet, this path can reach the proxy's own stub_status endpoint over the
-pod's loopback interface (they share a network namespace), so it also collects nginx connection
-metrics — the one thing the DaemonSet path deliberately does not do (see plan §3b).
+None of these listeners is published as a containerPort or a Service. filelog offsets are
+checkpointed into the sidecar's own emptyDir so a sidecar restart neither loses nor repeats lines.
 */}}
 {{- $obs := .Values.observability -}}
-{{- if and $obs.enabled $obs.nginxLogs.enabled }}
+{{- if $obs.enabled }}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -22,24 +27,44 @@ data:
   config.yaml: |
     extensions:
       health_check:
-        endpoint: "0.0.0.0:13133"
+        endpoint: "0.0.0.0:{{ $constants.otel.health }}"
+
+      # Offsets survive a sidecar restart. The checkpoint directory is on the same emptyDir as /tmp,
+      # so a pod restart clears both the offsets and the log files they refer to.
+      file_storage/checkpoints:
+        directory: /tmp/otel-checkpoints
+        create_directory: true
 
     receivers:
       nginx/metrics:
-        endpoint: "http://localhost:8090/stub_status"
+        endpoint: "http://localhost:{{ $constants.proxyStubStatus }}/stub_status"
         collection_interval: 30s
 
       filelog/nginx_access:
         include: [/var/log/nginx/otel/access_json.log]
         start_at: end
+        storage: file_storage/checkpoints
         operators:
           {{- include "kasm.otelNginxAccessLogOperators" . | nindent 10 }}
 
       filelog/nginx_error:
         include: [/var/log/nginx/otel/error.log]
         start_at: end
+        storage: file_storage/checkpoints
         operators:
           {{- include "kasm.otelNginxErrorLogOperators" . | nindent 10 }}
+
+      # ngx_otel_module traces. Loopback only.
+      otlp/nginx:
+        protocols:
+          grpc:
+            endpoint: "127.0.0.1:{{ $constants.otel.otlpNginx }}"
+
+      # Co-located Kasm services (guac, rdp-gateway, rdp-https-gateway). Loopback only.
+      otlp/local:
+        protocols:
+          http:
+            endpoint: "127.0.0.1:{{ $constants.otel.otlpHttp }}"
 
     processors:
       batch:
@@ -54,18 +79,32 @@ data:
     exporters:
       otlphttp:
         endpoint: "${env:OTEL_EXPORTER_OTLP_ENDPOINT}"
+        retry_on_failure:
+          enabled: true
+          initial_interval: 5s
+          max_interval: 30s
+          max_elapsed_time: 300s
+        sending_queue:
+          enabled: true
+          num_consumers: 2
+          queue_size: 500
 
     service:
-      extensions: [health_check]
+      extensions: [health_check, file_storage/checkpoints]
 
       pipelines:
         logs:
-          receivers: [filelog/nginx_access, filelog/nginx_error]
+          receivers: [filelog/nginx_access, filelog/nginx_error, otlp/local]
+          processors: [memory_limiter, batch]
+          exporters: [otlphttp]
+
+        traces:
+          receivers: [otlp/nginx, otlp/local]
           processors: [memory_limiter, batch]
           exporters: [otlphttp]
 
         metrics:
-          receivers: [nginx/metrics]
+          receivers: [nginx/metrics, otlp/local]
           processors: [memory_limiter, batch]
           exporters: [otlphttp]
 
@@ -78,5 +117,5 @@ data:
                 exporter:
                   prometheus:
                     host: "0.0.0.0"
-                    port: 8888
+                    port: {{ $constants.otel.selfMetrics }}
 {{- end }}

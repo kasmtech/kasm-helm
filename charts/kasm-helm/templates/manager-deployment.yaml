@@ -92,7 +92,7 @@ spec:
               value: {{ $.Values.components.manager.updateTimer | quote }}
             - name: KASM_MANAGER_SUPPORT_BUNDLE_TIMER
               value: {{ $.Values.components.manager.supportBundleTimer | quote }}
-            {{- include "kasm.otelEnv" (dict "context" $ "serviceName" "kasm-manager" "zone" $zone.name "component" "manager" "python" true) | nindent 12 }}
+            {{- include "kasm.otelEnv" (dict "context" $ "serviceName" "kasm-manager" "zone" $zone.name "python" true) | nindent 12 }}
             {{- include "kasm.clickhouseEnv" (dict "context" $) | nindent 12 }}
           ports:
             - name: {{ printf "zn%s-%s" ($idx | toString) $constants.manager.portName }}
@@ -113,18 +113,11 @@ spec:
           volumeMounts:
             - name: tmp-data
               mountPath: /tmp
-            {{- if and $.Values.observability.fileLogs.enabled (has "manager" $.Values.observability.fileLogs.components) }}
-            - name: kasm-filelogs-data
-              mountPath: /opt/kasm/current/log
-            {{- end }}
             {{- with $merged.containerMounts }}
               {{- toYaml . | nindent 12 }}
             {{- end }}
             {{- include "kasm.trustedCaVolumeMounts" $ | nindent 12 }}
             {{- include "kasm.clickhouseCaVolumeMount" $ | nindent 12 }}
-        {{- if and $.Values.observability.fileLogs.enabled (has "manager" $.Values.observability.fileLogs.components) }}
-        {{- include "kasm.otelSidecar" (dict "context" $ "zone" $zone.name "serviceName" "kasm-manager" "configMap" (include "kasm.name" (list $ "otel-filelogs-sidecar" "configmap")) "volumeName" "kasm-filelogs-data" "mountPath" "/opt/kasm/current/log") | nindent 8 }}
-        {{- end }}
         {{- with $merged.extraContainers }}
           {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -132,17 +125,6 @@ spec:
         - name: tmp-data
           emptyDir:
             sizeLimit: 1Gi
-        {{- if and $.Values.observability.fileLogs.enabled (has "manager" $.Values.observability.fileLogs.components) }}
-        - name: kasm-filelogs-data
-          emptyDir:
-            sizeLimit: {{ $.Values.observability.fileLogs.sizeLimit }}
-        - name: otel-sidecar-config
-          configMap:
-            name: {{ include "kasm.name" (list $ "otel-filelogs-sidecar" "configmap") }}
-        - name: otel-sidecar-tmp
-          emptyDir:
-            sizeLimit: 64Mi
-        {{- end }}
         {{- with $merged.volumes }}
           {{- toYaml . | nindent 8 }}
         {{- end }}

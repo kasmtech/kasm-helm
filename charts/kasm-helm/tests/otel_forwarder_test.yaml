@@ -1,0 +1,252 @@
+suite: OTel Collector forwarder + gateway workloads
+
+templates:
+  - templates/otel-forwarder-configmap.yaml
+  - templates/otel-forwarder-deployment.yaml
+  - templates/otel-forwarder-service.yaml
+  - templates/otel-gateway-configmap.yaml
+  - templates/otel-gateway-deployment.yaml
+  - templates/otel-gateway-service.yaml
+
+tests:
+  # ---------- forwarder: one per release, never per zone ----------
+  - it: forwarder Deployment/Service/ConfigMap render by default, cluster-wide
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/otel-forwarder-deployment.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/otel-forwarder-configmap.yaml
+      - isKind:
+          of: Deployment
+        template: templates/otel-forwarder-deployment.yaml
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-otel-forwarder
+        template: templates/otel-forwarder-deployment.yaml
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-otel-forwarder
+        template: templates/otel-forwarder-service.yaml
+        documentIndex: 0
+
+  # The whole point of de-zoning: two zones still yield exactly one forwarder.
+  - it: multi-zone renders exactly one forwarder Deployment and one Service
+    values:
+      - ../../../tests/values/multizone-config.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/otel-forwarder-deployment.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/otel-forwarder-service.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/otel-forwarder-configmap.yaml
+
+  - it: forwarder Service exposes OTLP http/grpc, health and self-metrics but NOT 4316
+    template: templates/otel-forwarder-service.yaml
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.ports[?(@.name=="otlp-http")].port
+          value: 4318
+      - equal:
+          path: spec.ports[?(@.name=="otlp-grpc")].port
+          value: 4317
+      # nginx exports to its pod-local sidecar now, so the cluster-wide forwarder exposes no
+      # unauthenticated ingest at all.
+      - notExists:
+          path: spec.ports[?(@.port==4316)]
+      - lengthEqual:
+          path: spec.ports
+          count: 4
+
+  - it: forwarder runs as the collector image user with the chart's hardening
+    template: templates/otel-forwarder-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsUser
+          value: 10001
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+
+  - it: forwarder image comes from components.otelForwarder and is independently overridable
+    template: templates/otel-forwarder-deployment.yaml
+    set:
+      components.otelForwarder.image.repository: grafana/alloy
+      components.otelForwarder.image.tag: v1.5.0
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: docker.io/grafana/alloy:v1.5.0
+
+  - it: forwarder replicas honour components.otelForwarder.replicas
+    template: templates/otel-forwarder-deployment.yaml
+    set:
+      components.otelForwarder.replicas: 4
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 4
+
+  # ---------- external ingest ----------
+  - it: external Service is absent by default
+    template: templates/otel-forwarder-service.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  - it: external Service exposes only 4317 and renders TLS on the receiver by default
+    values:
+      - ../../../tests/values/observability-external-ingest.yaml
+    asserts:
+      - hasDocuments:
+          count: 2
+        template: templates/otel-forwarder-service.yaml
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-otel-forwarder-external
+        template: templates/otel-forwarder-service.yaml
+        documentIndex: 1
+      - equal:
+          path: spec.type
+          value: LoadBalancer
+        template: templates/otel-forwarder-service.yaml
+        documentIndex: 1
+      - lengthEqual:
+          path: spec.ports
+          count: 1
+        template: templates/otel-forwarder-service.yaml
+        documentIndex: 1
+      # The bearer token rides every export, so the externally reachable port must not be plaintext.
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "cert_file: /etc/otelcol-contrib/certs/tls.crt"
+        template: templates/otel-forwarder-configmap.yaml
+      - exists:
+          path: spec.template.spec.volumes[?(@.name=="otel-forwarder-cert")]
+        template: templates/otel-forwarder-deployment.yaml
+
+  - it: external ingest TLS can be turned off explicitly, and then no cert is mounted
+    set:
+      observability.collector.forwarder.externalService.enabled: true
+      observability.collector.forwarder.externalService.tls: false
+    asserts:
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "cert_file:"
+        template: templates/otel-forwarder-configmap.yaml
+      - notExists:
+          path: spec.template.spec.volumes[?(@.name=="otel-forwarder-cert")]
+        template: templates/otel-forwarder-deployment.yaml
+
+  # ---------- externalEndpoint replaces the forwarder only ----------
+  - it: forwarder.externalEndpoint removes the forwarder but keeps the gateway
+    values:
+      - ../../../tests/values/observability-external-forwarder.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/otel-forwarder-deployment.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/otel-forwarder-service.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/otel-forwarder-configmap.yaml
+      # The gateway still writes to ClickHouse; the operator's collector must forward to it.
+      - hasDocuments:
+          count: 1
+        template: templates/otel-gateway-deployment.yaml
+      - hasDocuments:
+          count: 2
+        template: templates/otel-gateway-service.yaml
+
+  # ---------- gateway ----------
+  - it: gateway renders one ClusterIP Service and one headless Service
+    template: templates/otel-gateway-service.yaml
+    asserts:
+      - hasDocuments:
+          count: 2
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-otel-gateway
+        documentIndex: 0
+      - notExists:
+          path: spec.clusterIP
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-otel-gateway-headless
+        documentIndex: 1
+      # Headless is what makes the forwarder's dns resolver see individual pods.
+      - equal:
+          path: spec.clusterIP
+          value: None
+        documentIndex: 1
+      - equal:
+          path: spec.publishNotReadyAddresses
+          value: true
+        documentIndex: 1
+
+  - it: gateway defaults to one replica but is scalable, and rolls without surging
+    template: templates/otel-gateway-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 1
+      - equal:
+          path: spec.strategy.type
+          value: RollingUpdate
+      - equal:
+          path: spec.strategy.rollingUpdate.maxSurge
+          value: 0
+
+  - it: gateway scales when asked
+    template: templates/otel-gateway-deployment.yaml
+    set:
+      components.otelGateway.replicas: 3
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 3
+
+  - it: gateway image is independent of the forwarder image
+    template: templates/otel-gateway-deployment.yaml
+    set:
+      components.otelForwarder.image.repository: grafana/alloy
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: docker.io/otel/opentelemetry-collector-contrib:0.156.0
+
+  # ---------- disabled ----------
+  - it: observability.enabled=false renders no collector workloads at all
+    values:
+      - ../../../tests/values/observability-disabled.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/otel-forwarder-deployment.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/otel-forwarder-service.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/otel-forwarder-configmap.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/otel-gateway-deployment.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/otel-gateway-service.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/otel-gateway-configmap.yaml

@@ -1,0 +1,7 @@
+# Replace the chart's forwarder with a Collector the operator already runs. The gateway,
+# ClickHouse, and the sidecars still render; the sidecars and Kasm services export to this
+# endpoint instead of the chart's forwarder Service.
+observability:
+  collector:
+    forwarder:
+      externalEndpoint: "http://alloy.observability:4318"

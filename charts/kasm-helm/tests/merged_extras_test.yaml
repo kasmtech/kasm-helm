@@ -148,12 +148,13 @@ tests:
           path: spec.template.spec.containers[?(@.name=="cp-sidecar")]
       - exists:
           path: spec.template.spec.initContainers[?(@.name=="cp-init")]
-      # nginx, guac, rdp-gateway, rdp-https-gateway, cp-sidecar: exactly one of each,
-      # proving the extra container is added once to the single consolidated pod
-      # rather than once per former per-service workload.
+      # nginx, guac, rdp-gateway, rdp-https-gateway, otel-sidecar, cp-sidecar: exactly one
+      # of each, proving the extra container is added once to the single consolidated pod
+      # rather than once per former per-service workload. The otel-sidecar is unconditional
+      # while observability.enabled, which is the default.
       - lengthEqual:
           path: spec.template.spec.containers
-          count: 5
+          count: 6
 
   - it: global extraVolumes/extraContainers merge with connectionProxy-scoped extras, component-scoped wins on name collision
     template: templates/connection-proxy-statefulset.yaml

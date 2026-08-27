@@ -114,12 +114,16 @@ connectionProxy:
     portName: cp-rdp-tls-pt
     image: {{ if and $cp.rdpHttpsGateway.image.registry $cp.rdpHttpsGateway.image.repository }}{{ printf "%s/%s:%s" $cp.rdpHttpsGateway.image.registry $cp.rdpHttpsGateway.image.repository (include "kasm.imageTag" (list . $cp.rdpHttpsGateway.image.tag "connectionProxy.rdpHttpsGateway")) }}{{ end }}
 otel:
-  component: otel-collector
-  svc: {{ if .Values.kasmZones }}{{ printf "%s-otel-collector-%s" .Release.Name (include "kasm.zoneName" (include "kasm.primaryZone" . | fromYaml).name) }}{{ else }}{{ printf "%s-otel-collector-default" .Release.Name }}{{ end }}
+  component: otel-forwarder
+  svc: {{ printf "%s-otel-forwarder" .Release.Name }}
   portName: otel-pt
   gatewayComponent: otel-gateway
   gatewaySvc: {{ printf "%s-otel-gateway" .Release.Name }}
-  image: {{ printf "%s/%s:%s" .Values.observability.collector.image.registry .Values.observability.collector.image.repository .Values.observability.collector.image.tag }}
+  gatewayHeadlessSvc: {{ printf "%s-otel-gateway-headless" .Release.Name }}
+  gatewayHeadlessFqdn: {{ printf "%s-otel-gateway-headless.%s.svc.%s" .Release.Name .Release.Namespace .Values.clusterDomain }}
+  image: {{ printf "%s/%s:%s" .Values.components.otelForwarder.image.registry .Values.components.otelForwarder.image.repository .Values.components.otelForwarder.image.tag }}
+  gatewayImage: {{ printf "%s/%s:%s" .Values.components.otelGateway.image.registry .Values.components.otelGateway.image.repository .Values.components.otelGateway.image.tag }}
+  sidecarImage: {{ printf "%s/%s:%s" .Values.components.otelSidecar.image.registry .Values.components.otelSidecar.image.repository .Values.components.otelSidecar.image.tag }}
   otlpHttp: 4318
   otlpGrpc: 4317
   otlpNginx: 4316
@@ -129,7 +133,7 @@ clickhouse:
   component: clickhouse
   svc: {{ printf "%s-clickhouse" .Release.Name }}
   portName: ch-pt
-  image: {{ printf "%s/%s:%s" .Values.observability.clickhouse.image.registry .Values.observability.clickhouse.image.repository .Values.observability.clickhouse.image.tag }}
+  image: {{ printf "%s/%s:%s" .Values.components.clickhouse.image.registry .Values.components.clickhouse.image.repository .Values.components.clickhouse.image.tag }}
   http: 8123
   native: 9000
   httpTls: 8443
@@ -517,7 +521,7 @@ Where:
   {{- end -}}
 {{- end -}}
 
-{{- if eq $component "otel-collector-ext" -}}
+{{- if eq $component "otel-forwarder-ext" -}}
   {{- with $ctx.Values.observability.collector.forwarder.externalService.labels -}}
     {{- $labels = merge $labels . -}}
   {{- end -}}
@@ -566,7 +570,7 @@ Where:
   {{- end -}}
 {{- end -}}
 
-{{- if eq $component "otel-collector-ext" -}}
+{{- if eq $component "otel-forwarder-ext" -}}
   {{- with $ctx.Values.observability.collector.forwarder.externalService.annotations -}}
     {{- $annotations = merge $annotations . -}}
   {{- end -}}
@@ -1107,10 +1111,10 @@ successThreshold: {{ $successThreshold }}
   Example usage:
   {{ include "replicas.preset" (dict "node" "proxy" "size" "small") -}}
 
-  Note: "otel-gateway" is 1 at every size on purpose. The gateway runs tail_sampling, which
-  must see every span of a trace in one process, and a ClusterIP Service would spread a
-  trace's spans across replicas. "otel-collector" (the per-zone forwarders) has no such
-  constraint and scales with size.
+  Note: "otel-gateway" is 1 at every size on purpose — it only samples and writes to ClickHouse,
+  so it needs less headroom than the forwarder. It can be scaled via components.otelGateway.replicas:
+  the forwarder reaches it through a loadbalancing exporter keyed on trace ID, so tail_sampling
+  still sees whole traces. "otel-forwarder" has no such constraint and scales with size.
 */}}
 {{- define "replicas.preset" -}}
 {{- $presetSizes := dict
@@ -1139,7 +1143,7 @@ successThreshold: {{ $successThreshold }}
     "medium" 2
     "large" 3
   )
-  "otel-collector" (dict
+  "otel-forwarder" (dict
     "small" 1
     "medium" 2
     "large" 2
@@ -1301,7 +1305,7 @@ successThreshold: {{ $successThreshold }}
         "limits" (dict "cpu" "1500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
       )
     )
-    "otel-collector" (dict
+    "otel-forwarder" (dict
       "small" (dict
         "requests" (dict "cpu" "200m" "memory" "256Mi" "ephemeral-storage" "50Mi")
         "limits" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
@@ -1568,9 +1572,11 @@ Dedup rules:
   Where:
     context     = root context (.)
     serviceName = OTEL_SERVICE_NAME value, e.g. "kasm-api"
-    zone        = zone name (from kasm.zones), used to build the collector endpoint
-    component   = (optional) key under observability.fileLogs.components used for the file-logging
-                  membership test, e.g. "api". Omit for components that never file-log (guac excepted).
+    zone        = (optional) zone name (from kasm.zones), recorded as the kasm.zone resource
+                  attribute. Zones no longer select an endpoint: there is one cluster-wide forwarder.
+    sidecar     = (optional bool) set true for containers in a pod that runs a Collector sidecar
+                  (Connection Proxy). Those export to the sidecar over loopback and the sidecar is the
+                  pod's single egress point; everything else exports to the forwarder Service.
     python      = (optional bool) set true for the Python services (api, manager) to also emit
                   OTEL_PYTHON_EXCLUDED_URLS.
   Emits a YAML list fragment suitable for splicing into a container's `env:`.
@@ -1584,10 +1590,14 @@ Dedup rules:
   value: "true"
 {{- else }}
 {{- $zone := .zone | default "" -}}
-{{- $zoneName := ternary (include "kasm.zoneName" $zone) "default" (ne $zone "") -}}
-{{- $endpoint := $obs.collector.externalEndpoint -}}
-{{- if not $endpoint -}}
-  {{- $endpoint = printf "http://%s-otel-collector-%s:4318" $ctx.Release.Name $zoneName -}}
+{{- $endpoint := "" -}}
+{{- if .sidecar -}}
+  {{- $endpoint = printf "http://localhost:%v" (include "kasm.constants" $ctx | fromYaml).otel.otlpHttp -}}
+{{- else -}}
+  {{- $endpoint = $obs.collector.forwarder.externalEndpoint -}}
+  {{- if not $endpoint -}}
+    {{- $endpoint = printf "http://%s-otel-forwarder:4318" $ctx.Release.Name -}}
+  {{- end -}}
 {{- end }}
 - name: OTEL_SERVICE_NAME
   value: {{ $serviceName | quote }}
@@ -1600,7 +1610,11 @@ Dedup rules:
   value: "socket.io/*,healthcheck"
 {{- end }}
 - name: OTEL_RESOURCE_ATTRIBUTES
+  {{- if $zone }}
+  value: {{ printf "deployment.environment=kubernetes,service.namespace=%s,kasm.zone=%s" $ctx.Release.Namespace (include "kasm.zoneName" $zone) | quote }}
+  {{- else }}
   value: {{ printf "deployment.environment=kubernetes,service.namespace=%s" $ctx.Release.Namespace | quote }}
+  {{- end }}
 {{- end }}
 {{- /*
   The logging vars below are emitted whether or not observability is enabled. They are not OTel
@@ -1692,7 +1706,7 @@ Dedup rules:
 
 {{/*
   Render-time validation for the observability values tree. Call once from a template that
-  always renders (H4 calls this at the top of templates/otel-collector-configmap.yaml).
+  always renders (called at the top of templates/otel-forwarder-configmap.yaml).
   Usage:
     {{ include "kasm.observabilityValidate" $ }}
 */}}
@@ -1712,27 +1726,16 @@ Dedup rules:
 {{- if and $ch.caCert $ch.caCertConfigMap -}}
   {{- fail "observability.clickhouse.caCert and observability.clickhouse.caCertConfigMap are mutually exclusive: caCert has the chart render a ConfigMap from literal PEM text, caCertConfigMap points at one you already manage." -}}
 {{- end -}}
-{{- $forwardSecretNameSet := ne $collector.forward.existingSecret.name "" -}}
-{{- $forwardSecretKeySet := ne $collector.forward.existingSecret.key "" -}}
+{{- $forwardSecretNameSet := ne $collector.gateway.forward.existingSecret.name "" -}}
+{{- $forwardSecretKeySet := ne $collector.gateway.forward.existingSecret.key "" -}}
 {{- if and (or $forwardSecretNameSet $forwardSecretKeySet) (not (and $forwardSecretNameSet $forwardSecretKeySet)) -}}
-  {{- fail "observability.collector.forward.existingSecret requires both 'name' and 'key' to be set." -}}
+  {{- fail "observability.collector.gateway.forward.existingSecret requires both 'name' and 'key' to be set." -}}
 {{- end -}}
-{{- if and $collector.externalEndpoint (or $collector.forwarder.existingConfigMap $collector.gateway.existingConfigMap) -}}
-  {{- fail "observability.collector.externalEndpoint is mutually exclusive with observability.collector.forwarder.existingConfigMap and observability.collector.gateway.existingConfigMap: externalEndpoint means neither Collector tier is rendered by this chart, so there is no config for them to override." -}}
+{{- if and $collector.forwarder.externalEndpoint $collector.forwarder.existingConfigMap -}}
+  {{- fail "observability.collector.forwarder.externalEndpoint is mutually exclusive with observability.collector.forwarder.existingConfigMap: externalEndpoint means the chart renders no forwarder at all, so there is no config for it to override. The gateway is unaffected either way." -}}
 {{- end -}}
-{{- range $entry := $obs.fileLogs.components -}}
-  {{- if not (has $entry (list "api" "manager" "guac")) -}}
-    {{- fail (printf "observability.fileLogs.components contains %q, which is not a supported component. Allowed values: api, manager, guac." $entry) -}}
-  {{- end -}}
-{{- end -}}
-{{- if and $obs.hostLogs.enabled $obs.nginxLogs.enabled -}}
-  {{- fail "observability.hostLogs.enabled and observability.nginxLogs.enabled are mutually exclusive: hostLogs runs a node-level DaemonSet reading container-runtime log files, nginxLogs runs a sidecar in the proxy pod reading a shared volume. Enabling both would store every nginx log line twice. Use nginxLogs in namespaces that enforce the baseline/restricted Pod Security Standards; use hostLogs otherwise." -}}
-{{- end -}}
-{{- if and $ctx.Values.isOpenshift $obs.hostLogs.enabled (not $obs.nginxLogs.enabled) -}}
-  {{- fail "isOpenshift: true never renders the hostLogs DaemonSet (a hostPath + runAsUser:0 workload needs a SecurityContextConstraint this chart does not ship). Set observability.nginxLogs.enabled: true to collect nginx logs on OpenShift instead." -}}
-{{- end -}}
-{{- if or (lt (int $collector.tailSamplePercentage) 0) (gt (int $collector.tailSamplePercentage) 100) -}}
-  {{- fail (printf "observability.collector.tailSamplePercentage must be between 0 and 100, got %d." (int $collector.tailSamplePercentage)) -}}
+{{- if or (lt (int $collector.gateway.tailSamplePercentage) 0) (gt (int $collector.gateway.tailSamplePercentage) 100) -}}
+  {{- fail (printf "observability.collector.gateway.tailSamplePercentage must be between 0 and 100, got %d." (int $collector.gateway.tailSamplePercentage)) -}}
 {{- end -}}
 {{- end -}}
 
@@ -1862,19 +1865,26 @@ Dedup rules:
 {{- end -}}
 
 {{/*
-  Shared OTel Collector sidecar container, used by two callers:
-    - the nginxLogs fallback (proxy pod, reads a shared emptyDir of nginx log files)
-    - observability.fileLogs (api/manager/guac pods, reads a shared emptyDir of JSON app logs)
+  Shared OTel Collector sidecar container. A sidecar runs in every pod whose telemetry can only be
+  read from inside the pod, and is that pod's single egress point to the forwarder:
+    - Kasm Proxy and Connection Proxy (nginx log files on a shared emptyDir, plus stub_status metrics)
+    - Kasm DB (PostgreSQL JSON log files on the data PVC)
   The caller is responsible for adding matching volumes to the pod spec:
     - a ConfigMap volume named "otel-sidecar-config" (the same name passed as .configMap)
-    - an emptyDir volume named "otel-sidecar-tmp"
+    - an emptyDir volume named "otel-sidecar-tmp" (also holds the filelog offset checkpoints)
     - the log volume named .volumeName, already mounted (read-write) into the primary container
   Optional args:
-    zone        = zone name (from kasm.zones), used to build the forwarder endpoint the same way
-                  kasm.otelEnv does. Omitted for pods that are not zone-scoped.
-    serviceName = OTEL_SERVICE_NAME to report resource attributes under (e.g. "kasm-api"). Omit for
+    uid         = uid/gid to run as (default 10001, the collector image's user). The DB sidecar must
+                  run as 70: PostgreSQL writes its log files 0600 owned by the postgres user, so any
+                  other uid cannot read them.
+    zone        = zone name (from kasm.zones), recorded as the kasm.zone resource attribute.
+    serviceName = OTEL_SERVICE_NAME to report resource attributes under (e.g. "kasm-db"). Omit for
                   callers whose collector config already hardcodes the service name (the nginx
                   operator chains set resource["service.name"]=kasm-proxy themselves).
+    subPath     = (optional) subPath for the log volume mount, for callers whose logs live inside a
+                  larger volume (the DB PVC).
+    extraVolumeMounts = (optional) YAML list of additional mounts, e.g. the DB sidecar's checkpoint
+                  directory on the data PVC.
   Usage:
     {{- include "kasm.otelSidecar" (dict "context" $ "configMap" "my-cm" "volumeName" "my-logs" "mountPath" "/var/log/nginx/otel") | nindent 8 }}
 */}}
@@ -1884,15 +1894,15 @@ Dedup rules:
 {{- $mountPath := required "kasm.otelSidecar requires mountPath" .mountPath -}}
 {{- $constants := include "kasm.constants" $ctx | fromYaml -}}
 {{- $zone := .zone | default "" -}}
-{{- $zoneName := ternary (include "kasm.zoneName" $zone) "default" (ne $zone "") -}}
-{{- $endpoint := $ctx.Values.observability.collector.externalEndpoint -}}
+{{- $uid := .uid | default 10001 -}}
+{{- $endpoint := $ctx.Values.observability.collector.forwarder.externalEndpoint -}}
 {{- if not $endpoint -}}
-  {{- $endpoint = printf "http://%s-otel-collector-%s:4318" $ctx.Release.Name $zoneName -}}
+  {{- $endpoint = printf "http://%s-otel-forwarder:4318" $ctx.Release.Name -}}
 {{- end -}}
 - name: otel-sidecar
-  image: {{ $constants.otel.image }}
+  image: {{ $constants.otel.sidecarImage }}
   imagePullPolicy: {{ $ctx.Values.imagePullPolicy }}
-  {{- include "kasm.securityContext" (list $ctx 10001 "container") | nindent 2 }}
+  {{- include "kasm.securityContext" (list $ctx $uid "container") | nindent 2 }}
   env:
     - name: OTEL_EXPORTER_OTLP_ENDPOINT
       value: {{ $endpoint | quote }}
@@ -1900,16 +1910,32 @@ Dedup rules:
     - name: OTEL_SERVICE_NAME
       value: {{ .serviceName | quote }}
     {{- end }}
+    - name: OTEL_RESOURCE_ATTRIBUTES
+      {{- if $zone }}
+      value: {{ printf "deployment.environment=kubernetes,service.namespace=%s,kasm.zone=%s" $ctx.Release.Namespace (include "kasm.zoneName" $zone) | quote }}
+      {{- else }}
+      value: {{ printf "deployment.environment=kubernetes,service.namespace=%s" $ctx.Release.Namespace | quote }}
+      {{- end }}
+  {{- if $ctx.Values.components.otelSidecar.resources }}
+  resources: {{- toYaml $ctx.Values.components.otelSidecar.resources | nindent 4 }}
+  {{- else }}
   resources: {{- include "resources.preset" (dict "node" "otel-sidecar" "size" $ctx.Values.deploymentSize) | nindent 4 }}
+  {{- end }}
   volumeMounts:
     - name: {{ $volumeName }}
       mountPath: {{ $mountPath }}
+      {{- with .subPath }}
+      subPath: {{ . }}
+      {{- end }}
       readOnly: true
     - name: otel-sidecar-config
       mountPath: /etc/otelcol-contrib/config.yaml
       subPath: config.yaml
     - name: otel-sidecar-tmp
       mountPath: /tmp
+    {{- with .extraVolumeMounts }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
   {{- if $ctx.Values.applyHealthChecks }}
   livenessProbe:
     {{- include "health.probe" (dict "root" $ctx "component" "otel-sidecar" "probeType" "livenessProbe" "type" "http" "path" "/" "port" 13133) | nindent 4 }}
@@ -1929,17 +1955,13 @@ Dedup rules:
 {{- $ctx := .context -}}
 {{- $obs := $ctx.Values.observability -}}
 {{- $serviceName := required "kasm.loggingEnv requires serviceName" .serviceName -}}
-{{- $component := .component | default "" -}}
-{{- $fileLoggingEnabled := and $obs.enabled $obs.fileLogs.enabled (and $component (has $component $obs.fileLogs.components)) -}}
-{{- if $fileLoggingEnabled }}
-- name: KASM_LOG_FILE_ENABLED
-  value: "true"
-- name: KASM_LOG_FILE_PATH
-  value: {{ printf "/opt/kasm/current/log/%s.log" $serviceName | quote }}
-{{- else }}
+{{- /*
+  File logging is always off. Kasm services export their logs over OTLP, so a second, file-shaped
+  copy inside the pod would only store every line twice; the sidecars exist for nginx and PostgreSQL,
+  which cannot export OTLP themselves.
+*/}}
 - name: KASM_LOG_FILE_ENABLED
   value: "false"
-{{- end }}
 - name: KASM_LOG_CONSOLE_COLOR
   value: "false"
 {{- end }}

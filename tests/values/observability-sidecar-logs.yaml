@@ -1,8 +1,0 @@
-# The PSS-restricted fallback: hostLogs (hostPath + runAsUser:0 DaemonSet) is incompatible with
-# the baseline/restricted Pod Security Standards, so this scenario collects nginx logs/metrics via
-# the in-pod sidecar instead.
-observability:
-  hostLogs:
-    enabled: false
-  nginxLogs:
-    enabled: true

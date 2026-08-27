@@ -1,11 +1,22 @@
 {{/*
-Kasm OTel Collector gateway Service — exactly one per release, cluster-wide (not zone-scoped).
-Must equal $constants.otel.gatewaySvc; the per-zone forwarders and H5's host-log DaemonSet both
-point at this name directly. No external Service variant — out-of-cluster senders use a zone
-forwarder's externalService instead.
+Kasm OTel Collector gateway Services — cluster-wide, not zone-scoped.
+
+Two of them, on purpose:
+  <release>-otel-gateway           ClusterIP. Addressable name for health checks and anything that
+                                   just needs "a gateway".
+  <release>-otel-gateway-headless  clusterIP: None, so DNS returns every gateway pod IP. This is
+                                   what the forwarder's loadbalancing exporter resolves: it hashes
+                                   each trace ID to one backend so every span of a trace reaches
+                                   the same pod, which is what makes tail_sampling correct with
+                                   more than one replica. A ClusterIP Service cannot do this — gRPC
+                                   pins one long-lived HTTP/2 connection to one backend, so a trace
+                                   entering through different forwarder pods would be split across
+                                   gateways and sampled independently.
+
+No external Service variant: out-of-cluster senders use the forwarder's externalService.
 */}}
 {{- $obs := .Values.observability -}}
-{{- if and $obs.enabled (not $obs.collector.externalEndpoint) }}
+{{- if $obs.enabled }}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
 apiVersion: v1
 kind: Service
@@ -24,4 +35,20 @@ spec:
     - name: self-metrics
       protocol: TCP
       port: {{ $constants.otel.selfMetrics }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  {{- include "kasm.metadata" (dict "context" $ "component" "otel-gateway" "resource" "service" "name" $constants.otel.gatewayHeadlessSvc "include" "all") | indent 2 }}
+spec:
+  clusterIP: None
+  # Report every pod, ready or not, so the forwarder's hash ring is stable across a rolling update
+  # instead of reshuffling every time a readiness probe flaps.
+  publishNotReadyAddresses: true
+  selector:
+    {{- include "kasm.metadata" (dict "context" $ "component" "otel-gateway" "resource" "service" "include" "match") | indent 4 }}
+  ports:
+    - name: otlp-grpc
+      protocol: TCP
+      port: {{ $constants.otel.otlpGrpc }}
 {{- end }}

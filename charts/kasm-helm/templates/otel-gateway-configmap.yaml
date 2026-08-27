@@ -9,7 +9,7 @@ Ported from kasm_backend/install/conf/otel/otel-collector-local.yaml, minus the 
 receivers (those live in H5's host-log DaemonSet / nginx sidecar, not the central Collector).
 */}}
 {{- $obs := .Values.observability -}}
-{{- if and $obs.enabled (not $obs.collector.externalEndpoint) (not $obs.collector.gateway.existingConfigMap) }}
+{{- if and $obs.enabled (not $obs.collector.gateway.existingConfigMap) }}
 {{- $ch := $obs.clickhouse -}}
 {{- $useClickhouse := or $ch.enabled $ch.standalone -}}
 {{- $dsn := include "kasm.clickhouseNativeDsn" (dict "context" $) -}}
@@ -28,8 +28,8 @@ receivers (those live in H5's host-log DaemonSet / nginx sidecar, not the centra
 {{- else -}}
   {{- $dsn = printf "%s?dial_timeout=10s" $dsn -}}
 {{- end -}}
-{{- $forwardEnabled := ne $obs.collector.forward.endpoint "" -}}
-{{- $forwardHasToken := or (ne $obs.collector.forward.token "") (ne $obs.collector.forward.existingSecret.name "") -}}
+{{- $forwardEnabled := ne $obs.collector.gateway.forward.endpoint "" -}}
+{{- $forwardHasToken := or (ne $obs.collector.gateway.forward.token "") (ne $obs.collector.gateway.forward.existingSecret.name "") -}}
 {{- $logsExporter := ternary "clickhouse/logs" "debug" $useClickhouse -}}
 {{- $tracesExporter := ternary "clickhouse/traces" "debug" $useClickhouse -}}
 {{- $metricsExporter := ternary "clickhouse/metrics" "debug" $useClickhouse -}}
@@ -93,7 +93,7 @@ data:
           - name: probabilistic-sample
             type: probabilistic
             probabilistic:
-              sampling_percentage: {{ $obs.collector.tailSamplePercentage }}
+              sampling_percentage: {{ $obs.collector.gateway.tailSamplePercentage }}
 
     exporters:
 {{- if $useClickhouse }}
@@ -171,7 +171,7 @@ data:
       # Forward a copy of everything to an external OTLP/HTTP endpoint in addition to the
       # exporter(s) above, so a forwarded copy reflects the sampling decision.
       otlphttp/external:
-        endpoint: "{{ $obs.collector.forward.endpoint }}"
+        endpoint: "{{ $obs.collector.gateway.forward.endpoint }}"
 {{- if $forwardHasToken }}
         headers:
           Authorization: "Bearer ${env:OTEL_FORWARD_TOKEN}"

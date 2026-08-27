@@ -1,0 +1,139 @@
+{{/*
+Kasm OTel Collector forwarder Deployment — one per release, not per zone.
+
+Receives from every Collector sidecar, from the Kasm services that export directly, and from any
+Kasm resources outside the cluster, then batches and forwards to the gateway. Holds no
+cross-request state (no sampling, no ClickHouse), so it scales freely.
+
+Zones do not select an endpoint: zone identity is recorded as the kasm.zone resource attribute on
+the telemetry itself (see kasm.otelEnv), which is where it belongs.
+*/}}
+{{- $obs := .Values.observability -}}
+{{- if and $obs.enabled (not $obs.collector.forwarder.externalEndpoint) }}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $fwd := .Values.components.otelForwarder -}}
+{{- $forwarderReplicas := ternary $fwd.replicas (include "replicas.preset" (dict "node" "otel-forwarder" "size" .Values.deploymentSize)) (gt (int $fwd.replicas) 0) -}}
+{{- $resourcesObj := $fwd.resources -}}
+{{- if not (gt (len $resourcesObj) 0) -}}
+  {{- $resourcesObj = (include "resources.preset" (dict "node" "otel-forwarder" "size" .Values.deploymentSize) | fromYaml) -}}
+{{- end -}}
+{{- $memLimit := dig "limits" "memory" "256Mi" $resourcesObj -}}
+{{- $merged := fromYaml (include "kasm.mergedValues" (dict "root" . "componentName" "otelForwarder")) -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  {{- include "kasm.metadata" (dict "context" . "component" "otel-forwarder" "resource" "deployment" "include" "all") | indent 2 }}
+spec:
+  replicas: {{ $forwarderReplicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: {{ add1 $forwarderReplicas }}
+  selector:
+    matchLabels:
+      {{- include "kasm.metadata" (dict "context" . "component" "otel-forwarder" "resource" "deployment" "include" "match") | indent 6 }}
+  template:
+    metadata:
+      {{- $checksumAnn := dict -}}
+      {{- if not $obs.collector.forwarder.existingConfigMap -}}
+        {{- $checksumAnn = dict "checksum/config" (include (print $.Template.BasePath "/otel-forwarder-configmap.yaml") $ | sha256sum) -}}
+      {{- end -}}
+      {{- include "kasm.metadata" (dict "context" . "component" "otel-forwarder" "resource" "pod" "include" "la" "extraAnnotations" $checksumAnn) | indent 6 }}
+    spec:
+      restartPolicy: {{ .Values.restartPolicy }}
+      {{- if .Values.imagePullSecrets.enabled }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets.name | default (printf "%s-image-pull-secret" .Release.Name) }}
+      {{- end }}
+      {{- include "kasm.securityContext" (list . 10001 "pod") | nindent 6 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $merged.extraInitContainers }}
+      initContainers:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ include "kasm.name" (list . "otel-forwarder" "container") }}
+          image: {{ $constants.otel.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          env:
+            - name: OTEL_BEARER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $constants.secrets.name }}
+                  key: otel-bearer-token
+            # ~80% of the resolved memory limit, so the Go runtime cooperates with memory_limiter
+            # instead of waiting for it to intervene.
+            - name: GOMEMLIMIT
+              value: {{ include "kasm.gomemlimit" $memLimit | quote }}
+          ports:
+            - name: otlp-http
+              containerPort: {{ $constants.otel.otlpHttp }}
+              protocol: TCP
+            - name: otlp-grpc
+              containerPort: {{ $constants.otel.otlpGrpc }}
+              protocol: TCP
+            - name: health
+              containerPort: {{ $constants.otel.health }}
+              protocol: TCP
+            - name: self-metrics
+              containerPort: {{ $constants.otel.selfMetrics }}
+              protocol: TCP
+          volumeMounts:
+            # NOTE: a customer-provided existingConfigMap must use the key `config.yaml`.
+            - name: config
+              mountPath: /etc/otelcol-contrib/config.yaml
+              subPath: config.yaml
+            - name: tmp
+              mountPath: /tmp
+            {{- if $obs.collector.forwarder.externalService.enabled }}
+            {{- if $obs.collector.forwarder.externalService.tls }}
+            - name: otel-forwarder-cert
+              mountPath: /etc/otelcol-contrib/certs
+              readOnly: true
+            {{- end }}
+            {{- end }}
+            {{- with $merged.containerMounts }}
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- if .Values.applyHealthChecks }}
+          livenessProbe:
+            {{- include "health.probe" (dict "root" . "component" "otel-forwarder" "probeType" "livenessProbe" "type" "http" "path" "/" "port" 13133) | nindent 12 }}
+          readinessProbe:
+            {{- include "health.probe" (dict "root" . "component" "otel-forwarder" "probeType" "readinessProbe" "type" "http" "path" "/" "port" 13133) | nindent 12 }}
+          {{- end }}
+          {{- if $fwd.resources }}
+          resources: {{- toYaml $fwd.resources | nindent 12 }}
+          {{- else }}
+          resources: {{- include "resources.preset" (dict "node" "otel-forwarder" "size" .Values.deploymentSize) | nindent 12 }}
+          {{- end }}
+          {{- include "kasm.securityContext" (list . 10001 "container") | nindent 10 }}
+        {{- with $merged.extraContainers }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ default (include "kasm.name" (list . "otel-forwarder" "configmap")) $obs.collector.forwarder.existingConfigMap }}
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+        {{- if $obs.collector.forwarder.externalService.enabled }}
+        {{- if $obs.collector.forwarder.externalService.tls }}
+        # The external OTLP/gRPC port carries the bearer token on every export, so it is served over
+        # TLS using the same certificate as the rest of Kasm.
+        - name: otel-forwarder-cert
+          secret:
+            secretName: {{ .Values.certificate.secretName | default (include "kasm.name" (list . "cert-manager" "secret")) }}
+            defaultMode: 0o600
+        {{- end }}
+        {{- end }}
+        {{- with $merged.volumes }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+{{- end }}

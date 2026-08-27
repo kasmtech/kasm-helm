@@ -101,16 +101,15 @@ data:
         '"cookie_username": "$cookie_username",'
         '"upstream_header_time": "$upstream_header_time"'
       '}';
-      access_log /dev/stdout {{ if .Values.observability.enabled }}json_combined{{ else }}{{ ternary "json_combined" "main" (eq .Values.logFormat "json") }}{{ end }};
-      {{- if and .Values.observability.enabled .Values.observability.nginxLogs.enabled }}
-      # nginxLogs sidecar fallback: also write to files on the shared emptyDir so the
-      # otel-sidecar container (which cannot read stdout/stderr) can tail them.
+      # The console always gets the human-readable format. Structured logs are the sidecar's job:
+      # a sidecar cannot read another container's stdout, so nginx additionally writes JSON access
+      # logs and its error log to files on the shared emptyDir for the sidecar to tail.
+      access_log /dev/stdout main;
+      error_log  /dev/stderr warn;
+      {{- if .Values.observability.enabled }}
       access_log /var/log/nginx/otel/access_json.log json_combined;
       error_log  /var/log/nginx/otel/error.log warn;
       {{- end }}
-      # The hostLogs DaemonSet parses the container runtime's captured stdout/stderr, so
-      # error_log must go to stderr (not a file) for that path to see anything.
-      error_log  /dev/stderr warn;
 
 
   orchestrator.conf: |
