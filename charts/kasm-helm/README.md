@@ -2674,6 +2674,7 @@ object
 				<div style="max-width: 520px;">
 <pre lang="json">
 adminUsername: admin@kasm.local
+authDomain: ""
 config: {}
 defaultApiUsers: false
 defaultUsers: false
@@ -2701,7 +2702,21 @@ admin@kasm.local
 			<td>Change the username seeded on the admin-group member. Default: `admin@kasm.local`, the only true built-in admin account. Setting this to any other value seeds that account with generated (non-built-in) credentials stored under a `<local-part>-password`/`<local-part>-salt` key pair in the passwords/salts Secrets (e.g. `system@kasm.local` -> `system-password`) instead of the built-in admin-password-Secret-backed credentials. The chart will not create an `admin-password` key at all in that case, and the db-init Job will not be given a DEFAULT_ADMIN_PASSWORD env var. See docs/default-users.md. </td>
 		</tr>
 		<tr>
-			<td id="kasmConfig--config"><a href="./values.yaml#L1256">kasmConfig.config</a></td>
+			<td id="kasmConfig--authDomain"><a href="./values.yaml#L1259">kasmConfig.authDomain</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+""
+</pre>
+</div>
+			</td>
+			<td>Set the `kasm_auth_domain` global setting, which scopes the Kasm session cookie. Defaults to `""`, leaving Kasm's own `$request_host$` default in place (cookie scoped to whichever hostname served the page).  Applies at DATABASE INITIALIZATION, so it takes effect on FRESH INSTALLS ONLY. On an existing database the db-init Job no longer seeds anything; change the value in the admin UI under Settings -> Auth, or through the admin API (`POST /api/admin/get_settings` for the `setting_id`, then `POST /api/admin/update_setting`).  Why it exists: with a Kubernetes agent, browsers connect to the agent's session-proxy hostname directly, which is a different hostname from `publicAddr`. A cookie scoped to `publicAddr` is never sent to the agent and every session connection fails with a 401. Set this to the common parent domain of both hostnames — for `kasm.example.com` and `sessions.example.com`, that is `example.com`. Pick the two hostnames as siblings under one parent from the start; there is no fixing this later without renaming one.  Unlike `kasmConfig.config.settings`, this is applied last against the finished seed file, so it wins over both `existingDefaultPropertiesSecret` and the `kasmConfig.config` merge. It does not require `generatePreseed`. See the "Running alongside the kasm-helm control plane" section of [charts/kasm-agent/README.md](../kasm-agent/README.md) for the full agent pairing. </td>
+		</tr>
+		<tr>
+			<td id="kasmConfig--config"><a href="./values.yaml#L1276">kasmConfig.config</a></td>
 			<td>
 object
 </td>
@@ -2743,7 +2758,7 @@ false
 			<td>Creates a series of 4 users and 5 groups with a standard set of permissions accommodating most standard deployment scenarios. Refer to the [Default Users](./docs/default-users.md) for additional information about what this flag creates. </td>
 		</tr>
 		<tr>
-			<td id="kasmConfig--existingDefaultPropertiesSecret"><a href="./values.yaml#L1249">kasmConfig.existingDefaultPropertiesSecret</a></td>
+			<td id="kasmConfig--existingDefaultPropertiesSecret"><a href="./values.yaml#L1269">kasmConfig.existingDefaultPropertiesSecret</a></td>
 			<td>
 object
 </td>

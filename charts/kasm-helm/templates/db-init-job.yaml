@@ -8,6 +8,12 @@ Initialize the DB
 {{- $existingDefaultPropertiesSecret := dig "existingDefaultPropertiesSecret" "name" "" .Values.kasmConfig }}
 {{- $existingDefaultPropertiesKey := dig "existingDefaultPropertiesSecret" "key" "default_properties.yaml" .Values.kasmConfig }}
 {{- $adminUsername := dig "adminUsername" "admin@kasm.local" .Values.kasmConfig }}
+{{- $authDomain := dig "authDomain" "" .Values.kasmConfig }}
+{{- $generatePreseed := and .Values.kasmConfig .Values.kasmConfig.generatePreseed }}
+{{/* The prepare-db-preseed initContainer rewrites the seed file the db-init container reads. Any
+     one of the three inputs is reason enough to render it: a chart-generated custom_properties to
+     merge, a customer-supplied default_properties to swap in, or an auth domain to stamp. */}}
+{{- $preparePreseed := or $generatePreseed $existingDefaultPropertiesSecret $authDomain }}
 {{/* admin@kasm.local only stops being the seeded admin account when preseed's defaultUsers
      replaces it with a renamed, non-built-in admin account. Otherwise (preseed disabled, or
      defaultUsers disabled) the app's baked-in default seed still creates admin@kasm.local. */}}
@@ -36,10 +42,17 @@ spec:
       {{- include "kasm.securityContext" (list . 1000 "pod") | nindent 6 }}
       initContainers:
         {{- include "kasm.trustedCaInit" (list . "api") | nindent 8 }}
-        {{- if or (and .Values.kasmConfig .Values.kasmConfig.generatePreseed) $existingDefaultPropertiesSecret }}
+        {{- if $preparePreseed }}
         - name: prepare-db-preseed
           image: {{ $constants.api.image }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
+          {{- if $authDomain }}
+          env:
+            # Passed through the environment rather than interpolated into the yq program below, so
+            # the domain can never break out of the single-quoted expression.
+            - name: KASM_AUTH_DOMAIN
+              value: {{ $authDomain | quote }}
+          {{- end }}
           securityContext:
             runAsUser: 1000
             runAsGroup: 1000
@@ -91,15 +104,22 @@ spec:
               echo "Applied customer-provided default_properties.yaml from Secret."
               {{- end }}
 
-              {{- if and .Values.kasmConfig .Values.kasmConfig.generatePreseed }}
+              {{- if $generatePreseed }}
               if [[ ! -f "${CUSTOM_PROPERTIES}" ]]; then
                 echo "Custom preseed file was not found: ${CUSTOM_PROPERTIES}" >&2
                 exit 1
               fi
 
+              # .settings is an UPSERT keyed on (name, category) — the pair Kasm looks a setting up
+              # by — not a list concatenation. Appending instead would leave two rows for any
+              # setting that already exists in the default seed (kasm_auth_domain, and 86 others),
+              # and every /api/authenticate would then fail with a 500 (sqlalchemy
+              # MultipleResultsFound) until one row was deleted by hand.
               "${YQ_BIN}" -n '
                 load("'"${DEFAULT_PROPERTIES}"'") as $default |
                 load("'"${CUSTOM_PROPERTIES}"'") as $custom |
+                ($default.settings // []) as $defaultSettings |
+                ($custom.settings // []) as $customSettings |
                 (
                   $default * (
                     $custom
@@ -115,7 +135,32 @@ spec:
                   ($custom.group_settings // [])
                 ) |
                 .settings = (
-                  ($default.settings // []) + ($custom.settings // [])
+                  (
+                    $defaultSettings
+                    | map(
+                        . as $d |
+                        (
+                          $customSettings
+                          | map(select(.name == $d.name and .category == $d.category))
+                          | select(length > 0)
+                          | .[-1]
+                        ) // $d
+                      )
+                  )
+                  +
+                  (
+                    $customSettings
+                    | map(
+                        . as $c |
+                        select(
+                          (
+                            $defaultSettings
+                            | map(select(.name == $c.name and .category == $c.category))
+                            | length
+                          ) == 0
+                        )
+                      )
+                  )
                 )
               ' > "${MERGED_PROPERTIES}"
 
@@ -124,10 +169,41 @@ spec:
 
               echo "Merged custom preseed into ${DEFAULT_PROPERTIES}."
               {{- end }}
+
+              {{- if $authDomain }}
+              # Applied last, against the finished file, so it wins over both the customer-supplied
+              # seed and the custom merge above regardless of what either of them set.
+              "${YQ_BIN}" -i '
+                strenv(KASM_AUTH_DOMAIN) as $domain |
+                (.settings // []) as $settings |
+                ($settings | map(select(.name == "kasm_auth_domain")) | length) as $existing |
+                .settings = (
+                  ($settings | (.[] | select(.name == "kasm_auth_domain") | .value) = $domain)
+                  +
+                  (
+                    [
+                      {
+                        "category": "auth",
+                        "description": "Override the domain used in the Kasm session cookie.",
+                        "name": "kasm_auth_domain",
+                        "sanitize": false,
+                        "services_restart": null,
+                        "title": "Kasm Authorization Domain",
+                        "value": $domain,
+                        "value_type": "string"
+                      }
+                    ]
+                    | map(select($existing == 0))
+                  )
+                )
+              ' "${DEFAULT_PROPERTIES}"
+
+              echo "Set kasm_auth_domain to ${KASM_AUTH_DOMAIN} in ${DEFAULT_PROPERTIES}."
+              {{- end }}
           volumeMounts:
             - name: db-preseed-data
               mountPath: /seed_data
-            {{- if and .Values.kasmConfig .Values.kasmConfig.generatePreseed }}
+            {{- if $generatePreseed }}
             - name: custom-db-preseed
               mountPath: /custom-preseed/custom_properties.yaml
               subPath: custom_properties.yaml
@@ -243,7 +319,7 @@ spec:
           volumeMounts:
             - name: tmp-data
               mountPath: /tmp
-            {{- if or (and .Values.kasmConfig .Values.kasmConfig.generatePreseed) $existingDefaultPropertiesSecret }}
+            {{- if $preparePreseed }}
             - name: db-preseed-data
               mountPath: /opt/kasm/current/conf/database/seed_data
               readOnly: true
@@ -253,12 +329,12 @@ spec:
         - name: tmp-data
           emptyDir:
             sizeLimit: 256Mi
-        {{- if or (and .Values.kasmConfig .Values.kasmConfig.generatePreseed) $existingDefaultPropertiesSecret }}
+        {{- if $preparePreseed }}
         - name: db-preseed-data
           emptyDir:
             sizeLimit: 16Mi
         {{- end }}
-        {{- if and .Values.kasmConfig .Values.kasmConfig.generatePreseed }}
+        {{- if $generatePreseed }}
         - name: custom-db-preseed
           secret:
             secretName: {{ $preseedSecretName }}

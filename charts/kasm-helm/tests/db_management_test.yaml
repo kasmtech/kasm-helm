@@ -36,7 +36,7 @@ tests:
           path: spec.template.spec.containers[0].args[0]
           pattern: '/usr/bin/startup\.sh \|\| true'
   
-  - it: does not run the prepare-db-preseed init container when neither generatePreseed nor existingDefaultPropertiesSecret is set
+  - it: does not run the prepare-db-preseed init container when none of generatePreseed, existingDefaultPropertiesSecret or authDomain is set
     template: templates/db-init-job.yaml
     set:
       dbManagement:

@@ -2306,6 +2306,12 @@
           "description": "Username for the privileged admin account in the default user seed. Defaults to admin@kasm.local. Has no effect when defaultUsers is false.",
           "type": "string"
         },
+        "authDomain": {
+          "default": "",
+          "title": "authDomain",
+          "description": "Value for the kasm_auth_domain global setting, which scopes the Kasm session cookie. Empty leaves Kasm's $request_host$ default in place. Applied at database initialization, so it affects fresh installs only; on an existing database change it in the admin UI (Settings -> Auth) or via the admin API. Set it to the parent domain covering both the control plane's publicAddr and a Kubernetes agent's session-proxy hostname. Does not require generatePreseed.",
+          "type": "string"
+        },
         "existingDefaultPropertiesSecret": {
           "title": "existingDefaultPropertiesSecret",
           "description": "Reference a customer-managed Secret containing a complete default_properties.yaml seed file. When name is set, its contents replace the image's baked-in default_properties.yaml as the base seed file, independently of generatePreseed.",

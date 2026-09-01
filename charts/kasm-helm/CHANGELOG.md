@@ -2,6 +2,16 @@
 
 All notable changes to the kasm-helm chart are documented here.
 
+## [Unreleased]
+
+### Added
+
+- Adds `kasmConfig.authDomain`, which sets Kasm's `kasm_auth_domain` global setting (the domain the session cookie is scoped to) at database initialization. Kubernetes-agent deployments need it pointed at the parent domain covering both the control plane's `publicAddr` and the agent's session hostname, otherwise the browser never sends the cookie to the agent and every session connection fails with a 401 — previously an unavoidable manual post-install step through the admin UI or API. It needs no `generatePreseed` and is applied last, so it wins over both `kasmConfig.config` and `kasmConfig.existingDefaultPropertiesSecret`. Fresh installs only; existing databases still change the value in the admin UI under Settings → Auth, or through the admin API.
+
+### Fixed
+
+- Fixed the DB preseed merging `kasmConfig.config.settings` into Kasm's default seed by list concatenation, which left a duplicate row for any setting that already exists in that seed (`kasm_auth_domain` and 86 others) and made every `/api/authenticate` call fail with a 500 (`MultipleResultsFound`) until one row was deleted by hand. Settings now upsert on `name` + `category`: a preseeded setting replaces its default counterpart, defaults with no counterpart are kept, and genuinely new settings are still appended.
+
 ## [1.1190.6] - 2026-07-28
 
 ### Fixed
