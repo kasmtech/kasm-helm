@@ -1,0 +1,149 @@
+# Kasm Video Device Plugin
+
+{{ template "chart.badgesSection" . }}
+
+{{ template "chart.description" . }}
+
+{{ template "chart.homepageLine" . }}
+
+{{ template "chart.maintainersSection" . }}
+
+{{ template "chart.sourcesSection" . }}
+
+{{ template "chart.requirementsSection" . }}
+
+## What this chart does
+
+Kubernetes will not schedule a pod onto a node because of a device file; it schedules on resources. This
+chart deploys Kasm's own video-device-plugin (built from `apps/kasm-video-device-plugin` in kasm-monorepo) as
+a DaemonSet that implements the kubelet Device Plugin API (v1beta1) and turns the node's video devices into a
+countable, allocatable extended resource:
+
+1. The plugin scans `/dev` every 10 seconds for entries starting with `devicePrefix` (default `video`, so
+   `video0`, `video1`, ...), sorted numerically by suffix so the advertised order stays stable as devices
+   come and go.
+2. Every matching device up to `maxDevices` (default 128) is advertised as one unit of `resourceName`
+   (default **`kasm.com/video`**).
+3. When a workspace pod requests `kasm.com/video: 1`, kubelet picks a specific free device, guarantees no
+   other pod gets it, and mounts it into the container. The Kasm agent adds that request to the pod when
+   `KASM_SVC_WEBCAM=1`. When a container is allocated exactly one device, the plugin also injects
+   `allocateEnvVar` (default `KASM_VIDEO_DEVICE`) set to that device's host path, which the exec job reads to
+   discover the assigned device.
+
+The devices themselves come from the **v4l2loopback** kernel module, which this chart does not install — the
+companion [`kasm-node-prep`](../kasm-node-prep) chart builds and loads it. Install both, or the plugin will
+find no devices and advertise a capacity of zero.
+
+Allocation is entirely kubelet's job here. There is no assignment tracking to configure and no way for two
+sessions to end up on the same virtual webcam.
+
+## Security posture
+
+Read this before installing. **This chart is privileged by necessity** — a device plugin has to reach the
+node's device files and the kubelet socket.
+
+* The DaemonSet container runs with `securityContext.privileged: true`, because it must stat, open, and hand
+  out the node's device nodes.
+* It mounts two host paths:
+  * `/var/lib/kubelet/device-plugins` — the Device Plugin API socket directory. The plugin creates its own
+    socket here and registers with kubelet through `kubelet.sock`. Write access to this directory is
+    effectively the ability to advertise arbitrary resources to kubelet.
+  * `/dev` — the node device tree matched against `devicePrefix`.
+* It does **not** use `hostNetwork`, `hostPID`, `hostIPC`, or a host service account, and it mounts no other
+  host path. It needs no RBAC, because it talks to kubelet over the socket rather than to the API server.
+* The namespace it is installed into must allow privileged pods. With
+  [Pod Security Admission](https://kubernetes.io/docs/concepts/security/pod-security-admission/) that means
+  labelling the namespace `pod-security.kubernetes.io/enforce: privileged`. The pods cannot satisfy the
+  `baseline` or `restricted` standards and will be rejected outright by an enforcing namespace.
+
+## Node prerequisites
+
+* **The v4l2loopback module must be loaded**, otherwise no `/dev/video*` device exists and the plugin
+  advertises `kasm.com/video: 0`. Install [`kasm-node-prep`](../kasm-node-prep) with
+  `modules.v4l2loopback.enabled: true` on the same nodes. That chart's own prerequisites (kernel headers
+  available, internet or mirror access for the module source, and MOK enrollment on Secure Boot nodes) apply
+  transitively — this plugin is useless on a node where the module could not be built.
+* **The kubelet device-plugin directory must be at `/var/lib/kubelet/device-plugins`.** Clusters that
+  relocate the kubelet root directory need the `device-plugin` hostPath adjusted to match.
+* **`priorityClassName: system-node-critical`** is used by default, which requires the pods to run in a
+  namespace permitted to use that system priority class (`kube-system`, or any namespace when no
+  `ResourceQuota` restricts it). Set `priorityClassName: ""` if your admission policy forbids it.
+
+## Usage
+
+Pin the plugin to the same nodes the module installer prepares, so `kasm.com/video` is never advertised on a
+node without loopback devices:
+
+```yaml
+nodeSelector:
+  kasm.com/workspaces: "true"
+tolerations:
+  - key: kasm.com/workspaces
+    operator: Exists
+    effect: NoSchedule
+```
+
+Confirm the resource is registered once the pods are up:
+
+```bash
+kubectl get nodes -o custom-columns='NODE:.metadata.name,VIDEO:.status.allocatable.kasm\.com/video'
+```
+
+A node showing a capacity of `0` (or no value) has no `/dev/video*` devices; check the `kasm-node-prep` pod
+log on that node.
+
+{{ define "chart.valueDefaultColumnRender" }}
+{{- $defaultValue := (default .Default .AutoDefault)  -}}
+{{- $notationType := .NotationType }}
+{{- if (and (hasPrefix "`" $defaultValue) (hasSuffix "`" $defaultValue) ) -}}
+{{- $defaultValue = (toYaml (fromJson (trimAll "`" (default .Default .AutoDefault) ) ) ) -}}
+{{- $notationType = "json" }}
+{{- end -}}
+{{- if (eq $notationType "tpl" ) }}
+<pre lang="{{ $notationType }}">
+{{ .Key }}: |
+{{- $defaultValue | nindent 2 }}
+</pre>
+{{- else if (eq $notationType "email") }}
+<a href="mailto:{{ $defaultValue }}" style="color: green;">"{{ $defaultValue }}"</a>
+{{- else }}
+<pre lang="{{ $notationType }}">
+{{ $defaultValue }}
+</pre>
+{{- end }}
+{{ end }}
+
+{{ define "chart.typeColumnRender" }}
+{{- if (eq .Type "string/email") }}
+<a href="#stringemail" title="{{- template "chart.valuetypes.email" -}}">{{.Type}}</a>
+{{- else }}
+{{ .Type }}
+{{- end }}
+{{ end }}
+
+{{ define "chart.valuesTableHtml" }}
+<table>
+	<thead>
+		<th>Key</th>
+		<th>Type</th>
+		<th>Default</th>
+		<th>Description</th>
+	</thead>
+	<tbody>
+	{{- range .Values }}
+		<tr>
+			<td id="{{ .Key | replace "." "--" }}"><a href="./values.yaml#L{{ .LineNumber }}">{{ .Key }}</a></td>
+			<td>{{- template "chart.typeColumnRender" . -}}</td>
+			<td>
+				<div style="max-width: 520px;">{{ template "chart.valueDefaultColumnRender" . }}</div>
+			</td>
+			<td>{{ if .Description }}{{ .Description }}{{ else }}{{ .AutoDescription }}{{ end }}</td>
+		</tr>
+	{{- end }}
+	</tbody>
+</table>
+{{ end }}
+
+## Chart value settings in `values.yaml`
+
+{{ template "chart.valuesSectionHtml" . }}

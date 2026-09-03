@@ -1,0 +1,30 @@
+dependencies:
+- name: kasm-agent-operator
+  repository: file://../kasm-agent-operator
+  version: 0.1.0
+- name: kasm-otel-collector
+  repository: file://../kasm-otel-collector
+  version: 0.1.0
+- name: kasm-agent-instance
+  repository: file://../kasm-agent-instance
+  version: 0.1.0
+- name: kasm-node-prep
+  repository: file://../kasm-node-prep
+  version: 0.1.0
+- name: kasm-video-device-plugin
+  repository: file://../kasm-video-device-plugin
+  version: 0.1.0
+- name: kasm-egress-installer
+  repository: file://../kasm-egress-installer
+  version: 0.1.0
+- name: csi-driver-rclone
+  repository: oci://ghcr.io/veloxpack/charts
+  version: 0.5.0
+- name: gpu-operator
+  repository: https://helm.ngc.nvidia.com/nvidia
+  version: v26.7.0
+- name: nfs-server-provisioner
+  repository: https://kubernetes-sigs.github.io/nfs-ganesha-server-and-external-provisioner/
+  version: 1.8.0
+digest: sha256:60a80fb57e864734053e791ed12a2b6efc679827c118fcbc890c6cc58994dd49
+generated: "2026-09-02T17:47:41.705678614Z"

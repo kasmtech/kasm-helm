@@ -1,0 +1,462 @@
+suite: KMM mode
+
+# The two templates that exist only for modules.v4l2loopback.method=kmm. Neither renders anything
+# while the method is build, which the first test pins down.
+templates:
+  - templates/kmm-module.yaml
+  - templates/kmm-dockerfile-configmap.yaml
+
+tests:
+  - it: renders no KMM objects at all with the default build method
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders the Module and its Dockerfile ConfigMap when the method is kmm
+    set:
+      modules:
+        v4l2loopback:
+          method: kmm
+          kmm:
+            image:
+              registry: registry.contoso.com
+              repository: kasm/v4l2loopback
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/kmm-module.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/kmm-dockerfile-configmap.yaml
+
+  # --- The Module custom resource ----------------------------------------------------------------
+  #
+  # Schema per kmm.sigs.x-k8s.io_modules.yaml at KMM v2.7.0.
+
+  - it: renders a Module carrying the same modprobe parameters the reconcile script would use
+    template: templates/kmm-module.yaml
+    set:
+      modules:
+        v4l2loopback:
+          method: kmm
+          kmm:
+            image:
+              registry: registry.contoso.com
+              repository: kasm/v4l2loopback
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Module
+      - isAPIVersion:
+          of: kmm.sigs.x-k8s.io/v1beta1
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-kasm-node-prep-v4l2loopback
+      - equal:
+          path: spec.moduleLoader.container.modprobe.moduleName
+          value: v4l2loopback
+      - equal:
+          path: spec.moduleLoader.container.modprobe.parameters
+          value:
+            - devices=4
+            - exclusive_caps=1
+      - equal:
+          path: spec.moduleLoader.container.kernelMappings[0].regexp
+          value: ^.*$
+      - equal:
+          path: spec.moduleLoader.container.kernelMappings[0].build.dockerfileConfigMap.name
+          value: RELEASE-NAME-kasm-node-prep-v4l2loopback-dockerfile
+      # Not configured, so neither block is present.
+      - isNull:
+          path: spec.moduleLoader.container.kernelMappings[0].sign
+      - isNull:
+          path: spec.imageRepoSecret
+      - isNull:
+          path: spec.tolerations
+      # spec.selector is required by the CRD; an empty nodeSelector selects every node.
+      - equal:
+          path: spec.selector
+          value: {}
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: node-prep
+      - equal:
+          path: metadata.labels["helm.sh/chart"]
+          value: kasm-node-prep-0.1.0
+
+  - it: follows the module parameter values the same way the build method does
+    template: templates/kmm-module.yaml
+    set:
+      modules:
+        v4l2loopback:
+          method: kmm
+          videoDevices: 12
+          exclusiveCaps: false
+          kmm:
+            image:
+              registry: registry.contoso.com
+              repository: kasm/v4l2loopback
+    asserts:
+      - equal:
+          path: spec.moduleLoader.container.modprobe.parameters
+          value:
+            - devices=12
+            - exclusive_caps=0
+
+  # KMM -- not Helm, and not a shell -- expands ${KERNEL_FULL_VERSION}, so it has to reach the
+  # cluster as those 22 literal characters.
+  - it: defaults the image tag to the literal ${KERNEL_FULL_VERSION} KMM substitutes per kernel
+    template: templates/kmm-module.yaml
+    set:
+      modules:
+        v4l2loopback:
+          method: kmm
+          kmm:
+            image:
+              registry: registry.contoso.com
+              repository: kasm/v4l2loopback
+    asserts:
+      - equal:
+          path: spec.moduleLoader.container.kernelMappings[0].containerImage
+          value: 'registry.contoso.com/kasm/v4l2loopback:${KERNEL_FULL_VERSION}'
+
+  - it: pins one image for every kernel when a tag is set
+    template: templates/kmm-module.yaml
+    set:
+      modules:
+        v4l2loopback:
+          method: kmm
+          kmm:
+            kernelRegexp: '^6\.8\..*$'
+            image:
+              registry: registry.contoso.com
+              repository: kasm/v4l2loopback
+              tag: "0.13.2-6.8.0-generic"
+    asserts:
+      - equal:
+          path: spec.moduleLoader.container.kernelMappings[0].containerImage
+          value: registry.contoso.com/kasm/v4l2loopback:0.13.2-6.8.0-generic
+      - equal:
+          path: spec.moduleLoader.container.kernelMappings[0].regexp
+          value: ^6\.8\..*$
+
+  - it: joins a digest pinned image tag without a second separator
+    template: templates/kmm-module.yaml
+    set:
+      modules:
+        v4l2loopback:
+          method: kmm
+          kmm:
+            image:
+              registry: registry.contoso.com
+              repository: kasm/v4l2loopback
+              tag: "@sha256:dc192e164c69b03f156765793a1be62ca437709ae477b27ca7d8f3dcf5021576"
+    asserts:
+      - equal:
+          path: spec.moduleLoader.container.kernelMappings[0].containerImage
+          value: registry.contoso.com/kasm/v4l2loopback@sha256:dc192e164c69b03f156765793a1be62ca437709ae477b27ca7d8f3dcf5021576
+
+  - it: adds the sign block and the registry secret when they are configured
+    template: templates/kmm-module.yaml
+    set:
+      modules:
+        v4l2loopback:
+          method: kmm
+          kmm:
+            image:
+              registry: registry.contoso.com
+              repository: kasm/v4l2loopback
+            imageRepoSecret: kasm-registry
+            sign:
+              enabled: true
+              keySecret: kasm-mok-key
+              certSecret: kasm-mok-cert
+    asserts:
+      - equal:
+          path: spec.moduleLoader.container.kernelMappings[0].sign.keySecret.name
+          value: kasm-mok-key
+      - equal:
+          path: spec.moduleLoader.container.kernelMappings[0].sign.certSecret.name
+          value: kasm-mok-cert
+      # A glob, not an interpolated kernel release: the CRD documents Ash globs for filesToSign.
+      - equal:
+          path: spec.moduleLoader.container.kernelMappings[0].sign.filesToSign
+          value:
+            - /opt/lib/modules/*/extra/v4l2loopback.ko
+      - equal:
+          path: spec.imageRepoSecret.name
+          value: kasm-registry
+
+  - it: carries the chart's scheduling values onto the Module so KMM reaches the same nodes
+    template: templates/kmm-module.yaml
+    set:
+      modules:
+        v4l2loopback:
+          method: kmm
+          kmm:
+            image:
+              registry: registry.contoso.com
+              repository: kasm/v4l2loopback
+      nodeSelector:
+        kasm.com/workspaces: "true"
+      tolerations:
+        - key: kasm.com/workspaces
+          operator: Exists
+          effect: NoSchedule
+    asserts:
+      - equal:
+          path: spec.selector["kasm.com/workspaces"]
+          value: "true"
+      - contains:
+          path: spec.tolerations
+          content:
+            key: kasm.com/workspaces
+            operator: Exists
+            effect: NoSchedule
+
+  - it: honors fullnameOverride for both KMM object names
+    set:
+      fullnameOverride: node-prep
+      modules:
+        v4l2loopback:
+          method: kmm
+          kmm:
+            image:
+              registry: registry.contoso.com
+              repository: kasm/v4l2loopback
+    asserts:
+      - equal:
+          path: metadata.name
+          value: node-prep-v4l2loopback
+        template: templates/kmm-module.yaml
+      - equal:
+          path: metadata.name
+          value: node-prep-v4l2loopback-dockerfile
+        template: templates/kmm-dockerfile-configmap.yaml
+
+  # --- The Dockerfile ConfigMap ------------------------------------------------------------------
+
+  - it: renders a two stage Dockerfile in the layout KMM expects, under the dockerfile key
+    template: templates/kmm-dockerfile-configmap.yaml
+    set:
+      modules:
+        v4l2loopback:
+          method: kmm
+          kmm:
+            image:
+              registry: registry.contoso.com
+              repository: kasm/v4l2loopback
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-kasm-node-prep-v4l2loopback-dockerfile
+      - exists:
+          path: data.dockerfile
+      # KMM passes KERNEL_FULL_VERSION as a build arg, once per kernel release it finds.
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'ARG KERNEL_FULL_VERSION'
+      # Stage 1 builds against the *target* kernel's headers, in the chart's own builder image.
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'FROM docker\.io/library/ubuntu:22\.04 AS builder'
+      - matchRegex:
+          path: data.dockerfile
+          pattern: '"linux-headers-\$\{KERNEL_FULL_VERSION\}"'
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'build-essential'
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'libelf1'
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'git clone --depth 1 --branch "v0\.13\.2" "https://github\.com/umlaeute/v4l2loopback\.git" v4l2loopback'
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'make -C /usr/src/v4l2loopback KERNELRELEASE="\$\{KERNEL_FULL_VERSION\}"'
+      # Stage 2 ships only the .ko, in <dirName>/lib/modules/<kernel>/, indexed by depmod -b /opt.
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'COPY --from=builder /usr/src/v4l2loopback/v4l2loopback\.ko /opt/lib/modules/\$\{KERNEL_FULL_VERSION\}/extra/'
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'depmod -b /opt "\$\{KERNEL_FULL_VERSION\}"'
+
+  - it: clones the configured mirror and ref, and follows a custom builder image
+    template: templates/kmm-dockerfile-configmap.yaml
+    set:
+      image:
+        registry: registry.contoso.com
+        repository: kasm/builder
+        tag: "24.04"
+      modules:
+        v4l2loopback:
+          method: kmm
+          sourceRepo: https://git.contoso.com/mirrors/v4l2loopback.git
+          sourceRef: v0.13.1
+          kmm:
+            image:
+              registry: registry.contoso.com
+              repository: kasm/v4l2loopback
+    asserts:
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'FROM registry\.contoso\.com/kasm/builder:24\.04 AS builder'
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'git clone --depth 1 --branch "v0\.13\.1" "https://git\.contoso\.com/mirrors/v4l2loopback\.git" v4l2loopback'
+
+  - it: clones the default branch when no sourceRef is pinned
+    template: templates/kmm-dockerfile-configmap.yaml
+    set:
+      modules:
+        v4l2loopback:
+          method: kmm
+          sourceRef: ""
+          kmm:
+            image:
+              registry: registry.contoso.com
+              repository: kasm/v4l2loopback
+    asserts:
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'git clone --depth 1 "https://github\.com/umlaeute/v4l2loopback\.git" v4l2loopback'
+      - notMatchRegex:
+          path: data.dockerfile
+          pattern: '--branch'
+
+  # Airgap mode A: images are built in connected CI and only pulled here, so there is nothing to
+  # build in the cluster -- no Dockerfile ConfigMap, and no build block on the Module.
+  - it: omits the Dockerfile ConfigMap and the build block when in-cluster builds are off
+    set:
+      modules:
+        v4l2loopback:
+          method: kmm
+          kmm:
+            build:
+              enabled: false
+            image:
+              registry: registry.contoso.com
+              repository: kasm/v4l2loopback
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/kmm-dockerfile-configmap.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/kmm-module.yaml
+      - isNull:
+          path: spec.moduleLoader.container.kernelMappings[0].build
+        template: templates/kmm-module.yaml
+      # The image is still per-kernel: one prebuilt tag per kernel in the fleet.
+      - equal:
+          path: spec.moduleLoader.container.kernelMappings[0].containerImage
+          value: 'registry.contoso.com/kasm/v4l2loopback:${KERNEL_FULL_VERSION}'
+        template: templates/kmm-module.yaml
+
+  # --- Required values ---------------------------------------------------------------------------
+
+  - it: fails when the kmm image registry is not set
+    set:
+      modules:
+        v4l2loopback:
+          method: kmm
+          kmm:
+            image:
+              repository: kasm/v4l2loopback
+    template: templates/kmm-module.yaml
+    asserts:
+      - failedTemplate:
+          errorMessage: "kasm-node-prep: modules.v4l2loopback.kmm.image.registry must be set when modules.v4l2loopback.method=kmm. KMM loads the module from a container image, so it needs a registry to pull it from (and, with kmm.build.enabled, to push the built image to)."
+
+  - it: fails when the kmm image repository is not set
+    set:
+      modules:
+        v4l2loopback:
+          method: kmm
+          kmm:
+            image:
+              registry: registry.contoso.com
+    template: templates/kmm-module.yaml
+    asserts:
+      - failedTemplate:
+          errorMessage: "kasm-node-prep: modules.v4l2loopback.kmm.image.repository must be set when modules.v4l2loopback.method=kmm. KMM loads the module from a container image, so it needs a repository to pull it from (and, with kmm.build.enabled, to push the built image to)."
+
+  - it: fails when signing is enabled without a key secret
+    set:
+      modules:
+        v4l2loopback:
+          method: kmm
+          kmm:
+            image:
+              registry: registry.contoso.com
+              repository: kasm/v4l2loopback
+            sign:
+              enabled: true
+              certSecret: kasm-mok-cert
+    template: templates/kmm-module.yaml
+    asserts:
+      - failedTemplate:
+          errorMessage: "kasm-node-prep: modules.v4l2loopback.kmm.sign.keySecret must be set when modules.v4l2loopback.kmm.sign.enabled is true. It names the Secret holding the private Machine Owner Key that KMM signs the built module with."
+
+  - it: fails when signing is enabled without a cert secret
+    set:
+      modules:
+        v4l2loopback:
+          method: kmm
+          kmm:
+            image:
+              registry: registry.contoso.com
+              repository: kasm/v4l2loopback
+            sign:
+              enabled: true
+              keySecret: kasm-mok-key
+    template: templates/kmm-module.yaml
+    asserts:
+      - failedTemplate:
+          errorMessage: "kasm-node-prep: modules.v4l2loopback.kmm.sign.certSecret must be set when modules.v4l2loopback.kmm.sign.enabled is true. It names the Secret holding the public certificate matching modules.v4l2loopback.kmm.sign.keySecret."
+
+  # sourcePath points inside *this chart's* builder image, which a KMM build pod never runs. The
+  # airgapped KMM path is prebuilt images (kmm.build.enabled=false), not a vendored source tree.
+  - it: fails when sourcePath is combined with the kmm method
+    set:
+      modules:
+        v4l2loopback:
+          method: kmm
+          sourcePath: /opt/kasm-modules/v4l2loopback
+          kmm:
+            image:
+              registry: registry.contoso.com
+              repository: kasm/v4l2loopback
+    template: templates/kmm-module.yaml
+    asserts:
+      - failedTemplate:
+          errorMessage: "kasm-node-prep: modules.v4l2loopback.sourcePath applies to method=build only -- it points at a source tree inside this chart's builder image, which a KMM build pod never runs. A KMM in-cluster build clones modules.v4l2loopback.sourceRepo; for an airgapped fleet set modules.v4l2loopback.kmm.build.enabled=false and pull prebuilt per-kernel images instead."
+
+  - it: fails on an unknown method
+    set:
+      modules:
+        v4l2loopback:
+          method: operator
+    template: templates/kmm-module.yaml
+    asserts:
+      - failedTemplate:
+          errorMessage: 'kasm-node-prep: modules.v4l2loopback.method must be "build" or "kmm", got "operator".'
+
+  # WireGuard has the key only so the two modules read alike; there is no second implementation.
+  - it: fails when wireguard is pointed at KMM
+    set:
+      modules:
+        wireguard:
+          enabled: true
+          method: kmm
+    template: templates/kmm-module.yaml
+    asserts:
+      - failedTemplate:
+          errorMessage: "kasm-node-prep: wireguard via KMM is not supported: kernels >= 5.6 ship WireGuard in-tree; use method: build for older kernels."

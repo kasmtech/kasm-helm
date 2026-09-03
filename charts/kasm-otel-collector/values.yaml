@@ -1,0 +1,356 @@
+# nameOverride -- Override the chart name used to build resource names and the `app.kubernetes.io/name` label.
+# Leave empty to use the chart name (`kasm-otel-collector`).
+#
+nameOverride: ""
+
+# fullnameOverride -- Fully override the generated resource name prefix. When set, resource names are used verbatim
+# instead of being derived from the release name and the chart name.
+#
+fullnameOverride: ""
+
+# commonLabels -- Custom labels to apply to every resource created by this chart.
+#
+commonLabels: {}
+
+# commonAnnotations -- Custom annotations to apply to every resource created by this chart.
+#
+commonAnnotations: {}
+
+# replicaCount -- Number of collector replicas to run. The collector holds an in-memory sending queue, so scaling
+# beyond one replica buys throughput, not durability.
+#
+replicaCount: 1
+
+# image -- The OpenTelemetry Collector container image. The `contrib` distribution is required: the `clickhouse`
+# exporter and the `k8s_events` receiver are not present in the core distribution.
+#
+image:
+  # image.registry -- Registry that hosts the collector image.
+  registry: docker.io
+  # image.repository -- Repository of the collector image, without the registry or tag.
+  repository: otel/opentelemetry-collector-contrib
+  # image.tag -- Tag of the collector image. Leave empty to fall back to the chart's `appVersion`.
+  tag: ""
+  # image.pullPolicy -- Image pull policy for the collector container.
+  pullPolicy: IfNotPresent
+
+# imagePullSecrets -- A list of `{name: <secret>}` references used to pull the collector image from a private registry.
+#
+imagePullSecrets: []
+
+# serviceAccount -- The ServiceAccount the collector pod runs as. The `k8s_events` receiver reads Events through this
+# identity, so an externally managed ServiceAccount must be bound to a Role granting `get`/`list`/`watch` on events.
+#
+serviceAccount:
+  # serviceAccount.create -- Create a ServiceAccount for the collector. Set to false to reuse an existing one.
+  create: true
+  # serviceAccount.name -- Name of the ServiceAccount to use. Generated from the release name when empty.
+  name: ""
+  # serviceAccount.annotations -- Custom annotations to add to the collector ServiceAccount.
+  annotations: {}
+
+# receivers -- Telemetry ingestion points. The OTLP receiver (HTTP on 4318, gRPC on 4317) is always enabled; it is
+# how the Kasm agent components report.
+#
+receivers:
+  # receivers.k8sEvents -- Ingests Kubernetes Events from the release namespace as log records - what Kubernetes
+  # itself is doing to a session (scheduling failures, image pulls, probe failures, OOMKills), correlated with the
+  # app traces for the same pod. Enabling this also renders the Role and RoleBinding that permit reading Events.
+  k8sEvents:
+    # receivers.k8sEvents.enabled -- Enable the `k8s_events` receiver and its namespace-scoped Events RBAC.
+    enabled: true
+
+# exporters -- Backends the collector fans telemetry out to. At least one exporter must be enabled or templating fails.
+#
+exporters:
+  # exporters.otlp -- The primary OTLP/gRPC exporter, typically a Grafana LGTM stack (Tempo, Mimir/Prometheus, Loki).
+  otlp:
+    # exporters.otlp.enabled -- Enable the OTLP/gRPC exporter. It receives traces, metrics, and logs.
+    enabled: true
+    # exporters.otlp.endpoint -- `host:port` of the OTLP/gRPC receiver on the backend. No scheme - gRPC endpoints
+    # are bare host:port.
+    endpoint: lgtm.observability.svc.cluster.local:4317
+    # exporters.otlp.tlsInsecure -- Disable TLS on the exporter connection. Appropriate for an in-cluster backend
+    # reached over the pod network; set to false when the backend terminates TLS.
+    tlsInsecure: true
+    # exporters.otlp.sendingQueueSize -- Size of the exporter's in-memory sending queue, in batches.
+    sendingQueueSize: 1000
+  # exporters.clickhouse -- Optional long-retention archive. Gets the same spans and log records the OTLP backend
+  # gets, kept for months instead of days and queryable in SQL. Metrics deliberately do not go here.
+  clickhouse:
+    # exporters.clickhouse.enabled -- Enable the ClickHouse archive exporter for traces and logs.
+    enabled: false
+    # exporters.clickhouse.endpoint -- ClickHouse native-protocol DSN, including any query parameters.
+    endpoint: tcp://clickhouse.observability.svc.cluster.local:9000?dial_timeout=10s&compress=lz4
+    # exporters.clickhouse.database -- ClickHouse database that holds the traces and logs tables.
+    database: otel
+    # exporters.clickhouse.username -- ClickHouse user the exporter authenticates as.
+    username: otel
+    # exporters.clickhouse.existingSecret -- Name of an existing Secret holding the ClickHouse password. The
+    # collector refuses to start when the resolved `CLICKHOUSE_PASSWORD` environment variable is unset, so this
+    # Secret must exist in the release namespace before install. The password is never stored in values.
+    existingSecret: clickhouse-otel
+    # exporters.clickhouse.existingSecretKey -- Key inside `exporters.clickhouse.existingSecret` holding the password.
+    existingSecretKey: password
+    # exporters.clickhouse.createSchema -- Build the traces/logs tables and their materialized views on first
+    # connect, so there is no migration step to run by hand.
+    createSchema: true
+    # exporters.clickhouse.tracesTableName -- Name of the ClickHouse table that receives spans.
+    tracesTableName: otel_traces
+    # exporters.clickhouse.logsTableName -- Name of the ClickHouse table that receives log records.
+    logsTableName: otel_logs
+    # exporters.clickhouse.ttl -- Table-level TTL. ClickHouse drops whole expired parts on merge, so this costs
+    # nothing to enforce. The default is 90 days.
+    ttl: 2160h
+    # exporters.clickhouse.timeout -- Deadline for a single INSERT into ClickHouse. It has to cover the largest
+    # batch the sending queue lets accumulate, and a timeout is retried with the 5s-to-30s backoff configured
+    # alongside it, so setting this too low turns an ordinary merge pause on the ClickHouse side into a retry storm
+    # rather than into a clean drop.
+    timeout: 10s
+    # exporters.clickhouse.sendingQueueSize -- Size of the exporter's in-memory sending queue, in batches.
+    # ClickHouse prefers fewer, larger inserts; the queue absorbs a restart or a merge pause without
+    # backpressuring the OTLP path alongside it.
+    sendingQueueSize: 1000
+  # exporters.debug -- Writes telemetry to the collector's own stdout. Useful when bringing a new deployment up;
+  # leave disabled in steady state.
+  debug:
+    # exporters.debug.enabled -- Enable the debug exporter on every pipeline.
+    enabled: false
+    # exporters.debug.verbosity -- Debug exporter verbosity - one of `basic`, `normal`, or `detailed`.
+    verbosity: normal
+
+# processors -- Tuning for the processors shared by every pipeline. The processor set itself is fixed; these values
+# only adjust its thresholds.
+#
+processors:
+  # processors.memoryLimiter -- Backpressure guard. Percentage-based so it stays correct if the container's memory
+  # limit ever changes, instead of a hand-recomputed MiB value that silently drifts out of sync.
+  memoryLimiter:
+    # processors.memoryLimiter.checkInterval -- How often the limiter samples the collector's own heap. This is the
+    # resolution of the entire backpressure mechanism: between two samples the collector allocates unchecked, so a
+    # longer interval makes it likelier that a burst of session traces carries it past the limit and into an OOMKill
+    # before the limiter ever reacts.
+    checkInterval: 1s
+    # processors.memoryLimiter.limitPercentage -- Percentage of the container memory limit at which the collector
+    # starts refusing data.
+    limitPercentage: 80
+    # processors.memoryLimiter.spikeLimitPercentage -- Percentage of the container memory limit reserved as spike
+    # headroom.
+    spikeLimitPercentage: 20
+  # processors.batch -- Batching applied to the traces and metrics pipelines, trading a little export latency for
+  # far fewer and larger exporter requests. Logs are batched separately and far more conservatively - see
+  # `processors.batchLogs`.
+  batch:
+    # processors.batch.timeout -- Maximum time a batch is held before being sent.
+    timeout: 5s
+    # processors.batch.sendBatchSize -- Number of spans or metric datapoints that triggers an immediate send without
+    # waiting out `processors.batch.timeout`. Larger batches compress better and cost the backend fewer requests;
+    # smaller ones get a session's spans into Tempo sooner, which matters when someone is watching a workspace
+    # start.
+    sendBatchSize: 512
+    # processors.batch.sendBatchMaxSize -- Hard upper bound on records in a single batch; anything larger is split
+    # across sends. This is what keeps one export under the backend's gRPC max-receive-message-size, and the logs
+    # pipeline needs a far lower ceiling for exactly that reason (see `processors.batchLogs.sendBatchMaxSize`).
+    sendBatchMaxSize: 2048
+  # processors.batchLogs -- Separate, much smaller batching for logs. Log records run larger than trace/metric
+  # records once marshaled, and the shared batch ceiling produced logs batches that decompressed past the
+  # backend's default 4MiB gRPC max-recv-message-size, so every logs batch was rejected outright.
+  batchLogs:
+    # processors.batchLogs.timeout -- Maximum time a logs batch is held before being sent.
+    timeout: 5s
+    # processors.batchLogs.sendBatchSize -- Number of log records that triggers an immediate send. Deliberately two
+    # orders of magnitude below the trace/metric equivalent, because a marshaled log record is much larger than a
+    # span and an oversized logs batch is rejected by the backend in its entirety rather than partially accepted.
+    sendBatchSize: 16
+    # processors.batchLogs.sendBatchMaxSize -- Hard upper bound on log records in one batch. This is the value that
+    # actually keeps a logs export under the backend's default 4MiB gRPC max-receive-message-size; the shared
+    # trace/metric ceiling of 2048 is what caused every logs batch to come back ResourceExhausted while traces and
+    # metrics on the same exporter were fine.
+    sendBatchMaxSize: 32
+  # processors.deltatocumulative -- Converts delta histograms to cumulative. Prometheus is cumulative-only and
+  # silently drops delta metrics on its OTLP receiver.
+  deltatocumulative:
+    # processors.deltatocumulative.maxStale -- How long a stale series is tracked before being dropped.
+    maxStale: 5m
+  # processors.filterProbes -- Drops the kubelet probe spans (`/__ready`, `/__healthcheck`). Each is a single-span
+  # trace with a hardcoded 200, so nothing is orphaned by dropping them and nothing is learned by keeping them.
+  filterProbes:
+    # processors.filterProbes.spans -- OTTL span conditions; a span matching any of these is dropped from the
+    # traces pipeline. The agent heartbeat traces are deliberately absent - they are the only continuous signal
+    # that the agent is talking to the API server.
+    spans:
+      - 'attributes["url.path"] == "/__ready"'
+      - 'attributes["url.path"] == "/__healthcheck"'
+
+# telemetry -- The collector's own self-observability, rendered into `service.telemetry`.
+#
+telemetry:
+  # telemetry.logsLevel -- Log level for the collector process itself.
+  logsLevel: info
+  # telemetry.metricsLevel -- Detail level of the collector's internal metrics - one of `none`, `basic`, `normal`,
+  # or `detailed`.
+  metricsLevel: basic
+
+# configOverride -- Replace the generated collector configuration wholesale. When non-empty this string becomes the
+# entire `config.yaml` and every other value under `receivers`, `exporters`, `processors`, and `telemetry` is
+# ignored. Intended as an escape hatch for configurations this chart does not model.
+#
+configOverride: ""
+
+# service -- The ClusterIP Service that fronts the collector's OTLP receivers.
+#
+service:
+  # service.type -- Kubernetes Service type. The collector is an in-cluster telemetry sink; ClusterIP is correct
+  # unless something outside the cluster needs to report to it directly.
+  type: ClusterIP
+  # service.otlpHttpPort -- Service port that maps to the collector's OTLP/HTTP receiver.
+  otlpHttpPort: 4318
+  # service.otlpGrpcPort -- Service port that maps to the collector's OTLP/gRPC receiver.
+  otlpGrpcPort: 4317
+  # service.annotations -- Custom annotations to add to the collector Service.
+  annotations: {}
+
+# resources -- Compute resources for the collector container. Both requests and limits must set cpu and memory;
+# the repository's Kyverno policies reject workloads that omit either. The memory limit is also what
+# `processors.memoryLimiter` computes its percentages against.
+#
+resources:
+  requests:
+    # resources.requests.cpu -- CPU request for the collector container. The collector's CPU cost is almost entirely
+    # marshaling and compression, so it tracks span and log volume rather than the number of agent pods; this floor
+    # covers a quiet agent namespace.
+    cpu: 50m
+    # resources.requests.memory -- Memory request for the collector container. Sized for the steady-state sending
+    # queues; the burst headroom lives in `resources.limits.memory`, which is also what the memory limiter measures
+    # against.
+    memory: 128Mi
+  limits:
+    # resources.limits.cpu -- CPU limit for the collector container. Throttling here does not drop telemetry, it
+    # backs the exporter queues up, so the first symptom of a limit set too low is growing queue depth and traces
+    # arriving late in Tempo rather than an error in the logs.
+    cpu: 250m
+    # resources.limits.memory -- Memory limit for the collector container, and the number
+    # `processors.memoryLimiter.limitPercentage` and `processors.memoryLimiter.spikeLimitPercentage` are percentages
+    # of. It therefore decides how large a trace burst the collector can absorb before it starts refusing data -
+    # raise this rather than the limiter percentages when the collector is shedding load under normal session churn.
+    memory: 512Mi
+
+# livenessProbe -- Timing for the liveness probe against the `health_check` extension on port 13133.
+#
+livenessProbe:
+  # livenessProbe.initialDelaySeconds -- Seconds to wait after the container starts before the first liveness check.
+  # The collector parses its configuration and starts every receiver before the `health_check` extension answers, so
+  # this only has to cover process startup, not backend connectivity.
+  initialDelaySeconds: 5
+  # livenessProbe.periodSeconds -- Seconds between liveness checks. Together with `livenessProbe.failureThreshold`
+  # this sets how long a wedged collector keeps running before the kubelet restarts it - here roughly 45 seconds.
+  # Longer periods are cheaper but slower to notice a hung process.
+  periodSeconds: 15
+  # livenessProbe.timeoutSeconds -- Seconds a single liveness check may take before it counts as a failure. The
+  # `health_check` handler replies from memory with no I/O, so a timeout means the Go runtime is not scheduling
+  # goroutines at all - which is exactly the condition a liveness probe should catch.
+  timeoutSeconds: 1
+  # livenessProbe.failureThreshold -- Consecutive liveness failures before the kubelet restarts the collector.
+  # Resist lowering this: a collector under backpressure is still healthy and still answering, and a restart
+  # discards everything sitting in the in-memory sending queues, so an over-eager liveness probe turns a temporary
+  # trace burst into permanent telemetry loss.
+  failureThreshold: 3
+  # livenessProbe.successThreshold -- Consecutive successes needed to consider the container live again after a
+  # failed check. Kubernetes requires this to be 1 for liveness probes; it is spelled out here only so the whole
+  # probe block can be replaced from values in one piece.
+  successThreshold: 1
+
+# readinessProbe -- Timing for the readiness probe against the `health_check` extension on port 13133.
+#
+readinessProbe:
+  # readinessProbe.initialDelaySeconds -- Seconds to wait after the container starts before the first readiness
+  # check. Until the first success the pod stays out of the Service endpoints, so this is the floor on how long a
+  # rolling update leaves the collector unreachable per replica.
+  initialDelaySeconds: 5
+  # readinessProbe.periodSeconds -- Seconds between readiness checks. Deliberately shorter than
+  # `livenessProbe.periodSeconds`: readiness decides how quickly a collector that stops answering is pulled out of
+  # the Service, and pulling it out early is cheap because the process keeps running.
+  periodSeconds: 10
+  # readinessProbe.timeoutSeconds -- Seconds a single readiness check may take before it counts as a failure. The
+  # `health_check` extension answers from memory, so anything approaching a whole second already means the collector
+  # is starved for CPU.
+  timeoutSeconds: 1
+  # readinessProbe.failureThreshold -- Consecutive readiness failures before the pod is removed from the Service
+  # endpoints. Unlike the liveness threshold this is cheap to trip - the collector keeps running and keeps its
+  # queues, it simply stops receiving new OTLP traffic - so lower it if you would rather fail agent exports fast
+  # than have them block.
+  failureThreshold: 3
+  # readinessProbe.successThreshold -- Consecutive successes needed before the pod is put back into the Service
+  # endpoints. Raise it if you want a flapping collector to prove itself over more than one probe interval before
+  # agent traffic is routed back to it.
+  successThreshold: 1
+
+# podSecurityContext -- Pod-level security context for the collector pod.
+#
+podSecurityContext:
+  # podSecurityContext.runAsNonRoot -- Refuse to start the collector if its image resolves to a root UID. The
+  # collector needs no privileges - it listens on 4317, 4318, and 13133, all above 1024 - so this costs nothing and
+  # is what the repository's Kyverno policies expect.
+  runAsNonRoot: true
+  seccompProfile:
+    # podSecurityContext.seccompProfile.type -- Seccomp profile applied to the collector pod. `RuntimeDefault` uses
+    # the container runtime's own syscall filter, which the restricted Pod Security Standard requires; `Unconfined`
+    # disables filtering entirely and should only be needed on a runtime that ships no default profile.
+    type: RuntimeDefault
+
+# securityContext -- Container-level security context for the collector container.
+#
+securityContext:
+  # securityContext.allowPrivilegeEscalation -- Allow a process in the collector container to acquire more
+  # privileges than its parent, through setuid binaries or file capabilities. Nothing the collector does needs this,
+  # and leaving it false is required by the restricted Pod Security Standard.
+  allowPrivilegeEscalation: false
+  # securityContext.readOnlyRootFilesystem -- Mount the collector's root filesystem read-only. The generated
+  # configuration arrives as a ConfigMap mount and the sending queues are in memory, so nothing this chart deploys
+  # writes to disk. Set it false only for a `configOverride` that adds a file-backed component, such as the
+  # file_storage extension used for a persistent queue.
+  readOnlyRootFilesystem: true
+  capabilities:
+    # securityContext.capabilities.drop -- Linux capabilities dropped from the collector container. `ALL` is correct
+    # here - the collector binds only unprivileged ports and reads only its own ConfigMap - and dropping everything
+    # is what the restricted Pod Security Standard requires.
+    drop:
+      - ALL
+
+# podAnnotations -- Custom annotations to add to the collector pod template. The `checksum/config` annotation is
+# always added on top of these so a configuration change rolls the Deployment.
+#
+podAnnotations: {}
+
+# podLabels -- Custom labels to add to the collector pod template.
+#
+podLabels: {}
+
+# nodeSelector -- Node selector for the collector pod -
+# [Kubernetes Node Selector](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector).
+#
+nodeSelector: {}
+
+# tolerations -- Tolerations for the collector pod -
+# [Kubernetes Taints and Tolerations](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/).
+#
+tolerations: []
+
+# affinity -- Affinity rules for the collector pod -
+# [Kubernetes Affinity](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/).
+#
+affinity: {}
+
+# topologySpreadConstraints -- Topology spread constraints for the collector pod -
+# [Kubernetes Topology Spread Constraints](https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/).
+#
+topologySpreadConstraints: []
+
+# priorityClassName -- PriorityClass assigned to the collector pod. Leave empty to use the cluster default.
+#
+priorityClassName: ""
+
+# extraEnv -- Additional environment variables appended to the collector container, as a list of Kubernetes EnvVar
+# objects. Useful for referencing secrets from a `configOverride`.
+#
+extraEnv: []

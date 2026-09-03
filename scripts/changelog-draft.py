@@ -16,11 +16,17 @@ entries for commits not already represented, so edits to existing entries are
 preserved across runs.
 
 Usage:
-    python3 scripts/changelog-draft.py [--base BRANCH] [--use-llm] [--model MODEL] [--dry-run]
+    python3 scripts/changelog-draft.py [--base BRANCH] [--chart CHART] [--use-llm] [--model MODEL] [--dry-run]
     make changelog
     make changelog-llm
     make changelog-llm CHANGELOG_ARGS="--model claude-sonnet-4-6"
     make changelog-console
+
+--chart selects which chart's CHANGELOG.md to draft into (default: kasm-helm, matching the Makefile
+targets above, which never pass --chart). Commits are filtered to those touching files under that
+chart's own charts/<chart>/ directory. Pass --chart <name> to draft entries for one of the
+kasm-agent-family charts instead, e.g.:
+    python3 scripts/changelog-draft.py --chart kasm-agent
 """
 import argparse
 import re
@@ -30,8 +36,29 @@ import tempfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-CHANGELOG = REPO_ROOT / "charts" / "kasm-helm" / "CHANGELOG.md"
 HELM = REPO_ROOT / "bin" / "helm"
+
+# Every chart this script knows how to draft a CHANGELOG.md entry for. kasm-helm is the default (and
+# the only chart the Makefile's changelog/changelog-llm/changelog-console targets ever pass -- they
+# call this script with no --chart, so DEFAULT_CHART must stay "kasm-helm" for those to keep working
+# unchanged). The 8 kasm-agent-family charts are reachable via --chart for anyone drafting their
+# CHANGELOG.md the same way.
+DEFAULT_CHART = "kasm-helm"
+CHART_DIRS = {
+    "kasm-helm": REPO_ROOT / "charts" / "kasm-helm",
+    "kasm-agent": REPO_ROOT / "charts" / "kasm-agent",
+    "kasm-agent-operator": REPO_ROOT / "charts" / "kasm-agent-operator",
+    "kasm-agent-instance": REPO_ROOT / "charts" / "kasm-agent-instance",
+    "kasm-otel-collector": REPO_ROOT / "charts" / "kasm-otel-collector",
+    "kasm-node-prep": REPO_ROOT / "charts" / "kasm-node-prep",
+    "kasm-video-device-plugin": REPO_ROOT / "charts" / "kasm-video-device-plugin",
+    "kasm-agent-crds": REPO_ROOT / "charts" / "kasm-agent-crds",
+    "kasm-platform": REPO_ROOT / "charts" / "kasm-platform",
+}
+
+
+def _changelog_path(chart: str) -> Path:
+    return CHART_DIRS[chart] / "CHANGELOG.md"
 
 DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 DIFF_MAX_CHARS = 6000
@@ -56,27 +83,30 @@ _UNRELEASED_RE = re.compile(
     re.MULTILINE | re.DOTALL,
 )
 
-# Canonical top-of-file header. Always present, always first, regardless of
-# whatever preamble (or lack thereof) the file starts with.
-_HEADER_TEXT = (
-    "# Changelog\n"
-    "\n"
-    "All notable changes to the kasm-helm chart are documented here.\n"
-    "\n"
-)
+# Canonical top-of-file header, parameterised by chart name so the same logic serves
+# CHART_DIRS["kasm-helm"]/CHANGELOG.md and every kasm-agent-family chart's CHANGELOG.md alike.
+# Always present, always first, regardless of whatever preamble (or lack thereof) the file starts with.
+def _header_text(chart: str) -> str:
+    return (
+        "# Changelog\n"
+        "\n"
+        f"All notable changes to the {chart} chart are documented here.\n"
+        "\n"
+    )
 
-# Matches any existing leading "# Changelog" title and/or subtitle line(s) so
+
+# Matches any existing leading "# Changelog" title and/or subtitle line(s) -- for any chart name -- so
 # they can be stripped before the canonical header is prepended.
 _LEADING_HEADER_RE = re.compile(
     r"^\s*# Changelog\s*\n+"
-    r"(?:All notable changes to the kasm-helm chart are documented here\.\s*\n+)?",
+    r"(?:All notable changes to the [\w.-]+ chart are documented here\.\s*\n+)?",
 )
 
 
-def _ensure_header(text: str) -> str:
-    """Return text with the canonical header guaranteed at the top."""
+def _ensure_header(text: str, chart: str) -> str:
+    """Return text with the canonical header for `chart` guaranteed at the top."""
     stripped = _LEADING_HEADER_RE.sub("", text, count=1)
-    return _HEADER_TEXT + stripped.lstrip("\n")
+    return _header_text(chart) + stripped.lstrip("\n")
 
 # Embedded hash marker written into every entry; invisible in rendered markdown.
 _HASH_RE = re.compile(r"<!-- hash:([0-9a-f]+) -->")
@@ -163,14 +193,21 @@ def _helm_bin() -> str:
     return str(HELM) if HELM.exists() else "helm"
 
 
-def _helm_render(chart_path: Path) -> str:
+# kasm-helm requires publicAddr and benefits from a small deploymentSize to render quickly; neither
+# value exists in the kasm-agent-family charts' schemas, so those charts render with no extra --set.
+def _extra_helm_sets(chart: str) -> list:
+    if chart == "kasm-helm":
+        return ["--set", "publicAddr=changelog.example.com", "--set", "deploymentSize=small"]
+    return []
+
+
+def _helm_render(chart_path: Path, chart: str) -> str:
     try:
         return subprocess.check_output(
             [
                 _helm_bin(), "template", "kasm-changelog-draft", str(chart_path),
                 "-n", "kasm-test",
-                "--set", "publicAddr=changelog.example.com",
-                "--set", "deploymentSize=small",
+                *_extra_helm_sets(chart),
             ],
             text=True,
             stderr=subprocess.DEVNULL,
@@ -179,8 +216,9 @@ def _helm_render(chart_path: Path) -> str:
         return ""
 
 
-def _rendered_diff(hash_: str) -> str:
-    """Unified diff of helm template output before and after hash_."""
+def _rendered_diff(hash_: str, chart: str) -> str:
+    """Unified diff of helm template output before and after hash_, for the given chart."""
+    chart_repo_path = f"charts/{chart}/"
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
         before_dir = tmp_path / "before"
@@ -191,7 +229,7 @@ def _rendered_diff(hash_: str) -> str:
         for ref, dest in ((f"{hash_}^", before_dir), (hash_, after_dir)):
             try:
                 archive = subprocess.check_output(
-                    ["git", "archive", ref, "--", "charts/kasm-helm/"],
+                    ["git", "archive", ref, "--", chart_repo_path],
                     stderr=subprocess.DEVNULL,
                 )
                 subprocess.run(
@@ -205,8 +243,8 @@ def _rendered_diff(hash_: str) -> str:
 
         before_file = tmp_path / "before.yaml"
         after_file = tmp_path / "after.yaml"
-        before_file.write_text(_helm_render(before_dir / "charts" / "kasm-helm"))
-        after_file.write_text(_helm_render(after_dir / "charts" / "kasm-helm"))
+        before_file.write_text(_helm_render(before_dir / "charts" / chart, chart))
+        after_file.write_text(_helm_render(after_dir / "charts" / chart, chart))
 
         result = subprocess.run(
             ["diff", "-u", str(before_file), str(after_file)],
@@ -270,7 +308,7 @@ def _stamp(entry: str, hash_: str) -> str:
 # Section building and merging
 # ---------------------------------------------------------------------------
 
-def _build_new_entries(commits: list, use_llm: bool, model: str) -> dict:
+def _build_new_entries(commits: list, use_llm: bool, model: str, chart: str) -> dict:
     """Return {category: [stamped_entry_string]} for the given commits."""
     buckets: dict = {}
 
@@ -283,7 +321,7 @@ def _build_new_entries(commits: list, use_llm: bool, model: str) -> dict:
 
         if use_llm:
             print(f"  [{i + 1}/{len(commits)}] {subject[:70]}", flush=True)
-            diff = _rendered_diff(hash_)
+            diff = _rendered_diff(hash_, chart)
             text = _call_llm(subject, components, files, diff, model)
             if text == "SKIP":
                 print("        → skipped by LLM")
@@ -347,13 +385,13 @@ def _merge_into_existing(existing: str, new_buckets: dict) -> str:
 # Changelog file update
 # ---------------------------------------------------------------------------
 
-def _update(new_buckets: dict) -> tuple:
+def _update(changelog_path: Path, chart: str, new_buckets: dict) -> tuple:
     """
-    Write new_buckets into CHANGELOG.md.
+    Write new_buckets into changelog_path.
 
     Returns (included, existing_had_unreleased) for reporting.
     """
-    text = _ensure_header(CHANGELOG.read_text())
+    text = _ensure_header(changelog_path.read_text(), chart)
     match = _UNRELEASED_RE.search(text)
 
     if match:
@@ -362,11 +400,11 @@ def _update(new_buckets: dict) -> tuple:
         had_unreleased = True
     else:
         fresh = _render_fresh_section(new_buckets)
-        insert_at = len(_HEADER_TEXT)
+        insert_at = len(_header_text(chart))
         updated = text[:insert_at] + fresh + "\n" + text[insert_at:]
         had_unreleased = False
 
-    CHANGELOG.write_text(updated)
+    changelog_path.write_text(updated)
     return had_unreleased
 
 
@@ -384,6 +422,11 @@ def main() -> None:
         help="Base branch to diff against (default: develop)",
     )
     parser.add_argument(
+        "--chart", default=DEFAULT_CHART, choices=sorted(CHART_DIRS), metavar="CHART",
+        help=f"Chart to draft CHANGELOG.md entries for (default: {DEFAULT_CHART}). "
+             f"One of: {', '.join(sorted(CHART_DIRS))}",
+    )
+    parser.add_argument(
         "--use-llm", action="store_true",
         help="Use Claude Code CLI with rendered diffs to generate prose entries (requires `claude` in PATH)",
     )
@@ -397,25 +440,42 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    _fetch(args.base)
-    all_commits = _commits(args.base)
+    chart = args.chart
+    changelog_path = _changelog_path(chart)
+    chart_prefix = f"charts/{chart}/"
 
     def _status(msg: str) -> None:
         print(msg, file=sys.stderr)
 
-    if not all_commits:
-        _status(f"No commits found since '{args.base}'. Nothing to add.")
+    if not changelog_path.exists():
+        sys.exit(f"ERROR: {changelog_path} does not exist. Create it first (Keep a Changelog format, "
+                  f"a lone '## [Unreleased]' section is enough), then re-run.")
+
+    _fetch(args.base)
+    all_commits = _commits(args.base)
+
+    # Restrict to commits that touched at least one file under this chart's own directory -- a
+    # commit spanning several charts (e.g. a shared Makefile/CI change) only shows up in the
+    # CHANGELOG.md of the chart(s) whose files it actually changed.
+    chart_commits = [
+        (h, s, [f for f in files if f.startswith(chart_prefix)])
+        for h, s, files in all_commits
+        if any(f.startswith(chart_prefix) for f in files)
+    ]
+
+    if not chart_commits:
+        _status(f"No commits touching {chart_prefix} found since '{args.base}'. Nothing to add.")
         return
 
     # Filter to commits not already represented in [Unreleased].
-    existing_text = CHANGELOG.read_text()
+    existing_text = changelog_path.read_text()
     existing_match = _UNRELEASED_RE.search(existing_text)
     already_seen = _extract_hashes(existing_match.group(0)) if existing_match else set()
 
-    new_commits = [(h, s, f) for h, s, f in all_commits if h not in already_seen]
+    new_commits = [(h, s, f) for h, s, f in chart_commits if h not in already_seen]
 
     if not new_commits:
-        _status(f"All {len(all_commits)} commit(s) already represented in [Unreleased]. Nothing to add.")
+        _status(f"All {len(chart_commits)} commit(s) already represented in [Unreleased]. Nothing to add.")
         return
 
     if already_seen:
@@ -424,31 +484,31 @@ def main() -> None:
     if args.use_llm:
         _status(f"Generating entries with {args.model} ({len(new_commits)} commit(s), rendered diff per commit)...")
 
-    new_buckets = _build_new_entries(new_commits, args.use_llm, args.model)
+    new_buckets = _build_new_entries(new_commits, args.use_llm, args.model, chart)
 
     if args.dry_run:
         # Simulate the full update and write to stdout so output is directly
         # comparable to the current file (e.g. via diff). All status messages
         # go to stderr so stdout contains only the file content.
-        text = _ensure_header(CHANGELOG.read_text())
+        text = _ensure_header(changelog_path.read_text(), chart)
         match = _UNRELEASED_RE.search(text)
         if match and new_buckets:
             merged = _merge_into_existing(match.group(0), new_buckets)
             sys.stdout.write(text[:match.start()] + merged + text[match.end():])
         elif not match and new_buckets:
             fresh = _render_fresh_section(new_buckets)
-            insert_at = len(_HEADER_TEXT)
+            insert_at = len(_header_text(chart))
             sys.stdout.write(text[:insert_at] + fresh + "\n" + text[insert_at:])
         else:
             sys.stdout.write(text)
         return
 
-    _update(new_buckets)
+    _update(changelog_path, chart, new_buckets)
 
     skipped = sum(1 for _, s, _ in new_commits if _categorize(s) is None)
     included = len(new_commits) - skipped
     mode = "LLM-generated" if args.use_llm else "scaffold"
-    _status(f"Added {included} {mode} entr{'y' if included == 1 else 'ies'} to {CHANGELOG} ({skipped} internal skipped).")
+    _status(f"Added {included} {mode} entr{'y' if included == 1 else 'ies'} to {changelog_path} ({skipped} internal skipped).")
     if not args.use_llm:
         _status("Edit the [Unreleased] entries to user-friendly language, then commit.")
 

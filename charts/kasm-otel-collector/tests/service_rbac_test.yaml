@@ -1,0 +1,118 @@
+suite: collector service, service account and events rbac
+templates:
+  - templates/service.yaml
+  - templates/serviceaccount.yaml
+  - templates/role.yaml
+  - templates/rolebinding.yaml
+tests:
+  - it: exposes both otlp ports on a ClusterIP service
+    template: templates/service.yaml
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: spec.type
+          value: ClusterIP
+      - contains:
+          path: spec.ports
+          content:
+            name: otlp-http
+            port: 4318
+            targetPort: otlp-http
+            protocol: TCP
+      - contains:
+          path: spec.ports
+          content:
+            name: otlp-grpc
+            port: 4317
+            targetPort: otlp-grpc
+            protocol: TCP
+
+  - it: selects the collector pods by the chart's selector labels
+    template: templates/service.yaml
+    asserts:
+      - equal:
+          path: spec.selector
+          value:
+            app.kubernetes.io/name: kasm-otel-collector
+            app.kubernetes.io/component: otel-collector
+            app.kubernetes.io/instance: RELEASE-NAME
+
+  - it: creates a service account by default
+    template: templates/serviceaccount.yaml
+    asserts:
+      - isKind:
+          of: ServiceAccount
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-kasm-otel-collector
+
+  - it: skips the service account when serviceAccount.create is false
+    template: templates/serviceaccount.yaml
+    set:
+      serviceAccount:
+        create: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: grants namespace-scoped read access to events for the k8s_events receiver
+    template: templates/role.yaml
+    asserts:
+      - isKind:
+          of: Role
+      - equal:
+          path: rules[0].apiGroups[0]
+          value: ""
+      - contains:
+          path: rules[0].resources
+          content: events
+      - equal:
+          path: rules[0].verbs
+          value:
+            - get
+            - list
+            - watch
+
+  - it: binds the events role to the collector service account
+    template: templates/rolebinding.yaml
+    asserts:
+      - isKind:
+          of: RoleBinding
+      - equal:
+          path: roleRef.name
+          value: RELEASE-NAME-kasm-otel-collector
+      - equal:
+          path: subjects[0].name
+          value: RELEASE-NAME-kasm-otel-collector
+
+  - it: removes the events role when the k8s_events receiver is disabled
+    template: templates/role.yaml
+    set:
+      receivers:
+        k8sEvents:
+          enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: removes the events role binding when the k8s_events receiver is disabled
+    template: templates/rolebinding.yaml
+    set:
+      receivers:
+        k8sEvents:
+          enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: binds an externally managed service account when one is named
+    template: templates/rolebinding.yaml
+    set:
+      serviceAccount:
+        create: false
+        name: existing-collector-sa
+    asserts:
+      - equal:
+          path: subjects[0].name
+          value: existing-collector-sa

@@ -1,0 +1,566 @@
+suite: agent custom resource
+templates:
+  - templates/agent.yaml
+set:
+  manager:
+    hostname: zonea.example.com
+    existingTokenSecret: kasm-manager-token
+  publicHostname: agent.example.com
+tests:
+  - it: renders the Agent resource with the configured name
+    asserts:
+      - isKind:
+          of: Agent
+      - isAPIVersion:
+          of: agent.kasm.com/v1alpha1
+      - equal:
+          path: metadata.name
+          value: k8s-agent
+
+  - it: honours a custom agent name
+    set:
+      name: zonea-agent
+    asserts:
+      - equal:
+          path: metadata.name
+          value: zonea-agent
+
+  - it: joins the agent image and falls back to the chart appVersion
+    asserts:
+      - equal:
+          path: spec.image
+          value: docker.io/kasmweb/kasm-agent-api:develop
+
+  - it: uses an explicit agent image tag when one is set
+    set:
+      image:
+        registry: harbor.example.com
+        repository: kasm/kasm-agent-api
+        tag: 1.19.0
+    asserts:
+      - equal:
+          path: spec.image
+          value: harbor.example.com/kasm/kasm-agent-api:1.19.0
+
+  - it: joins both session proxy images, with an appVersion fallback only on the sidecar
+    asserts:
+      - equal:
+          path: spec.sessionProxy.image
+          value: docker.io/kasmweb/nginx:1.25.3
+      - equal:
+          path: spec.sessionProxy.sidecarImage
+          value: docker.io/kasmweb/kasm-nginx-sidecar:develop
+
+  - it: fails when the session proxy nginx tag is emptied, since it has no fallback
+    set:
+      sessionProxy:
+        image:
+          tag: ""
+    asserts:
+      - failedTemplate:
+          errorMessage: "agent.sessionProxy.image.tag is required: this image has no chart appVersion fallback."
+
+  - it: renders the manager connection with its defaults
+    asserts:
+      - equal:
+          path: spec.manager.hostname
+          value: zonea.example.com
+      - equal:
+          path: spec.manager.port
+          value: 443
+      - equal:
+          path: spec.manager.scheme
+          value: https
+      - equal:
+          path: spec.manager.pathPrefix
+          value: /manager_api
+
+  - it: fails with a clear message when manager.hostname is empty
+    set:
+      manager:
+        hostname: ""
+    asserts:
+      - failedTemplate:
+          errorMessage: "agent.manager.hostname is required: set it to the hostname of the Kasm manager (or the proxy in front of it) this agent registers with."
+
+  - it: fails with a clear message when publicHostname is empty
+    set:
+      publicHostname: ""
+    asserts:
+      - failedTemplate:
+          errorMessage: "agent.publicHostname is required: set it to the externally reachable address browsers use to connect to this agent's session proxy."
+
+  - it: fails when neither a token nor an existing token secret is configured
+    set:
+      manager:
+        existingTokenSecret: ""
+        token: ""
+    asserts:
+      - failedTemplate:
+          errorMessage: "agent.manager: no manager token configured. Set agent.manager.existingTokenSecret to the name of a Secret already holding the token (preferred), or agent.manager.token to the token itself so this chart creates one."
+
+  - it: references an existing token secret with its configured key
+    set:
+      manager:
+        existingTokenSecret: my-manager-token
+        tokenSecretKey: manager-token
+    asserts:
+      - equal:
+          path: spec.manager.tokenSecretRef.name
+          value: my-manager-token
+      - equal:
+          path: spec.manager.tokenSecretRef.key
+          value: manager-token
+
+  - it: references the chart-created secret when only an inline token is set
+    set:
+      manager:
+        existingTokenSecret: ""
+        token: placeholder-token
+    asserts:
+      - equal:
+          path: spec.manager.tokenSecretRef.name
+          value: RELEASE-NAME-kasm-agent-instance-manager-token
+      - equal:
+          path: spec.manager.tokenSecretRef.key
+          value: token
+
+  - it: prefers the existing token secret when both it and an inline token are set
+    set:
+      manager:
+        existingTokenSecret: my-manager-token
+        token: placeholder-token
+    asserts:
+      - equal:
+          path: spec.manager.tokenSecretRef.name
+          value: my-manager-token
+
+  - it: renders the session proxy block with its defaults
+    asserts:
+      - equal:
+          path: spec.sessionProxy.replicas
+          value: 1
+      - equal:
+          path: spec.sessionProxy.probeTimeoutSeconds
+          value: 120
+      - equal:
+          path: spec.sessionProxy.reconcileIntervalSeconds
+          value: 30
+      - equal:
+          path: spec.sessionProxy.certSecretName
+          value: kasm-session-proxy-tls
+
+  - it: omits the session proxy service and proxy protocol blocks while they hold only defaults
+    asserts:
+      - isNull:
+          path: spec.sessionProxy.service
+      - isNull:
+          path: spec.sessionProxy.proxyProtocol
+
+  - it: renders every session proxy service field once they are set
+    set:
+      sessionProxy:
+        service:
+          type: LoadBalancer
+          externalTrafficPolicy: Local
+          httpsNodePort: 30443
+          httpNodePort: 30080
+          annotations:
+            service.beta.kubernetes.io/aws-load-balancer-type: external
+    asserts:
+      - equal:
+          path: spec.sessionProxy.service.type
+          value: LoadBalancer
+      - equal:
+          path: spec.sessionProxy.service.externalTrafficPolicy
+          value: Local
+      - equal:
+          path: spec.sessionProxy.service.httpsNodePort
+          value: 30443
+      - equal:
+          path: spec.sessionProxy.service.httpNodePort
+          value: 30080
+      - equal:
+          path: spec.sessionProxy.service.annotations["service.beta.kubernetes.io/aws-load-balancer-type"]
+          value: external
+
+  - it: publishes the proxy on pinned node ports with client ips preserved
+    set:
+      sessionProxy:
+        service:
+          type: NodePort
+          externalTrafficPolicy: Local
+          httpsNodePort: 32443
+          httpNodePort: 32080
+    asserts:
+      - equal:
+          path: spec.sessionProxy.service.type
+          value: NodePort
+      - equal:
+          path: spec.sessionProxy.service.externalTrafficPolicy
+          value: Local
+      - equal:
+          path: spec.sessionProxy.service.httpsNodePort
+          value: 32443
+      - equal:
+          path: spec.sessionProxy.service.httpNodePort
+          value: 32080
+      - isNull:
+          path: spec.sessionProxy.service.annotations
+
+  - it: renders the service block for an otherwise default ClusterIP carrying annotations
+    set:
+      sessionProxy:
+        service:
+          annotations:
+            metallb.universe.tf/address-pool: kasm
+    asserts:
+      - equal:
+          path: spec.sessionProxy.service.type
+          value: ClusterIP
+      - equal:
+          path: spec.sessionProxy.service.annotations["metallb.universe.tf/address-pool"]
+          value: kasm
+      - isNull:
+          path: spec.sessionProxy.service.externalTrafficPolicy
+      - isNull:
+          path: spec.sessionProxy.service.httpsNodePort
+      - isNull:
+          path: spec.sessionProxy.service.httpNodePort
+
+  - it: keeps numeric-looking service annotations as strings
+    set:
+      sessionProxy:
+        service:
+          type: LoadBalancer
+          annotations:
+            service.beta.kubernetes.io/aws-load-balancer-connection-idle-timeout: 3600
+    asserts:
+      - equal:
+          path: spec.sessionProxy.service.annotations["service.beta.kubernetes.io/aws-load-balancer-connection-idle-timeout"]
+          value: "3600"
+
+  - it: enables proxy protocol with its trusted source ranges
+    set:
+      sessionProxy:
+        proxyProtocol:
+          enabled: true
+          trustedCIDRs:
+            - 10.0.0.0/16
+            - 192.168.1.0/24
+    asserts:
+      - equal:
+          path: spec.sessionProxy.proxyProtocol.enabled
+          value: true
+      - equal:
+          path: spec.sessionProxy.proxyProtocol.trustedCIDRs
+          value:
+            - 10.0.0.0/16
+            - 192.168.1.0/24
+
+  - it: renders the proxy protocol block when only trusted cidrs are set
+    set:
+      sessionProxy:
+        proxyProtocol:
+          trustedCIDRs:
+            - 10.0.0.0/8
+    asserts:
+      - equal:
+          path: spec.sessionProxy.proxyProtocol.enabled
+          value: false
+      - contains:
+          path: spec.sessionProxy.proxyProtocol.trustedCIDRs
+          content: 10.0.0.0/8
+
+  - it: omits empty trusted cidrs when proxy protocol is merely enabled
+    set:
+      sessionProxy:
+        proxyProtocol:
+          enabled: true
+    asserts:
+      - equal:
+          path: spec.sessionProxy.proxyProtocol.enabled
+          value: true
+      - isNull:
+          path: spec.sessionProxy.proxyProtocol.trustedCIDRs
+
+  - it: omits the operator-managed gateway route by default
+    asserts:
+      - isNull:
+          path: spec.gatewayRoute
+
+  - it: renders the operator-managed gateway route with only the required parent ref
+    set:
+      gatewayRoute:
+        enabled: true
+        parentRef:
+          name: traefik-gateway
+    asserts:
+      - equal:
+          path: spec.gatewayRoute.enabled
+          value: true
+      - equal:
+          path: spec.gatewayRoute.parentRef.name
+          value: traefik-gateway
+      - isNull:
+          path: spec.gatewayRoute.parentRef.namespace
+      - isNull:
+          path: spec.gatewayRoute.parentRef.sectionName
+
+  - it: carries the gateway namespace, listener section and explicit hostnames
+    set:
+      gatewayRoute:
+        enabled: true
+        parentRef:
+          name: traefik-gateway
+          namespace: kube-system
+          sectionName: tls-passthrough
+        hostnames:
+          - agent.example.com
+          - alt.example.com
+    asserts:
+      - equal:
+          path: spec.gatewayRoute.parentRef.namespace
+          value: kube-system
+      - equal:
+          path: spec.gatewayRoute.parentRef.sectionName
+          value: tls-passthrough
+      - equal:
+          path: spec.gatewayRoute.hostnames
+          value:
+            - agent.example.com
+            - alt.example.com
+
+  - it: leaves gateway route hostnames off so the operator defaults them to the public hostname
+    set:
+      gatewayRoute:
+        enabled: true
+        parentRef:
+          name: traefik-gateway
+    asserts:
+      - isNull:
+          path: spec.gatewayRoute.hostnames
+
+  - it: fails when the gateway route is enabled without a parent ref name
+    set:
+      gatewayRoute:
+        enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "agent.gatewayRoute.parentRef.name is required when agent.gatewayRoute.enabled is true: set it to the name of the Gateway the operator should attach the TLSRoute to."
+
+  - it: ignores a configured gateway parent ref while the gateway route is disabled
+    set:
+      gatewayRoute:
+        parentRef:
+          name: traefik-gateway
+          sectionName: tls-passthrough
+        hostnames:
+          - agent.example.com
+    asserts:
+      - isNull:
+          path: spec.gatewayRoute
+
+  - it: renders the interval, policy and zone defaults
+    asserts:
+      - equal:
+          path: spec.heartbeatIntervalSeconds
+          value: 5
+      - equal:
+          path: spec.metricsIntervalSeconds
+          value: 30
+      - equal:
+          path: spec.imageAvailabilityPolicy
+          value: all
+      - equal:
+          path: spec.imagePullPolicy
+          value: IfNotPresent
+      - equal:
+          path: spec.logLevel
+          value: INFO
+      - equal:
+          path: spec.publicPort
+          value: 443
+      - equal:
+          path: spec.zone
+          value: default
+
+  - it: omits every optional field that is left empty
+    asserts:
+      - isNull:
+          path: spec.serverID
+      - isNull:
+          path: spec.apiServerURL
+      - isNull:
+          path: spec.storageMappings
+      - isNull:
+          path: spec.imagePullSecrets
+      - isNull:
+          path: spec.workspaceImagePullSecrets
+      - isNull:
+          path: spec.nodeSelector
+      - isNull:
+          path: spec.workspacesNodeSelector
+      - isNull:
+          path: spec.resources
+
+  - it: renders the optional fields once they are set
+    set:
+      serverID: 11111111-2222-3333-4444-555555555555
+      apiServerURL: https://kasm-proxy.kasm.svc.cluster.local
+      imagePullSecrets:
+        - name: kasm-registry
+      workspaceImagePullSecrets:
+        - name: workspace-registry
+      nodeSelector:
+        kubernetes.io/os: linux
+      workspacesNodeSelector:
+        kasm.com/workspaces: "true"
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+    asserts:
+      - equal:
+          path: spec.serverID
+          value: 11111111-2222-3333-4444-555555555555
+      - equal:
+          path: spec.apiServerURL
+          value: https://kasm-proxy.kasm.svc.cluster.local
+      - contains:
+          path: spec.imagePullSecrets
+          content:
+            name: kasm-registry
+      - contains:
+          path: spec.workspaceImagePullSecrets
+          content:
+            name: workspace-registry
+      - equal:
+          path: spec.nodeSelector["kubernetes.io/os"]
+          value: linux
+      - equal:
+          path: spec.workspacesNodeSelector["kasm.com/workspaces"]
+          value: "true"
+      - equal:
+          path: spec.resources.limits.cpu
+          value: 500m
+
+  - it: omits storageMappings when it is disabled and no installation id is set
+    set:
+      storageMappings:
+        enabled: false
+        installationID: ""
+    asserts:
+      - isNull:
+          path: spec.storageMappings
+
+  - it: renders storageMappings when it is enabled
+    set:
+      storageMappings:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.storageMappings.enabled
+          value: true
+      - isNull:
+          path: spec.storageMappings.installationID
+
+  - it: renders storageMappings when only an installation id is set
+    set:
+      storageMappings:
+        installationID: kasm-prod
+    asserts:
+      - equal:
+          path: spec.storageMappings.enabled
+          value: false
+      - equal:
+          path: spec.storageMappings.installationID
+          value: kasm-prod
+
+  - it: defaults the otel endpoint to the collector service for this release
+    asserts:
+      - contains:
+          path: spec.env
+          content:
+            name: OTEL_EXPORTER_OTLP_ENDPOINT
+            value: http://RELEASE-NAME-kasm-otel-collector:4318
+      - contains:
+          path: spec.env
+          content:
+            name: OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE
+            value: cumulative
+
+  - it: honours an explicit otel endpoint
+    set:
+      otel:
+        endpoint: http://otel-gateway.observability.svc.cluster.local:4318
+    asserts:
+      - contains:
+          path: spec.env
+          content:
+            name: OTEL_EXPORTER_OTLP_ENDPOINT
+            value: http://otel-gateway.observability.svc.cluster.local:4318
+
+  - it: drops the otel env entirely when otel is disabled
+    set:
+      otel:
+        enabled: false
+    asserts:
+      - isNull:
+          path: spec.env
+
+  - it: adds the gpu operator flag only when gpu is enabled
+    set:
+      gpu:
+        enabled: true
+    asserts:
+      - contains:
+          path: spec.env
+          content:
+            name: KASM_GPU_OPERATOR_ENABLED
+            value: "true"
+
+  - it: omits the gpu operator flag by default
+    asserts:
+      - notContains:
+          path: spec.env
+          content:
+            name: KASM_GPU_OPERATOR_ENABLED
+            value: "true"
+
+  - it: appends user env entries after the generated ones so the operator merge favours them
+    set:
+      env:
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: http://custom-collector:4318
+        - name: KASM_EXTRA
+          value: extra-value
+    asserts:
+      - equal:
+          path: spec.env[0].name
+          value: OTEL_EXPORTER_OTLP_ENDPOINT
+      - equal:
+          path: spec.env[2].value
+          value: http://custom-collector:4318
+      - contains:
+          path: spec.env
+          content:
+            name: KASM_EXTRA
+            value: extra-value
+
+  - it: renders user env even when otel and gpu are both off
+    set:
+      otel:
+        enabled: false
+      env:
+        - name: KASM_EXTRA
+          value: extra-value
+    asserts:
+      - equal:
+          path: spec.env
+          value:
+            - name: KASM_EXTRA
+              value: extra-value

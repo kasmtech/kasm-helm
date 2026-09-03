@@ -1,0 +1,295 @@
+# Kasm Agent Instance
+
+{{ template "chart.badgesSection" . }}
+
+{{ template "chart.description" . }}
+
+{{ template "chart.homepageLine" . }}
+
+> **Part of the [`kasm-agent`](../kasm-agent/README.md) umbrella.** This chart creates the `Agent`
+> custom resource and normally ships as the `agent` dependency of the
+> [`kasm-agent`](../kasm-agent/README.md) chart (or the full-stack
+> [`kasm-platform`](../kasm-platform/README.md) chart), which also installs the operator that
+> reconciles it. Install it standalone only to add an agent instance to a cluster whose operator
+> already exists.
+
+{{ template "chart.maintainersSection" . }}
+
+{{ template "chart.sourcesSection" . }}
+
+{{ template "chart.requirementsSection" . }}
+
+## Documentation
+
+Please see our [official documentation site](https://docs.kasm.com) for more information.
+
+> **Note:** Make sure to select the correct Kasm Workspaces version in the top-right version selector on the documentation site to ensure the guides match your deployment.
+
+## Prerequisites
+
+* Kubernetes 1.26 or newer — the shared floor for the whole `kasm-agent` family (older versions of Kubernetes may work, however, we try to keep this chart updated to [supported versions of Kubernetes](https://kubernetes.io/releases/))
+* Helm 3.18.x or newer ([installation](https://helm.sh/docs/helm/helm_install/))
+* The Kasm agent operator, and its `agent.kasm.com` CRDs, installed in the cluster. This chart creates custom resources; it does not install the controller that reconciles them.
+* A reachable Kasm control plane, and the shared manager token for it.
+* [cert-manager](https://cert-manager.io/) when `sessionProxy.certificate.enabled` is set, the [Gateway API](https://gateway-api.sigs.k8s.io/) CRDs plus a Gateway when `httpRoute.enabled` is set, the Gateway API's **experimental** channel CRDs plus a Gateway with a `Passthrough` TLS listener when either `gatewayRoute.enabled` or `tlsRoute.enabled` is set, an ingress controller when `ingress.enabled` is set, and OpenShift (the `route.openshift.io` API) when `route.enabled` is set.
+
+## What this chart deploys
+
+* An `Agent` custom resource. The operator reconciles it into the agent Deployment, the session-proxy Deployment, and a session-proxy Service named `<name>-session-proxy`. None of those are created by this chart.
+* A `Secret` holding the manager token, only when the token is supplied inline via `manager.token`. Referencing an existing Secret through `manager.existingTokenSecret` is preferred and takes precedence.
+* Optionally, a cert-manager `Certificate` for the session proxy's HTTPS listener, a `KasmImagePuller` that pre-stages workspace images on every node, and - to expose the session proxy at the agent's public hostname - one of a Gateway API `HTTPRoute`, a Gateway API `TLSRoute`, a classic `networking.k8s.io/v1` `Ingress`, or an OpenShift `Route`. The `TLSRoute` can instead be delegated to the operator via `gatewayRoute`, in which case this chart creates no route object of its own. The session-proxy Service can also be published directly, without any of those, through `sessionProxy.service`.
+
+## External access
+
+The session-proxy Service the operator creates is a `ClusterIP` by default, reachable only inside the cluster. This chart offers five mutually exclusive ways to publish it at `publicHostname`; enable at most one, because all of them point at the same Service:
+
+* `httpRoute.enabled` renders a Gateway API `HTTPRoute` attached to the Gateways in `httpRoute.parentRefs`. The Gateway's listener has to allow routes from this namespace. Only the `parentRefs` cross namespaces, so no `ReferenceGrant` is needed.
+* `ingress.enabled` renders a `networking.k8s.io/v1` `Ingress` on `ingress.className`, with one `/` `Prefix` rule per entry in `ingress.hosts`, TLS from `ingress.tls`, and annotations from `ingress.annotations` merged over `commonAnnotations`.
+* `route.enabled` renders an OpenShift `route.openshift.io/v1` `Route` for `route.host`, the native option on OpenShift.
+* `gatewayRoute.enabled` asks the **operator** to create a Gateway API `TLSRoute` - SNI-based TLS passthrough, the same end-to-end shape as the OpenShift `Route` but on any cluster with the Gateway API.
+* `tlsRoute.enabled` renders that same passthrough `TLSRoute` **from this chart** instead.
+
+All five default their hostname to `publicHostname`.
+
+Or skip the ingress layer entirely and publish the session-proxy Service itself - see below.
+
+### `gatewayRoute` vs `tlsRoute` — who owns the route
+
+Both produce a `gateway.networking.k8s.io/v1alpha2` `TLSRoute` doing SNI-based passthrough to the session proxy, and both need the same things from the cluster: `TLSRoute` ships in the Gateway API's **experimental** channel only, and the Gateway needs a listener with `protocol: TLS` and `tls.mode: Passthrough` whose `allowedRoutes` admits this namespace. What differs is ownership.
+
+**Prefer `gatewayRoute` when the operator supports it.** The operator creates and reconciles the route itself, alongside the session-proxy Service it already owns, so the two cannot drift apart:
+
+```yaml
+gatewayRoute:
+  enabled: true
+  parentRef:
+    name: traefik-gateway
+    namespace: kube-system
+    sectionName: tls-passthrough   # optional: pick one listener on the Gateway
+```
+
+Note the shape: `gatewayRoute.parentRef` is a **single** reference, where `tlsRoute.parentRefs` is a list. `parentRef.name` is required whenever `gatewayRoute.enabled` is true and templating fails without it. `gatewayRoute.hostnames` is left empty in the normal case — the *operator* defaults it to `[publicHostname]`, so this chart omits the field rather than filling it in.
+
+Reach for `tlsRoute` when the operator predates `spec.gatewayRoute`, or when the route has to be a Helm-release object — owned by the release, torn down with it, patched by other release tooling — rather than an operator-owned one. That path takes a list of `parentRefs`, defaults `hostnames` to `publicHostname` in the chart, and exposes a `backendPort` (4444, the proxy's own HTTPS listener).
+
+### LoadBalancer / NodePort — no ingress layer at all
+
+Publishing the session proxy directly — a cloud NLB straight onto sessions, a corporate load
+balancer forwarding to NodePorts, external SSL termination handing plain HTTP to the cluster — is
+first-class: `sessionProxy.service` is passed through to the Agent, and the operator applies it to
+the session-proxy Service it owns. The whole block is omitted from the Agent resource while it holds
+nothing but defaults, so leaving it alone keeps the plain `ClusterIP` the operator creates on its
+own; any single non-default value pulls it in.
+
+NodePort with pinned ports, preserving the client IP:
+
+```yaml
+sessionProxy:
+  service:
+    type: NodePort
+    externalTrafficPolicy: Local   # real client IPs; see the caveat below
+    httpsNodePort: 30443           # the proxy's own TLS listener (4444)
+    httpNodePort: 30080            # plain HTTP (4445), for TLS terminated in front
+```
+
+LoadBalancer with cloud annotations:
+
+```yaml
+sessionProxy:
+  service:
+    type: LoadBalancer
+    externalTrafficPolicy: Local
+    annotations:
+      service.beta.kubernetes.io/aws-load-balancer-type: external
+      service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
+      service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+```
+
+`httpsNodePort` and `httpNodePort` are only worth pinning when a firewall rule or an external load
+balancer has to be aimed at a fixed port: the operator carries the ports Kubernetes allocated across
+reconciles, so an unpinned NodePort stays stable in practice anyway. Both must fall inside the
+cluster's node-port range — the CRD rejects anything outside 30000–32767.
+
+Two caveats carry over regardless of how the Service is created. With `networkPolicies` enabled the
+session-ingress allow must cover the exposure path (`networkPolicies.sessionProxy.ports` already
+admits 4444/4445 from anywhere by default). And NodePort reachability from outside depends on your
+environment actually routing the 30000–32767 range to the nodes — VM/cloud firewalls that only
+forward 443/80 will refuse the connection before Kubernetes ever sees it (verified: the same
+NodePort answers in-cluster while an unrouted LAN client gets connection-refused).
+
+#### Preserving the client IP
+
+Two independent mechanisms, at different layers; pick the one that matches how traffic actually
+reaches the proxy.
+
+`sessionProxy.service.externalTrafficPolicy: Local` works at **L4**. `Cluster`, the Kubernetes
+default, SNATs the connection, so the session proxy logs the node's address instead of the user's.
+`Local` skips that SNAT — but it also only routes traffic through nodes that are hosting a
+session-proxy pod, and a node without one blackholes the connection. Pair it with a load balancer
+that honours the Service's health check, or make sure every node it advertises runs a proxy pod
+(raise `sessionProxy.replicas`, or pin the pods with `nodeSelector`).
+
+`sessionProxy.proxyProtocol` works at **L7**, for an external L4 proxy that cannot set
+`X-Forwarded-For` but can prepend a PROXY protocol header:
+
+```yaml
+sessionProxy:
+  proxyProtocol:
+    enabled: true
+    trustedCIDRs:               # the fronting LB's own source range
+      - 10.0.0.0/16
+```
+
+This one is all-or-nothing and needs both ends configured. Enabling it turns on `proxy_protocol` on
+both nginx listeners, and nginx then **requires** a PROXY header on every connection with no
+fallback: once it is on, anything connecting directly — a browser hitting the NodePort, a health
+check, `curl` against the Service — fails on those listeners. Turn it on only together with the
+matching setting on the load balancer in front (for example
+`service.beta.kubernetes.io/aws-load-balancer-proxy-protocol: "*"` in
+`sessionProxy.service.annotations`). `trustedCIDRs` is the set of source ranges nginx trusts to send
+an accurate header — normally the fronting load balancer's address range: its node subnet, the cloud
+LB's CIDR, the MetalLB pool.
+
+#### Older operator builds
+
+Before the operator grew `sessionProxy.service`, the working pattern was a **second Service** you
+own, deployed through the umbrella chart's `extraObjects` — the operator ignores it, and its
+selector matches the proxy pods, whose labels are stable. It still works, and remains the fallback
+when running an operator that predates the field:
+
+```yaml
+# kasm-agent umbrella values — alongside agent.*
+extraObjects:
+  - apiVersion: v1
+    kind: Service
+    metadata:
+      # "k8s-agent" is the default agent.name — keep the two in sync if you change it.
+      name: k8s-agent-session-proxy-external
+    spec:
+      type: LoadBalancer             # or NodePort
+      externalTrafficPolicy: Local
+      selector:
+        app.kubernetes.io/name: k8s-agent          # = agent.name
+        app.kubernetes.io/component: session-proxy
+      ports:
+        - name: https                # the proxy's own TLS listener
+          port: 443
+          targetPort: 4444
+```
+
+### Where TLS terminates
+
+The session proxy listens on two ports: 4445 is plain HTTP, and 4444 is its own HTTPS listener, served with the certificate in `sessionProxy.certSecretName`.
+
+`httpRoute` and `ingress` both default to backend port 4445 - TLS for the public hostname terminates at the Gateway or the Ingress. Routing them to 4444 instead means telling the controller to speak TLS upstream (`nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"` on ingress-nginx).
+
+The `Route` defaults to `passthrough` termination, matching the Kasm operator's OpenShift example: the router forwards the TLS connection untouched, so browsers see the session proxy's certificate directly. That certificate therefore has to be valid for `route.host` - enable `sessionProxy.certificate` or provision `sessionProxy.certSecretName` out of band before using it. `route.backendPort` follows the termination mode when left empty: 4444 for `passthrough` and `reencrypt`, 4445 for `edge`, which terminates at the router instead. `reencrypt` additionally accepts a `route.tls.destinationCACertificate` for validating the proxy's certificate, and `edge` accepts `route.tls.key`/`certificate` plus an `insecureEdgeTerminationPolicy` of `Redirect`.
+
+Both `TLSRoute` options - operator-managed `gatewayRoute` and chart-managed `tlsRoute` - are passthrough too, and for the same reason browsers end up validating the session proxy's own certificate, but through the Gateway API rather than the OpenShift router. They are what to reach for when you want end-to-end TLS on a cluster that is not OpenShift. The Gateway matches on SNI alone and splices the connection through without decrypting it, which is why `tlsRoute.backendPort` defaults to 4444 (nothing terminates TLS earlier, so the plain-HTTP listener would never work) and why the proxy's certificate has to cover every hostname in force - whether set explicitly or defaulted to `publicHostname`. Both require support on the Gateway side that the `HTTPRoute` path does not: `TLSRoute` is an experimental-channel CRD, and the Gateway needs a listener declared with `protocol: TLS` and `tls.mode: Passthrough` - a normal terminating HTTPS listener will not serve it.
+
+Publishing the Service directly through `sessionProxy.service` leaves TLS wherever you put it: point an external load balancer at the HTTPS listener (4444) for end-to-end TLS to the proxy's own certificate, or at the plain-HTTP one (4445) when TLS is terminated in front.
+
+### Websockets and timeouts
+
+Kasm sessions are long-lived VNC websockets, so whatever terminates them must allow websocket upgrades and use timeouts of at least 3600s. Otherwise sessions are dropped mid-use at the default timeout - 60 seconds on ingress-nginx, 30 seconds on the OpenShift router:
+
+```yaml
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+  tls:
+    - secretName: kasm-agent-public-tls
+      hosts:
+        - agent.example.com
+```
+
+```yaml
+route:
+  enabled: true
+  annotations:
+    haproxy.router.openshift.io/timeout: "3600s"
+```
+
+The two passthrough routes (`gatewayRoute`, `tlsRoute`) and direct `sessionProxy.service` exposure have no equivalent knob, because nothing on the path speaks HTTP: there is no upgrade to allow and no HTTP read timeout to raise. What bounds a session there is the **layer-4 idle timeout** of the Gateway's data plane or of the load balancer in front of it — an AWS NLB's 350s default, for instance, will still cut idle sessions, so raise it the same way.
+
+## Required values
+
+Two values have no defaults and must be set:
+
+* `manager.hostname` - the Kasm manager (or the proxy in front of it) this agent registers with.
+* `publicHostname` - the externally reachable address browsers use to connect to this agent's session proxy.
+
+Exactly one of `manager.existingTokenSecret` or `manager.token` must also be set. Templating fails with a specific message when any of these is missing.
+
+## Environment variables
+
+`spec.env` on the Agent is assembled in this order:
+
+1. `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE`, when `otel.enabled` is true.
+2. `KASM_GPU_OPERATOR_ENABLED`, when `gpu.enabled` is true.
+3. Everything in the `env` list, verbatim.
+
+The operator merges environment variables by name, so an entry in `env` that reuses one of the generated names overrides it.
+
+{{ define "chart.valueDefaultColumnRender" }}
+{{- $defaultValue := (default .Default .AutoDefault)  -}}
+{{- $notationType := .NotationType }}
+{{- if (and (hasPrefix "`" $defaultValue) (hasSuffix "`" $defaultValue) ) -}}
+{{- $defaultValue = (toYaml (fromJson (trimAll "`" (default .Default .AutoDefault) ) ) ) -}}
+{{- $notationType = "json" }}
+{{- end -}}
+{{- if (eq $notationType "tpl" ) }}
+<pre lang="{{ $notationType }}">
+{{ .Key }}: |
+{{- $defaultValue | nindent 2 }}
+</pre>
+{{- else if (eq $notationType "email") }}
+<a href="mailto:{{ $defaultValue }}" style="color: green;">"{{ $defaultValue }}"</a>
+{{- else }}
+<pre lang="{{ $notationType }}">
+{{ $defaultValue }}
+</pre>
+{{- end }}
+{{ end }}
+
+{{ define "chart.typeColumnRender" }}
+{{- if (eq .Type "string/email") }}
+<a href="#stringemail" title="{{- template "chart.valuetypes.email" -}}">{{.Type}}</a>
+{{- else if (eq .Type "k8s/storage/persistent-volume/access-modes" )}}
+<a target="_blank" 
+   href="https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes"
+   >{{- .Type }}</a>
+{{- else }}
+{{ .Type }}
+{{- end }}
+{{ end }}
+
+{{ define "chart.valuesTableHtml" }}
+<table>
+	<thead>
+		<th>Key</th>
+		<th>Type</th>
+		<th>Default</th>
+		<th>Description</th>
+	</thead>
+	<tbody>
+	{{- range .Values }}
+		<tr>
+			<td id="{{ .Key | replace "." "--" }}"><a href="./values.yaml#L{{ .LineNumber }}">{{ .Key }}</a></td>
+			<td>{{- template "chart.typeColumnRender" . -}}</td>
+			<td>
+				<div style="max-width: 520px;">{{ template "chart.valueDefaultColumnRender" . }}</div>
+			</td>
+			<td>{{ if .Description }}{{ .Description }}{{ else }}{{ .AutoDescription }}{{ end }}</td>
+		</tr>
+	{{- end }}
+	</tbody>
+</table>
+{{ end }}
+
+## Chart value settings in `values.yaml`
+
+{{ template "chart.valuesSectionHtml" . }}

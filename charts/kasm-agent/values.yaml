@@ -1,0 +1,409 @@
+# Default values for the kasm-agent umbrella chart.
+#
+# This chart owns very little on its own: it wires together the Kasm agent subcharts and the
+# optional third-party cluster infrastructure some Kasm features depend on. Each block below maps
+# to one dependency alias in `Chart.yaml`, and every value nested under an alias is passed straight
+# through to that subchart.
+#
+# The six Kasm subcharts intentionally carry only two values here: their `enabled` flag, and a
+# `nameOverride` that undoes Helm's habit of naming an aliased dependency's resources after the
+# alias. Their own `values.yaml` files are the source of truth for everything else and their
+# defaults flow through unchanged. Refer to each subchart's README for the full value reference, and
+# set any of them from this file (or your own values file) as `<alias>.<subchart value>`, for
+# example:
+#
+#   agent:
+#     manager:
+#       hostname: kasm.example.com
+#     publicHostname: agent.example.com
+#
+# The three third-party dependencies default to disabled and ship a commented pass-through example
+# instead of live defaults, so that upgrading the upstream chart never silently changes behaviour
+# because this file pinned a value.
+
+# operator -- The Kasm agent operator (`kasm-agent-operator` subchart, alias `operator`). Installs
+# the Kasm CustomResourceDefinitions, the cluster RBAC, and the controller-manager that reconciles
+# Agent, KasmWorkspace, KasmImagePuller, WarmPool, and WarmPoolInstance resources.
+#
+# The operator is a cluster singleton: it owns fixed-name ClusterRoles and cluster-scoped CRDs, so
+# only one release per cluster may enable it. Disable it here when the operator is already installed
+# by another release and this release only adds an agent instance.
+#
+# See the `kasm-agent-operator` chart for its values (`crds.install`, `crds.keep`,
+# `serviceAccount.name`, `rbac.aggregateRoles`, `leaderElect`, `otel.enabled`, `otel.endpoint`,
+# `image.*`, `resources`, ...).
+#
+operator:
+  # operator.enabled -- Install the Kasm agent operator with this release.
+  #
+  enabled: true
+  # operator.nameOverride -- Pins the subchart's resource names to its own chart name. Helm sets
+  # `.Chart.Name` inside an aliased dependency to the *alias*, so without this the operator's
+  # resources would be named after `operator` rather than after `kasm-agent-operator`. Leave it
+  # alone unless you know why you are changing it.
+  #
+  nameOverride: kasm-agent-operator
+
+# otelCollector -- The Kasm OpenTelemetry collector (`kasm-otel-collector` subchart, alias
+# `otelCollector`). Receives OTLP traces, metrics, and logs from the operator, the agent, and
+# workspace pods on ports 4317 (gRPC) and 4318 (HTTP), optionally watches Kubernetes events, and
+# forwards everything to the telemetry backends you point it at.
+#
+# The backends themselves (an LGTM stack, ClickHouse, a vendor OTLP endpoint) are external to this
+# chart — the collector's exporters reference them, this chart never installs them.
+#
+# See the `kasm-otel-collector` chart for its values (`receivers.k8sEvents.enabled`,
+# `exporters.otlp.*`, `exporters.clickhouse.*`, `exporters.debug.enabled`, `configOverride`,
+# `image.*`, `resources`, ...).
+#
+otelCollector:
+  # otelCollector.enabled -- Install the Kasm OpenTelemetry collector with this release. Disable it
+  # when workspace telemetry is not wanted, or when the agent and operator should point at a
+  # collector that already exists in the cluster.
+  #
+  enabled: true
+  # otelCollector.nameOverride -- Pins the subchart's resource names to its own chart name. Helm
+  # sets `.Chart.Name` inside an aliased dependency to the *alias*, and both the operator and the
+  # agent default their OTLP endpoint to `http://<release>-kasm-otel-collector:4318` — so without
+  # this the collector Service would be named after `otelCollector` and nothing would find it.
+  #
+  nameOverride: kasm-otel-collector
+
+# agent -- The Kasm agent instance (`kasm-agent-instance` subchart, alias `agent`). Creates the
+# Agent custom resource that registers this cluster as a Kasm deployment zone, plus the session
+# proxy that terminates workspace connections.
+#
+# This is the only subchart with required values. At a minimum set `agent.manager.hostname`, a
+# manager token (`agent.manager.token` or `agent.manager.existingTokenSecret`), and
+# `agent.publicHostname`, and either supply a session proxy TLS Secret through
+# `agent.sessionProxy.certSecretName` or let cert-manager issue one with
+# `agent.sessionProxy.certificate.enabled`.
+#
+# See the `kasm-agent-instance` chart for its values (`name`, `image.*`, `manager.*`,
+# `publicHostname`, `publicPort`, `zone`, `sessionProxy.*`, `otel.*`, `gpu.enabled`,
+# `storageMappings.*`, `imagePuller.*`, `httpRoute.*`, `env`, ...).
+#
+agent:
+  # agent.enabled -- Install the Kasm agent instance with this release. Disable it to install only
+  # the operator and cluster infrastructure, and create Agent resources separately.
+  #
+  enabled: true
+  # agent.nameOverride -- Pins the subchart's resource names to its own chart name. Helm sets
+  # `.Chart.Name` inside an aliased dependency to the *alias*, so without this the agent's satellite
+  # objects would be named after `agent` rather than after `kasm-agent-instance`.
+  #
+  nameOverride: kasm-agent-instance
+
+# nodePrep -- Node preparation (`kasm-node-prep` subchart, alias `nodePrep`). Runs a privileged
+# DaemonSet that builds and loads host kernel modules: `v4l2loopback` for webcam passthrough and
+# `wireguard` for VPN egress on kernels older than 5.6.
+#
+# The same DaemonSet also carries the optional node tuning under `nodePrep.tuning.*` — a disk
+# swapfile (`tuning.swap`) and kernel tunables (`tuning.sysctls`) — which are off by default and are
+# a reason to enable this subchart even on nodes whose image already ships every kernel module. See
+# "Workspace node best practices" in this chart's README; `tuning.swap` additionally requires the
+# node's kubelet to be configured for swap first.
+#
+# This subchart needs privileged pods with host access, so the namespace must permit the
+# `privileged` Pod Security Standard. Leave it disabled unless webcam, WireGuard egress or node
+# tuning is used.
+#
+# See the `kasm-node-prep` chart for its values (`modules.v4l2loopback.enabled`,
+# `modules.v4l2loopback.videoDevices`, `modules.v4l2loopback.exclusiveCaps`,
+# `modules.wireguard.enabled`, `tuning.swap.enabled`, `tuning.sysctls.enabled`,
+# `secureBoot.existingMokSecret`, `nodeSelector`, ...).
+#
+nodePrep:
+  # nodePrep.enabled -- Install the privileged node preparation DaemonSet with this release.
+  #
+  enabled: false
+  # nodePrep.nameOverride -- Pins the subchart's resource names to its own chart name. Helm sets
+  # `.Chart.Name` inside an aliased dependency to the *alias*, and `nodePrep` is not a valid
+  # RFC 1123 name, so without this the chart would render resource names Kubernetes rejects.
+  #
+  nameOverride: kasm-node-prep
+
+# videoDevicePlugin -- The Kasm video device plugin (`kasm-video-device-plugin` subchart, alias
+# `videoDevicePlugin`). Advertises the `/dev/video*` devices on each node as a scheduleable
+# extended resource (`kasm.com/video` by default) so workspace pods can request a webcam.
+#
+# The plugin only advertises devices that already exist. Pair it with `nodePrep.enabled` and
+# `nodePrep.modules.v4l2loopback.enabled` unless the nodes provide real capture devices.
+#
+# See the `kasm-video-device-plugin` chart for its values (`devicePrefix`, `maxDevices`, `resourceName`,
+# `nodeSelector`, ...).
+#
+videoDevicePlugin:
+  # videoDevicePlugin.enabled -- Install the video device plugin DaemonSet with this release.
+  #
+  enabled: false
+  # videoDevicePlugin.nameOverride -- Pins the subchart's resource names to its own chart name. Helm
+  # sets `.Chart.Name` inside an aliased dependency to the *alias*, and `videoDevicePlugin` is not a
+  # valid RFC 1123 name, so without this the chart would render resource names Kubernetes rejects.
+  #
+  nameOverride: kasm-video-device-plugin
+
+# egressInstaller -- The Kasm egress installer (`kasm-egress-installer` subchart, alias
+# `egressInstaller`). A privileged DaemonSet that chains a CNI shim into every node's CNI conflist
+# and, on request, brings up an OpenVPN/WireGuard/Ziti tunnel inside a session's network namespace.
+#
+# Requires hostNetwork, hostPID, and a privileged container -- see the subchart's README for why
+# each is load-bearing. This trips the `kasm-disallow-host-namespaces` Kyverno policy by design, the
+# same way `nodePrep` trips the PSS baseline: both are rendered via the `infra` test scenario, which
+# is excluded from the Kyverno gate rather than exempted through it (this repo has no
+# PolicyException mechanism). See docs/egress-installer-port-notes.md in kasm-monorepo for the
+# reviewed risk profile.
+#
+# Lifecycle (verified live on k3s): a graceful shutdown -- disabling this in a `helm upgrade`, or
+# `helm uninstall` -- restores every patched conflist from its backup and removes the shim, leaving
+# the node's CNI chain as it was found. A hard crash leaves the chain patched; the replacement pod
+# re-installs and re-verifies it on start. The residual risk is the window with no daemon running:
+# the chained shim fails CNI ADD on that node until the DaemonSet restarts it, so a sustained
+# crash-loop still blocks new pod scheduling there.
+#
+# See the `kasm-egress-installer` chart for its values (`distro`, `cniBinDir`, `cniConfDirs`,
+# `socketDir`, ...).
+#
+egressInstaller:
+  # egressInstaller.enabled -- Install the egress installer DaemonSet with this release.
+  #
+  enabled: false
+  # egressInstaller.nameOverride -- Pins the subchart's resource names to its own chart name. Helm
+  # sets `.Chart.Name` inside an aliased dependency to the *alias*, and `egressInstaller` is not a
+  # valid RFC 1123 name, so without this the chart would render resource names Kubernetes rejects.
+  #
+  nameOverride: kasm-egress-installer
+
+# csiRclone -- The Veloxpack rclone CSI driver (`csi-driver-rclone`, pulled from
+# `oci://ghcr.io/veloxpack/charts`, alias `csiRclone`). Third-party chart, not maintained by Kasm.
+#
+# The driver provisions StorageClasses for the CSI driver `rclone.csi.veloxpack.io`, which mounts
+# object storage and other rclone remotes (S3, GCS, Azure Blob, WebDAV, SFTP, ...) into workspace
+# pods. It is what backs Kasm cloud storage mappings, so enable it alongside
+# `agent.storageMappings.enabled` — the StorageClass names created here are the ones referenced by
+# the storage mappings configured in the Kasm manager UI.
+#
+# Nodes must have the FUSE kernel module available for rclone mounts to work.
+#
+# Everything nested under `csiRclone` other than `enabled` is passed straight through to the
+# upstream chart; run `helm show values oci://ghcr.io/veloxpack/charts/csi-driver-rclone --version
+# 0.5.0` for the full reference.
+#
+csiRclone:
+  # csiRclone.enabled -- Install the rclone CSI driver with this release. Leave disabled when the
+  # driver is already installed in the cluster, or when cloud storage mappings are not used.
+  #
+  enabled: false
+  #
+  # Minimal pass-through example — uncomment and adapt:
+  #
+  # driver:
+  #   name: rclone.csi.veloxpack.io
+  # storageClasses:
+  #   - name: kasm-s3
+  #     parameters:
+  #       remote: "s3"
+  #       remotePath: "my-kasm-bucket"
+  #       configData: |
+  #         [s3]
+  #         type = s3
+  #         provider = AWS
+  #         access_key_id = YOUR_ACCESS_KEY_ID
+  #         secret_access_key = YOUR_SECRET_ACCESS_KEY
+  #     reclaimPolicy: Delete
+  #     volumeBindingMode: Immediate
+  #     mountOptions:
+  #       - vfs-cache-mode=writes
+  #       - vfs-cache-max-size=10G
+  # node:
+  #   nodeSelector: {}
+
+# gpuOperator -- The NVIDIA GPU Operator (`gpu-operator`, alias `gpuOperator`). Third-party chart,
+# not maintained by Kasm.
+#
+# Installs the NVIDIA drivers, the container toolkit, and the device plugin so that GPU nodes
+# advertise `nvidia.com/gpu` and CUDA workloads run inside workspace pods.
+#
+# Installing the operator alone does not make Kasm request GPUs. Also set `agent.gpu.enabled=true`,
+# which adds `KASM_GPU_OPERATOR_ENABLED` to the agent so it schedules GPU workspaces against the
+# advertised resource.
+#
+# Everything nested under `gpuOperator` other than `enabled` is passed straight through to the
+# upstream chart; run `helm show values nvidia/gpu-operator --version v26.7.0` for the full
+# reference. Note that the operator is cluster-scoped, so install it once per cluster.
+#
+gpuOperator:
+  # gpuOperator.enabled -- Install the NVIDIA GPU Operator with this release. Leave disabled when
+  # the operator is already installed in the cluster, or when the nodes' GPU drivers are managed
+  # outside Kubernetes.
+  #
+  enabled: false
+  #
+  # Minimal pass-through example — uncomment and adapt:
+  #
+  # driver:
+  #   # Set to false when the NVIDIA driver is already installed on the host (most cloud GPU images).
+  #   enabled: true
+  # toolkit:
+  #   enabled: true
+  # devicePlugin:
+  #   enabled: true
+  # nfd:
+  #   # Disable when node feature discovery is already running in the cluster.
+  #   enabled: true
+
+# nfs-server-provisioner -- The in-cluster NFS server provisioner (`nfs-server-provisioner`,
+# un-aliased: the upstream chart names its resources after the chart name and has no
+# nameOverride support, so a camelCase alias would render invalid object names).
+# Third-party chart, not maintained by Kasm.
+#
+# Provides a ReadWriteMany StorageClass backed by a single in-cluster NFS server, for clusters that
+# have no RWX-capable CSI driver of their own. Persistent user profiles need RWX, so this is a
+# convenient starting point — but it is a single point of failure and is not a substitute for a
+# managed RWX filesystem (EFS, Azure Files, CephFS, a real NFS appliance) in production.
+#
+# Everything nested under `nfs-server-provisioner` other than `enabled` is passed straight through
+# to the upstream chart; run `helm show values
+# nfs-ganesha/nfs-server-provisioner --version 1.8.0` for the full reference.
+#
+nfs-server-provisioner:
+  # nfs-server-provisioner.enabled -- Install the in-cluster NFS server provisioner with this release.
+  #
+  enabled: false
+  #
+  # Minimal pass-through example — uncomment and adapt:
+  #
+  # persistence:
+  #   # Back the NFS export with a PVC instead of the pod's ephemeral storage. Without this,
+  #   # every user profile is lost when the NFS server pod restarts.
+  #   enabled: true
+  #   # storageClass: ""   # the block StorageClass the export itself is carved from
+  #   size: 200Gi
+  # storageClass:
+  #   create: true
+  #   # The RWX StorageClass name that Kasm persistent profiles should reference.
+  #   name: kasm-rwx
+  #   reclaimPolicy: Retain
+  #   mountOptions:
+  #     - vers=4.1
+  #     - noatime
+
+# networkPolicies -- Baseline namespace-scoped NetworkPolicies for the release namespace.
+#
+# These are a starting point for isolating the Kasm namespace: a default deny, then narrow
+# allowances for DNS, intra-namespace traffic, the Kubernetes API server, the Kasm manager, inbound
+# session proxy traffic, and the OpenTelemetry backend. The operator additionally stamps its own
+# per-workspace NetworkPolicies at runtime for workspace network isolation; those are unaffected by
+# anything here.
+#
+# NetworkPolicy objects are inert unless the cluster CNI enforces them (Calico, Cilium, Antrea,
+# Weave, and the managed equivalents do; the default kubenet and some managed CNIs do not).
+#
+networkPolicies:
+  # networkPolicies.enabled -- Render the baseline NetworkPolicies. Off by default because a
+  # default-deny policy in a namespace whose CNI does not enforce NetworkPolicy is misleading, and
+  # in a namespace whose CNI does enforce it can cut off traffic this chart cannot anticipate.
+  #
+  enabled: false
+  # networkPolicies.apiServer -- Egress to the Kubernetes API server, which the operator, the agent,
+  # and the device plugins all need.
+  #
+  apiServer:
+    # networkPolicies.apiServer.cidr -- The CIDR the API server endpoint falls in. The default
+    # allows any destination on the ports below, because the API server address varies by cluster
+    # and is often outside the cluster network. Tighten it to the API server endpoint (or the
+    # control plane subnet) once known — `kubectl get endpoints kubernetes -n default` shows it.
+    #
+    cidr: 0.0.0.0/0
+    # networkPolicies.apiServer.ports -- The TCP ports the API server is reachable on.
+    #
+    ports:
+      - 6443
+      - 443
+  # networkPolicies.manager -- Egress to the Kasm manager this agent registers with. Covers the
+  # agent's registration and heartbeat traffic, and workspace uploads back to the manager.
+  #
+  manager:
+    # networkPolicies.manager.cidr -- The CIDR the Kasm manager falls in. The default allows any
+    # destination on the ports below; tighten it to the manager's address or its load balancer
+    # subnet when that is a stable value.
+    #
+    cidr: 0.0.0.0/0
+    # networkPolicies.manager.ports -- The TCP ports the Kasm manager is reachable on. Policy
+    # evaluation happens AFTER destination NAT: when the manager is reached through its public
+    # hostname and that resolves to a node running hostPort/ServiceLB-style ingress (k3s +
+    # Traefik), the connection's effective destination is the ingress controller's backend pod
+    # port — add it here (Traefik's websecure is 8443) or agent heartbeats fail with
+    # "connection refused" and the manager reports no agent slots. Verified live.
+    #
+    ports:
+      - 443
+      - 80
+  # networkPolicies.sessionProxy -- Inbound traffic to the session proxy, which is what users'
+  # browsers connect to for a workspace session.
+  #
+  sessionProxy:
+    # networkPolicies.sessionProxy.ports -- The TCP ports the session proxy accepts connections on.
+    # Must match the session proxy's listeners; change both together.
+    #
+    ports:
+      - 4444
+      - 4445
+    # networkPolicies.sessionProxy.from -- The peers allowed to reach the session proxy, as a list
+    # of raw NetworkPolicy peer objects (`ipBlock`, `namespaceSelector`, `podSelector`). Empty means
+    # from anywhere, which is usually what is wanted when an ingress controller or a cloud load
+    # balancer fronts the proxy and its source addresses are not predictable.
+    #
+    # Example:
+    #   from:
+    #     - namespaceSelector:
+    #         matchLabels:
+    #           kubernetes.io/metadata.name: ingress-nginx
+    #
+    from: []
+  # networkPolicies.otelBackend -- Egress to the telemetry backends the OpenTelemetry collector
+  # exports to. Those backends are external to this chart.
+  #
+  otelBackend:
+    # networkPolicies.otelBackend.cidr -- The CIDR the telemetry backends fall in. Leave as the
+    # default when the backend is outside the cluster and its address is not fixed; set it to the
+    # backend namespace's pod CIDR, or drop the ports you do not use, to tighten it.
+    #
+    cidr: 0.0.0.0/0
+    # networkPolicies.otelBackend.ports -- The TCP ports the telemetry backends listen on. The
+    # defaults are OTLP gRPC (4317), OTLP HTTP (4318), and the ClickHouse native protocol (9000).
+    #
+    ports:
+      - 4317
+      - 4318
+      - 9000
+  # networkPolicies.extraPolicies -- Additional NetworkPolicy manifests to render alongside the
+  # baseline set. Each entry is a complete manifest, either as a string or as an object, and is
+  # rendered through `tpl` so Helm templating may be used inside it.
+  #
+  # Example:
+  #   extraPolicies:
+  #     - |
+  #       apiVersion: networking.k8s.io/v1
+  #       kind: NetworkPolicy
+  #       metadata:
+  #         name: {{ .Release.Name }}-allow-registry-egress
+  #       spec:
+  #         podSelector: {}
+  #         policyTypes:
+  #           - Egress
+  #         egress:
+  #           - to:
+  #               - ipBlock:
+  #                   cidr: 10.20.0.0/16
+  #             ports:
+  #               - protocol: TCP
+  #                 port: 443
+  #
+  extraPolicies: []
+
+# extraObjects -- Deploy additional Kubernetes manifests alongside this release.
+# This field is expected to be either a list of strings or a list of objects. Each entry is
+# rendered through `tpl`, so Helm templating may be used inside it.
+#
+extraObjects: []

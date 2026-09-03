@@ -1,0 +1,121 @@
+{{- $agent := .Values.agent | default dict -}}
+{{- $nodePrep := .Values.nodePrep | default dict -}}
+{{- $sessionProxy := dig "sessionProxy" dict $agent -}}
+{{- $agentEnabled := dig "enabled" false $agent -}}
+{{- $nodePrepEnabled := dig "enabled" false $nodePrep -}}
+{{- $operatorEnabled := dig "enabled" false (.Values.operator | default dict) -}}
+{{- $otelEnabled := dig "enabled" false (.Values.otelCollector | default dict) -}}
+{{- $videoEnabled := dig "enabled" false (.Values.videoDevicePlugin | default dict) -}}
+{{- $csiRcloneEnabled := dig "enabled" false (.Values.csiRclone | default dict) -}}
+{{- $gpuOperatorEnabled := dig "enabled" false (.Values.gpuOperator | default dict) -}}
+{{- $nfsEnabled := dig "enabled" false (index .Values "nfs-server-provisioner" | default dict) -}}
+{{- $agentGpu := dig "gpu" "enabled" false $agent -}}
+{{- $storageMappings := dig "storageMappings" "enabled" false $agent -}}
+{{- $v4l2 := dig "modules" "v4l2loopback" "enabled" false $nodePrep -}}
+{{- $certEnabled := dig "certificate" "enabled" false $sessionProxy -}}
+{{- $certSecret := dig "certSecretName" "" $sessionProxy -}}
+CHART NAME: {{ .Chart.Name }}
+CHART VERSION: {{ .Chart.Version }}
+APP VERSION: {{ .Chart.AppVersion }}
+
+The Kasm agent stack has been installed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+Installed with this release:
+{{ if $operatorEnabled }}  * operator            the Kasm agent operator (CRDs, cluster RBAC, controller-manager)
+{{ end }}{{ if $otelEnabled }}  * otelCollector       the OpenTelemetry collector, reachable at {{ .Release.Name }}-kasm-otel-collector:4317 (gRPC) and :4318 (HTTP)
+{{ end }}{{ if $agentEnabled }}  * agent               the Agent resource and its session proxy
+{{ end }}{{ if $nodePrepEnabled }}  * nodePrep            the privileged node preparation DaemonSet (kernel modules)
+{{ end }}{{ if $videoEnabled }}  * videoDevicePlugin   the video device plugin DaemonSet
+{{ end }}{{ if $csiRcloneEnabled }}  * csiRclone           the Veloxpack rclone CSI driver (rclone.csi.veloxpack.io)
+{{ end }}{{ if $gpuOperatorEnabled }}  * gpuOperator         the NVIDIA GPU Operator
+{{ end }}{{ if $nfsEnabled }}  * nfs-server-provisioner  the in-cluster NFS server provisioner (ReadWriteMany StorageClass)
+{{ end }}
+Watch the rollout:
+
+  kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }} -w
+
+{{ if $operatorEnabled }}Check that the agent registered with its Kasm manager:
+
+  kubectl get agents.agent.kasm.com -n {{ .Release.Namespace }}
+
+{{ end }}
+{{- if $agentEnabled }}
+{{- if not $certEnabled }}
+SESSION PROXY TLS
+
+  agent.sessionProxy.certificate.enabled is false, so this chart does not issue a certificate for
+  the session proxy. The TLS Secret must already exist in namespace "{{ .Release.Namespace }}", of type
+  kubernetes.io/tls, {{ if $certSecret }}named "{{ $certSecret }}"{{ else }}with its name set in agent.sessionProxy.certSecretName{{ end }}.
+
+  Create it from an existing certificate:
+
+    kubectl create secret tls {{ $certSecret | default "<agent.sessionProxy.certSecretName>" }} \
+      --namespace {{ .Release.Namespace }} \
+      --cert=path/to/tls.crt --key=path/to/tls.key
+
+  Or set agent.sessionProxy.certificate.enabled=true, along with
+  agent.sessionProxy.certificate.issuerRef and agent.sessionProxy.certificate.dnsNames, to have
+  cert-manager issue and renew it. Browsers connect to the session proxy directly, so the
+  certificate must be trusted by the client, not just by the cluster.
+
+{{ end }}
+{{- end }}
+{{- if and $storageMappings (not $csiRcloneEnabled) }}
+WARNING: agent.storageMappings.enabled is true but csiRclone.enabled is false.
+
+  Cloud storage mappings are provisioned through the rclone CSI driver
+  (rclone.csi.veloxpack.io). Unless that driver is already installed in this cluster by something
+  else, workspace pods with a storage mapping will stay Pending with an unbound PVC. Either set
+  csiRclone.enabled=true, or install the driver separately. Nodes also need the FUSE kernel module
+  for rclone mounts to work.
+
+{{ end }}
+{{- if and $videoEnabled (not (and $nodePrepEnabled $v4l2)) }}
+WARNING: videoDevicePlugin.enabled is true but v4l2loopback node preparation is not.
+
+  The device plugin only advertises /dev/video* devices that already exist on a node. With no
+  v4l2loopback module loaded, and no physical capture devices on the nodes, it will advertise zero
+  devices and every webcam-enabled workspace will fail to schedule. Set nodePrep.enabled=true and
+  nodePrep.modules.v4l2loopback.enabled=true, or confirm the nodes provide real video devices.
+
+{{ end }}
+{{- if and $gpuOperatorEnabled (not $agentGpu) }}
+WARNING: gpuOperator.enabled is true but agent.gpu.enabled is false.
+
+  The GPU Operator will advertise nvidia.com/gpu on GPU nodes, but the agent will not request it,
+  so no workspace ever lands on a GPU. Set agent.gpu.enabled=true — it sets
+  KASM_GPU_OPERATOR_ENABLED on the agent, which is what makes it schedule GPU workspaces against
+  the advertised resource.
+
+{{ end }}
+{{- if $nodePrepEnabled }}
+WARNING: nodePrep.enabled is true — this release runs privileged pods.
+
+  Node preparation builds and loads host kernel modules, so its DaemonSet runs privileged, with
+  host PID and mounts from the host filesystem. Namespace "{{ .Release.Namespace }}" must permit the
+  "privileged" Pod Security Standard:
+
+    kubectl label namespace {{ .Release.Namespace }} pod-security.kubernetes.io/enforce=privileged
+
+  Kernel headers matching the running kernel must be available on each node, and on nodes with
+  Secure Boot enabled the built modules must be signed with an enrolled MOK key
+  (nodePrep.secureBoot.existingMokSecret). Restrict which nodes are prepared with
+  nodePrep.nodeSelector.
+
+{{ end }}
+{{- if .Values.networkPolicies.enabled }}
+NOTE: networkPolicies.enabled is true.
+
+  Baseline NetworkPolicies were created in namespace "{{ .Release.Namespace }}", starting with a default deny.
+  They do nothing at all unless this cluster's CNI enforces NetworkPolicy — Calico, Cilium, Antrea,
+  and the managed equivalents do; plain kubenet and some managed CNIs silently ignore every policy.
+  Confirm enforcement before treating this as isolation:
+
+    kubectl get networkpolicies -n {{ .Release.Namespace }}
+
+  The defaults for networkPolicies.apiServer.cidr, networkPolicies.manager.cidr, and
+  networkPolicies.otelBackend.cidr are 0.0.0.0/0 on specific ports. Narrow them to the real
+  destinations once known.
+
+{{ end }}
+Documentation: https://docs.kasm.com

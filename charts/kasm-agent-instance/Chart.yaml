@@ -1,0 +1,17 @@
+annotations:
+  category: Virtual Desktop
+apiVersion: v2
+appVersion: "develop"
+name: kasm-agent-instance
+description: Creates the Agent custom resource (agent.kasm.com/v1alpha1) that the Kasm agent operator reconciles into a Kubernetes-native Kasm agent and session proxy, plus its satellite objects - the manager token Secret, a cert-manager Certificate, a KasmImagePuller, and a Gateway API HTTPRoute, a classic Ingress or an OpenShift Route. Deployed as a subchart of the kasm-agent umbrella chart under the `agent` alias.
+icon: https://kasm-static-content.s3.amazonaws.com/icons/kasm-logo-small.png
+home: https://kasm.com
+keywords:
+  - kasm
+  - vdi
+  - workspaces
+  - agent
+maintainers:
+  - name: Kasm Technologies, Inc.
+    url: https://github.com/kasmtech/kasm-helm
+version: 0.1.0

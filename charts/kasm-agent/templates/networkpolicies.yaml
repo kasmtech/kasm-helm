@@ -1,0 +1,188 @@
+{{/*
+  Baseline namespace-scoped NetworkPolicies for the release namespace.
+
+  Rendered only when `.Values.networkPolicies.enabled` is true. NetworkPolicy is additive: a pod is
+  isolated for a direction as soon as one policy selects it for that direction, and every matching
+  policy's rules are then unioned. So `default-deny` isolates every pod in the namespace, and each
+  `allow-*` policy below punches one hole back through it.
+
+  These cover the traffic this chart knows about. The operator stamps its own per-workspace policies
+  at runtime for workspace network isolation; those are independent of everything here.
+
+  None of this has any effect unless the cluster CNI enforces NetworkPolicy.
+*/}}
+{{- if .Values.networkPolicies.enabled }}
+{{- $fullname := include "kasmAgent.fullname" . }}
+{{- $np := .Values.networkPolicies }}
+---
+{{/* Isolate every pod in the namespace in both directions. The allow-* policies below re-open
+     exactly the paths the Kasm agent stack needs. */}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ printf "%s-default-deny" $fullname }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kasmAgent.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+{{/* Cluster DNS. Every pod needs to resolve Service names, and CoreDNS answers on both UDP and TCP
+     port 53. No `to` selector: kube-dns may live in any namespace and behind any address, and
+     restricting the destination here is the most common way to break a whole namespace. */}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ printf "%s-allow-dns" $fullname }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kasmAgent.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+{{/* Traffic between pods of this namespace, in both directions. The agent, the operator, the
+     collector, the session proxy, and the workspace pods all talk to one another, and enumerating
+     each of those flows individually would break every time a component gains a port. */}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ printf "%s-allow-intra-namespace" $fullname }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kasmAgent.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector: {}
+  egress:
+    - to:
+        - podSelector: {}
+---
+{{/* Egress to the Kubernetes API server. The operator watches and reconciles Kasm custom
+     resources, the agent reads its own Agent resource, and the device plugins report to kubelet's
+     API. Tighten `networkPolicies.apiServer.cidr` to the control plane endpoint when it is known;
+     the default allows any destination on the API server ports. */}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ printf "%s-allow-apiserver-egress" $fullname }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kasmAgent.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: {{ $np.apiServer.cidr }}
+      ports:
+        {{- range $np.apiServer.ports }}
+        - protocol: TCP
+          port: {{ . }}
+        {{- end }}
+---
+{{/* Egress to the Kasm manager: agent registration and heartbeats, and workspace uploads back to
+     the manager. Tighten `networkPolicies.manager.cidr` to the manager's address when it is
+     stable. */}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ printf "%s-allow-manager-egress" $fullname }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kasmAgent.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: {{ $np.manager.cidr }}
+      ports:
+        {{- range $np.manager.ports }}
+        - protocol: TCP
+          port: {{ . }}
+        {{- end }}
+---
+{{/* Inbound session traffic to the session proxy, which is what a user's browser connects to.
+     `networkPolicies.sessionProxy.from` is empty by default, which allows connections from
+     anywhere — an ingress controller or cloud load balancer usually fronts the proxy and its
+     source addresses are rarely predictable. */}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ printf "%s-allow-session-ingress" $fullname }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kasmAgent.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: session-proxy
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        {{- range $np.sessionProxy.ports }}
+        - protocol: TCP
+          port: {{ . }}
+        {{- end }}
+      {{- with $np.sessionProxy.from }}
+      from:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+{{/* Egress to the telemetry backends the OpenTelemetry collector exports to (OTLP gRPC and HTTP,
+     and the ClickHouse native protocol by default). Those backends are external to this chart. */}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ printf "%s-allow-otlp-backend-egress" $fullname }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kasmAgent.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: {{ $np.otelBackend.cidr }}
+      ports:
+        {{- range $np.otelBackend.ports }}
+        - protocol: TCP
+          port: {{ . }}
+        {{- end }}
+{{/* Additional policies supplied by the operator of this release. Each entry is a complete
+     manifest, string or object, rendered through `tpl`. */}}
+{{- if and (hasKey $np "extraPolicies") (not (kindIs "slice" $np.extraPolicies)) -}}
+  {{- fail "networkPolicies.extraPolicies must be an array (YAML list). Each item may be a string or an object." -}}
+{{- end -}}
+{{- range $np.extraPolicies }}
+---
+  {{- if typeIs "string" . }}
+    {{- tpl . $ }}
+  {{- else }}
+    {{- tpl (. | toYaml | nindent 0) $ }}
+  {{- end }}
+{{- end }}
+{{- end }}

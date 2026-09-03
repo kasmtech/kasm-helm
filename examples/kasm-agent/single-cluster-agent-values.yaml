@@ -1,0 +1,115 @@
+# kasm-agent values for the RECOMMENDED two-namespace, single-cluster deployment — the
+# counterpart of a kasm-helm control-plane install in namespace `kasm` (see
+# examples/kasm-agent/single-cluster-control-plane-values.yaml for that half, and
+# "Running alongside the kasm-helm control plane" in charts/kasm-agent/README.md for the
+# full walkthrough).
+#
+# Two namespaces is the recommended layout because it keeps the blast radii apart:
+#   * the `privileged` Pod Security Standard that nodePrep / videoDevicePlugin require
+#     stays confined to THIS namespace — the control plane keeps normal enforcement;
+#   * the umbrella's baseline NetworkPolicies can be ENABLED here (below) without any
+#     risk of cutting off control-plane traffic, which is why this file turns them on
+#     while the shared-namespace example must leave them off.
+#
+# Install order (control plane first — the agent needs its zone and token):
+#
+#   # 1. Control plane
+#   helm install kasm charts/kasm-helm -n kasm --create-namespace \
+#     -f examples/kasm-agent/single-cluster-control-plane-values.yaml
+#   kubectl label namespace kasm kasm.com/role=manager   # optional; only for direct manager->workspace ingress
+#
+#   # 2. Copy the registration token across (Secrets do not cross namespaces)
+#   kubectl create namespace kasm-agent
+#   kubectl create secret generic kasm-manager-token -n kasm-agent \
+#     --from-literal=token="$(kubectl get secret kasm-secrets -n kasm \
+#       -o jsonpath='{.data.manager-token}' | base64 -d)"
+#
+#   # 3. The agent (this file)
+#   helm dependency build charts/kasm-agent
+#   helm install kasm-agent charts/kasm-agent -n kasm-agent \
+#     -f examples/kasm-agent/single-cluster-agent-values.yaml
+#
+# Hostname plan — both under ONE parent domain (the control-plane values seed
+# kasm_auth_domain to that parent, so the session cookie reaches both):
+#   control plane UI/API:  kasm.example.com        (that file's publicAddr)
+#   agent session proxy:   sessions.example.com    (agent.publicHostname here)
+#
+# Replace every example.com hostname and the TLS handling before use.
+
+agent:
+  manager:
+    # The control plane's publicAddr. Leave pathPrefix at its /manager_api default.
+    hostname: kasm.example.com
+    # The Secret created in step 2 of the install order above.
+    existingTokenSecret: kasm-manager-token
+    tokenSecretKey: token
+
+  # Must differ from the control plane's publicAddr and share its parent domain.
+  publicHostname: sessions.example.com
+
+  # The zone this agent registers into; the control-plane values preseed exactly this
+  # one, with direct connections enabled.
+  zone: default
+
+  sessionProxy:
+    # TLS for sessions.example.com, served by the session proxy itself. Either create
+    # this Secret out of band, or uncomment the certificate block to have cert-manager
+    # issue and renew it.
+    certSecretName: kasm-session-proxy-tls
+    # certificate:
+    #   enabled: true
+    #   issuerRef:
+    #     name: letsencrypt
+    #     kind: ClusterIssuer
+
+  # Expose the session proxy on publicHostname. Pick exactly ONE of ingress /
+  # httpRoute / route (OpenShift). Kasm sessions are long-lived websockets: the
+  # controller must allow upgrades and use read/send timeouts of at least 3600s.
+  ingress:
+    enabled: true
+    className: traefik
+    annotations:
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+      nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    tls:
+      - secretName: kasm-agent-public-tls
+        hosts:
+          - sessions.example.com
+
+# In a dedicated namespace the baseline NetworkPolicies are safe to enforce — they
+# model exactly this stack's traffic (OTLP, session-proxy ingress, manager egress,
+# DNS) and nothing else shares the namespace. This is one of the two reasons the
+# two-namespace layout is recommended.
+networkPolicies:
+  enabled: true
+  manager:
+    # LIVE-VERIFIED GOTCHA: with hostPort/ServiceLB-style ingress (k3s + traefik), the
+    # node DNATs :443 to the ingress controller's backend port BEFORE NetworkPolicy
+    # evaluation — so reaching an in-cluster manager through its public hostname needs
+    # that backend port allowed as well (traefik's websecure is 8443). Symptom if
+    # missing: agent heartbeats fail with "connection refused" and the manager reports
+    # "No Agent slots available". Drop 8443 if your manager is reached through an
+    # external LB that terminates before the node.
+    ports: [443, 80, 8443]
+
+# Optional per-feature infrastructure, all off by default. Enabling nodePrep or
+# videoDevicePlugin requires the `privileged` Pod Security Standard on THIS namespace
+# only — the control-plane namespace is unaffected (the other reason this layout is
+# recommended):
+#
+#   kubectl label namespace kasm-agent pod-security.kubernetes.io/enforce=privileged
+#
+# nodePrep:
+#   enabled: true              # kernel modules (v4l2loopback for webcam) + node tuning
+#   tuning:
+#     sysctls:
+#       enabled: true          # desktop-density inotify limits
+#     swap:
+#       enabled: true          # requires kubelet fail-swap-on=false first — see
+#                              # examples/kasm-agent/k3s-node-swap-config.yaml
+# videoDevicePlugin:
+#   enabled: true              # advertises /dev/video* as kasm.com/video
+# csiRclone:
+#   enabled: true              # cloud storage mappings (pair with agent.storageMappings)
+# nfs-server-provisioner:
+#   enabled: true              # in-cluster RWX StorageClass for shared profiles

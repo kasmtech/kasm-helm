@@ -1,0 +1,151 @@
+{{/*
+  The Agent custom resource.
+
+  The operator reconciles this into the agent Deployment, the session-proxy
+  Deployment, and the session-proxy Service (named "<.Values.name>-session-proxy").
+  Nothing in this chart creates those directly.
+
+  Optional fields are omitted entirely rather than rendered empty: the CRD
+  distinguishes "unset" from "set to the zero value" for several of them, and an
+  omitted field leaves the operator's own default in charge.
+*/}}
+{{- $env := include "kasmAgentInstance.env" . -}}
+{{- /* The session-proxy Service overrides. The whole block stays off the resource
+       while it holds nothing but defaults - ClusterIP with no annotations, no
+       traffic policy and no pinned node ports is exactly what the operator does
+       on its own - but any single non-default value pulls it in, annotations on
+       an otherwise plain ClusterIP Service included. */}}
+{{- $service := .Values.sessionProxy.service -}}
+{{- $serviceSet := or (and $service.type (ne $service.type "ClusterIP")) $service.annotations $service.externalTrafficPolicy $service.httpsNodePort $service.httpNodePort -}}
+{{- $proxyProtocol := .Values.sessionProxy.proxyProtocol -}}
+apiVersion: agent.kasm.com/v1alpha1
+kind: Agent
+metadata:
+  name: {{ .Values.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kasmAgentInstance.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  image: {{ include "kasmAgentInstance.joinImage" (dict "image" .Values.image "defaultTag" .Chart.AppVersion "path" "agent.image") | quote }}
+  imageAvailabilityPolicy: {{ .Values.imageAvailabilityPolicy | quote }}
+  imagePullPolicy: {{ .Values.imagePullPolicy }}
+  logLevel: {{ .Values.logLevel | quote }}
+  heartbeatIntervalSeconds: {{ .Values.heartbeatIntervalSeconds }}
+  metricsIntervalSeconds: {{ .Values.metricsIntervalSeconds }}
+  manager:
+    hostname: {{ include "kasmAgentInstance.managerHostname" . | quote }}
+    port: {{ .Values.manager.port }}
+    scheme: {{ .Values.manager.scheme }}
+    pathPrefix: {{ .Values.manager.pathPrefix | quote }}
+    {{- /* The token is always referenced, never inlined on the resource. */}}
+    tokenSecretRef:
+      name: {{ include "kasmAgentInstance.managerTokenSecretName" . }}
+      key: {{ include "kasmAgentInstance.managerTokenSecretKey" . }}
+  publicHostname: {{ include "kasmAgentInstance.publicHostname" . | quote }}
+  publicPort: {{ .Values.publicPort }}
+  zone: {{ .Values.zone | quote }}
+  sessionProxy:
+    image: {{ include "kasmAgentInstance.joinImage" (dict "image" .Values.sessionProxy.image "defaultTag" "" "path" "agent.sessionProxy.image") | quote }}
+    sidecarImage: {{ include "kasmAgentInstance.joinImage" (dict "image" .Values.sessionProxy.sidecarImage "defaultTag" .Chart.AppVersion "path" "agent.sessionProxy.sidecarImage") | quote }}
+    replicas: {{ .Values.sessionProxy.replicas }}
+    probeTimeoutSeconds: {{ .Values.sessionProxy.probeTimeoutSeconds }}
+    reconcileIntervalSeconds: {{ .Values.sessionProxy.reconcileIntervalSeconds }}
+    certSecretName: {{ .Values.sessionProxy.certSecretName }}
+    {{- if $serviceSet }}
+    service:
+      {{- with $service.type }}
+      type: {{ . }}
+      {{- end }}
+      {{- with $service.externalTrafficPolicy }}
+      externalTrafficPolicy: {{ . }}
+      {{- end }}
+      {{- with $service.httpsNodePort }}
+      httpsNodePort: {{ . }}
+      {{- end }}
+      {{- with $service.httpNodePort }}
+      httpNodePort: {{ . }}
+      {{- end }}
+      {{- /* Keys and values are quoted individually rather than passed through
+             toYaml: load-balancer annotations are routinely numeric-looking
+             (idle timeouts, ports), and both the CRD's map[string]string and the
+             API server reject a non-string annotation value. */}}
+      {{- with $service.annotations }}
+      annotations:
+        {{- range $key, $value := . }}
+        {{ $key | quote }}: {{ $value | quote }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+    {{- if or $proxyProtocol.enabled $proxyProtocol.trustedCIDRs }}
+    proxyProtocol:
+      enabled: {{ $proxyProtocol.enabled }}
+      {{- with $proxyProtocol.trustedCIDRs }}
+      trustedCIDRs:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- end }}
+  {{- /* The operator-managed TLS-passthrough route. The CRD marks both `enabled`
+         and `parentRef` required whenever this block is present, so it is either
+         omitted whole or rendered with both. hostnames is deliberately NOT
+         defaulted here the way tlsRoute.yaml defaults its own: the operator
+         defaults it to [spec.publicHostname], and passing an empty list would
+         override that with "match nothing". */}}
+  {{- if .Values.gatewayRoute.enabled }}
+  gatewayRoute:
+    enabled: true
+    parentRef:
+      name: {{ include "kasmAgentInstance.gatewayRouteParentRefName" . | quote }}
+      {{- with .Values.gatewayRoute.parentRef.namespace }}
+      namespace: {{ . | quote }}
+      {{- end }}
+      {{- with .Values.gatewayRoute.parentRef.sectionName }}
+      sectionName: {{ . | quote }}
+      {{- end }}
+    {{- with .Values.gatewayRoute.hostnames }}
+    hostnames:
+      {{- range . }}
+      - {{ . | quote }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+  {{- with .Values.serverID }}
+  serverID: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.apiServerURL }}
+  apiServerURL: {{ . | quote }}
+  {{- end }}
+  {{- if or .Values.storageMappings.enabled .Values.storageMappings.installationID }}
+  storageMappings:
+    enabled: {{ .Values.storageMappings.enabled }}
+    {{- with .Values.storageMappings.installationID }}
+    installationID: {{ . | quote }}
+    {{- end }}
+  {{- end }}
+  {{- with .Values.imagePullSecrets }}
+  imagePullSecrets:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.workspaceImagePullSecrets }}
+  workspaceImagePullSecrets:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.nodeSelector }}
+  nodeSelector:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.workspacesNodeSelector }}
+  workspacesNodeSelector:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.resources }}
+  resources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $env }}
+  env:
+    {{- . | nindent 4 }}
+  {{- end }}

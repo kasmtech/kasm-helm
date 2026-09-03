@@ -1,0 +1,29 @@
+{{/*
+  Namespace-scoped read access to Events for the k8s_events receiver.
+
+  Deliberately a Role and not a ClusterRole: the receiver is configured with
+  `namespaces: [<release namespace>]`, so cluster-wide read would grant the
+  collector more than it can use.
+*/}}
+{{- if .Values.receivers.k8sEvents.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "kasmOtelCollector.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kasmOtelCollector.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - get
+      - list
+      - watch
+{{- end }}

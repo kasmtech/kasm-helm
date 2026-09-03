@@ -1,0 +1,32 @@
+# Airgapped KMM (Mode A) scenario: v4l2loopback delegated to the Kernel Module Management operator
+# with in-cluster builds OFF, so the chart renders a `kmm.sigs.x-k8s.io/v1beta1` Module that KMM only
+# ever *pulls* prebuilt per-kernel images for. This is the clean offline path documented in the
+# kasm-node-prep chart's "Airgapped KMM (prebuilt modules)" runbook, and it is the scenario that makes
+# `make images-agent` emit the KMM operator image set.
+#
+# Rendered to .rendered-infra/ alongside infra.yaml, NOT .rendered/: the Module custom resource has no
+# schema kubeconform can fetch (it is -ignore-missing-schemas skipped) and the release is privileged
+# cluster-infra, so it is deliberately kept out of the kyverno baseline-PSS gate that sweeps .rendered/.
+# The registry/repository/imageRepoSecret values are placeholders — point them at your mirror for a real
+# airgapped install.
+agent:
+  manager:
+    hostname: kasm.example.test
+    token: "placeholder-not-a-real-token"
+  publicHostname: agent.kasm.example.test
+
+nodePrep:
+  enabled: true
+  modules:
+    v4l2loopback:
+      enabled: true
+      method: kmm
+      kmm:
+        image:
+          registry: registry.example.internal
+          repository: kasm/v4l2loopback
+        imageRepoSecret: kasm-registry
+        build:
+          # Mode A: no in-cluster kaniko build. KMM only pulls the prebuilt
+          # <registry>/<repository>:${KERNEL_FULL_VERSION} image for each fleet kernel.
+          enabled: false

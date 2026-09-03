@@ -1,0 +1,65 @@
+{{/*
+  Classic networking.k8s.io/v1 Ingress exposing the session proxy at the agent's
+  public hostname. The Gateway API alternative lives in httproute.yaml - enable
+  at most one of the two, since both point at the same Service.
+
+  The backend Service is NOT created by this chart: the Agent controller creates
+  it from agent.yaml and names it "<Agent name>-session-proxy", which is why the
+  backend is built from .Values.name rather than from the chart fullname.
+
+  The default backend port, 4445, is the proxy's plain-HTTP listener, not its
+  self-signed HTTPS one (4444) - TLS for the public hostname is expected to
+  terminate at the Ingress. Pointing ingress.backendPort at 4444 also needs a
+  backend-protocol annotation on most controllers (for ingress-nginx,
+  `nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"`), or the controller
+  will speak plaintext to a TLS listener.
+
+  Kasm sessions are long-lived VNC websockets. The ingress controller must allow
+  websocket upgrades and must be configured with read and send timeouts of at
+  least 3600s, or sessions are torn down mid-use at the controller's default
+  timeout (60s on ingress-nginx). See ingress.annotations in values.yaml for the
+  ingress-nginx form of those settings.
+*/}}
+{{- if .Values.ingress.enabled }}
+{{- $hosts := .Values.ingress.hosts | default (list (include "kasmAgentInstance.publicHostname" .)) }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "kasmAgentInstance.fullname" . }}-session-proxy
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kasmAgentInstance.labels" . | nindent 4 }}
+  {{- /* ingress.annotations wins over commonAnnotations on a key collision. Both
+         key and value are quoted rather than passed through toYaml because the
+         timeout annotations below are numeric-looking, and the API server rejects
+         a non-string annotation value - which is exactly what a
+         `--set ingress.annotations.<timeout>=3600` would otherwise produce. */}}
+  {{- $annotations := merge (dict) (.Values.ingress.annotations | default dict) (.Values.commonAnnotations | default dict) }}
+  {{- with $annotations }}
+  annotations:
+    {{- range $key, $value := . }}
+    {{ $key | quote }}: {{ $value | quote }}
+    {{- end }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- range $hosts }}
+    - host: {{ . | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ printf "%s-session-proxy" $.Values.name }}
+                port:
+                  number: {{ $.Values.ingress.backendPort }}
+    {{- end }}
+{{- end }}

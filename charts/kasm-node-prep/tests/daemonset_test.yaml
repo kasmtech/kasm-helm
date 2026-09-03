@@ -1,0 +1,438 @@
+suite: node prep daemonset
+
+# configmap.yaml is listed so the checksum/config annotation can resolve it; every test
+# asserts against the DaemonSet only.
+templates:
+  - templates/daemonset.yaml
+  - templates/configmap.yaml
+
+tests:
+  - it: renders a privileged daemonset that runs the reconcile script
+    template: templates/daemonset.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: DaemonSet
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-kasm-node-prep
+      - equal:
+          path: spec.updateStrategy.type
+          value: RollingUpdate
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/component"]
+          value: node-prep
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: docker.io/library/ubuntu:22.04
+      - equal:
+          path: spec.template.spec.containers[0].command
+          value:
+            - /bin/bash
+            - /scripts/ensure-modules.sh
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.privileged
+          value: true
+      - isNull:
+          path: spec.template.spec.hostNetwork
+      - isNull:
+          path: spec.template.spec.hostPID
+
+  - it: mounts only the host paths the module build needs
+    template: templates/daemonset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: lib-modules
+            hostPath:
+              path: /lib/modules
+              type: Directory
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: usr-src
+            hostPath:
+              path: /usr/src
+              type: DirectoryOrCreate
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: dev
+            hostPath:
+              path: /dev
+              type: Directory
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: scripts
+            configMap:
+              name: RELEASE-NAME-kasm-node-prep
+              defaultMode: 493
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: scripts
+            mountPath: /scripts
+            readOnly: true
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: lib-modules
+            mountPath: /lib/modules
+      - lengthEqual:
+          path: spec.template.spec.volumes
+          count: 4
+
+  - it: always sets cpu and memory requests and limits
+    template: templates/daemonset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 100m
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 256Mi
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: 1000m
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 1Gi
+
+  - it: annotates the pod template with the reconcile script checksum
+    template: templates/daemonset.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.metadata.annotations["checksum/config"]
+          pattern: "^[a-f0-9]{64}$"
+
+  - it: changes the checksum annotation when the script changes
+    template: templates/daemonset.yaml
+    set:
+      modules:
+        v4l2loopback:
+          videoDevices: 8
+    asserts:
+      - notEqual:
+          path: spec.template.metadata.annotations["checksum/config"]
+          value: "770691effd75661ae99aa6650f2cbfa9a36cbc49111dfd09730a9ee2aa877d55"
+
+  - it: does not mount the MOK secret when none is configured
+    template: templates/daemonset.yaml
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: mok
+            mountPath: /etc/kasm-mok
+            readOnly: true
+      - lengthEqual:
+          path: spec.template.spec.containers[0].volumeMounts
+          count: 4
+
+  - it: mounts the MOK secret read only when secureBoot.existingMokSecret is set
+    template: templates/daemonset.yaml
+    set:
+      secureBoot:
+        existingMokSecret: kasm-mok-keys
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: mok
+            secret:
+              secretName: kasm-mok-keys
+              defaultMode: 256
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: mok
+            mountPath: /etc/kasm-mok
+            readOnly: true
+      - lengthEqual:
+          path: spec.template.spec.containers[0].volumeMounts
+          count: 5
+
+  - it: applies scheduling, strategy, label and annotation overrides
+    template: templates/daemonset.yaml
+    set:
+      nodeSelector:
+        kasm.com/workspaces: "true"
+      tolerations:
+        - key: kasm.com/workspaces
+          operator: Exists
+          effect: NoSchedule
+      updateStrategy: OnDelete
+      podAnnotations:
+        contoso.com/owner: platform
+      podLabels:
+        contoso.com/tier: node
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector["kasm.com/workspaces"]
+          value: "true"
+      - contains:
+          path: spec.template.spec.tolerations
+          content:
+            key: kasm.com/workspaces
+            operator: Exists
+            effect: NoSchedule
+      - equal:
+          path: spec.updateStrategy.type
+          value: OnDelete
+      - equal:
+          path: spec.template.metadata.annotations["contoso.com/owner"]
+          value: platform
+      - equal:
+          path: spec.template.metadata.labels["contoso.com/tier"]
+          value: node
+
+  - it: honors fullnameOverride
+    template: templates/daemonset.yaml
+    set:
+      fullnameOverride: node-prep
+    asserts:
+      - equal:
+          path: metadata.name
+          value: node-prep
+      - equal:
+          path: spec.template.spec.volumes[0].configMap.name
+          value: node-prep
+
+  # Helm rewrites .Chart.Name to the dependency alias for an aliased subchart, so the camelCase
+  # umbrella alias has to normalize into a DNS-safe resource name.
+  - it: normalizes a camelCase nameOverride the way an umbrella alias would arrive
+    template: templates/daemonset.yaml
+    set:
+      nameOverride: nodePrep
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-node-prep
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: node-prep
+      - equal:
+          path: spec.template.spec.volumes[0].configMap.name
+          value: RELEASE-NAME-node-prep
+
+  # --- Node tuning ------------------------------------------------------------------------------
+
+  - it: mounts nothing extra when tuning is off, or when only sysctl tuning is on
+    template: templates/daemonset.yaml
+    set:
+      tuning:
+        sysctls:
+          enabled: true
+    asserts:
+      # sysctl -w needs no host mount: the privileged container already writes the node's /proc/sys.
+      - lengthEqual:
+          path: spec.template.spec.volumes
+          count: 4
+      - notContains:
+          path: spec.template.spec.volumes
+          content:
+            name: swap
+            hostPath:
+              path: /var/lib/kasm-node-prep
+              type: DirectoryOrCreate
+
+  - it: adds the swapfile and kubelet-config host paths only when swap tuning is enabled
+    template: templates/daemonset.yaml
+    set:
+      tuning:
+        swap:
+          enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: swap
+            hostPath:
+              path: /var/lib/kasm-node-prep
+              type: DirectoryOrCreate
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: k3s-config
+            hostPath:
+              path: /etc/rancher/k3s
+              type: DirectoryOrCreate
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: kubelet-config
+            hostPath:
+              path: /var/lib/kubelet
+              type: DirectoryOrCreate
+      # The swap directory is mounted at its host path so /proc/swaps reads the same on both sides.
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: swap
+            mountPath: /var/lib/kasm-node-prep
+      # The kubelet configuration is only ever read.
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: k3s-config
+            mountPath: /host/etc/rancher/k3s
+            readOnly: true
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: kubelet-config
+            mountPath: /host/var/lib/kubelet
+            readOnly: true
+      - lengthEqual:
+          path: spec.template.spec.volumes
+          count: 7
+
+  - it: follows tuning.swap.hostPath for both the volume and its mount path
+    template: templates/daemonset.yaml
+    set:
+      tuning:
+        swap:
+          enabled: true
+          hostPath: /mnt/kasm
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: swap
+            hostPath:
+              path: /mnt/kasm
+              type: DirectoryOrCreate
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: swap
+            mountPath: /mnt/kasm
+
+  # A tuning-only install never builds a module, so it gets none of the module build machinery's
+  # host access either -- no writable /lib/modules, /usr/src or /dev.
+  - it: drops the module build host paths when every module is disabled
+    template: templates/daemonset.yaml
+    set:
+      modules:
+        v4l2loopback:
+          enabled: false
+        wireguard:
+          enabled: false
+      tuning:
+        swap:
+          enabled: true
+    asserts:
+      - notContains:
+          path: spec.template.spec.volumes
+          content:
+            name: lib-modules
+            hostPath:
+              path: /lib/modules
+              type: Directory
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: dev
+            mountPath: /dev
+      # scripts + the three swap-related host paths, and nothing else.
+      - lengthEqual:
+          path: spec.template.spec.volumes
+          count: 4
+      - lengthEqual:
+          path: spec.template.spec.containers[0].volumeMounts
+          count: 4
+
+  - it: joins a digest pinned image tag without a second separator
+    template: templates/daemonset.yaml
+    set:
+      image:
+        registry: registry.contoso.com
+        repository: kasm/ubuntu
+        tag: 22.04@sha256:dc192e164c69b03f156765793a1be62ca437709ae477b27ca7d8f3dcf5021576
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: registry.contoso.com/kasm/ubuntu:22.04@sha256:dc192e164c69b03f156765793a1be62ca437709ae477b27ca7d8f3dcf5021576
+
+  # --- KMM mode ---------------------------------------------------------------------------------
+
+  # A module delegated to the Kernel Module Management operator is not built on the node, so the
+  # DaemonSet loses the module build host paths exactly as a tuning-only install does.
+  - it: drops the module build host paths when the only module is delegated to KMM
+    template: templates/daemonset.yaml
+    set:
+      modules:
+        v4l2loopback:
+          method: kmm
+          kmm:
+            image:
+              registry: registry.contoso.com
+              repository: kasm/v4l2loopback
+      tuning:
+        sysctls:
+          enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - notContains:
+          path: spec.template.spec.volumes
+          content:
+            name: lib-modules
+            hostPath:
+              path: /lib/modules
+              type: Directory
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: dev
+            mountPath: /dev
+      # Only the script mount is left: sysctl -w needs no host path.
+      - lengthEqual:
+          path: spec.template.spec.volumes
+          count: 1
+      - lengthEqual:
+          path: spec.template.spec.containers[0].volumeMounts
+          count: 1
+
+  # There is no DaemonSet to render when KMM owns the only module and no tuning is enabled.
+  - it: renders no daemonset at all for a kmm-only install with tuning off
+    template: templates/daemonset.yaml
+    set:
+      modules:
+        v4l2loopback:
+          method: kmm
+          kmm:
+            image:
+              registry: registry.contoso.com
+              repository: kasm/v4l2loopback
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # A second module still built on the node keeps the DaemonSet and every host path it needs.
+  - it: keeps the module build host paths when a build-method module is also enabled
+    template: templates/daemonset.yaml
+    set:
+      modules:
+        v4l2loopback:
+          method: kmm
+          kmm:
+            image:
+              registry: registry.contoso.com
+              repository: kasm/v4l2loopback
+        wireguard:
+          enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: lib-modules
+            hostPath:
+              path: /lib/modules
+              type: Directory
+      - lengthEqual:
+          path: spec.template.spec.volumes
+          count: 4

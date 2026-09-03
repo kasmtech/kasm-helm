@@ -1,0 +1,21 @@
+{{/*
+  The collector's configuration file.
+
+  Rendered from values by the "kasmOtelCollector.config" helper, unless
+  .Values.configOverride is set - in which case that string is used verbatim as
+  the whole file.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "kasmOtelCollector.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kasmOtelCollector.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  config.yaml: |
+    {{- include "kasmOtelCollector.config" . | nindent 4 }}

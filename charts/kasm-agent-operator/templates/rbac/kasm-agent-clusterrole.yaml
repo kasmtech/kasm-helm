@@ -1,0 +1,61 @@
+{{/*
+  ClusterRole for the Kasm Agent pod. The agent is the session arbiter: it creates/manages KasmWorkspace
+  CRs, persists state in ConfigMaps, manages image-pull Secrets, and reads pod/node/metrics state for
+  heartbeat reporting.
+
+  Translated from config/rbac/agent_clusterrole.yaml in the kasm-agent-operator repo.
+
+  The `kasm-agent` name below MUST NOT be templated or fullname-prefixed. The operator creates a
+  per-Agent ClusterRoleBinding that references this ClusterRole by that exact name while reconciling an
+  Agent CR, and `manager-role` grants it `bind` on that exact resourceName. Renaming it breaks agent
+  reconciliation at runtime, and it is why this chart is a cluster singleton.
+*/}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kasm-agent
+  labels:
+    {{- include "kasmAgentOperator.labels" . | nindent 4 }}
+rules:
+  # ConfigMaps — agent persists state and writes per-session nginx conf.
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Secrets — agent creates docker pull Secrets for private workspace images.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  # PVCs — agent deletes persistent profile PVCs on Reset-mode launches.
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "delete"]
+  # Pods — agent polls pod phase to detect when a workspace is Running.
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  # Pods/exec — agent runs exec commands inside workspace containers.
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+  # Nodes — agent reads node capacity for heartbeat reporting to the manager.
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+  # Deployments — agent reads workspace Deployment status and scales replicas.
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  # KasmWorkspace CRs — the agent API creates/deletes workspace CRs; the
+  # workspaces controller in this operator reconciles them to Pods.
+  - apiGroups: ["agent.kasm.com"]
+    resources: ["kasmworkspaces", "kasmworkspaces/status"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # KasmImagePuller CR — the agent API creates/updates it and reads its status
+  # to report image availability in the heartbeat.
+  - apiGroups: ["agent.kasm.com"]
+    resources: ["kasmimagepullers", "kasmimagepullers/status"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Metrics — agent scrapes node/pod metrics for heartbeat utilization data.
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["nodes", "pods"]
+    verbs: ["get", "list"]

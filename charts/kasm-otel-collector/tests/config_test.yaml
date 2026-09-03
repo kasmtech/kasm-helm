@@ -1,0 +1,214 @@
+suite: collector configuration rendering
+templates:
+  - templates/configmap.yaml
+tests:
+  - it: names the config key config.yaml and wires the default otlp exporter into every pipeline
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-kasm-otel-collector-config
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "otlp_grpc/backend:"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "exporters: \\[otlp_grpc/backend\\]"
+
+  - it: always renders the otlp receiver on both protocols
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'http:\n        endpoint: "0.0.0.0:4318"'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'grpc:\n        endpoint: "0.0.0.0:4317"'
+
+  - it: always renders the health_check extension on 13133
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'health_check:\n    endpoint: "0.0.0.0:13133"'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "extensions: \\[health_check\\]"
+
+  - it: keeps the explanatory comments on the tuned processors
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "# Percentage-based so this stays correct if the container's memory"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "# they are the only continuous signal that the agent is talking to the"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "# Prometheus is cumulative-only and silently DROPS delta metrics on its"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "# fine. A much smaller ceiling for logs specifically avoids hitting"
+
+  - it: renders every always-on processor
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "memory_limiter:"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "filter/probes:"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "deltatocumulative:"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "\n  batch:"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "batch/logs:"
+
+  - it: scopes the k8s_events receiver to the release namespace
+    release:
+      namespace: kasm-agent
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "k8s_events:\n    namespaces: \\[kasm-agent\\]"
+
+  - it: joins k8s_events onto the logs pipeline with its resource and transform processors
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "receivers: \\[otlp, k8s_events\\]"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "processors: \\[memory_limiter, transform/k8s_events, resource/k8s_events, batch/logs\\]"
+
+  - it: removes the k8s_events receiver and its processors when k8sEvents is disabled
+    set:
+      receivers:
+        k8sEvents:
+          enabled: false
+    asserts:
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "k8s_events:"
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "transform/k8s_events:"
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "resource/k8s_events:"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "processors: \\[memory_limiter, batch/logs\\]"
+
+  - it: adds the clickhouse exporter to traces and logs but deliberately not to metrics
+    set:
+      exporters:
+        clickhouse:
+          enabled: true
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "clickhouse/archive:"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "processors: \\[memory_limiter, filter/probes, batch\\]\n      exporters: \\[otlp_grpc/backend, clickhouse/archive\\]"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "processors: \\[memory_limiter, batch\\]\n      exporters: \\[otlp_grpc/backend\\]"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "# Metrics deliberately do not go here: Prometheus already keeps them"
+
+  - it: keeps the password as an env reference and never inlines a credential
+    set:
+      exporters:
+        clickhouse:
+          enabled: true
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "password: \\$\\{env:CLICKHOUSE_PASSWORD\\}"
+
+  - it: adds the debug exporter to every pipeline when enabled
+    set:
+      exporters:
+        debug:
+          enabled: true
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "debug:\n    verbosity: normal"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "exporters: \\[otlp_grpc/backend, debug\\]"
+
+  - it: drops the metrics pipeline when only clickhouse is enabled, since it takes no metrics
+    set:
+      exporters:
+        otlp:
+          enabled: false
+        clickhouse:
+          enabled: true
+    asserts:
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "    metrics:\n      receivers:"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "exporters: \\[clickhouse/archive\\]"
+
+  - it: fails with a clear message when no exporter is enabled
+    set:
+      exporters:
+        otlp:
+          enabled: false
+        clickhouse:
+          enabled: false
+        debug:
+          enabled: false
+    asserts:
+      - failedTemplate:
+          errorMessage: "kasm-otel-collector: no exporters are enabled, so the collector would drop every signal it receives. Enable at least one of exporters.otlp.enabled, exporters.clickhouse.enabled, or exporters.debug.enabled (otelCollector.* under the kasm-agent umbrella chart)."
+
+  - it: honours the otlp endpoint and tls settings
+    set:
+      exporters:
+        otlp:
+          endpoint: tempo.telemetry.svc.cluster.local:4317
+          tlsInsecure: false
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "endpoint: tempo.telemetry.svc.cluster.local:4317"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "insecure: false"
+
+  - it: uses configOverride verbatim as the whole config and ignores the other values
+    set:
+      configOverride: |
+        receivers:
+          nop:
+        exporters:
+          nop:
+        service:
+          pipelines:
+            traces:
+              receivers: [nop]
+              exporters: [nop]
+      exporters:
+        clickhouse:
+          enabled: true
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "receivers:\n  nop:"
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "memory_limiter"
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "clickhouse/archive"

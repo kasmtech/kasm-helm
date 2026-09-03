@@ -1,0 +1,29 @@
+{{/*
+  ClusterIP Service fronting the collector's OTLP receivers. This is the address
+  the Kasm agent components set as their OTEL_EXPORTER_OTLP_ENDPOINT.
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "kasmOtelCollector.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kasmOtelCollector.labels" . | nindent 4 }}
+  {{- $annotations := merge (dict) .Values.service.annotations .Values.commonAnnotations }}
+  {{- with $annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - name: otlp-http
+      port: {{ .Values.service.otlpHttpPort }}
+      targetPort: otlp-http
+      protocol: TCP
+    - name: otlp-grpc
+      port: {{ .Values.service.otlpGrpcPort }}
+      targetPort: otlp-grpc
+      protocol: TCP
+  selector:
+    {{- include "kasmOtelCollector.selectorLabels" . | nindent 4 }}

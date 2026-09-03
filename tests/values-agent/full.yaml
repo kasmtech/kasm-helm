@@ -1,0 +1,35 @@
+# Turns on every non-privileged feature this chart offers, to exercise as much of the template
+# surface as possible in one render. Deliberately excludes the privileged/cluster-infra pieces
+# (nodePrep, videoDevicePlugin, and the 3 remote third-party dependencies) — those would pull large
+# charts into every render here and are covered on their own by the infra.yaml scenario instead.
+networkPolicies:
+  enabled: true
+
+agent:
+  manager:
+    hostname: kasm.example.test
+    token: "placeholder-not-a-real-token"
+  publicHostname: agent.kasm.example.test
+  sessionProxy:
+    certificate:
+      enabled: true
+      issuerRef:
+        name: placeholder-issuer
+        kind: ClusterIssuer
+  gpu:
+    enabled: true
+  storageMappings:
+    enabled: true
+  imagePuller:
+    enabled: true
+  httpRoute:
+    enabled: true
+
+otelCollector:
+  exporters:
+    otlp:
+      enabled: true
+    clickhouse:
+      enabled: true
+    debug:
+      enabled: true

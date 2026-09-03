@@ -1,0 +1,194 @@
+# Kasm Egress Installer
+
+{{ template "chart.badgesSection" . }}
+
+{{ template "chart.description" . }}
+
+{{ template "chart.homepageLine" . }}
+
+{{ template "chart.maintainersSection" . }}
+
+{{ template "chart.sourcesSection" . }}
+
+{{ template "chart.requirementsSection" . }}
+
+## Read this before installing
+
+This chart has been validated in a live k3s cluster (install, pod scheduling through the chained shim, crash restart, and graceful uninstall). It was ported from `kasm-kubernetes-operator`'s
+unmerged `feature/DEV-228-k8s-agent-egress` branch; see `docs/egress-installer-port-notes.md` in
+kasm-monorepo for the full review it's based on. Two findings from that review matter enough to repeat
+here:
+
+1. **Graceful shutdown cleans up after itself; a crash does not (until the next start).** This
+   DaemonSet chains a CNI plugin (`kasm-egress-cni`) into every node's active CNI conflist. On a graceful
+   termination — disabling it in a `helm upgrade`, `helm uninstall`, a rolling update, or a plain pod
+   delete — the daemon restores each patched `.conflist` from the `.kasm-egress.bak` backup it wrote on
+   first modification and removes the shim binary, leaving the node's CNI chain exactly as it found it
+   (verified live on k3s: pods kept getting IPs after uninstall). The default 30s termination grace
+   period is ample; the cleanup takes well under a second. A **hard crash** skips that path: the chain
+   stays patched, and the replacement pod re-installs and re-verifies it on start.
+
+   The residual risk is the window with **no daemon running**. The shim hard-fails (`os.Exit(1)`) on CNI
+   ADD/CHECK when it can't reach the daemon's socket, and a failing chained CNI plugin fails the *entire*
+   pod sandbox creation — not just Kasm workspace pods, **every pod scheduled on that node**. Normally
+   that window is just the DaemonSet restart, but a sustained crash-loop, or losing the pod without a
+   graceful termination (a node reboot mid-uninstall, an evicted-and-not-rescheduled DaemonSet), blocks
+   new pod scheduling on that node until a daemon comes back — or until the `.conflist` is restored by
+   hand from its `.kasm-egress.bak`. Decide how you want to handle that failure mode before installing
+   this anywhere that matters.
+2. **This chart requires `hostNetwork: true` and `hostPID: true`** (see Security posture below), which
+   conflicts with any cluster policy that blanket-disallows host namespaces (for example, a Kyverno
+   `ClusterPolicy` with an unconditional `disallow-host-namespaces` rule and no exception mechanism). That
+   is a genuine, unresolved policy conflict, not a chart bug — it needs an explicit decision (a scoped
+   policy exception, or accepting this workload sits outside the baseline policy set), not a silent bypass.
+
+## What this chart does
+
+1. The daemon starts, installs its bundled `kasm-egress-cni` binary onto the host's CNI bin directory, and
+   patches every `.conflist` file it finds in `cniConfDirs` to chain that shim into the plugin list —
+   idempotently: reapplying is safe, and each conflist is checked (and re-verified after a settle delay) for
+   the entry rather than blindly re-added.
+2. From then on, every pod's CNI `ADD` on that node is proxied through the shim to the daemon. For an
+   ordinary pod that never asked for an egress tunnel, the daemon just passes the previous CNI result
+   through unchanged.
+3. When a workspace session's pod annotations request a tunnel (OpenVPN, WireGuard, or Ziti — configured
+   via the Kasm agent, not this chart), the daemon uses `nsenter` to enter that pod's network namespace,
+   brings the tunnel up there, and injects the tunnel's DNS servers into the CNI result. `CHECK` and `DEL`
+   verify and tear the tunnel down the same way.
+
+## Security posture
+
+Read this before installing. **This chart is aggressively privileged by necessity** — it manipulates other
+pods' network namespaces and the node's own CNI configuration.
+
+* The DaemonSet container runs with `securityContext.privileged: true`. It calls `nsenter` into arbitrary
+  other pods' network *and* mount namespaces (found by scanning `/proc/<pid>/ns/*` across every process on
+  the node, not just the namespace path the CNI request itself provides), runs `mknod` for `/dev/net/tun`,
+  manipulates `iptables` and routes, and `unshare -m`s a new mount namespace to give the Ziti tunnel process
+  its own bind mount for DNS. None of that fits inside a narrower capability set reliably.
+* `hostPID: true` — required for the `/proc` scan above.
+* `hostNetwork: true` — required so this pod isn't itself waiting on the CNI chain it exists to patch.
+* It mounts several host paths: the CNI bin directory (write, to install the shim), every directory in
+  `cniConfDirs` (write, to patch conflists), the containerd config directories for k3s and RKE2 (read-only,
+  to detect a non-default `conf_dir`), and its own socket directory (write — must be a host path, since the
+  shim that connects to it runs directly on the host, outside any pod).
+* RBAC is minimal: a `ClusterRole` with `get` (never list or watch) on `pods`, `nodes`, and `services`,
+  used only for optional annotation-based config discovery and looking up a sibling container's env vars.
+* The namespace this is installed into must allow privileged, host-namespace pods. With
+  [Pod Security Admission](https://kubernetes.io/docs/concepts/security/pod-security-admission/) that means
+  labelling the namespace `pod-security.kubernetes.io/enforce: privileged` — this cannot satisfy `baseline`
+  or `restricted` and will be rejected outright by an enforcing namespace.
+
+## Ziti version support
+
+The image bundles three pinned Ziti CLI versions (2.0.0-pre7, 1.6.14, 1.5.12). The daemon queries a
+session's Ziti identity for its controller version and picks the installed binary whose major.minor matches
+— a controller running a newer minor version than all three bundled here will fail with "no installed ziti
+binary matches controller major.minor version". Keep this list current with whatever Ziti controller
+versions your fleet actually runs.
+
+## Usage
+
+Pin the daemon to the same nodes that run Kasm Workspaces sessions:
+
+```yaml
+nodeSelector:
+  kasm.com/workspaces: "true"
+tolerations:
+  - key: kasm.com/workspaces
+    operator: Exists
+    effect: NoSchedule
+```
+
+Check the daemon's own view of CNI chaining status once it's up:
+
+```bash
+kubectl exec -n <namespace> <pod> -- wget -qO- --unix-socket /var/run/kasm-egress/daemon.sock http://unix/status
+```
+
+### Point the shim at the right CNI plugin directory
+
+The CNI plugin bin dir is this chart's one silent-failure knob. The daemon installs its
+`kasm-egress-cni` binary into that directory; if it is not the directory your container runtime
+actually loads plugins from, the runtime never invokes the shim. Nothing errors — the DaemonSet
+stays `Running`, the conflists still look patched — sessions just get no egress tunnel.
+
+`distro` picks the directory, and `cniBinDir` overrides it:
+
+| `distro` | Bin dir it derives | Use for |
+| -------- | ------------------ | ------- |
+| `k3s` (the default) | `/var/lib/rancher/k3s/data/cni` | k3s |
+| `vanilla` | `/opt/cni/bin` | kubeadm, and most managed distributions |
+| anything else | none — you must set `cniBinDir` | RKE2 (its bin dir varies by version) and everything else |
+
+An unrecognized `distro` with no `cniBinDir` **fails template rendering** rather than guessing a
+path: a wrong directory here is silent at runtime, so the chart would rather not install than
+install something that quietly does nothing.
+
+```yaml
+distro: vanilla            # /opt/cni/bin — kubeadm and most managed distros
+# distro: k3s              # the default: /var/lib/rancher/k3s/data/cni
+# cniBinDir: /opt/cni/bin  # explicit override; required for any other distro
+```
+
+This preset governs the install directory and nothing else. The conflist directories
+(`cniConfDirs`) and the containerd config paths (`containerdConfigPaths`) are scanned as a *union*
+that already covers the k3s, RKE2, and vanilla layouts, and entries that do not exist on a given
+node are skipped rather than treated as an error — so there is no matching `distro` choice to make
+for those.
+
+{{ define "chart.valueDefaultColumnRender" }}
+{{- $defaultValue := (default .Default .AutoDefault)  -}}
+{{- $notationType := .NotationType }}
+{{- if (and (hasPrefix "`" $defaultValue) (hasSuffix "`" $defaultValue) ) -}}
+{{- $defaultValue = (toYaml (fromJson (trimAll "`" (default .Default .AutoDefault) ) ) ) -}}
+{{- $notationType = "json" }}
+{{- end -}}
+{{- if (eq $notationType "tpl" ) }}
+<pre lang="{{ $notationType }}">
+{{ .Key }}: |
+{{- $defaultValue | nindent 2 }}
+</pre>
+{{- else if (eq $notationType "email") }}
+<a href="mailto:{{ $defaultValue }}" style="color: green;">"{{ $defaultValue }}"</a>
+{{- else }}
+<pre lang="{{ $notationType }}">
+{{ $defaultValue }}
+</pre>
+{{- end }}
+{{ end }}
+
+{{ define "chart.typeColumnRender" }}
+{{- if (eq .Type "string/email") }}
+<a href="#stringemail" title="{{- template "chart.valuetypes.email" -}}">{{.Type}}</a>
+{{- else }}
+{{ .Type }}
+{{- end }}
+{{ end }}
+
+{{ define "chart.valuesTableHtml" }}
+<table>
+	<thead>
+		<th>Key</th>
+		<th>Type</th>
+		<th>Default</th>
+		<th>Description</th>
+	</thead>
+	<tbody>
+	{{- range .Values }}
+		<tr>
+			<td id="{{ .Key | replace "." "--" }}"><a href="./values.yaml#L{{ .LineNumber }}">{{ .Key }}</a></td>
+			<td>{{- template "chart.typeColumnRender" . -}}</td>
+			<td>
+				<div style="max-width: 520px;">{{ template "chart.valueDefaultColumnRender" . }}</div>
+			</td>
+			<td>{{ if .Description }}{{ .Description }}{{ else }}{{ .AutoDescription }}{{ end }}</td>
+		</tr>
+	{{- end }}
+	</tbody>
+</table>
+{{ end }}
+
+## Chart value settings in `values.yaml`
+
+{{ template "chart.valuesSectionHtml" . }}

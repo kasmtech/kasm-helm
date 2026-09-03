@@ -1,0 +1,8 @@
+# Minimal scenario: only the values the kasm-agent umbrella chart cannot template without.
+# Exercises the umbrella with everything else left at chart defaults (operator, otelCollector,
+# and agent enabled; nodePrep, videoDevicePlugin, and the 3 remote third-party deps disabled).
+agent:
+  manager:
+    hostname: kasm.example.test
+    token: "placeholder-not-a-real-token"
+  publicHostname: agent.kasm.example.test

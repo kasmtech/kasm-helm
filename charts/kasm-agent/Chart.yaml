@@ -1,0 +1,80 @@
+apiVersion: v2
+name: kasm-agent
+description: "Umbrella chart for the Kasm Workspaces Kubernetes agent: operator, telemetry collector, agent instance, and optional per-feature cluster infrastructure"
+type: application
+icon: https://kasm-static-content.s3.amazonaws.com/icons/kasm-logo-small.png
+home: https://kasm.com
+keywords:
+  - kasm
+  - vdi
+  - workspaces
+  - agent
+  - operator
+maintainers:
+  - name: Kasm Technologies, Inc.
+    url: https://github.com/kasmtech/kasm-helm
+version: 0.1.0
+appVersion: "develop"
+dependencies:
+  # The Kasm agent operator. Installs the CRDs, cluster RBAC, and controller-manager that
+  # reconcile Agent, KasmWorkspace, KasmImagePuller, WarmPool, and WarmPoolInstance resources.
+  - name: kasm-agent-operator
+    version: 0.1.0
+    repository: file://../kasm-agent-operator
+    alias: operator
+    condition: operator.enabled
+  # The OpenTelemetry collector the operator, agent, and workspaces ship traces, metrics, and
+  # Kubernetes events to. Exports to an external OTLP endpoint and/or ClickHouse.
+  - name: kasm-otel-collector
+    version: 0.1.0
+    repository: file://../kasm-otel-collector
+    alias: otelCollector
+    condition: otelCollector.enabled
+  # An Agent custom resource plus its session proxy, registering this cluster with a Kasm manager.
+  - name: kasm-agent-instance
+    version: 0.1.0
+    repository: file://../kasm-agent-instance
+    alias: agent
+    condition: agent.enabled
+  # Optional privileged DaemonSet that builds and loads host kernel modules (v4l2loopback for
+  # webcam passthrough, wireguard for VPN egress on kernels older than 5.6).
+  - name: kasm-node-prep
+    version: 0.1.0
+    repository: file://../kasm-node-prep
+    alias: nodePrep
+    condition: nodePrep.enabled
+  # Optional device plugin that advertises the /dev/video* devices created by node prep so
+  # workspace pods can request them as a scheduleable resource.
+  - name: kasm-video-device-plugin
+    version: 0.1.0
+    repository: file://../kasm-video-device-plugin
+    alias: videoDevicePlugin
+    condition: videoDevicePlugin.enabled
+  # Optional privileged CNI shim + tunnel daemon providing per-session OpenVPN/WireGuard/Ziti
+  # egress routing.
+  - name: kasm-egress-installer
+    version: 0.1.0
+    repository: file://../kasm-egress-installer
+    alias: egressInstaller
+    condition: egressInstaller.enabled
+  # Optional third-party CSI driver backing Kasm cloud storage mappings (rclone remotes).
+  - name: csi-driver-rclone
+    version: 0.5.0
+    repository: oci://ghcr.io/veloxpack/charts
+    alias: csiRclone
+    condition: csiRclone.enabled
+  # Optional third-party operator that installs NVIDIA drivers, the container toolkit, and the
+  # device plugin so workspace pods can request nvidia.com/gpu.
+  - name: gpu-operator
+    version: v26.7.0
+    repository: https://helm.ngc.nvidia.com/nvidia
+    alias: gpuOperator
+    condition: gpuOperator.enabled
+  # Optional third-party in-cluster NFS server providing a ReadWriteMany StorageClass for
+  # persistent user profiles when the cluster has no RWX-capable CSI driver.
+  # No alias: the upstream chart derives resource names from its chart name and has no
+  # nameOverride support, so a camelCase alias would render invalid (RFC 1123) object names.
+  - name: nfs-server-provisioner
+    version: 1.8.0
+    repository: https://kubernetes-sigs.github.io/nfs-ganesha-server-and-external-provisioner/
+    condition: nfs-server-provisioner.enabled

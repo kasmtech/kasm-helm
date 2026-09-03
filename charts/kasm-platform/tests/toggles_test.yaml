@@ -1,0 +1,76 @@
+# Proves the two dependency toggles are wired to the right values keys, and that values set from
+# here reach each half.
+#
+# Only the "enabled" direction is asserted against subchart templates. helm-unittest cannot assert
+# `hasDocuments: 0` on a template belonging to a *disabled* dependency — Helm never loads that
+# subchart, so the template does not exist and the assertion errors instead of passing. The
+# disabled direction is covered by `helm template`:
+#
+#   helm template t charts/kasm-platform --set kasm-agent.enabled=false ...   -> no agent objects
+#   helm template t charts/kasm-platform --set kasm-helm.enabled=false ...    -> no control plane
+#
+# and, for this chart's own template, by the "does not render when the control plane is disabled"
+# case is validated via helm template in the repo validation flow.
+suite: dependency toggles
+release:
+  name: kasm
+  namespace: kasm
+set:
+  kasm-agent.agent.manager.hostname: kasm.example.com
+  kasm-agent.agent.manager.token: placeholder-not-a-real-token
+  kasm-agent.agent.publicHostname: sessions.example.com
+
+tests:
+  - it: installs the control plane, and passes values down to it
+    templates:
+      - charts/kasm-helm/templates/api-deployment.yaml
+    set:
+      kasm-helm.publicAddr: kasm.example.com
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.name
+          value: kasm-api-default
+
+  - it: installs the agent operator, whose own condition stays reachable from here
+    templates:
+      - charts/kasm-agent/charts/operator/templates/deployment.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Deployment
+
+  - it: installs the agent instance, and passes values down to it
+    templates:
+      - charts/kasm-agent/charts/agent/templates/agent.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: kind
+          value: Agent
+      - equal:
+          path: spec.manager.hostname
+          value: kasm.example.com
+      - equal:
+          path: spec.publicHostname
+          value: sessions.example.com
+
+  - it: lets the agent read the control plane's own token Secret in a shared namespace
+    templates:
+      - charts/kasm-agent/charts/agent/templates/agent.yaml
+    set:
+      kasm-agent.agent.manager.token: null
+      kasm-agent.agent.manager.existingTokenSecret: kasm-secrets
+      kasm-agent.agent.manager.tokenSecretKey: manager-token
+    asserts:
+      - equal:
+          path: spec.manager.tokenSecretRef.name
+          value: kasm-secrets
+      - equal:
+          path: spec.manager.tokenSecretRef.key
+          value: manager-token

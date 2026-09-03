@@ -1,0 +1,48 @@
+{{/*
+  Gateway API HTTPRoute exposing the session proxy at the agent's public
+  hostname.
+
+  The backend Service is NOT created by this chart: the Agent controller creates
+  it from agent.yaml and names it "<Agent name>-session-proxy", which is why the
+  backendRef is built from .Values.name rather than from the chart fullname.
+
+  The default backend port, 4445, is the proxy's plain-HTTP listener, not its
+  self-signed HTTPS one (4444) - TLS for the public hostname is expected to
+  terminate at the Gateway.
+
+  Only the parentRef crosses namespaces; the backendRef stays in-namespace, so
+  no ReferenceGrant is needed. The Gateway's listener does have to allow routes
+  from this namespace (its allowedRoutes).
+*/}}
+{{- if .Values.httpRoute.enabled }}
+{{- $hostnames := .Values.httpRoute.hostnames | default (list (include "kasmAgentInstance.publicHostname" .)) }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "kasmAgentInstance.fullname" . }}-session-proxy
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kasmAgentInstance.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.httpRoute.parentRefs }}
+  parentRefs:
+    {{- range . }}
+    - name: {{ .name }}
+      {{- with .namespace }}
+      namespace: {{ . }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+  hostnames:
+    {{- range $hostnames }}
+    - {{ . | quote }}
+    {{- end }}
+  rules:
+    - backendRefs:
+        - name: {{ printf "%s-session-proxy" .Values.name }}
+          port: {{ .Values.httpRoute.backendPort }}
+{{- end }}

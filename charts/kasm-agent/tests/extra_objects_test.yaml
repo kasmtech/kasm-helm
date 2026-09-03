@@ -1,0 +1,76 @@
+suite: extra objects rendering
+templates:
+  - templates/extra-objects.yaml
+release:
+  name: kasm
+  namespace: kasm-agent
+
+tests:
+  - it: renders nothing by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders object-form extraObjects
+    set:
+      extraObjects:
+        - apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: test-object
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: kind
+          value: ConfigMap
+      - equal:
+          path: metadata.name
+          value: test-object
+
+  - it: renders string-form extraObjects through tpl
+    set:
+      extraObjects:
+        - |
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: {{ .Release.Name }}-test-secret
+            namespace: {{ .Release.Namespace }}
+          type: Opaque
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: kind
+          value: Secret
+      - equal:
+          path: metadata.name
+          value: kasm-test-secret
+      - equal:
+          path: metadata.namespace
+          value: kasm-agent
+
+  - it: renders mixed object and string extraObjects
+    set:
+      extraObjects:
+        - apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: object-form
+        - |
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: string-form
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: fails when extraObjects is not a list
+    set:
+      extraObjects:
+        name: not-a-list
+    asserts:
+      - failedTemplate:
+          errorMessage: "extraObjects must be an array (YAML list). Each item may be a string or an object."

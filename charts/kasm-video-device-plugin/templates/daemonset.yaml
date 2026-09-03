@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "kasmVideoDevicePlugin.fullname" . }}
+  labels:
+    {{- include "kasmVideoDevicePlugin.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "kasmVideoDevicePlugin.selectorLabels" . | nindent 6 }}
+  updateStrategy:
+    type: {{ .Values.updateStrategy }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "kasmVideoDevicePlugin.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: video-device-plugin
+          image: {{ include "kasmVideoDevicePlugin.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            # Prefix matched against /dev entries (e.g. "video" -> video0, video1, ...).
+            - name: DEVICE_PREFIX
+              value: {{ .Values.devicePrefix | quote }}
+            # Cap on how many matching devices to advertise.
+            - name: MAX_DEVICES
+              value: {{ .Values.maxDevices | quote }}
+            # Extended resource name registered with kubelet; must match workspace pod resource requests.
+            - name: RESOURCE_NAME
+              value: {{ .Values.resourceName | quote }}
+            # Env var the plugin injects into a container allocated exactly one device.
+            - name: DEVICE_ENV_VAR
+              value: {{ .Values.allocateEnvVar | quote }}
+          # The plugin has to stat and open the node's device files to enumerate and hand them out, which
+          # an unprivileged container cannot do.
+          securityContext:
+            privileged: true
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            # The kubelet Device Plugin API socket directory: the plugin creates its own socket here and
+            # registers itself with kubelet through kubelet.sock.
+            - name: device-plugin
+              mountPath: /var/lib/kubelet/device-plugins
+            # The node device tree the configured device paths are matched against.
+            - name: dev
+              mountPath: /dev
+      volumes:
+        - name: device-plugin
+          hostPath:
+            path: /var/lib/kubelet/device-plugins
+            type: Directory
+        - name: dev
+          hostPath:
+            path: /dev
+            type: Directory

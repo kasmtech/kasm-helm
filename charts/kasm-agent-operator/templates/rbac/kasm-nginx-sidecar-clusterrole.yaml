@@ -1,0 +1,28 @@
+{{/*
+  ClusterRole for the kasm-nginx-sidecar container that runs alongside the session proxy. It watches
+  session ConfigMaps and KasmWorkspace CRs to know which sessions are active and which nginx configs to
+  write.
+
+  Translated from config/rbac/nginx_sidecar_clusterrole.yaml in the kasm-agent-operator repo.
+
+  It is a ClusterRole (not a Role) so the operator can create namespaced RoleBindings referencing it
+  while holding only `bind` on it (escalation prevention).
+
+  The `kasm-nginx-sidecar` name below MUST NOT be templated or fullname-prefixed. The operator
+  references it by that exact name when reconciling an Agent CR, and `manager-role` grants `bind` on
+  that exact resourceName. Renaming it breaks session-proxy reconciliation at runtime, and it is why
+  this chart is a cluster singleton.
+*/}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kasm-nginx-sidecar
+  labels:
+    {{- include "kasmAgentOperator.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["agent.kasm.com"]
+    resources: ["kasmworkspaces"]
+    verbs: ["get", "list", "watch"]

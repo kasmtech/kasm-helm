@@ -1,0 +1,646 @@
+{{- include "kasmNodePrep.validateEnabled" . }}
+{{- include "kasmNodePrep.validateMethods" . }}
+{{/*
+  The reconcile script executed by the node prep DaemonSet.
+
+  Only the sections for enabled modules and enabled tuning features are rendered, so a disabled one
+  leaves no trace in the script (and, via the checksum annotation on the DaemonSet, toggling one
+  rolls the pods).
+*/}}
+{{- define "kasmNodePrep.ensureModulesScript" -}}
+{{- $v4l2 := .Values.modules.v4l2loopback -}}
+{{- $wireguard := .Values.modules.wireguard -}}
+{{- $swap := .Values.tuning.swap -}}
+{{- $sysctls := .Values.tuning.sysctls -}}
+{{/*
+  True per module when this script is the thing that builds it, i.e. it is enabled *and* its
+  method is "build". A module delegated to the Kernel Module Management operator
+  (modules.v4l2loopback.method=kmm) leaves no trace in here at all: KMM builds the .ko into a
+  container image and runs its own worker pods to load it, so every section below would be a
+  second, competing implementation.
+*/}}
+{{- $v4l2Build := and $v4l2.enabled (eq $v4l2.method "build") -}}
+{{- $wireguardBuild := and $wireguard.enabled (eq $wireguard.method "build") -}}
+{{/*
+  True when at least one kernel module is built here. The entire module build machinery is rendered
+  only when this holds, so neither a tuning-only nor a KMM-only install produces a script that
+  touches the toolchain.
+*/}}
+{{- $anyModule := include "kasmNodePrep.anyBuildModuleEnabled" . -}}
+{{/*
+  True when at least one module built here still has to be fetched over the network, i.e. it has no
+  modules.<name>.sourcePath pointing at a source tree baked into the builder image. Everything that
+  needs git -- the presence check, the clone helper -- is rendered only when this holds, so a fully
+  pre-baked (airgapped) install produces a script with no git in it at all.
+*/}}
+{{- $needsClone := or (and $v4l2Build (not $v4l2.sourcePath)) (and $wireguardBuild (not $wireguard.sourcePath)) -}}
+#!/usr/bin/env bash
+#
+# kasm-node-prep: ensure this node is in the state Kasm Workspaces sessions need -- the kernel
+# modules built and loaded, and any enabled host tuning applied.
+#
+# Rendered by the kasm-node-prep Helm chart. Runs forever: every pass re-checks each requested
+# module and rebuilds it when it is missing, and re-asserts any enabled tuning, which is how both
+# survive node reboots.
+
+set -euo pipefail
+
+RECONCILE_INTERVAL="{{ .Values.reconcileIntervalSeconds }}"
+KERNEL_RELEASE="$(uname -r)"
+{{- if $anyModule }}
+KERNEL_BUILD="/lib/modules/${KERNEL_RELEASE}/build"
+BUILD_ROOT="/tmp/kasm-node-prep"
+MOK_DIR="/etc/kasm-mok"
+DEPS_READY=""
+{{- end }}
+{{- if $swap.enabled }}
+SWAP_DIR="{{ $swap.hostPath }}"
+SWAP_FILE="{{ $swap.hostPath }}/kasm.swap"
+SWAP_SIZE_MIB="{{ $swap.sizeMib | int }}"
+SWAP_SWAPPINESS="{{ $swap.swappiness | int }}"
+{{- if not $swap.force }}
+# Read-only mounts of the node's kubelet configuration, used only to confirm that swap is safe to
+# enable here. See kubelet_allows_swap().
+K3S_CONFIG_DIR="/host/etc/rancher/k3s"
+KUBELET_CONFIG="/host/var/lib/kubelet/config.yaml"
+{{- end }}
+{{- end }}
+{{- if $v4l2Build }}
+V4L2_DEVICES="{{ .Values.modules.v4l2loopback.videoDevices }}"
+V4L2_EXCLUSIVE_CAPS="{{ ternary 1 0 .Values.modules.v4l2loopback.exclusiveCaps }}"
+V4L2_SOURCE_REPO="{{ .Values.modules.v4l2loopback.sourceRepo }}"
+V4L2_SOURCE_REF="{{ .Values.modules.v4l2loopback.sourceRef }}"
+V4L2_SOURCE_PATH="{{ .Values.modules.v4l2loopback.sourcePath }}"
+{{- end }}
+{{- if $wireguardBuild }}
+WIREGUARD_SOURCE_REPO="{{ .Values.modules.wireguard.sourceRepo }}"
+WIREGUARD_SOURCE_PATH="{{ .Values.modules.wireguard.sourcePath }}"
+{{- end }}
+
+log() {
+  printf '%s [kasm-node-prep] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"
+}
+
+err() {
+  log "ERROR: $*" >&2
+}
+{{- if $anyModule }}
+
+# Return 0 when the named module is present in the running kernel. Reads /proc/modules
+# directly rather than piping lsmod into grep: under `set -o pipefail` a long module list
+# makes `grep -q` exit on its early match while lsmod is still writing, the resulting
+# SIGPIPE fails the pipeline, and a genuinely loaded module reads as missing. Bonus: this
+# also works before the kmod package is installed in a fresh builder container.
+module_loaded() {
+  grep -qE "^$1[[:space:]]" /proc/modules 2>/dev/null
+}
+
+# Like module_loaded, but with a short grace period: immediately after a successful
+# modprobe/insmod the module list can lag by a moment, and a same-second check reports a
+# false failure for a module that is in fact loaded.
+module_loaded_wait() {
+  local i
+  for i in 1 2 3 4 5; do
+    if module_loaded "$1"; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+# Return 0 when everything this pass needs to build a module is already in the builder image. This
+# runs before any distro-specific logic, so a pre-baked image from any OS family -- not just
+# Debian/Ubuntu -- satisfies it and the script never touches the network.
+build_deps_present() {
+  local tool
+
+  # gcc and make are the toolchain; insmod ships with kmod, alongside modprobe and depmod.
+  for tool in gcc make insmod; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+      return 1
+    fi
+  done
+{{- if $needsClone }}
+
+  # At least one enabled module is still cloned from git (no modules.*.sourcePath set for it).
+  if ! command -v git >/dev/null 2>&1; then
+    return 1
+  fi
+{{- end }}
+
+  # Secure Boot signing shells out to the kernel's sign-file helper, which needs openssl.
+  if [ -d "$MOK_DIR" ] && ! command -v openssl >/dev/null 2>&1; then
+    return 1
+  fi
+
+  # Nothing can be compiled without the kernel build tree matching the running kernel.
+  [ -d "$KERNEL_BUILD" ]
+}
+
+# Make the toolchain and the kernel headers matching the node kernel available. The container shares
+# the node kernel, so "uname -r" here is the node's kernel release. Runs at most once per container
+# lifetime.
+#
+# A builder image that already carries everything short-circuits on build_deps_present and performs
+# no package operations at all -- see the "Airgapped / offline nodes" section of this chart's README.
+# Otherwise the packages are installed from the node OS repositories with apt-get.
+ensure_build_deps() {
+  if [ -n "$DEPS_READY" ]; then
+    return 0
+  fi
+
+  if build_deps_present; then
+    DEPS_READY=1
+    log "build prerequisites already present; skipping package installation"
+    return 0
+  fi
+
+  if ! command -v apt-get >/dev/null 2>&1; then
+    err "Build prerequisites are missing and this builder image has no apt-get to install them. Either use a Debian/Ubuntu builder image with access to the node OS package repositories, or pre-bake gcc, make, kmod and the kernel build tree at ${KERNEL_BUILD} into the image configured by image.registry/image.repository. Skipping this pass."
+    return 1
+  fi
+
+  log "Installing build dependencies for kernel ${KERNEL_RELEASE}"
+  export DEBIAN_FRONTEND=noninteractive
+
+  if ! apt-get update -qq; then
+    err "apt-get update failed. The node needs access to its OS package repositories (or a local mirror) to build kernel modules. Skipping this pass."
+    return 1
+  fi
+
+  # ca-certificates: the module sources are cloned over HTTPS, and the slim base image
+  # ships no CA bundle, so TLS verification fails without it.
+  # libelf1: kbuild's objtool is dynamically linked against libelf.so.1; without it every
+  # module compile fails with "Error 127" even though gcc and the headers are fine.
+  if ! apt-get install -y --no-install-recommends build-essential git kmod ca-certificates libelf1; then
+    err "Failed to install build-essential, git, kmod, ca-certificates and libelf1. Skipping this pass."
+    return 1
+  fi
+
+  if [ ! -d "$KERNEL_BUILD" ]; then
+    log "No kernel build tree at ${KERNEL_BUILD}; installing linux-headers-${KERNEL_RELEASE}"
+    if ! apt-get install -y --no-install-recommends "linux-headers-${KERNEL_RELEASE}"; then
+      err "Kernel headers package linux-headers-${KERNEL_RELEASE} is not available from the configured apt repositories. Pre-install the matching headers on the node (or use a builder image whose distro ships them) and this pass will succeed on the next reconcile. Skipping this pass."
+      return 1
+    fi
+  else
+    log "Kernel build tree already present at ${KERNEL_BUILD}"
+  fi
+
+  if [ -d "$MOK_DIR" ] && ! apt-get install -y --no-install-recommends openssl; then
+    err "Failed to install openssl, which Secure Boot module signing needs. Skipping this pass."
+    return 1
+  fi
+
+  DEPS_READY=1
+  log "Build dependencies ready"
+}
+
+# Sign a freshly built module with the enrolled Machine Owner Key, when one is mounted.
+# A node with Secure Boot enabled refuses to insert an unsigned module.
+sign_module() {
+  local ko="$1"
+  local sign_file
+
+  if [ ! -d "$MOK_DIR" ]; then
+    return 0
+  fi
+
+  if [ ! -s "${MOK_DIR}/mokPrivateKey" ] || [ ! -s "${MOK_DIR}/mokPublicKey" ]; then
+    err "Secure Boot signing is configured but ${MOK_DIR}/mokPrivateKey or ${MOK_DIR}/mokPublicKey is missing or empty."
+    return 1
+  fi
+
+  sign_file="/usr/src/linux-headers-${KERNEL_RELEASE}/scripts/sign-file"
+  if [ ! -x "$sign_file" ]; then
+    sign_file="${KERNEL_BUILD}/scripts/sign-file"
+  fi
+  if [ ! -x "$sign_file" ]; then
+    err "Secure Boot signing is configured but no sign-file helper was found for kernel ${KERNEL_RELEASE}."
+    return 1
+  fi
+
+  log "Signing ${ko} with the enrolled MOK key"
+  "$sign_file" sha256 "${MOK_DIR}/mokPrivateKey" "${MOK_DIR}/mokPublicKey" "$ko"
+}
+
+# Stage a module source tree into a clean directory under BUILD_ROOT. A source tree baked into the
+# builder image (modules.*.sourcePath) is copied, which needs no network; otherwise the tree is
+# cloned from the configured git repository.
+stage_source() {
+  local repo="$1"
+  local ref="$2"
+  local dest="$3"
+  local source_path="$4"
+
+  rm -rf "$dest"
+  mkdir -p "$BUILD_ROOT"
+
+  if [ -n "$source_path" ]; then
+    if [ ! -d "$source_path" ]; then
+      err "Configured source path ${source_path} is not a directory in the builder image."
+      return 1
+    fi
+    log "Copying module sources from ${source_path} into ${dest}"
+    cp -a "$source_path" "$dest"
+    return 0
+  fi
+{{- if $needsClone }}
+
+  if [ -n "$ref" ]; then
+    log "Cloning ${repo} at ${ref} into ${dest}"
+    git clone --quiet --depth 1 --branch "$ref" "$repo" "$dest"
+  else
+    log "Cloning ${repo} into ${dest}"
+    git clone --quiet --depth 1 "$repo" "$dest"
+  fi
+{{- else }}
+
+  err "No source path is configured for ${dest}, and this script was rendered with every enabled module built from modules.*.sourcePath, so there is no git fallback."
+  return 1
+{{- end }}
+}
+{{- end }}
+{{- if $v4l2Build }}
+
+# Return 0 when at least one /dev/video* device exists on the node.
+video_devices_present() {
+  local dev
+  for dev in /dev/video*; do
+    if [ -e "$dev" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Build, sign and load v4l2loopback with the configured device count.
+ensure_v4l2loopback() {
+  local src="${BUILD_ROOT}/v4l2loopback"
+
+  if module_loaded v4l2loopback; then
+    log "v4l2loopback is already loaded"
+    return 0
+  fi
+
+  log "v4l2loopback is not loaded; building it for kernel ${KERNEL_RELEASE}"
+
+  if ! ensure_build_deps; then
+    return 1
+  fi
+
+  # v4l2loopback links against the kernel's V4L2 core (the videodev module). Minimal kernel
+  # flavors -- Ubuntu's -kvm and some cloud kernels -- are built with CONFIG_MEDIA_SUPPORT
+  # unset and ship no videodev at all, so the build can never succeed there. Fail with the
+  # real reason instead of a wall of undefined-symbol modpost errors every pass.
+  if ! modinfo videodev >/dev/null 2>&1 && ! grep -qE '^CONFIG_VIDEO_DEV=(m|y)' "${KERNEL_BUILD}/.config" 2>/dev/null; then
+    err "Kernel ${KERNEL_RELEASE} has no V4L2 core (videodev): CONFIG_MEDIA_SUPPORT/CONFIG_VIDEO_DEV are not enabled in this kernel flavor. Webcam support needs a kernel that ships the V4L2 core -- on Ubuntu, the generic flavor with linux-modules-extra, not the -kvm/cloud flavor. Install such a kernel on the node; skipping v4l2loopback until then."
+    return 1
+  fi
+  # The V4L2 core may exist as a module but not be loaded yet; v4l2loopback needs it present
+  # at insertion time.
+  modprobe videodev 2>/dev/null || true
+
+  if ! stage_source "$V4L2_SOURCE_REPO" "$V4L2_SOURCE_REF" "$src" "$V4L2_SOURCE_PATH"; then
+{{- if $v4l2.sourcePath }}
+    err "Failed to stage v4l2loopback from ${V4L2_SOURCE_PATH}. modules.v4l2loopback.sourcePath must point at a source tree baked into the builder image. Skipping this pass."
+{{- else }}
+    err "Failed to clone v4l2loopback from ${V4L2_SOURCE_REPO} at ${V4L2_SOURCE_REF}. The node needs access to that repository (or an internal mirror), or set modules.v4l2loopback.sourcePath to a source tree baked into the builder image. Skipping this pass."
+{{- end }}
+    return 1
+  fi
+
+  if ! make -C "$src"; then
+    err "Failed to build v4l2loopback against kernel ${KERNEL_RELEASE}. Skipping this pass."
+    return 1
+  fi
+
+  if ! sign_module "${src}/v4l2loopback.ko"; then
+    return 1
+  fi
+
+  if ! make -C "$src" install-module && ! make -C "$KERNEL_BUILD" M="$src" modules_install; then
+    log "Could not install v4l2loopback into /lib/modules; falling back to inserting the built module directly"
+    if ! insmod "${src}/v4l2loopback.ko" "devices=${V4L2_DEVICES}" "exclusive_caps=${V4L2_EXCLUSIVE_CAPS}"; then
+      err "insmod of ${src}/v4l2loopback.ko failed. Skipping this pass."
+      return 1
+    fi
+  else
+    depmod -a || true
+    log "Loading v4l2loopback with devices=${V4L2_DEVICES} exclusive_caps=${V4L2_EXCLUSIVE_CAPS}"
+    if ! modprobe v4l2loopback "devices=${V4L2_DEVICES}" "exclusive_caps=${V4L2_EXCLUSIVE_CAPS}"; then
+      err "modprobe v4l2loopback failed. Skipping this pass."
+      return 1
+    fi
+  fi
+
+  if ! module_loaded_wait v4l2loopback; then
+    err "v4l2loopback still does not appear in lsmod after insertion. Skipping this pass."
+    return 1
+  fi
+
+  if video_devices_present; then
+    log "v4l2loopback loaded; /dev/video* devices are present on the node"
+  else
+    err "v4l2loopback is loaded but no /dev/video* device appeared. Check that devtmpfs is mounted on the node."
+    return 1
+  fi
+}
+{{- end }}
+{{- if $wireguardBuild }}
+
+# Build, sign and load the out-of-tree WireGuard module, unless the kernel already provides it.
+ensure_wireguard() {
+  local src="${BUILD_ROOT}/wireguard-linux-compat"
+
+  if grep -q wg_ /proc/kallsyms 2>/dev/null; then
+    log "WireGuard is built into kernel ${KERNEL_RELEASE} (wg_ symbols found in /proc/kallsyms); nothing to build"
+    return 0
+  fi
+
+  if module_loaded wireguard; then
+    log "wireguard is already loaded"
+    return 0
+  fi
+
+  log "wireguard is not available; building it for kernel ${KERNEL_RELEASE}"
+
+  if ! ensure_build_deps; then
+    return 1
+  fi
+
+  if ! stage_source "$WIREGUARD_SOURCE_REPO" "" "$src" "$WIREGUARD_SOURCE_PATH"; then
+{{- if $wireguard.sourcePath }}
+    err "Failed to stage WireGuard from ${WIREGUARD_SOURCE_PATH}. modules.wireguard.sourcePath must point at a source tree baked into the builder image. Skipping this pass."
+{{- else }}
+    err "Failed to clone WireGuard from ${WIREGUARD_SOURCE_REPO}. The node needs access to that repository (or an internal mirror), or set modules.wireguard.sourcePath to a source tree baked into the builder image. Skipping this pass."
+{{- end }}
+    return 1
+  fi
+
+  if ! make -C "${src}/src" module; then
+    err "Failed to build the WireGuard module against kernel ${KERNEL_RELEASE}. Skipping this pass."
+    return 1
+  fi
+
+  if ! sign_module "${src}/src/wireguard.ko"; then
+    return 1
+  fi
+
+  if ! make -C "${src}/src" module-install && ! make -C "$KERNEL_BUILD" M="${src}/src" modules_install; then
+    log "Could not install wireguard into /lib/modules; falling back to inserting the built module directly"
+    if ! insmod "${src}/src/wireguard.ko"; then
+      err "insmod of ${src}/src/wireguard.ko failed. Skipping this pass."
+      return 1
+    fi
+  else
+    depmod -a || true
+    log "Loading wireguard"
+    if ! modprobe wireguard; then
+      err "modprobe wireguard failed. Skipping this pass."
+      return 1
+    fi
+  fi
+
+  if ! module_loaded_wait wireguard; then
+    err "wireguard still does not appear in lsmod after insertion. Skipping this pass."
+    return 1
+  fi
+
+  log "wireguard loaded"
+}
+{{- end }}
+
+{{- if or $sysctls.enabled $swap.enabled }}
+
+# Set one kernel tunable on the node. "sysctl -w" is idempotent, so this runs every pass; the
+# current value is read first so an already-correct setting stays silent and only real changes
+# reach the log.
+apply_sysctl() {
+  local key="$1"
+  local value="$2"
+  local current
+
+  current="$(sysctl -n "$key" 2>/dev/null || true)"
+  if [ "$current" = "$value" ]; then
+    return 0
+  fi
+
+  if ! sysctl -w "${key}=${value}" >/dev/null 2>&1; then
+    err "Failed to set ${key}=${value}. Either the node kernel does not expose that tunable, or this container is not sharing the node's sysctl namespace. Skipping it this pass."
+    return 1
+  fi
+
+  log "sysctl ${key}: ${current:-unset} -> ${value}"
+}
+{{- end }}
+{{- if $sysctls.enabled }}
+
+# Re-apply the configured kernel tunables. Nothing is written to /etc/sysctl.d: the reconcile loop
+# is the persistence mechanism, so a rebooted node is re-tuned by the next pass and uninstalling
+# this chart leaves no configuration behind on the node.
+ensure_sysctls() {
+  local status=0
+{{- range $key, $value := $sysctls.values }}
+  apply_sysctl "{{ $key }}" "{{ include "kasmNodePrep.sysctlValue" $value }}" || status=1
+{{- end }}
+
+  return "$status"
+}
+{{- end }}
+{{- if $swap.enabled }}
+
+# Return 0 when our swapfile is already active on this node. The host directory is mounted at the
+# same path inside the container, so the name /proc/swaps reports is identical on both sides. The
+# here-string (rather than a pipe into grep -q) keeps "set -o pipefail" out of the picture.
+swap_active() {
+  local active
+
+  active="$(swapon --show=NAME --noheadings 2>/dev/null || true)"
+  grep -qxF "$SWAP_FILE" <<<"$active"
+}
+{{- if not $swap.force }}
+
+# Confirm the node's kubelet tolerates swap *before* any is activated. This is the footgun the
+# check exists for: a kubelet running with the default failSwapOn=true refuses to start while the
+# node has swap active, so switching swap on underneath it turns the next kubelet restart -- or the
+# next node reboot -- into a NotReady node. Best effort by design: it reads only the on-disk
+# kubelet configuration mounted read-only into this pod, and tuning.swap.force=true bypasses it.
+kubelet_allows_swap() {
+  local config
+
+  # k3s and RKE2 pass kubelet flags through as kubelet-arg entries in the agent/server config.
+  for config in "${K3S_CONFIG_DIR}/config.yaml" "${K3S_CONFIG_DIR}"/config.yaml.d/*.yaml; do
+    if [ -f "$config" ] && grep -q 'fail-swap-on=false' "$config"; then
+      log "kubelet swap support confirmed: ${config} carries fail-swap-on=false"
+      return 0
+    fi
+  done
+
+  # kubeadm and most other distributions: the kubelet component config on disk.
+  if [ -f "$KUBELET_CONFIG" ] && grep -qE '^[[:space:]]*failSwapOn:[[:space:]]*false' "$KUBELET_CONFIG"; then
+    log "kubelet swap support confirmed: ${KUBELET_CONFIG} sets failSwapOn: false"
+    return 0
+  fi
+
+  return 1
+}
+{{- end }}
+
+# Resolve the swapfile size in MiB: tuning.swap.sizeMib, or -- when that is 0 -- half of the node's
+# MemTotal clamped to [4096, 16384] MiB, the range of the menu Kasm's own agent installer offers.
+swap_size_mib() {
+  local size="$SWAP_SIZE_MIB"
+  local mem_total_kib
+
+  if [ "$size" -gt 0 ]; then
+    printf '%s\n' "$size"
+    return 0
+  fi
+
+  mem_total_kib="$(awk '/^MemTotal:/ { print $2 }' /proc/meminfo)"
+  size=$(( mem_total_kib / 2048 ))
+  if [ "$size" -lt 4096 ]; then
+    size=4096
+  elif [ "$size" -gt 16384 ]; then
+    size=16384
+  fi
+
+  printf '%s\n' "$size"
+}
+
+# Create and activate the node's swapfile, then apply vm.swappiness.
+#
+# /etc/fstab is deliberately never touched. The reconcile loop is the persistence mechanism: after
+# a reboot the swap is off, the next pass sees that and runs swapon again -- the same self-healing
+# contract as the kernel modules. It also means backing the feature out is a values change plus a
+# node reboot, with no node file to edit back.
+ensure_swap() {
+  local size
+  local existing_bytes
+
+  if swap_active; then
+    log "swapfile ${SWAP_FILE} is already active"
+  else
+{{- if $swap.force }}
+    log "tuning.swap.force is set; activating swap without confirming that the kubelet tolerates it"
+{{- else }}
+    if ! kubelet_allows_swap; then
+      err "tuning.swap.enabled is set, but this node's kubelet could not be confirmed to tolerate swap: neither ${K3S_CONFIG_DIR}/config.yaml nor ${K3S_CONFIG_DIR}/config.yaml.d/*.yaml carries 'fail-swap-on=false', and ${KUBELET_CONFIG} does not set 'failSwapOn: false'. A kubelet running with the default failSwapOn=true refuses to start while the node has swap active, so enabling swap now would take this node NotReady at its next kubelet restart or reboot. Configure the kubelet first: on k3s add 'kubelet-arg: [fail-swap-on=false, config=/etc/rancher/k3s/kubelet.yaml]' to /etc/rancher/k3s/config.yaml with 'memorySwap: {swapBehavior: LimitedSwap}' in that kubelet config file and restart k3s; on kubeadm set 'failSwapOn: false' in /var/lib/kubelet/config.yaml and restart kubelet. Set tuning.swap.force=true to skip this check when the kubelet is configured somewhere this script cannot read. Skipping swap this pass."
+      return 1
+    fi
+{{- end }}
+
+    size="$(swap_size_mib)"
+
+    if [ ! -d "$SWAP_DIR" ]; then
+      err "Swap directory ${SWAP_DIR} is not present in this container. It is a hostPath mount rendered from tuning.swap.hostPath, so this should not happen unless the DaemonSet was edited by hand. Skipping swap this pass."
+      return 1
+    fi
+
+    # A leftover file of a different size means tuning.swap.sizeMib changed since it was created.
+    # It is provably not in use here -- swap_active said so for exactly this path -- so replace it.
+    if [ -f "$SWAP_FILE" ]; then
+      existing_bytes="$(stat -c %s "$SWAP_FILE" 2>/dev/null || echo 0)"
+      if [ "$existing_bytes" -ne $(( size * 1024 * 1024 )) ]; then
+        log "Existing ${SWAP_FILE} is ${existing_bytes} bytes, not ${size} MiB; recreating it"
+        rm -f "$SWAP_FILE"
+      fi
+    fi
+
+    if [ ! -f "$SWAP_FILE" ]; then
+      log "Creating a ${size} MiB swapfile at ${SWAP_FILE}"
+      # fallocate is instant; dd is the fallback for builder images without util-linux's fallocate
+      # and for filesystems where a fallocated file cannot be used as swap.
+      if ! fallocate -l "${size}MiB" "$SWAP_FILE" 2>/dev/null; then
+        log "fallocate is unavailable or failed on this filesystem; falling back to dd"
+        if ! dd if=/dev/zero of="$SWAP_FILE" bs=1M count="$size" status=none; then
+          err "Failed to create ${SWAP_FILE}. Check that the filesystem behind ${SWAP_DIR} has at least ${size} MiB free on the node. Skipping swap this pass."
+          rm -f "$SWAP_FILE"
+          return 1
+        fi
+      fi
+    fi
+
+    # swapon refuses a swapfile that is readable by group or other.
+    chmod 600 "$SWAP_FILE"
+
+    # Unconditional rather than only-when-just-created: re-running mkswap on a file that is not in
+    # use only rewrites its header, and it repairs a file left half-initialised by an earlier pass.
+    if ! mkswap "$SWAP_FILE" >/dev/null 2>&1; then
+      err "mkswap failed on ${SWAP_FILE}. Skipping swap this pass."
+      return 1
+    fi
+
+    if ! swapon "$SWAP_FILE"; then
+      err "swapon failed on ${SWAP_FILE}. A swapfile has to live on a filesystem that supports one: ext4 and xfs do, btrfs needs a nodatacow file, and overlayfs and tmpfs never will. Point tuning.swap.hostPath at a directory on a real node disk. Skipping swap this pass."
+      return 1
+    fi
+
+    log "Swap is active: ${SWAP_FILE} (${size} MiB)"
+  fi
+
+  # Kasm's reason for swap is parking the memory of idle and stopped Workspaces, not absorbing peak
+  # load, so this is deliberately more eager than the kernel default of 60.
+  apply_sysctl vm.swappiness "$SWAP_SWAPPINESS"
+}
+{{- end }}
+
+terminate() {
+  log "Received a termination signal; exiting"
+  exit 0
+}
+trap terminate INT TERM
+
+log "Starting node prep on kernel ${KERNEL_RELEASE}, reconciling every ${RECONCILE_INTERVAL}s"
+{{- if $anyModule }}
+if [ -d "$MOK_DIR" ]; then
+  log "Secure Boot MOK keys are mounted at ${MOK_DIR}; built modules will be signed before insertion"
+fi
+{{- end }}
+
+while true; do
+  log "--- reconcile pass starting ---"
+  pass_status=0
+{{- if $v4l2Build }}
+  ensure_v4l2loopback || pass_status=1
+{{- end }}
+{{- if $wireguardBuild }}
+  ensure_wireguard || pass_status=1
+{{- end }}
+{{- if $sysctls.enabled }}
+  ensure_sysctls || pass_status=1
+{{- end }}
+{{- if $swap.enabled }}
+  ensure_swap || pass_status=1
+{{- end }}
+
+  if [ "$pass_status" -eq 0 ]; then
+    log "--- reconcile pass complete: the node is in the requested state ---"
+  else
+    err "--- reconcile pass finished with errors; retrying in ${RECONCILE_INTERVAL}s ---"
+  fi
+
+  # Backgrounded so the termination trap fires immediately instead of waiting out the sleep.
+  sleep "$RECONCILE_INTERVAL" &
+  wait $! || true
+done
+{{- end -}}
+{{/*
+  No DaemonSet, no script. A KMM-only install with tuning off has nothing for the reconcile loop
+  to do -- the Module CR is the whole payload -- so it renders neither this ConfigMap nor the
+  DaemonSet that mounts it, and is still a valid install.
+*/}}
+{{- if include "kasmNodePrep.daemonSetNeeded" . }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "kasmNodePrep.fullname" . }}
+  labels:
+    {{- include "kasmNodePrep.labels" . | nindent 4 }}
+data:
+  ensure-modules.sh: |
+    {{- include "kasmNodePrep.ensureModulesScript" . | nindent 4 }}
+{{- end }}

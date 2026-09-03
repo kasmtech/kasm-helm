@@ -1,0 +1,160 @@
+# nameOverride -- Override the chart name used when building resource names and the `app.kubernetes.io/name`
+# label. Leave empty to use the chart name (`kasm-egress-installer`).
+#
+nameOverride: ""
+
+# fullnameOverride -- Override the fully qualified name of every resource this chart creates. Leave empty to
+# use the standard `<release name>-<chart name>` naming.
+#
+fullnameOverride: ""
+
+# Configure the egress daemon image. This chart deploys Kasm's own egress daemon (built from
+# apps/kasm-egress-daemon in kasm-monorepo), which bundles and self-installs the kasm-egress-cni shim
+# binary onto the host — there is no separate image or workload for the CNI shim.
+#
+image:
+  # image.registry -- Container registry that hosts the egress daemon image. Point this at a private registry
+  # or a pull-through mirror for air-gapped clusters.
+  #
+  registry: docker.io
+  # image.repository -- Repository of the egress daemon image within `image.registry`.
+  #
+  repository: kasmweb/kasm-egress-daemon
+  # image.tag -- Tag of the egress daemon image. Leave empty to use the chart's `appVersion`.
+  #
+  tag: ""
+  # image.pullPolicy -- Image pull policy for the egress daemon container.
+  #
+  pullPolicy: IfNotPresent
+
+# imagePullSecrets -- Names of existing `kubernetes.io/dockerconfigjson` Secrets in the release namespace, used
+# to pull the egress daemon image from a private registry.
+#
+imagePullSecrets: []
+
+# socketDir -- Host path for the egress daemon's Unix socket and per-session state. Must be a host path (not
+# an emptyDir): the kasm-egress-cni shim it installs runs directly on the host, invoked by the container
+# runtime outside of any pod, and has to reach this same path from outside the container.
+#
+socketDir: /var/run/kasm-egress
+
+# distro -- Kubernetes distribution preset used to derive the CNI plugin bin dir (`cniBinDir`) when that is
+# left empty. Distributions read CNI plugin binaries from different host paths, and installing the shim to
+# the wrong one means the container runtime never invokes it — pods get no egress tunnel, with no error.
+# Recognized values: `k3s` (/var/lib/rancher/k3s/data/cni) and `vanilla` (/opt/cni/bin — kubeadm and most
+# managed distros). For any other distribution (including RKE2, whose bin dir varies by version) set
+# `cniBinDir` explicitly. This preset governs only the single bin dir the shim is installed into; the
+# conflist and containerd paths scanned below already cover k3s/RKE2/vanilla as a union.
+#
+distro: k3s
+
+# cniBinDir -- Host path the kasm-egress-cni shim binary is installed into; must match the CNI bin dir your
+# container runtime actually reads plugins from. Leave empty to derive it from `distro` (recommended); set
+# it to override the preset (required when `distro` is not a recognized value).
+#
+cniBinDir: ""
+
+# cniConfDirs -- Host paths scanned for active `.conflist` files. Every conflist found in each of these
+# directories is patched to chain kasm-egress-cni into its plugin list (idempotently — safe to reapply, and
+# the original file is backed up once, on first modification, to a sibling `.kasm-egress.bak`). Include every
+# path your container runtime might read chained CNI config from; unused paths in this list are skipped
+# silently, not treated as an error.
+#
+cniConfDirs:
+  - /etc/cni/net.d
+  - /var/lib/rancher/k3s/agent/etc/cni/net.d
+  - /var/lib/rancher/rke2/agent/etc/cni/net.d
+
+# containerdConfigPaths -- Host file paths inspected for a containerd `conf_dir` setting, so the daemon can
+# detect when containerd is already configured to read chained CNI config from a directory not listed above
+# (and merge it in). Paths that don't exist on a given node's distro are skipped, not an error — the six
+# defaults below cover every k3s/RKE2 config file layout across config.toml, config-v3.toml.tmpl, and
+# config.toml.tmpl. This is a separate list from containerdConfigDirs below because the daemon reads each of
+# these as an exact file, but volumes can only be mounted per-directory.
+#
+containerdConfigPaths:
+  - /var/lib/rancher/k3s/agent/etc/containerd/config.toml
+  - /var/lib/rancher/k3s/agent/etc/containerd/config-v3.toml.tmpl
+  - /var/lib/rancher/k3s/agent/etc/containerd/config.toml.tmpl
+  - /var/lib/rancher/rke2/agent/etc/containerd/config.toml
+  - /var/lib/rancher/rke2/agent/etc/containerd/config-v3.toml.tmpl
+  - /var/lib/rancher/rke2/agent/etc/containerd/config.toml.tmpl
+
+# containerdConfigDirs -- Host directories containing the files listed in containerdConfigPaths above, mounted
+# read-only so the daemon can read whichever of those files exist on a given node. Only one of these two
+# (k3s vs. RKE2) exists on any given node; DirectoryOrCreate is used so a missing one does not wedge the pod
+# in ContainerCreating (mirrors the same k3s-vs-RKE2 handling in the kasm-node-prep chart).
+#
+containerdConfigDirs:
+  - /var/lib/rancher/k3s/agent/etc/containerd
+  - /var/lib/rancher/rke2/agent/etc/containerd
+
+# excludedCIDRs -- CIDRs excluded from egress tunneling and routed through the pod's original default gateway
+# instead of the tunnel, once one is established. Empty by default (nothing bypassed).
+#
+excludedCIDRs: []
+
+# openvpnBinary -- Path to the openvpn binary inside the egress daemon container. The image bundles OpenVPN,
+# WireGuard tools, iproute2, iptables, and three pinned Ziti CLI versions; this only needs to change if you
+# build a custom image with openvpn installed somewhere else.
+#
+openvpnBinary: /usr/sbin/openvpn
+
+# nodeSelector -- Node labels that select which nodes run the egress daemon. Every pod scheduled on a
+# selected node depends on this daemon once installed — see the security notice in this chart's README before
+# narrowing or widening this.
+#
+nodeSelector: {}
+
+# tolerations -- Tolerations for the DaemonSet pods, so nodes carrying taints (for example dedicated
+# workspace nodes) still get the egress daemon.
+#
+tolerations: []
+
+# updateStrategy -- DaemonSet update strategy type. `RollingUpdate` restarts the daemon gradually (see this
+# chart's README for why a restart briefly affects node-wide pod scheduling, not just egress sessions).
+# `OnDelete` leaves running pods untouched until deleted manually.
+#
+updateStrategy: RollingUpdate
+
+# resources -- CPU and memory requests and limits for the egress daemon container.
+#
+resources:
+  requests:
+    # resources.requests.cpu -- CPU request for the egress daemon container. Between session setup and
+    # teardown the daemon is idle, so the request only has to cover the reconcile work and the socket server;
+    # the bursty tunnel negotiation is what `resources.limits.cpu` sizes for.
+    #
+    cpu: 50m
+    # resources.requests.memory -- Memory request for the egress daemon container. The daemon forks one tunnel
+    # process (OpenVPN, WireGuard, or Ziti) per egress session and every one of them lives in this container's
+    # cgroup, so the floor here should cover the daemon itself plus the sessions a node routinely runs.
+    #
+    memory: 64Mi
+  limits:
+    # resources.limits.cpu -- CPU limit for the egress daemon container. Tunnel setup and the userspace data
+    # path (OpenVPN and Ziti both encrypt in userspace) are the expensive parts, and throttling them shows up
+    # as slow session starts and a throughput ceiling rather than as an error — raise this before suspecting
+    # the tunnel provider.
+    #
+    cpu: 500m
+    # resources.limits.memory -- Memory limit for the egress daemon container. Consumption scales with the
+    # number of concurrent egress sessions, since each one adds another tunnel process to this cgroup, so
+    # raise it on nodes that host many egress-enabled sessions. An OOMKill here tears down every tunnel on the
+    # node at once, and the restart has the node-wide effect described in this chart's README.
+    #
+    memory: 256Mi
+
+# priorityClassName -- Priority class for the DaemonSet pods. If this pod is evicted, kasm-egress-cni starts
+# failing every pod ADD on that node (see this chart's README) — set to an empty string to use the namespace
+# default instead.
+#
+priorityClassName: system-node-critical
+
+# podAnnotations -- Extra annotations to add to the DaemonSet pods.
+#
+podAnnotations: {}
+
+# podLabels -- Extra labels to add to the DaemonSet pods, merged with the chart's standard selector labels.
+#
+podLabels: {}

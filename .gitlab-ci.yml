@@ -41,6 +41,13 @@ variables:
   DOCKER_DRIVER: overlay2
   DOCKER_BUILDKIT: "1"
   DOCKER_AUTH_CONFIG: ${_DOCKER_AUTH_CONFIG}
+  # Guard for helm-deploy-agent-docker-hub. The agent-family charts are all 0.1.0 / appVersion
+  # "develop" previews, so their version does not move between pushes the way kasm-helm's does and
+  # a re-push would silently replace a published preview with different content. That job therefore
+  # refuses any chart whose version already exists under kasmweb/. Set this to "true" when running
+  # the pipeline (Run pipeline -> Variables, or the manual job's own variables) to make the
+  # overwrite deliberate.
+  FORCE_REPUBLISH: "false"
 
 cache:
   key: "${CI_PROJECT_ID}"
@@ -91,6 +98,46 @@ helm-build:
       - kasm-helm-1.*.tgz
   tags: ["oci-fixed-amd"]
 
+# The agent-chart-family counterpart to helm-build above. Same stage, same .run-deploy gating; a
+# different image because packaging these four is not a one-liner and the Makefile already owns it:
+#
+#   make deps-agent          builds dependencies inside-out -- charts/kasm-agent first (its 6 local
+#                            subcharts + 3 remote deps), then charts/kasm-platform, which archives
+#                            charts/kasm-agent off disk and so needs kasm-agent's own charts/ staged
+#                            already. Reversing the two produces a kasm-platform archive whose
+#                            embedded kasm-agent is missing all 9 of its dependencies.
+#   make package-agent       charts/kasm-agent -> dist/, self-contained (this is also the airgap
+#                            artifact documented in the kasm-agent README).
+#   make package-agent-all   adds kasm-platform, kasm-agent-crds and kasm-egress-installer.
+#   make images-agent        renders every scenario and writes dist/kasm-agent-images.txt, the
+#                            mirror list for airgapped installs.
+#
+# One `make` invocation, not four: the targets share prerequisites (deps-agent, render-agent) and
+# make runs each at most once per invocation, so the remote dependency fetch happens exactly once.
+# python:3.12-bookworm rather than alpine/helm because the Makefile downloads its own pinned helm
+# into bin/ (cached above) -- the same arrangement the validate and docs-check jobs use.
+helm-build-agent:
+  stage: build
+  image: python:3.12-bookworm
+  extends:
+    - .run-deploy
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends bash curl make git ca-certificates
+  script:
+    # First, and cheaply (pure stdlib, no tool downloads): refuse to package anything while a
+    # file:// pin is stale. `helm package` does not re-resolve dependencies, so a parent whose pin
+    # has fallen behind the subchart it names packages the OLD subchart and exits 0 -- the archive
+    # is wrong and nothing downstream says so. `make test` runs this too, but the validate stage
+    # runs after build and deploy, which is too late to stop a bad archive being published.
+    - make version-check-agent
+    - make deps-agent package-agent package-agent-all images-agent
+  artifacts:
+    paths:
+      - dist/*.tgz
+      - dist/kasm-agent-images.txt
+  tags: ["oci-fixed-amd"]
+
 helm-deploy-docker-hub:
   stage: deploy
   image: 
@@ -128,6 +175,91 @@ helm-deploy-gitlab:
     - git push origin HEAD
   tags: ["oci-fixed-amd"]
 
+# Publishes the four archives helm-build-agent left in dist/ to the same OCI registry and namespace
+# helm-deploy-docker-hub uses, with the same credentials and the same `helm registry login`
+# pattern. It deviates from that job in exactly two ways, both forced by these charts being 0.1.0
+# previews rather than a moving release line:
+#
+#   when: manual        kasm-helm's version advances every release, so pushing it automatically on
+#                       every develop/release commit is always a new tag. The agent charts sit at
+#                       0.1.0 with appVersion "develop", so an automatic push would re-push the
+#                       same version on every commit -- and the guard below would then fail the
+#                       pipeline every time. Publishing a preview is a decision, so it is a button.
+#   allow_failure: true required, not cosmetic: deploy runs *before* validate, docs_check and the
+#                       three e2e stages, and a blocking manual job (allow_failure: false) would
+#                       hold every one of them until someone clicked it. Non-blocking keeps the
+#                       rest of the pipeline running; a refused or failed push still shows as a
+#                       warning on the job, and the script prints exactly what it refused.
+#
+# The guard itself: `helm show chart oci://.../<name> --version <v>` succeeds only if that exact
+# version is already published, so it is a cheap existence probe. It fails safe: a probe that errors
+# for any other reason (auth, rate limit) reads as "not published" and the push is attempted, which
+# then fails loudly rather than silently skipping a chart. Publishing over an existing preview is
+# allowed, but only when FORCE_REPUBLISH=true says so. Every archive is probed before anything is
+# refused, so one conflict does not hide the others.
+helm-deploy-agent-docker-hub:
+  stage: deploy
+  image:
+    name: alpine/helm:latest
+    entrypoint: [""]
+  # Same branch condition as .run-deploy, spelled out because a child job's `rules` replaces the
+  # extended one wholesale -- there is no way to add `when: manual` to an inherited rules list.
+  rules:
+    - if: '$CI_COMMIT_REF_NAME == "develop" || $CI_COMMIT_REF_NAME =~ /^release\/.*$/'
+      when: manual
+      allow_failure: true
+    - when: never
+  script:
+    - |
+      set -eu
+      if ! ls dist/*.tgz >/dev/null 2>&1; then
+        echo "ERROR: no dist/*.tgz artifacts to publish -- helm-build-agent did not run or its artifacts expired."
+        exit 1
+      fi
+      echo "$DOCKER_HUB_PASSWORD" | helm registry login registry-1.docker.io -u "$DOCKER_HUB_USERNAME" --password-stdin
+      refused=""
+      for archive in dist/*.tgz; do
+        # Read the identity out of the archive rather than off the filename: "<name>-<version>.tgz"
+        # cannot be split on the last hyphen once a version carries a prerelease tag (0.1.0-rc.1).
+        chart_name=$(helm show chart "$archive" | awk '/^name:/ {print $2; exit}')
+        chart_version=$(helm show chart "$archive" | awk '/^version:/ {print $2; exit}')
+        if helm show chart "oci://registry-1.docker.io/kasmweb/$chart_name" --version "$chart_version" >/dev/null 2>&1; then
+          if [ "${FORCE_REPUBLISH:-false}" = "true" ]; then
+            echo "REPUBLISH  $chart_name $chart_version -- already in kasmweb/, overwriting (FORCE_REPUBLISH=true)"
+          else
+            echo "REFUSED    $chart_name $chart_version -- already in kasmweb/"
+            refused="$refused $chart_name-$chart_version"
+            continue
+          fi
+        else
+          echo "PUBLISH    $chart_name $chart_version -- not yet in kasmweb/"
+        fi
+        helm push "$archive" "oci://registry-1.docker.io/kasmweb/"
+      done
+      if [ -n "$refused" ]; then
+        echo ""
+        echo "ERROR: refused to overwrite already-published version(s):$refused"
+        echo ""
+        echo "These charts are 0.1.0 / appVersion 'develop' previews, so the same version is what"
+        echo "every build produces -- re-pushing replaces a published preview with different content"
+        echo "under an unchanged version number, which no consumer can detect."
+        echo ""
+        echo "Either bump the chart (and every pin naming it) --"
+        echo "  python3 scripts/agent_versions.py --bump <chart> <version> --write"
+        echo "  make version-check-agent"
+        echo "-- or re-run this job with FORCE_REPUBLISH=true to overwrite deliberately."
+        exit 1
+      fi
+  tags: ["oci-fixed-amd"]
+
+# `make test` also runs version-check-agent (scripts/agent_versions.py --check), the guard on the
+# hand-maintained file:// dependency pins in charts/kasm-agent and charts/kasm-platform. It belongs
+# here rather than in a job of its own: a stale pin is a build-correctness problem in the same class
+# as crds-sync-check, which this job already covers.
+#
+# It is also run standalone at the top of helm-build-agent, and has to be: the validate stage comes
+# *after* build and deploy, so this job cannot gate what those two publish. The copy there is the
+# gate; this one is the report.
 validate:
   stage: validate
   image: python:3.12-bookworm
@@ -144,14 +276,17 @@ validate:
     - if: $CI_PIPELINE_SOURCE == "web"
       when: manual
 
-# Two documentation checks run in parallel as a matrix in the docs_check stage:
+# Documentation checks run in parallel as a matrix in the docs_check stage:
 #
-#   readme   — verifies README.md is in sync with values.yaml + README.md.gotmpl
-#   changelog — verifies CHANGELOG.md has been updated relative to the target branch
+#   readme       — verifies charts/kasm-helm/README.md is in sync with values.yaml + README.md.gotmpl
+#   changelog    — verifies charts/kasm-helm/CHANGELOG.md has been updated relative to the target branch
+#   readme-all   — same as readme, but for every chart (kasm-helm + all 8 kasm-agent-family charts) —
+#                  the drift guard the agent-family charts otherwise lack
+#   changelog-all — same as changelog, but for every touched chart's own CHANGELOG.md
 #
-# Both gate e2e (docs_check precedes all e2e_* stages) while keeping unit-test
-# and lint results visible regardless of docs drift state.  The changelog check
-# skips silently on develop and release/* — those are integration targets where
+# All four gate e2e (docs_check precedes all e2e_* stages) while keeping unit-test
+# and lint results visible regardless of docs drift state.  The changelog checks
+# skip silently on develop and release/* — those are integration targets where
 # diffing against themselves is meaningless.
 docs-check:
   stage: docs_check
@@ -161,13 +296,17 @@ docs-check:
     - apt-get install -y --no-install-recommends bash curl make git ca-certificates
   parallel:
     matrix:
-      - CHECK: [readme, changelog]
+      - CHECK: [readme, changelog, readme-all, changelog-all]
   script:
     - |
       if [ "$CHECK" = "readme" ]; then
         make readme-check
       elif [ "$CHECK" = "changelog" ]; then
         BASE_BRANCH="${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-develop}" make changelog-check
+      elif [ "$CHECK" = "readme-all" ]; then
+        make readme-check-all
+      elif [ "$CHECK" = "changelog-all" ]; then
+        BASE_BRANCH="${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-develop}" make changelog-check-all
       fi
   rules:
     - if: $CI_COMMIT_BRANCH

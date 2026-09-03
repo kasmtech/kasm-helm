@@ -1,0 +1,82 @@
+{{/*
+  OpenShift Route exposing the session proxy at the agent's public hostname.
+  This is the third and last external-access option in this chart, alongside
+  httproute.yaml (Gateway API) and ingress.yaml - enable at most one of the
+  three, since all of them point at the same Service.
+
+  The backend Service is NOT created by this chart: the Agent controller creates
+  it from agent.yaml and names it "<Agent name>-session-proxy", which is why the
+  `to.name` is built from .Values.name rather than from the chart fullname.
+
+  Termination defaults to passthrough, matching the Kasm operator's OpenShift
+  example: the OpenShift router hands the TLS connection to the session proxy
+  untouched, so browsers see the proxy's own certificate - the one in
+  sessionProxy.certSecretName - and that certificate has to be valid for
+  route.host, not just for the in-cluster Service name. Enable
+  sessionProxy.certificate, or supply the Secret out of band, before using it.
+
+  targetPort follows from the termination mode when route.backendPort is left
+  unset: passthrough and reencrypt both need the proxy's own HTTPS listener
+  (4444), while edge terminates TLS at the router and talks plain HTTP to the
+  proxy's 4445. Setting route.backendPort overrides that choice.
+
+  Kasm sessions are long-lived VNC websockets. The OpenShift router passes
+  websocket upgrades through on its own, but its default 30s connection timeout
+  tears sessions down mid-use, so set haproxy.router.openshift.io/timeout to at
+  least 3600s in route.annotations. See values.yaml for the exact annotation.
+*/}}
+{{- if .Values.route.enabled }}
+{{- $termination := .Values.route.tls.termination | default "passthrough" }}
+{{- $defaultBackendPort := 4445 }}
+{{- if or (eq $termination "passthrough") (eq $termination "reencrypt") }}
+{{- $defaultBackendPort = 4444 }}
+{{- end }}
+{{- $backendPort := .Values.route.backendPort | default $defaultBackendPort }}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ include "kasmAgentInstance.fullname" . }}-session-proxy
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kasmAgentInstance.labels" . | nindent 4 }}
+  {{- /* route.annotations wins over commonAnnotations on a key collision. Both key
+         and value are quoted rather than passed through toYaml because the router
+         timeout annotation is numeric-looking, and the API server rejects a
+         non-string annotation value. */}}
+  {{- $annotations := merge (dict) (.Values.route.annotations | default dict) (.Values.commonAnnotations | default dict) }}
+  {{- with $annotations }}
+  annotations:
+    {{- range $key, $value := . }}
+    {{ $key | quote }}: {{ $value | quote }}
+    {{- end }}
+  {{- end }}
+spec:
+  host: {{ .Values.route.host | default (include "kasmAgentInstance.publicHostname" .) | quote }}
+  to:
+    kind: Service
+    name: {{ printf "%s-session-proxy" .Values.name }}
+    weight: 100
+  port:
+    targetPort: {{ $backendPort }}
+  tls:
+    termination: {{ $termination }}
+    {{- with .Values.route.tls.insecureEdgeTerminationPolicy }}
+    insecureEdgeTerminationPolicy: {{ . }}
+    {{- end }}
+    {{- with .Values.route.tls.key }}
+    key: |-
+      {{- . | trim | nindent 6 }}
+    {{- end }}
+    {{- with .Values.route.tls.certificate }}
+    certificate: |-
+      {{- . | trim | nindent 6 }}
+    {{- end }}
+    {{- with .Values.route.tls.caCertificate }}
+    caCertificate: |-
+      {{- . | trim | nindent 6 }}
+    {{- end }}
+    {{- with .Values.route.tls.destinationCACertificate }}
+    destinationCACertificate: |-
+      {{- . | trim | nindent 6 }}
+    {{- end }}
+{{- end }}

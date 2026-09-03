@@ -1,0 +1,170 @@
+# Whole-stack values for the kasm-platform umbrella chart: the Kasm control plane and the
+# Kubernetes agent, one release, one namespace.
+#
+#   helm dependency build charts/kasm-agent      # inside-out: agent deps first
+#   helm dependency build charts/kasm-platform   # (or just: make deps-agent)
+#   helm install kasm charts/kasm-platform -n kasm --create-namespace \
+#     -f examples/kasm-agent/platform-values.yaml --timeout 20m
+#   kubectl label namespace kasm kasm.com/role=manager   # optional; only for direct manager->workspace ingress
+#
+# The `--timeout 20m` is not optional padding: the control plane's database initialization and the
+# first image pulls for both halves take a while on a cold cluster.
+#
+# Everything under `kasm-helm:` is a charts/kasm-helm value and everything under `kasm-agent:` is a
+# charts/kasm-agent value; see those two charts' READMEs for the full references, and the "Running
+# alongside the kasm-helm control plane" section of charts/kasm-agent/README.md for why the
+# pairing needs the settings it does.
+#
+# Hostname plan — both under ONE parent domain, because the session cookie has to reach both:
+#   control plane UI/API:  kasm.example.com        (kasm-helm.publicAddr)
+#   agent session proxy:   sessions.example.com    (kasm-agent.agent.publicHostname)
+#   auth cookie domain:    example.com             (kasm-helm.kasmConfig.authDomain below)
+#
+# Replace every example.com hostname, the manager token, and the TLS Secret names before use.
+# NOTHING HERE IS A REAL SECRET.
+
+# ---------------------------------------------------------------------------------------------
+# The umbrella's own values
+# ---------------------------------------------------------------------------------------------
+
+# This chart owns no values of its own beyond `extraObjects`; everything below belongs to one of
+# the two dependencies. The auth cookie domain is set with `kasm-helm.kasmConfig.authDomain`, in
+# the control-plane block.
+
+# ---------------------------------------------------------------------------------------------
+# The control plane (charts/kasm-helm)
+# ---------------------------------------------------------------------------------------------
+kasm-helm:
+  enabled: true
+
+  deploymentSize: small
+  publicAddr: kasm.example.com
+
+  # ClusterIP plus the chart's own Ingress. Never LoadBalancer next to an ingress controller that
+  # already binds the node's :443 — the chart rejects that combination outright.
+  proxyService:
+    type: ClusterIP
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    backendProtocol: http
+
+  certificate:
+    # A kubernetes.io/tls Secret covering publicAddr. Issue it with cert-manager or supply your own;
+    # users' browsers must trust it.
+    secretName: kasm-tls
+
+  kasmSecrets:
+    passwords:
+      # Pinning the manager token means the agent half of this same release can reference it
+      # without anyone reading it back after install. Leave the other four keys unset so they stay
+      # randomly generated; read admin-password back out of the "<release>-secrets" Secret this
+      # block creates when you first sign in.
+      manager-token: "change-me-agent-registration-token"
+
+  # Two zone defaults break Kubernetes-agent sessions, and both are preseed-able on a FRESH
+  # database (the preseed only runs at database initialisation; on an existing control plane make
+  # the same two changes in the admin UI under Infrastructure -> Zones):
+  #   proxy_connections: false      browsers connect straight to the agent's hostname instead of
+  #                                 being relayed through the control-plane proxy, which forwards
+  #                                 the original Host header and 404s behind host-routing ingress.
+  #   upstream_auth_address         where the agent-side session proxy validates sessions; the
+  #                                 $request_host$ default points it at the agent's own hostname.
+  kasmZones:
+    - name: default
+      proxy_hostname: kasm.example.com
+      proxy_connections: false
+      upstream_auth_address: kasm.example.com
+
+  kasmConfig:
+    # Required for the kasmZones above to reach the database.
+    generatePreseed: true
+
+    # The PARENT domain of publicAddr and kasm-agent.agent.publicHostname. It scopes the Kasm
+    # session cookie (`kasm_auth_domain`); the $request_host$ default pins the cookie to the
+    # control-plane hostname and every direct session connection 401s.
+    #
+    # Applied at database initialization, so this covers FRESH INSTALLS only. On an existing
+    # database, change it in the admin UI (Settings -> Auth) or with the 3-call admin API
+    # sequence in charts/kasm-platform/README.md.
+    #
+    # Note this is NOT a kasmConfig.config.settings entry. Routing kasm_auth_domain through
+    # config.settings used to be the broken path — the settings preseed concatenated rather than
+    # upserted, and the duplicate row made /api/authenticate 500 with MultipleResultsFound. That
+    # merge now upserts on name + category, so config.settings is safe for seed-existing settings
+    # too, but authDomain is the supported route here: it is applied last, against the finished
+    # seed file, so it wins over the merge and over existingDefaultPropertiesSecret.
+    authDomain: example.com
+
+    # Optionally seed workspace images at database initialization too, so the library is
+    # not empty on first login (a fresh Kasm database seeds no workspaces). Uncomment and
+    # adapt — the full field reference is in charts/kasm-helm/docs/preseed.md:
+    # config:
+    #   images:
+    #     - name: kasmweb/doom:develop
+    #       friendly_name: Doom
+    #       description: Doom via KasmVNC
+    #       image_type: Container
+    #       enabled: true
+    #       cores: 1
+    #       memory_bytes: 1610612736
+    #       docker_registry: https://kcr.kasmweb.com/v1/
+    #       categories:
+    #         - Games
+
+# ---------------------------------------------------------------------------------------------
+# The Kubernetes agent (charts/kasm-agent)
+# ---------------------------------------------------------------------------------------------
+kasm-agent:
+  enabled: true
+
+  agent:
+    manager:
+      # The control plane's publicAddr. /manager_api is the path its proxy routes to the manager,
+      # and is the chart default — do not empty it unless addressing the manager Service directly.
+      hostname: kasm.example.com
+      # One namespace, one release: the agent reads the control plane's own Secret directly. No
+      # copying, no second Secret to keep in sync. (Across namespaces, copy the value into the
+      # agent's namespace instead — Secrets do not cross namespaces.)
+      existingTokenSecret: kasm-secrets
+      tokenSecretKey: manager-token
+
+    # Must differ from kasm-helm.publicAddr, and share its parent domain.
+    publicHostname: sessions.example.com
+
+    # The zone the agent registers into. It must already exist on the control plane; the kasmZones
+    # block above seeds exactly this one.
+    zone: default
+
+    sessionProxy:
+      # TLS for sessions.example.com, terminated by the session proxy itself. Either create this
+      # Secret out of band or let cert-manager issue it with sessionProxy.certificate.enabled.
+      certSecretName: kasm-session-proxy-tls
+      # certificate:
+      #   enabled: true
+      #   issuerRef:
+      #     name: letsencrypt
+      #     kind: ClusterIssuer
+
+    # Expose the session proxy on publicHostname. Pick exactly ONE of ingress / httpRoute / route.
+    # Kasm sessions are long-lived websockets: the controller must allow upgrades and use read and
+    # send timeouts of at least 3600s, or sessions are cut off mid-use.
+    ingress:
+      enabled: true
+      className: traefik
+      tls:
+        - secretName: kasm-agent-public-tls
+          hosts:
+            - sessions.example.com
+
+  # The umbrella's baseline NetworkPolicies model only the agent stack's traffic. In a shared
+  # namespace they would cut the control plane off, so leave them disabled here.
+  networkPolicies:
+    enabled: false
+
+  # Off by default and left off: both need the namespace to permit the `privileged` Pod Security
+  # Standard, which in a shared namespace then also covers the control-plane pods.
+  nodePrep:
+    enabled: false
+  videoDevicePlugin:
+    enabled: false

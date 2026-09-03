@@ -1,0 +1,687 @@
+suite: manager token secret, certificate, image puller, http route, ingress, route and tls route
+templates:
+  - templates/manager-token-secret.yaml
+  - templates/certificate.yaml
+  - templates/imagepuller.yaml
+  - templates/httproute.yaml
+  - templates/ingress.yaml
+  - templates/route.yaml
+  - templates/tlsroute.yaml
+set:
+  manager:
+    hostname: zonea.example.com
+    existingTokenSecret: kasm-manager-token
+  publicHostname: agent.example.com
+tests:
+  - it: creates no token secret when an existing one is referenced
+    template: templates/manager-token-secret.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: creates an opaque token secret when the token is supplied inline
+    template: templates/manager-token-secret.yaml
+    set:
+      manager:
+        existingTokenSecret: ""
+        token: placeholder-token
+    asserts:
+      - isKind:
+          of: Secret
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-kasm-agent-instance-manager-token
+      - equal:
+          path: type
+          value: Opaque
+      - equal:
+          path: stringData.token
+          value: placeholder-token
+
+  - it: creates no token secret when the existing secret wins over an inline token
+    template: templates/manager-token-secret.yaml
+    set:
+      manager:
+        existingTokenSecret: kasm-manager-token
+        token: placeholder-token
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: fails from the secret template too when no token is configured at all
+    template: templates/manager-token-secret.yaml
+    set:
+      manager:
+        existingTokenSecret: ""
+        token: ""
+    asserts:
+      - failedTemplate:
+          errorMessage: "agent.manager: no manager token configured. Set agent.manager.existingTokenSecret to the name of a Secret already holding the token (preferred), or agent.manager.token to the token itself so this chart creates one."
+
+  - it: renders no certificate by default
+    template: templates/certificate.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: issues the session proxy certificate into the proxy's cert secret
+    template: templates/certificate.yaml
+    set:
+      sessionProxy:
+        certificate:
+          enabled: true
+          issuerRef:
+            name: openbao
+    asserts:
+      - isKind:
+          of: Certificate
+      - isAPIVersion:
+          of: cert-manager.io/v1
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-kasm-agent-instance-session-proxy
+      - equal:
+          path: spec.secretName
+          value: kasm-session-proxy-tls
+      - equal:
+          path: spec.commonName
+          value: agent.example.com
+      - equal:
+          path: spec.dnsNames
+          value:
+            - agent.example.com
+      - equal:
+          path: spec.issuerRef.kind
+          value: ClusterIssuer
+      - equal:
+          path: spec.issuerRef.group
+          value: cert-manager.io
+
+  - it: honours explicit certificate names
+    template: templates/certificate.yaml
+    set:
+      sessionProxy:
+        certificate:
+          enabled: true
+          commonName: proxy.example.com
+          dnsNames:
+            - proxy.example.com
+            - "*.proxy.example.com"
+          issuerRef:
+            name: letsencrypt-prod
+            kind: Issuer
+    asserts:
+      - equal:
+          path: spec.commonName
+          value: proxy.example.com
+      - contains:
+          path: spec.dnsNames
+          content: "*.proxy.example.com"
+      - equal:
+          path: spec.issuerRef.kind
+          value: Issuer
+
+  - it: fails when the certificate is enabled without an issuer name
+    template: templates/certificate.yaml
+    set:
+      sessionProxy:
+        certificate:
+          enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "agent.sessionProxy.certificate.issuerRef.name is required when agent.sessionProxy.certificate.enabled is true: name the cert-manager Issuer or ClusterIssuer that should sign the session proxy's certificate."
+
+  - it: renders no image puller by default
+    template: templates/imagepuller.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: passes the image catalog through to the KasmImagePuller
+    template: templates/imagepuller.yaml
+    set:
+      imagePuller:
+        enabled: true
+        images:
+          - image: kasmweb/chrome:develop
+            registry: https://index.docker.io/v1/
+          - image: registry.example.com/team/custom:1.0
+            registry: https://registry.example.com
+            imagePullSecrets:
+              - name: example-registry
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
+    asserts:
+      - isKind:
+          of: KasmImagePuller
+      - isAPIVersion:
+          of: agent.kasm.com/v1alpha1
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-kasm-agent-instance-image-puller
+      - equal:
+          path: spec.imagePullPolicy
+          value: IfNotPresent
+      - contains:
+          path: spec.images
+          content:
+            image: kasmweb/chrome:develop
+            registry: https://index.docker.io/v1/
+      - equal:
+          path: spec.images[1].imagePullSecrets[0].name
+          value: example-registry
+      - equal:
+          path: spec.resources.limits.memory
+          value: 128Mi
+
+  - it: omits an empty image puller resources block
+    template: templates/imagepuller.yaml
+    set:
+      imagePuller:
+        enabled: true
+        imagePullPolicy: Always
+    asserts:
+      - equal:
+          path: spec.imagePullPolicy
+          value: Always
+      - isNull:
+          path: spec.resources
+      - isNull:
+          path: spec.images
+
+  - it: renders no http route by default
+    template: templates/httproute.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: routes the public hostname to the operator-created session proxy service
+    template: templates/httproute.yaml
+    set:
+      httpRoute:
+        enabled: true
+        parentRefs:
+          - name: traefik-gateway
+            namespace: kube-system
+    asserts:
+      - isKind:
+          of: HTTPRoute
+      - isAPIVersion:
+          of: gateway.networking.k8s.io/v1
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-kasm-agent-instance-session-proxy
+      - contains:
+          path: spec.parentRefs
+          content:
+            name: traefik-gateway
+            namespace: kube-system
+      - equal:
+          path: spec.hostnames
+          value:
+            - agent.example.com
+      - equal:
+          path: spec.rules[0].backendRefs[0].name
+          value: k8s-agent-session-proxy
+      - equal:
+          path: spec.rules[0].backendRefs[0].port
+          value: 4445
+
+  - it: tracks the agent name in the backend reference
+    template: templates/httproute.yaml
+    set:
+      name: zonea-agent
+      httpRoute:
+        enabled: true
+        parentRefs:
+          - name: traefik-gateway
+    asserts:
+      - equal:
+          path: spec.rules[0].backendRefs[0].name
+          value: zonea-agent-session-proxy
+      - isNull:
+          path: spec.parentRefs[0].namespace
+
+  - it: honours explicit hostnames and backend port
+    template: templates/httproute.yaml
+    set:
+      httpRoute:
+        enabled: true
+        backendPort: 4444
+        hostnames:
+          - proxy.example.com
+          - alt.example.com
+        parentRefs:
+          - name: traefik-gateway
+    asserts:
+      - equal:
+          path: spec.hostnames
+          value:
+            - proxy.example.com
+            - alt.example.com
+      - equal:
+          path: spec.rules[0].backendRefs[0].port
+          value: 4444
+
+  - it: fails the http route when publicHostname is empty and no hostnames are given
+    template: templates/httproute.yaml
+    set:
+      publicHostname: ""
+      httpRoute:
+        enabled: true
+        parentRefs:
+          - name: traefik-gateway
+    asserts:
+      - failedTemplate:
+          errorMessage: "agent.publicHostname is required: set it to the externally reachable address browsers use to connect to this agent's session proxy."
+
+  - it: renders no ingress by default
+    template: templates/ingress.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: serves the public hostname from the operator-created session proxy service
+    template: templates/ingress.yaml
+    set:
+      ingress:
+        enabled: true
+        className: nginx
+        annotations:
+          nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+          nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+        tls:
+          - secretName: kasm-agent-public-tls
+            hosts:
+              - agent.example.com
+    asserts:
+      - isKind:
+          of: Ingress
+      - isAPIVersion:
+          of: networking.k8s.io/v1
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-kasm-agent-instance-session-proxy
+      - equal:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/proxy-read-timeout"]
+          value: "3600"
+      - equal:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/proxy-send-timeout"]
+          value: "3600"
+      - equal:
+          path: spec.ingressClassName
+          value: nginx
+      - equal:
+          path: spec.tls
+          value:
+            - secretName: kasm-agent-public-tls
+              hosts:
+                - agent.example.com
+      - lengthEqual:
+          path: spec.rules
+          count: 1
+      - equal:
+          path: spec.rules[0].host
+          value: agent.example.com
+      - equal:
+          path: spec.rules[0].http.paths[0].path
+          value: /
+      - equal:
+          path: spec.rules[0].http.paths[0].pathType
+          value: Prefix
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.name
+          value: k8s-agent-session-proxy
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.port.number
+          value: 4445
+
+  - it: omits the ingress class and tls when they are unset
+    template: templates/ingress.yaml
+    set:
+      ingress:
+        enabled: true
+    asserts:
+      - isNull:
+          path: spec.ingressClassName
+      - isNull:
+          path: spec.tls
+      - isNull:
+          path: metadata.annotations
+
+  - it: honours explicit ingress hosts and backend port
+    template: templates/ingress.yaml
+    set:
+      ingress:
+        enabled: true
+        backendPort: 4444
+        hosts:
+          - proxy.example.com
+          - alt.example.com
+    asserts:
+      - lengthEqual:
+          path: spec.rules
+          count: 2
+      - equal:
+          path: spec.rules[0].host
+          value: proxy.example.com
+      - equal:
+          path: spec.rules[1].host
+          value: alt.example.com
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.port.number
+          value: 4444
+      - equal:
+          path: spec.rules[1].http.paths[0].backend.service.port.number
+          value: 4444
+
+  - it: tracks the agent name in the ingress backend service
+    template: templates/ingress.yaml
+    set:
+      name: zonea-agent
+      ingress:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.name
+          value: zonea-agent-session-proxy
+
+  - it: merges common annotations under the ingress annotations
+    template: templates/ingress.yaml
+    set:
+      commonAnnotations:
+        example.com/owner: platform
+      ingress:
+        enabled: true
+        annotations:
+          nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    asserts:
+      - equal:
+          path: metadata.annotations["example.com/owner"]
+          value: platform
+      - equal:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/proxy-read-timeout"]
+          value: "3600"
+
+  - it: fails the ingress when publicHostname is empty and no hosts are given
+    template: templates/ingress.yaml
+    set:
+      publicHostname: ""
+      ingress:
+        enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "agent.publicHostname is required: set it to the externally reachable address browsers use to connect to this agent's session proxy."
+
+  - it: renders no openshift route by default
+    template: templates/route.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: passes tls through to the session proxy's own https listener by default
+    template: templates/route.yaml
+    set:
+      route:
+        enabled: true
+    asserts:
+      - isKind:
+          of: Route
+      - isAPIVersion:
+          of: route.openshift.io/v1
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-kasm-agent-instance-session-proxy
+      - equal:
+          path: spec.host
+          value: agent.example.com
+      - equal:
+          path: spec.to.kind
+          value: Service
+      - equal:
+          path: spec.to.name
+          value: k8s-agent-session-proxy
+      - equal:
+          path: spec.to.weight
+          value: 100
+      - equal:
+          path: spec.port.targetPort
+          value: 4444
+      - equal:
+          path: spec.tls.termination
+          value: passthrough
+      - isNull:
+          path: spec.tls.insecureEdgeTerminationPolicy
+      - isNull:
+          path: spec.tls.key
+      - isNull:
+          path: spec.tls.certificate
+      - isNull:
+          path: spec.tls.caCertificate
+      - isNull:
+          path: spec.tls.destinationCACertificate
+
+  - it: routes edge termination to the proxy's plain-http listener
+    template: templates/route.yaml
+    set:
+      route:
+        enabled: true
+        tls:
+          termination: edge
+          insecureEdgeTerminationPolicy: Redirect
+    asserts:
+      - equal:
+          path: spec.port.targetPort
+          value: 4445
+      - equal:
+          path: spec.tls.termination
+          value: edge
+      - equal:
+          path: spec.tls.insecureEdgeTerminationPolicy
+          value: Redirect
+
+  - it: keeps the https listener for reencrypt and carries the destination ca
+    template: templates/route.yaml
+    set:
+      route:
+        enabled: true
+        tls:
+          termination: reencrypt
+          destinationCACertificate: |
+            -----BEGIN CERTIFICATE-----
+            reencrypt
+            -----END CERTIFICATE-----
+    asserts:
+      - equal:
+          path: spec.port.targetPort
+          value: 4444
+      - equal:
+          path: spec.tls.termination
+          value: reencrypt
+      - matchRegex:
+          path: spec.tls.destinationCACertificate
+          pattern: "BEGIN CERTIFICATE"
+
+  - it: honours an explicit route backend port over the termination default
+    template: templates/route.yaml
+    set:
+      route:
+        enabled: true
+        backendPort: 4445
+    asserts:
+      - equal:
+          path: spec.port.targetPort
+          value: 4445
+      - equal:
+          path: spec.tls.termination
+          value: passthrough
+
+  - it: honours an explicit route host
+    template: templates/route.yaml
+    set:
+      route:
+        enabled: true
+        host: proxy.example.com
+    asserts:
+      - equal:
+          path: spec.host
+          value: proxy.example.com
+
+  - it: tracks the agent name in the route backend service
+    template: templates/route.yaml
+    set:
+      name: zonea-agent
+      route:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.to.name
+          value: zonea-agent-session-proxy
+
+  - it: merges common annotations under the route annotations and keeps them strings
+    template: templates/route.yaml
+    set:
+      commonAnnotations:
+        example.com/owner: platform
+      route:
+        enabled: true
+        annotations:
+          haproxy.router.openshift.io/timeout: 3600
+    asserts:
+      - equal:
+          path: metadata.annotations["example.com/owner"]
+          value: platform
+      - equal:
+          path: metadata.annotations["haproxy.router.openshift.io/timeout"]
+          value: "3600"
+
+  - it: renders the router edge certificate material when supplied
+    template: templates/route.yaml
+    set:
+      route:
+        enabled: true
+        tls:
+          termination: edge
+          key: |
+            -----BEGIN PRIVATE KEY-----
+            placeholder
+            -----END PRIVATE KEY-----
+          certificate: |
+            -----BEGIN CERTIFICATE-----
+            placeholder
+            -----END CERTIFICATE-----
+          caCertificate: |
+            -----BEGIN CERTIFICATE-----
+            placeholder-ca
+            -----END CERTIFICATE-----
+    asserts:
+      - matchRegex:
+          path: spec.tls.key
+          pattern: "BEGIN PRIVATE KEY"
+      - matchRegex:
+          path: spec.tls.certificate
+          pattern: "BEGIN CERTIFICATE"
+      - matchRegex:
+          path: spec.tls.caCertificate
+          pattern: "placeholder-ca"
+
+  - it: fails the route when publicHostname is empty and no host is given
+    template: templates/route.yaml
+    set:
+      publicHostname: ""
+      route:
+        enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "agent.publicHostname is required: set it to the externally reachable address browsers use to connect to this agent's session proxy."
+
+  - it: renders no tls route by default
+    template: templates/tlsroute.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: passes the public hostname through to the session proxy's own https listener
+    template: templates/tlsroute.yaml
+    set:
+      tlsRoute:
+        enabled: true
+        parentRefs:
+          - name: traefik-gateway
+            namespace: kube-system
+    asserts:
+      - isKind:
+          of: TLSRoute
+      - isAPIVersion:
+          of: gateway.networking.k8s.io/v1alpha2
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-kasm-agent-instance-session-proxy
+      - contains:
+          path: spec.parentRefs
+          content:
+            name: traefik-gateway
+            namespace: kube-system
+      - equal:
+          path: spec.hostnames
+          value:
+            - agent.example.com
+      - equal:
+          path: spec.rules[0].backendRefs[0].name
+          value: k8s-agent-session-proxy
+      - equal:
+          path: spec.rules[0].backendRefs[0].port
+          value: 4444
+
+  - it: tracks the agent name in the tls route backend reference
+    template: templates/tlsroute.yaml
+    set:
+      name: zonea-agent
+      tlsRoute:
+        enabled: true
+        parentRefs:
+          - name: traefik-gateway
+    asserts:
+      - equal:
+          path: spec.rules[0].backendRefs[0].name
+          value: zonea-agent-session-proxy
+      - isNull:
+          path: spec.parentRefs[0].namespace
+
+  - it: honours explicit tls route hostnames and backend port
+    template: templates/tlsroute.yaml
+    set:
+      tlsRoute:
+        enabled: true
+        backendPort: 4445
+        hostnames:
+          - proxy.example.com
+          - alt.example.com
+        parentRefs:
+          - name: traefik-gateway
+    asserts:
+      - equal:
+          path: spec.hostnames
+          value:
+            - proxy.example.com
+            - alt.example.com
+      - equal:
+          path: spec.rules[0].backendRefs[0].port
+          value: 4445
+
+  - it: fails the tls route when publicHostname is empty and no hostnames are given
+    template: templates/tlsroute.yaml
+    set:
+      publicHostname: ""
+      tlsRoute:
+        enabled: true
+        parentRefs:
+          - name: traefik-gateway
+    asserts:
+      - failedTemplate:
+          errorMessage: "agent.publicHostname is required: set it to the externally reachable address browsers use to connect to this agent's session proxy."

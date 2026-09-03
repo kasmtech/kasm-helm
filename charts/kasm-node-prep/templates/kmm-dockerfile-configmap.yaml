@@ -1,0 +1,75 @@
+{{- include "kasmNodePrep.validateEnabled" . }}
+{{- include "kasmNodePrep.validateMethods" . }}
+{{/*
+  The Dockerfile KMM builds the v4l2loopback kmod image from, in the ConfigMap shape
+  spec.moduleLoader.container.kernelMappings[].build.dockerfileConfigMap expects: a single key
+  named "dockerfile".
+
+  Rendered only when the module is delegated to KMM *and* in-cluster builds are on. With
+  modules.v4l2loopback.kmm.build.enabled=false there is nothing to build here -- the images are
+  built in connected CI and only pulled -- and no ConfigMap is created.
+*/}}
+{{- define "kasmNodePrep.kmmDockerfile" -}}
+{{- $v4l2 := .Values.modules.v4l2loopback -}}
+{{- $builder := include "kasmNodePrep.image" . -}}
+# Managed by the kasm-node-prep Helm chart. Edits made in the cluster are overwritten on upgrade.
+#
+# Two stages: compile v4l2loopback against the headers of the *target* kernel, then ship only the
+# resulting .ko in the layout a KMM worker pod expects -- <dirName>/lib/modules/<kernel>/, with
+# dirName defaulting to /opt -- plus a depmod index rooted at that prefix.
+#
+# KERNEL_FULL_VERSION is supplied by KMM, once per kernel release it finds on a selected node.
+ARG KERNEL_FULL_VERSION
+
+FROM {{ $builder }} AS builder
+
+ARG KERNEL_FULL_VERSION
+
+# libelf1: kbuild's objtool is dynamically linked against libelf.so.1, and without it every module
+# compile fails with "Error 127" even though gcc and the headers are fine. ca-certificates: the
+# module source is cloned over HTTPS.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      build-essential \
+      git \
+      ca-certificates \
+      libelf1 \
+      "linux-headers-${KERNEL_FULL_VERSION}" \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /usr/src
+{{- if $v4l2.sourceRef }}
+RUN git clone --depth 1 --branch {{ $v4l2.sourceRef | quote }} {{ $v4l2.sourceRepo | quote }} v4l2loopback
+{{- else }}
+RUN git clone --depth 1 {{ $v4l2.sourceRepo | quote }} v4l2loopback
+{{- end }}
+
+# KERNELRELEASE rather than the default `uname -r`: this build runs in a pod on some cluster node
+# whose own kernel has nothing to do with the kernel this image is being built for.
+RUN make -C /usr/src/v4l2loopback KERNELRELEASE="${KERNEL_FULL_VERSION}"
+
+FROM {{ $builder }}
+
+ARG KERNEL_FULL_VERSION
+
+# kmod, for the depmod below. Nothing else from the build stage is carried over.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends kmod \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /opt/lib/modules/${KERNEL_FULL_VERSION}/extra
+COPY --from=builder /usr/src/v4l2loopback/v4l2loopback.ko /opt/lib/modules/${KERNEL_FULL_VERSION}/extra/
+RUN depmod -b /opt "${KERNEL_FULL_VERSION}"
+{{- end -}}
+{{- if and (include "kasmNodePrep.v4l2loopbackKmm" .) .Values.modules.v4l2loopback.kmm.build.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "kasmNodePrep.kmmDockerfileConfigMapName" . }}
+  labels:
+    {{- include "kasmNodePrep.labels" . | nindent 4 }}
+data:
+  dockerfile: |
+    {{- include "kasmNodePrep.kmmDockerfile" . | nindent 4 }}
+{{- end }}

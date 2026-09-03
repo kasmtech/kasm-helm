@@ -1,0 +1,36 @@
+{{/*
+  cert-manager Certificate for the session proxy's HTTPS listener.
+
+  Issued into sessionProxy.certSecretName, which is the same Secret the Agent
+  resource points the proxy at - so enabling this is all that is needed for the
+  proxy to come up with a real certificate.
+*/}}
+{{- if .Values.sessionProxy.certificate.enabled }}
+{{- if not .Values.sessionProxy.certificate.issuerRef.name }}
+{{- fail "agent.sessionProxy.certificate.issuerRef.name is required when agent.sessionProxy.certificate.enabled is true: name the cert-manager Issuer or ClusterIssuer that should sign the session proxy's certificate." }}
+{{- end }}
+{{- $publicHostname := include "kasmAgentInstance.publicHostname" . }}
+{{- $dnsNames := .Values.sessionProxy.certificate.dnsNames | default (list $publicHostname) }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "kasmAgentInstance.fullname" . }}-session-proxy
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kasmAgentInstance.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  secretName: {{ .Values.sessionProxy.certSecretName }}
+  commonName: {{ .Values.sessionProxy.certificate.commonName | default $publicHostname | quote }}
+  dnsNames:
+    {{- range $dnsNames }}
+    - {{ . | quote }}
+    {{- end }}
+  issuerRef:
+    name: {{ .Values.sessionProxy.certificate.issuerRef.name }}
+    kind: {{ .Values.sessionProxy.certificate.issuerRef.kind | default "ClusterIssuer" }}
+    group: {{ .Values.sessionProxy.certificate.issuerRef.group | default "cert-manager.io" }}
+{{- end }}

@@ -1,0 +1,170 @@
+{{/*
+  Translated from config/rbac/role.yaml and config/rbac/role_binding.yaml in the kasm-agent-operator
+  repo. The `manager-role` / `manager-rolebinding` names are kept verbatim rather than fullname-prefixed
+  so a cluster converting from the kustomize deployment to this chart keeps the same objects.
+
+  These are cluster-scoped, so only one release of this chart can own them per cluster.
+*/}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+  labels:
+    {{- include "kasmAgentOperator.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - persistentvolumeclaims
+  - persistentvolumes
+  - pods
+  - secrets
+  - serviceaccounts
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - agent.kasm.com
+  resources:
+  - agents
+  - kasmimagepullers
+  - kasmworkspaces
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - agent.kasm.com
+  resources:
+  - agents/finalizers
+  - kasmimagepullers/finalizers
+  - kasmworkspaces/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - agent.kasm.com
+  resources:
+  - agents/status
+  - kasmimagepullers/status
+  - kasmworkspaces/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - apps
+  resources:
+  - daemonsets
+  - deployments
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - gateway.networking.k8s.io
+  resources:
+  - tlsroutes
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - networkpolicies
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - pools.kasm.ai
+  resources:
+  - warmpoolinstances
+  - warmpools
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - pools.kasm.ai
+  resources:
+  - warmpoolinstances/finalizers
+  - warmpools/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - pools.kasm.ai
+  resources:
+  - warmpoolinstances/status
+  - warmpools/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - clusterrolebindings
+  - rolebindings
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+# The operator holds only `bind` on these two ClusterRoles, not the permissions they grant. It creates
+# the per-Agent bindings that reference them by name, so the names below must match the ClusterRoles in
+# kasm-agent-clusterrole.yaml and kasm-nginx-sidecar-clusterrole.yaml exactly.
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resourceNames:
+  - kasm-agent
+  - kasm-nginx-sidecar
+  resources:
+  - clusterroles
+  verbs:
+  - bind
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: manager-rolebinding
+  labels:
+    {{- include "kasmAgentOperator.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: manager-role
+subjects:
+- kind: ServiceAccount
+  name: {{ .Values.serviceAccount.name }}
+  namespace: {{ .Release.Namespace }}

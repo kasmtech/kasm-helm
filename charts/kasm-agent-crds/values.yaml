@@ -1,0 +1,11 @@
+# This chart deliberately has no values, and there is nothing to fill in below.
+#
+# Its one job is to install the five CustomResourceDefinitions the Kasm Agent operator owns, byte for
+# byte as the operator repository generates them. A CRD schema is not a deployment knob: every field
+# in it is part of the contract the operator's compiled types depend on, so a value that changed one
+# would produce a cluster the operator cannot reconcile. The templates are static manifests carrying
+# no Go template constructs at all, and `make crds-sync-check` fails the build if they drift from
+# `charts/kasm-agent-operator/crds/`.
+#
+# Everything that *is* configurable — the operator Deployment, its RBAC, its telemetry — lives in the
+# `kasm-agent-operator` chart's values, or under the `operator:` key of the `kasm-agent` umbrella.

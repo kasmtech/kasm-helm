@@ -1,0 +1,140 @@
+{{- include "kasmNodePrep.validateEnabled" . }}
+{{- include "kasmNodePrep.validateMethods" . }}
+{{/*
+  The DaemonSet renders only when it has work: a module this chart builds on the node, or host
+  tuning to re-assert. An install whose only module is delegated to the Kernel Module Management
+  operator (modules.v4l2loopback.method=kmm), with tuning off, renders no DaemonSet and no
+  reconcile script -- KMM runs its own worker pods, and templates/kmm-module.yaml is the payload.
+*/}}
+{{- if include "kasmNodePrep.daemonSetNeeded" . }}
+{{/*
+  Only modules built here pull in the module build machinery and its host mounts; a KMM-delegated
+  module needs none of it.
+*/}}
+{{- $anyModule := include "kasmNodePrep.anyBuildModuleEnabled" . }}
+{{- $swap := .Values.tuning.swap }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "kasmNodePrep.fullname" . }}
+  labels:
+    {{- include "kasmNodePrep.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "kasmNodePrep.selectorLabels" . | nindent 6 }}
+  updateStrategy:
+    type: {{ .Values.updateStrategy }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "kasmNodePrep.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: node-prep
+          image: {{ include "kasmNodePrep.image" . }}
+          command:
+            - /bin/bash
+            - /scripts/ensure-modules.sh
+          # Loading a kernel module, writing the node's /proc/sys and calling swapon all require full
+          # privileges on the node; this container cannot be hardened further without losing the
+          # ability to do its job.
+          securityContext:
+            privileged: true
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+            {{- if $anyModule }}
+            # Writable so `modules_install`/`depmod` can place the built module in the node's module tree.
+            - name: lib-modules
+              mountPath: /lib/modules
+            # Writable so the kernel headers package installed in the container lands on the node and is
+            # reused by later passes and by the sign-file helper.
+            - name: usr-src
+              mountPath: /usr/src
+            # Needed to observe the /dev/video* devices v4l2loopback creates.
+            - name: dev
+              mountPath: /dev
+            {{- end }}
+            {{- if $swap.enabled }}
+            # The directory the swapfile is created in. Mounted at the same path as on the host so the
+            # name `swapon --show` reports is identical inside and outside the container.
+            - name: swap
+              mountPath: {{ $swap.hostPath }}
+            # Read-only, and read only to confirm the node's kubelet tolerates swap before any is
+            # activated — a kubelet left at the default `failSwapOn: true` refuses to start once the
+            # node has swap on.
+            - name: k3s-config
+              mountPath: /host/etc/rancher/k3s
+              readOnly: true
+            - name: kubelet-config
+              mountPath: /host/var/lib/kubelet
+              readOnly: true
+            {{- end }}
+            {{- if .Values.secureBoot.existingMokSecret }}
+            - name: mok
+              mountPath: /etc/kasm-mok
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: scripts
+          configMap:
+            name: {{ include "kasmNodePrep.fullname" . }}
+            defaultMode: 0755
+        {{- if $anyModule }}
+        - name: lib-modules
+          hostPath:
+            path: /lib/modules
+            type: Directory
+        - name: usr-src
+          hostPath:
+            path: /usr/src
+            type: DirectoryOrCreate
+        - name: dev
+          hostPath:
+            path: /dev
+            type: Directory
+        {{- end }}
+        {{- if $swap.enabled }}
+        - name: swap
+          hostPath:
+            path: {{ $swap.hostPath }}
+            type: DirectoryOrCreate
+        # DirectoryOrCreate rather than Directory: only one of these two paths exists on any given
+        # node (k3s/RKE2 vs. kubeadm and friends), and a missing one must not wedge the pod in
+        # ContainerCreating. Both are mounted read-only.
+        - name: k3s-config
+          hostPath:
+            path: /etc/rancher/k3s
+            type: DirectoryOrCreate
+        - name: kubelet-config
+          hostPath:
+            path: /var/lib/kubelet
+            type: DirectoryOrCreate
+        {{- end }}
+        {{- if .Values.secureBoot.existingMokSecret }}
+        - name: mok
+          secret:
+            secretName: {{ .Values.secureBoot.existingMokSecret }}
+            defaultMode: 0400
+        {{- end }}
+{{- end }}

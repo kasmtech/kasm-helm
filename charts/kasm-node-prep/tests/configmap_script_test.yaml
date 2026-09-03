@@ -1,0 +1,606 @@
+suite: reconcile script rendering
+
+templates:
+  - templates/configmap.yaml
+
+tests:
+  - it: renders the reconcile script with the default v4l2loopback module options
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-kasm-node-prep
+      - exists:
+          path: data["ensure-modules.sh"]
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'V4L2_DEVICES="4"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'V4L2_EXCLUSIVE_CAPS="1"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'modprobe v4l2loopback "devices=\$\{V4L2_DEVICES\}" "exclusive_caps=\$\{V4L2_EXCLUSIVE_CAPS\}"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'V4L2_SOURCE_REPO="https://github.com/umlaeute/v4l2loopback.git"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'V4L2_SOURCE_REF="v0\.13\.2"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'RECONCILE_INTERVAL="300"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'set -euo pipefail'
+
+  - it: reflects custom v4l2loopback module arguments in the script
+    set:
+      modules:
+        v4l2loopback:
+          videoDevices: 12
+          exclusiveCaps: false
+          sourceRef: v0.13.1
+          sourceRepo: https://git.contoso.com/mirrors/v4l2loopback.git
+      reconcileIntervalSeconds: 60
+    asserts:
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'V4L2_DEVICES="12"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'V4L2_EXCLUSIVE_CAPS="0"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'V4L2_SOURCE_REF="v0\.13\.1"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'V4L2_SOURCE_REPO="https://git\.contoso\.com/mirrors/v4l2loopback\.git"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'RECONCILE_INTERVAL="60"'
+
+  - it: omits the wireguard section entirely when wireguard is disabled by default
+    asserts:
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'ensure_wireguard'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'WIREGUARD_SOURCE_REPO'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'wireguard-linux-compat'
+
+  - it: renders the wireguard section with the built-in kernel short circuit when enabled
+    set:
+      modules:
+        wireguard:
+          enabled: true
+    asserts:
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'WIREGUARD_SOURCE_REPO="https://git\.zx2c4\.com/wireguard-linux-compat"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'grep -q wg_ /proc/kallsyms'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'ensure_wireguard \|\| pass_status=1'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'modprobe wireguard'
+
+  - it: renders only the wireguard section when v4l2loopback is disabled
+    set:
+      modules:
+        v4l2loopback:
+          enabled: false
+        wireguard:
+          enabled: true
+    asserts:
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'ensure_v4l2loopback'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'V4L2_DEVICES'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'ensure_wireguard'
+
+  - it: always includes the Secure Boot signing helper and the reboot self-healing loop
+    asserts:
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'MOK_DIR="/etc/kasm-mok"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'scripts/sign-file'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'sha256 "\$\{MOK_DIR\}/mokPrivateKey" "\$\{MOK_DIR\}/mokPublicKey"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'while true; do'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'sleep "\$RECONCILE_INTERVAL"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'linux-headers-\$\{KERNEL_RELEASE\}'
+
+  # --- Airgapped / offline support -------------------------------------------------------------
+
+  - it: leaves the airgap source paths empty by default and keeps the git clone and apt fallback
+    asserts:
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'V4L2_SOURCE_PATH=""'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'git clone --quiet --depth 1 --branch "\$ref" "\$repo" "\$dest"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'apt-get install -y --no-install-recommends build-essential git kmod ca-certificates'
+
+  - it: checks for pre-baked build prerequisites before doing any package installation
+    asserts:
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'build_deps_present\(\) \{'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'for tool in gcc make insmod; do'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'command -v git >/dev/null 2>&1'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'command -v openssl >/dev/null 2>&1'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: '\[ -d "\$KERNEL_BUILD" \]'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'if build_deps_present; then'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'build prerequisites already present; skipping package installation'
+      # The presence check and the "no apt-get here" guard both come before any apt-get call, so a
+      # pre-baked builder image from a non-Debian distro is never hard-failed on missing apt.
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: '(?s)if build_deps_present; then.*command -v apt-get >/dev/null 2>&1.*apt-get update -qq'
+
+  - it: builds from the baked-in source trees and drops the clone path when both sourcePaths are set
+    set:
+      modules:
+        v4l2loopback:
+          sourcePath: /opt/kasm-modules/v4l2loopback
+        wireguard:
+          enabled: true
+          sourcePath: /opt/kasm-modules/wireguard-linux-compat
+    asserts:
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'V4L2_SOURCE_PATH="/opt/kasm-modules/v4l2loopback"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'WIREGUARD_SOURCE_PATH="/opt/kasm-modules/wireguard-linux-compat"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'stage_source "\$V4L2_SOURCE_REPO" "\$V4L2_SOURCE_REF" "\$src" "\$V4L2_SOURCE_PATH"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'stage_source "\$WIREGUARD_SOURCE_REPO" "" "\$src" "\$WIREGUARD_SOURCE_PATH"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'cp -a "\$source_path" "\$dest"'
+      # Nothing in this rendering reaches the network: no clone, and git is not even a prerequisite.
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'git clone'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'command -v git'
+
+  - it: keeps the clone path when only one enabled module has a sourcePath
+    set:
+      modules:
+        v4l2loopback:
+          sourcePath: /opt/kasm-modules/v4l2loopback
+        wireguard:
+          enabled: true
+    asserts:
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'V4L2_SOURCE_PATH="/opt/kasm-modules/v4l2loopback"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'WIREGUARD_SOURCE_PATH=""'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'git clone --quiet --depth 1 "\$repo" "\$dest"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'command -v git >/dev/null 2>&1'
+
+  # --- Node tuning ------------------------------------------------------------------------------
+
+  - it: renders no tuning at all by default
+    asserts:
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'ensure_sysctls'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'apply_sysctl'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'ensure_swap'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'SWAP_FILE'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'swapon'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'kubelet_allows_swap'
+
+  - it: renders one apply_sysctl call per entry in the values map, and wires it into the loop
+    set:
+      tuning:
+        sysctls:
+          enabled: true
+    asserts:
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'apply_sysctl "fs\.inotify\.max_user_instances" "1024"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'apply_sysctl "fs\.inotify\.max_user_watches" "524288"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'sysctl -w "\$\{key\}=\$\{value\}"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'ensure_sysctls \|\| pass_status=1'
+      # sysctl tuning alone pulls in none of the swap machinery.
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'ensure_swap'
+
+  # Extra entries merge into the defaults, the way Helm merges any map. 4194304 is the regression
+  # case: a YAML number arrives as a float64, and unguarded formatting would emit "4.194304e+06",
+  # which sysctl(8) rejects.
+  - it: renders extra sysctl entries alongside the defaults, without scientific notation
+    set:
+      tuning:
+        sysctls:
+          enabled: true
+          values:
+            kernel.pid_max: 4194304
+            net.core.somaxconn: 4096
+    asserts:
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'apply_sysctl "kernel\.pid_max" "4194304"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'apply_sysctl "net\.core\.somaxconn" "4096"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'apply_sysctl "fs\.inotify\.max_user_instances" "1024"'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'e\+0'
+
+  # Some tunables take a space separated tuple, which has to survive as a string.
+  - it: passes a string sysctl value through untouched
+    set:
+      tuning:
+        sysctls:
+          enabled: true
+          values:
+            net.ipv4.tcp_rmem: "4096 87380 6291456"
+    asserts:
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'apply_sysctl "net\.ipv4\.tcp_rmem" "4096 87380 6291456"'
+
+  - it: renders the swap block, the kubelet safety check and the auto-size clamp when swap is enabled
+    set:
+      tuning:
+        swap:
+          enabled: true
+    asserts:
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'SWAP_DIR="/var/lib/kasm-node-prep"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'SWAP_FILE="/var/lib/kasm-node-prep/kasm\.swap"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'SWAP_SIZE_MIB="0"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'SWAP_SWAPPINESS="80"'
+      # The safety check reads the kubelet configuration from the two read-only host mounts.
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'K3S_CONFIG_DIR="/host/etc/rancher/k3s"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'KUBELET_CONFIG="/host/var/lib/kubelet/config\.yaml"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'kubelet_allows_swap\(\) \{'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: "grep -q 'fail-swap-on=false' \"\\$config\""
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: "grep -qE '\\^\\[\\[:space:\\]\\]\\*failSwapOn:\\[\\[:space:\\]\\]\\*false'"
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'if ! kubelet_allows_swap; then'
+      # Auto sizing: half of MemTotal (kB / 2048 == MiB / 2), clamped to Kasm's installer range.
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'size=\$\(\( mem_total_kib / 2048 \)\)'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'if \[ "\$size" -lt 4096 \]; then'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'elif \[ "\$size" -gt 16384 \]; then'
+      # Creation: fallocate with a dd fallback, 0600, mkswap, swapon.
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'fallocate -l "\$\{size\}MiB" "\$SWAP_FILE"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'dd if=/dev/zero of="\$SWAP_FILE" bs=1M count="\$size"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'chmod 600 "\$SWAP_FILE"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'mkswap "\$SWAP_FILE"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'swapon "\$SWAP_FILE"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'apply_sysctl vm\.swappiness "\$SWAP_SWAPPINESS"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'ensure_swap \|\| pass_status=1'
+      # /etc/fstab is never written: the reconcile loop is what re-activates swap after a reboot.
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: '/etc/fstab is deliberately never touched'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: '>>\s*/etc/fstab'
+      # Swap alone does not drag in the sysctl reconciler, only the apply_sysctl helper it uses.
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'ensure_sysctls'
+
+  - it: honours a custom swapfile size, path and swappiness
+    set:
+      tuning:
+        swap:
+          enabled: true
+          sizeMib: 8192
+          hostPath: /mnt/kasm
+          swappiness: 60
+    asserts:
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'SWAP_DIR="/mnt/kasm"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'SWAP_FILE="/mnt/kasm/kasm\.swap"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'SWAP_SIZE_MIB="8192"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'SWAP_SWAPPINESS="60"'
+
+  - it: drops the kubelet safety check entirely when tuning.swap.force is set
+    set:
+      tuning:
+        swap:
+          enabled: true
+          force: true
+    asserts:
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'kubelet_allows_swap'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'K3S_CONFIG_DIR'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'KUBELET_CONFIG'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'tuning\.swap\.force is set; activating swap without confirming'
+      # The rest of the swap path is unchanged.
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'swapon "\$SWAP_FILE"'
+
+  - it: strips the whole module build machinery from a tuning-only script
+    set:
+      modules:
+        v4l2loopback:
+          enabled: false
+        wireguard:
+          enabled: false
+      tuning:
+        sysctls:
+          enabled: true
+        swap:
+          enabled: true
+    asserts:
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'ensure_build_deps'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'build_deps_present'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'stage_source'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'sign_module'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'MOK_DIR'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'apt-get'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'KERNEL_BUILD'
+      # ...while the reconcile loop and both tuning reconcilers are still there.
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'ensure_sysctls \|\| pass_status=1'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'ensure_swap \|\| pass_status=1'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'while true; do'
+
+  # --- KMM mode ---------------------------------------------------------------------------------
+  #
+  # modules.v4l2loopback.method=kmm hands the module to the Kernel Module Management operator, which
+  # builds it into an image and runs its own worker pods. Every trace of it therefore has to leave
+  # this script, or the two would race to insmod the same module.
+
+  - it: renders no v4l2loopback section at all when the module is delegated to KMM
+    set:
+      modules:
+        v4l2loopback:
+          method: kmm
+          kmm:
+            image:
+              registry: registry.contoso.com
+              repository: kasm/v4l2loopback
+      tuning:
+        sysctls:
+          enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'ensure_v4l2loopback'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'V4L2_DEVICES'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'V4L2_SOURCE_REPO'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'video_devices_present'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'videodev'
+      # ...and with it the whole build machinery, since no module is built here any more.
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'ensure_build_deps'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'stage_source'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'sign_module'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'apt-get'
+      # The tuning the DaemonSet is still there for renders unchanged.
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'ensure_sysctls \|\| pass_status=1'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'apply_sysctl "fs\.inotify\.max_user_instances" "1024"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'while true; do'
+
+  - it: keeps the wireguard build while v4l2loopback is delegated to KMM
+    set:
+      modules:
+        v4l2loopback:
+          method: kmm
+          kmm:
+            image:
+              registry: registry.contoso.com
+              repository: kasm/v4l2loopback
+        wireguard:
+          enabled: true
+    asserts:
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'ensure_v4l2loopback'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'ensure_wireguard \|\| pass_status=1'
+      # The build machinery survives, because wireguard still needs it -- git included, since
+      # wireguard has no sourcePath.
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'ensure_build_deps'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'command -v git >/dev/null 2>&1'
+
+  # No module built here and no tuning: nothing for the reconcile loop to do, so there is no script
+  # and no ConfigMap to hold it. The Module CR is the whole install.
+  - it: renders no configmap at all for a kmm-only install with tuning off
+    set:
+      modules:
+        v4l2loopback:
+          method: kmm
+          kmm:
+            image:
+              registry: registry.contoso.com
+              repository: kasm/v4l2loopback
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: carries the standard chart labels
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: kasm-node-prep
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: node-prep
+      - equal:
+          path: metadata.labels["app.kubernetes.io/part-of"]
+          value: kasm-ai
+      - equal:
+          path: metadata.labels["app.kubernetes.io/managed-by"]
+          value: Helm
+      - equal:
+          path: metadata.labels["helm.sh/chart"]
+          value: kasm-node-prep-0.1.0

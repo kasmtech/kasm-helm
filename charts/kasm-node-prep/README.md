@@ -1,0 +1,1247 @@
+# Kasm Node Prep
+
+![Version: 0.1.0](https://img.shields.io/badge/Version-0.1.0-informational?style=flat-square) ![AppVersion: develop](https://img.shields.io/badge/AppVersion-develop-informational?style=flat-square)
+
+Privileged DaemonSet that builds and loads the kernel modules Kasm Workspaces sessions depend on (v4l2loopback for webcam passthrough, WireGuard for VPN sidecars on kernels older than 5.6) on every matching node, re-applying them after node reboots.
+
+**Homepage:** <https://kasm.com>
+
+## Maintainers
+
+| Name | Email | Url |
+| ---- | ------ | --- |
+| Kasm Technologies, Inc. |  | <https://github.com/kasmtech/kasm-helm> |
+
+## What this chart does
+
+Kasm Workspaces features that need a kernel module on the node cannot get one from Kubernetes alone. This
+chart fills that gap with a privileged DaemonSet that runs a reconcile loop on every matching node:
+
+* **v4l2loopback** creates the virtual `/dev/video*` devices behind Kasm webcam support. The browser captures
+  the user's webcam, streams it to `kasm_webcam_server` inside the workspace, and that binary writes frames
+  into a loopback device. Pair this chart with `kasm-video-device-plugin`, which advertises those devices to
+  kubelet as the extended resource `kasm.com/video` so workspace pods can request `kasm.com/video: 1`.
+* **WireGuard** backs workspace VPN sidecars on nodes running a kernel older than 5.6. Kernels 5.6 and newer
+  ship WireGuard in-tree, so the reconcile script detects the built-in module (`wg_` symbols in
+  `/proc/kallsyms`) and skips the build even when the module is enabled. Most managed Kubernetes node images
+  need nothing here.
+
+`modules.v4l2loopback` can also be delegated instead of built here: `modules.v4l2loopback.method: kmm` hands
+the module to the [Kernel Module Management](https://kmm.sigs.k8s.io/) operator, which builds it into a
+container image and loads it with its own worker pods, and removes it from the DaemonSet's script entirely.
+See [KMM mode](#kmm-mode). Everything below describes the default, `method: build`.
+
+Each pass checks whether the requested modules are loaded (`lsmod`), and builds and inserts the ones that are
+not. A pass where everything is already loaded does nothing but sleep for
+`reconcileIntervalSeconds`. Because the check is against the running kernel, **node reboots self-heal**: after
+a reboot the module is gone, the next pass rebuilds and reloads it, and no operator action is needed.
+
+A module that cannot be built (missing kernel headers, no repository access) is logged as a clear error and
+retried on the next pass. It never crash-loops the DaemonSet, so one unprepared node cannot take the rollout
+down.
+
+The same loop optionally applies **node tuning** — a disk swapfile and a set of kernel tunables — under
+`tuning.*`. Both are off by default and both are re-asserted every pass, which is what makes them survive a
+reboot without anything being written to `/etc/sysctl.d` or `/etc/fstab`. See
+[Node tuning](#node-tuning). A tuning-only install (every module disabled) is valid: the DaemonSet renders
+with none of the module build machinery and none of its host mounts.
+
+## Security posture
+
+Read this before installing. **This chart is privileged by necessity** — inserting a kernel module, writing
+the node's `/proc/sys` and calling `swapon` cannot be done from an unprivileged container.
+
+* The DaemonSet container runs with `securityContext.privileged: true`. It holds `CAP_SYS_MODULE` and full
+  access to the node kernel; anything it builds and inserts runs in ring 0 on that node.
+* Every host path is mounted **only when the feature that needs it is enabled**, so an install renders the
+  smallest set its values call for:
+  * Kernel modules (`modules.*.enabled`):
+    * `/lib/modules` **read-write** — so `modules_install` and `depmod` can place the built module in the
+      node's module tree.
+    * `/usr/src` **read-write** — so the kernel headers installed at runtime persist on the node and the
+      `sign-file` helper can be found there.
+    * `/dev` **read-write** — to observe the `/dev/video*` devices v4l2loopback creates.
+  * Swap (`tuning.swap.enabled`):
+    * `tuning.swap.hostPath` (default `/var/lib/kasm-node-prep`) **read-write** — the directory the
+      swapfile is created in, mounted at its own host path.
+    * `/etc/rancher/k3s` and `/var/lib/kubelet` **read-only** — read solely by the kubelet swap-support
+      check. Both use `DirectoryOrCreate`, so whichever one your distribution does not use is created
+      empty on the node rather than wedging the pod in `ContainerCreating`.
+  * `tuning.sysctls` needs no host mount at all: the privileged container already writes the node's
+    `/proc/sys`.
+* It does **not** use `hostNetwork`, `hostPID`, `hostIPC`, or a host service account, and it mounts no other
+  host path.
+* `modules.v4l2loopback.method: kmm` does not remove the privilege, it **moves** it: KMM's own worker pods
+  insert the module and are privileged in the same way. What changes is that this chart stops compiling
+  arbitrary source on the node, and — with `kmm.sign` — that only a signed module ever reaches one. Read
+  [KMM mode](#kmm-mode) before treating it as a hardening measure.
+* With `tuning.*` enabled the DaemonSet changes **node-wide** kernel state — sysctl values and an active
+  swapfile — that outlives the pod. Deleting the release stops the reconciliation but does not undo the
+  state; a node reboot does (nothing is persisted to `/etc/sysctl.d` or `/etc/fstab`).
+* The namespace it is installed into must allow privileged pods. With
+  [Pod Security Admission](https://kubernetes.io/docs/concepts/security/pod-security-admission/) that means
+  labelling the namespace `pod-security.kubernetes.io/enforce: privileged`. The pods cannot satisfy the
+  `baseline` or `restricted` standards and will be rejected outright by an enforcing namespace.
+* By default the reconcile script installs packages from the node OS repositories and clones module sources
+  over the network at runtime. Pin `modules.*.sourceRef` and point `modules.*.sourceRepo` at an internal
+  mirror if you need builds to be reproducible and supply-chain reviewed — or remove the runtime fetches
+  altogether with a pre-baked builder image (see [Airgapped / offline nodes](#airgapped--offline-nodes)),
+  which is the only configuration where what gets inserted into the node kernel is fixed at image build time.
+
+Treat installing this chart as granting node-root to whoever controls its values.
+
+## Node prerequisites
+
+* **Loadable kernel modules.** The node kernel must permit module insertion (`/sys/module` accessible, module
+  loading not locked down). Nodes with `kernel.modules_disabled=1` or a hardened, immutable OS image cannot be
+  prepared this way.
+* **A kernel flavor that ships the V4L2 core (for `v4l2loopback`).** The module links against the kernel's
+  `videodev` module. Minimal VM kernel flavors — Ubuntu's `-kvm` flavor, some cloud kernels — are built with
+  `CONFIG_MEDIA_SUPPORT` unset and can **never** load v4l2loopback. On Ubuntu use the `generic` flavor with
+  `linux-modules-extra-$(uname -r)` installed. The script detects this and reports it in the pod log instead
+  of retrying a build that cannot succeed.
+* **Kernel headers.** The container installs `linux-headers-$(uname -r)` at runtime. `uname -r` inside the
+  container reports the *node* kernel, because containers share the host kernel. If the exact headers package
+  for the node kernel is not published by the distro repositories (common on cloud-vendor kernels), pre-install
+  the headers in the node image or use a builder image whose distro ships them. Without them the module cannot
+  be compiled, and the pass is skipped with an error in the pod log.
+* **Package repository and source access.** Each node needs to reach its OS package repositories and the git
+  repositories in `modules.*.sourceRepo`, either directly or through a proxy or internal mirror — unless you
+  use a pre-baked builder image, which removes both fetches. See
+  [Airgapped / offline nodes](#airgapped--offline-nodes).
+* **A Debian/Ubuntu builder image**, *when packages have to be installed at runtime.* The default
+  `docker.io/library/ubuntu:22.04` builder uses `apt-get`. RHEL and Oracle Linux nodes need their headers
+  pre-installed, or a builder image and script adapted to `dnf`. A pre-baked builder image that already
+  carries everything is never asked for a package and so may be built on any OS family.
+* **Secure Boot: MOK enrollment.** On a node with UEFI Secure Boot enabled the kernel refuses unsigned
+  modules. Generate a Machine Owner Key pair, enroll the public key in each node's MOK database with `mokutil
+  --import` (a one-time manual step per node, or bake it into the node image), and store the pair in a Secret:
+
+  ```bash
+  kubectl create secret generic kasm-mok-keys \
+    --from-file=mokPrivateKey=MOK.priv \
+    --from-file=mokPublicKey=MOK.der
+  ```
+
+  Then set `secureBoot.existingMokSecret: kasm-mok-keys`. The Secret is mounted read-only at `/etc/kasm-mok`
+  and every built `.ko` is signed with the kernel's `sign-file` helper before insertion. Most managed
+  Kubernetes node images (EKS, GKE, AKS) leave Secure Boot off, so this is mainly a bare-metal and private
+  cloud concern.
+
+## KMM mode
+
+`modules.v4l2loopback.method: kmm` swaps *who builds and loads the module*. Instead of compiling it on every
+node inside this chart's privileged DaemonSet, the chart renders a `kmm.sigs.x-k8s.io/v1beta1` **`Module`**
+custom resource and lets the [Kernel Module Management](https://kmm.sigs.k8s.io/) operator do the rest: KMM
+watches which kernel releases are actually present on the selected nodes, builds (or pulls) one kmod image
+per kernel, and runs its own worker pods to `modprobe` the module.
+
+When the method is `kmm`, v4l2loopback disappears from the reconcile script. If it was the only reason the
+DaemonSet existed — no `wireguard`, no `tuning.*` — no DaemonSet and no script ConfigMap are rendered at all.
+The `Module` is the whole release. Node tuning and any module still on `method: build` keep their DaemonSet
+exactly as before, alongside the `Module`.
+
+### Which one to choose
+
+| | `build` (default) | `kmm` |
+| --- | --- | --- |
+| **Prerequisites** | Just this chart | The KMM operator, installed cluster-wide out of band |
+| **Where compilation happens** | On every node, every time the module is missing | Once per kernel release, in a build pod, into an image |
+| **Fleet with several kernels** | Each node builds its own | One `Module`; KMM resolves each kernel to its own image tag |
+| **Node needs a toolchain and headers** | Yes, at runtime (`apt-get`) unless pre-baked | No — nodes only pull an image |
+| **Container registry** | Not needed | **Required** |
+| **Secure Boot** | Sign on the node with a mounted MOK key (`secureBoot.existingMokSecret`) | Sign in-cluster before the image is pushed (`modules.v4l2loopback.kmm.sign`) |
+| **Where failures show up** | The node-prep pod log, with a diagnosis | The `Module` status and the KMM build pod logs |
+
+Choose `kmm` when the fleet is large enough that N nodes compiling the same module N times is waste, when
+Secure Boot means an unsigned `.ko` must never touch a node, or when the node image deliberately ships no
+compiler and no kernel headers. Choose `build` when you want the chart to be self-contained — no operator, no
+registry, no CRD — and when you value the reconcile script's diagnostics: it explains a missing V4L2 core, an
+unavailable headers package, or a kubelet that will not tolerate swap, in the pod log, on the node it happened
+on.
+
+### Prerequisite: the KMM operator
+
+KMM publishes no official Helm chart. Install it once per cluster from its pinned kustomize overlay:
+
+```console
+make kmm-install
+```
+
+which is `kubectl apply -k "https://github.com/kubernetes-sigs/kernel-module-management/config/default?ref=<KMM_VERSION>"`
+with `KMM_VERSION` pinned in the repository `Makefile` (currently `v2.7.0` — the tag the `Module` schema this
+chart renders was written against). `make kmm-uninstall` removes it again; note that it removes the
+*operator*, not the modules KMM already loaded — delete the `Module` custom resource first if you want those
+unloaded, because KMM unloads on delete.
+
+Without the operator the `Module` this chart creates is inert: the CRD does not exist, so the install fails
+outright, and if the CRD is present but the controller is not, nothing ever reconciles it.
+
+### The registry is not optional
+
+KMM loads the module from a container image, so `modules.v4l2loopback.kmm.image.registry` and
+`.repository` are both **required** — an empty one fails the render with an explanatory message. With
+in-cluster builds enabled the same registry is also the *push* target, so the credentials in
+`modules.v4l2loopback.kmm.imageRepoSecret` need write access to it:
+
+```console
+kubectl create secret docker-registry kasm-registry \
+  --docker-server=registry.example.internal \
+  --docker-username=... --docker-password=...
+```
+
+Leave `modules.v4l2loopback.kmm.image.tag` empty and the rendered `containerImage` ends in the literal
+`${KERNEL_FULL_VERSION}`, which **KMM** substitutes with each node's kernel release. That single line covers a
+fleet running several kernels. Set an explicit tag only when every matching node runs one kernel.
+
+```yaml
+modules:
+  v4l2loopback:
+    enabled: true
+    method: kmm
+    kmm:
+      image:
+        registry: registry.example.internal
+        repository: kasm/v4l2loopback
+      imageRepoSecret: kasm-registry
+```
+
+### In-cluster builds
+
+`modules.v4l2loopback.kmm.build.enabled: true` (the default) renders a ConfigMap holding a two-stage
+Dockerfile, and points the `Module`'s `build.dockerfileConfigMap` at it. KMM runs a kaniko build pod per
+kernel release from it. That build pod — not the node — needs:
+
+* the distribution's `linux-headers-${KERNEL_FULL_VERSION}` package, from the apt repositories of the base
+  image (`image.registry`/`image.repository`/`image.tag`, the same builder image values the DaemonSet uses);
+* `modules.v4l2loopback.sourceRepo` at `modules.v4l2loopback.sourceRef`, cloned over HTTPS;
+* push access to the registry above.
+
+The second stage keeps only the compiled `.ko`, placed where a KMM worker expects it —
+`/opt/lib/modules/${KERNEL_FULL_VERSION}/extra/`, indexed with `depmod -b /opt` — so the image that reaches
+the node carries no toolchain.
+
+`modules.v4l2loopback.sourcePath` is a `method: build` value only and **fails the render** when combined with
+`method: kmm`: it names a directory inside *this chart's* builder image, which a KMM build pod never runs.
+
+### Airgapped KMM (prebuilt modules)
+
+Set `modules.v4l2loopback.kmm.build.enabled: false` — "Mode A" — and the chart renders no Dockerfile
+ConfigMap and no `build` block on the `Module`. KMM then only ever *pulls*: one
+`<registry>/<repository>:<kernel release>` image per kernel in the fleet, and nothing in the cluster or on
+a node ever compiles, clones, or reaches `apt`. That is what makes it the clean offline path — the only
+things that have to cross the airgap are container images. You build those on a connected machine, once.
+
+**1. Build and push one module image per fleet kernel (connected, once).** The chart already carries the
+two-stage Dockerfile KMM would build in-cluster; extract it from a connected render and build it yourself,
+once per kernel release:
+
+```console
+helm template kasm-node-prep charts/kasm-node-prep \
+  --set modules.v4l2loopback.method=kmm \
+  --set modules.v4l2loopback.kmm.image.registry=registry.example.internal \
+  --set modules.v4l2loopback.kmm.image.repository=kasm/v4l2loopback \
+  --show-only templates/kmm-dockerfile-configmap.yaml \
+  | yq '.data.dockerfile' > Dockerfile.v4l2loopback
+
+for kver in 6.8.0-40-generic 5.15.0-113-generic; do
+  docker build --build-arg KERNEL_FULL_VERSION="$kver" \
+    -t registry.example.internal/kasm/v4l2loopback:"$kver" \
+    -f Dockerfile.v4l2loopback .
+  docker push registry.example.internal/kasm/v4l2loopback:"$kver"
+done
+```
+
+Each tag **must** be the exact kernel release (`uname -r`) of the nodes it is for. With
+`modules.v4l2loopback.kmm.image.tag` left empty the rendered `containerImage` ends in the literal
+`${KERNEL_FULL_VERSION}`, which **KMM** substitutes per node — so `registry.example.internal/kasm/v4l2loopback:6.8.0-40-generic`
+is what it will look for on a `6.8.0-40-generic` node. This build needs `linux-headers-<kver>` reachable
+from the base image's apt repositories, but it runs on the *connected* machine, so that is free here — it
+is exactly the dependency Mode B (below) has to solve *inside* the airgap.
+
+**2. Mirror the KMM operator's own images and install it.** KMM itself is five images, none of them pulled
+by any Helm release. `make images-agent` lists them under its **KMM mode** section (operator, webhook, and
+worker always; kaniko only for in-cluster builds, signimage only for Secure Boot). Mirror that set, then
+install the operator pointed at the mirror:
+
+```console
+make images-agent   # prints the KMM images to mirror, under "# KMM mode"
+make kmm-install-mirrored KMM_IMAGE_REGISTRY=registry.example.internal
+```
+
+`kmm-install-mirrored` applies the same pinned kustomize overlay `kmm-install` does, then repoints the
+operator, webhook, worker, build, and sign images off their upstream `:latest` tags onto
+`<mirror>/<same upstream path>:<version>` (`kubectl set image` for the two Deployment containers,
+`kubectl set env` for the operator's `RELATED_IMAGE_*` variables). Run without `KMM_IMAGE_REGISTRY` it only
+pins `:latest` to the version and warns, which is not enough for an airgap.
+
+**3. Install the chart in Mode A.** The airgap values delegate to KMM, turn in-cluster builds *off*, point
+at the mirror, and name a pull secret for it:
+
+```yaml
+modules:
+  v4l2loopback:
+    enabled: true
+    method: kmm
+    kmm:
+      build:
+        enabled: false                  # Mode A: KMM only pulls, never builds
+      image:
+        registry: registry.example.internal
+        repository: kasm/v4l2loopback
+      imageRepoSecret: kasm-registry    # docker-registry Secret in the release namespace
+```
+
+**The known-kernel-set requirement — and its clean failure mode.** Mode A only covers kernels you built an
+image for. A node whose kernel release has no matching `<registry>/<repository>:<kernel>` tag is simply
+never prepared: KMM cannot pull an image that does not exist. This fails *visibly*, not silently — the
+module is left unloaded and the `Module` reports why, so it is detectable in a readiness gate or CI rather
+than surfacing as a mysteriously missing `/dev/video0` later:
+
+```console
+kubectl get modules.kmm.sigs.x-k8s.io
+kubectl describe module <release>-kasm-node-prep-v4l2loopback   # an unmatched kernel or a failed pull shows here
+```
+
+So the image list is a thing you maintain as the fleet's kernels move: every new kernel needs its image
+built and pushed *before* a node running it comes up. For a fleet on a stable, known kernel set that is a
+small static list; for one whose kernels churn, keeping it current is the cost of Mode A.
+
+**When to reach for Mode B instead.** `modules.v4l2loopback.kmm.build.enabled: true` (Mode B) has KMM build
+the image in-cluster for whatever kernel it sees, so there is no per-kernel list to maintain — but *inside*
+the airgap that build pod additionally needs the kaniko image (mirror it with the set from step 2), an apt
+mirror serving `linux-headers-<kernel>`, and the module source reachable (an internal mirror of
+`modules.v4l2loopback.sourceRepo`). That is the fallback for churning kernels: it trades Mode A's static
+image list for standing build infrastructure behind the airgap. The equivalent with no KMM at all — a
+pre-baked builder image on the node — is [Airgapped / offline nodes](#airgapped--offline-nodes).
+
+### Secure Boot
+
+`modules.v4l2loopback.kmm.sign` is the KMM-mode counterpart of `secureBoot.existingMokSecret`: KMM signs the
+built module inside the cluster, between the build and the push, so an unsigned `.ko` never reaches a node.
+Both secrets are required when it is enabled.
+
+```yaml
+modules:
+  v4l2loopback:
+    method: kmm
+    kmm:
+      sign:
+        enabled: true
+        keySecret: kasm-mok-key    # data key: key   (PEM private key)
+        certSecret: kasm-mok-cert  # data key: cert  (DER certificate)
+```
+
+Enrolling the certificate in each node's UEFI MOK database with `mokutil --import` remains a manual, per-node
+(or per-node-image) step — KMM does not change that. `secureBoot.existingMokSecret` still applies only to
+modules this chart's DaemonSet builds; the two are independent.
+
+### Diagnosing it
+
+This is the real day-two difference. In `build` mode a failure is a line in the node-prep pod log, on the node
+it happened on. In `kmm` mode this chart's log has nothing to say about v4l2loopback at all — look at the
+`Module` and at KMM instead:
+
+```console
+kubectl get modules.kmm.sigs.x-k8s.io
+kubectl describe module <release>-kasm-node-prep-v4l2loopback
+kubectl get pods -l kmm.node.kubernetes.io/module.name=<release>-kasm-node-prep-v4l2loopback
+kubectl logs -n kmm-operator-system deploy/kmm-operator-controller
+```
+
+A build that cannot find its kernel headers, a push the registry secret is not allowed to make, and a kernel
+release no mapping matches all surface there, not here.
+
+## Node tuning
+
+Two optional pieces of host tuning, applied by the same reconcile loop, both **off by default**. Nothing is
+persisted to the node's configuration files: the loop re-asserts the state every pass, which is what makes it
+survive a reboot, and what makes backing it out a values change rather than a node edit.
+
+### Swap (`tuning.swap`)
+
+Kasm's own Docker agent installer creates a disk swapfile at `/mnt/Kasm.swap` on every agent host —
+`fallocate`, `mkswap`, `swapon` — and offers a 4/8/12/16 GB menu for it, with `--swap-size 8192` as the
+documented example. The Kasm documentation is unusually blunt about why:
+
+> it is imperative to a have a swap file for Kasm to be stable
+
+> Not having a swap file can result in user desktops being destroyed when RAM is over subscribed
+
+The mechanism is that swap lets the kernel move the memory of *stopped and idle* Workspaces onto disk —
+Kasm's own phrasing is "reduce memory consumption with stopped Workspaces" — instead of the OOM killer
+destroying a live session when the node is oversubscribed. See
+[System requirements (swap section)](https://docs.kasm.com/docs/explanations/system-requirements/index.html),
+[Docker Agent management](https://docs.kasm.com/docs/how-to/infra-autoscale/docker-agent/index.html) and
+[Sizing and operations](https://docs.kasm.com/docs/explanations/sizing-operations/index.html).
+
+A Kubernetes node never runs that installer, so it gets none of this. That is what this feature is for.
+
+#### The kubelet prerequisite — read this first
+
+Kubernetes swap (`NodeSwap`, stable in 1.36) needs three things on the node, none of which any Helm chart can
+set:
+
+1. **cgroup v2** — the unified hierarchy, which every current distribution uses.
+2. **`failSwapOn: false`** in the kubelet configuration.
+3. **`memorySwap.swapBehavior: LimitedSwap`** — without it the kubelet tolerates node swap but hands no pod
+   any of it.
+
+The second is a real footgun. A kubelet still carrying the default `failSwapOn: true` **refuses to start**
+while the node has swap active. Enabling swap underneath such a kubelet looks fine at first and then takes
+the node `NotReady` the next time kubelet restarts or the node reboots — possibly weeks later, during
+unrelated maintenance.
+
+On k3s both go in `/etc/rancher/k3s/config.yaml`:
+
+```yaml
+kubelet-arg:
+  - fail-swap-on=false
+  - config=/etc/rancher/k3s/kubelet.yaml
+```
+
+with `/etc/rancher/k3s/kubelet.yaml`:
+
+```yaml
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+failSwapOn: false
+memorySwap:
+  swapBehavior: LimitedSwap
+```
+
+Then `systemctl restart k3s` (or `k3s-agent` on agent nodes) and confirm with
+`kubectl get --raw "/api/v1/nodes/<node>/proxy/configz"`. A fuller, commented version — including the other
+kubelet settings worth changing on a workspace node — is in
+[`examples/kasm-agent/k3s-node-swap-config.yaml`](../../examples/kasm-agent/k3s-node-swap-config.yaml).
+
+#### The safety check
+
+Because that failure mode is silent and delayed, the reconcile loop refuses to create swap until it can
+*confirm* the kubelet tolerates it. Before the first `swapon` it greps, best effort, the kubelet
+configuration mounted read-only into the pod:
+
+* `/etc/rancher/k3s/config.yaml` and `/etc/rancher/k3s/config.yaml.d/*.yaml` for `fail-swap-on=false`
+  (k3s, RKE2)
+* `/var/lib/kubelet/config.yaml` for `failSwapOn: false` (kubeadm and most other distributions)
+
+If neither confirms it the pass logs an error naming both paths and the failure mode, and skips swap; the
+node is left exactly as it was. Fix the kubelet and the next pass picks it up — no rollout needed.
+
+A kubelet configured somewhere the script cannot read — a systemd drop-in, `--kubelet-arg` on a command line,
+a cloud-init unit — will never confirm. `tuning.swap.force: true` skips the check entirely (and removes it
+from the rendered script). Verify `failSwapOn: false` is genuinely in effect via `configz` before using it.
+
+#### Sizing
+
+`tuning.swap.sizeMib: 0`, the default, means half of the node's `MemTotal` clamped to `[4096, 16384]` MiB.
+Upstream Kasm publishes no RAM-ratio formula; **the half-of-RAM rule is this chart's**, anchored on the
+installer's documented `8192` example being exactly half of a 16 GiB node, and the clamp is the range of the
+installer's own menu. Set an explicit `sizeMib` whenever you have a better number for your workload.
+
+The file is `<tuning.swap.hostPath>/kasm.swap`, mode `0600`, created with `fallocate` (`dd` fallback) and
+activated with `swapon`. Point `hostPath` at a real node disk with room for it: ext4 and xfs work, btrfs
+needs a `nodatacow` file, and overlayfs and tmpfs never will. Changing `sizeMib` later is picked up on the
+next pass — a swapfile of the wrong size that is not currently active is replaced.
+
+#### How much of it a workspace pod actually gets
+
+`LimitedSwap` gives swap **only to Burstable pods** — memory request below memory limit, which is what the
+Kasm operator stamps for a workspace by default. A *Guaranteed* workspace (request equal to limit) and a
+*BestEffort* one both get exactly zero, no matter how much swap the node has. For a Burstable pod the
+allowance is proportional:
+
+```text
+pod swap limit = (pod memory request / node MemTotal) × total node swap
+```
+
+So a default Kasm workspace (2768Mi) on a 16 GiB node with an 8 GiB swapfile gets
+`2768 / 16384 × 8192 MiB ≈ 1384 MiB`. Sizing swap against node RAM therefore also sizes it per session.
+
+#### Why not zram
+
+zram is deliberately not offered as a default. Compressed swap lives in RAM, so it cannot do the one job
+Kasm wants swap for — getting an idle session's pages *off* the node's memory — and every MiB of it inflates
+`total node swap` in the formula above, handing every Burstable pod a larger `LimitedSwap` allowance backed
+by the very memory that was under pressure. Configure zram by hand at a *lower priority* than the disk
+swapfile if you want it as a fast first tier; do not use it instead of one.
+
+### Sysctls (`tuning.sysctls`)
+
+`tuning.sysctls.values` is a map applied with `sysctl -w` once per pass — silent when the value is already
+correct, logged when it changes. **Kasm's installer sets no sysctls at all**; these are this chart's
+engineering judgement, not an upstream recommendation. The defaults raise the inotify limits, which desktop
+sessions consume disproportionately:
+
+| Tunable | Default here | Kernel default | Why |
+| ------- | ------------ | -------------- | --- |
+| `fs.inotify.max_user_instances` | `1024` | `128` | Every session runs a desktop environment, a file manager and a browser, each of which takes inotify instances. The limit is per *UID*, and workspace sessions on a node share one, so it is effectively a per-node budget that a handful of concurrent sessions exhausts. |
+| `fs.inotify.max_user_watches` | `524288` | `8192`, raised by some distributions | The same per-UID accounting applied to watched paths. The symptom of running out is applications silently losing file-change notifications rather than failing outright, which makes it an unpleasant one to diagnose. |
+
+The map **merges** with these defaults, the way Helm merges any map, so adding an entry keeps them. Set a key
+to `null` to drop one:
+
+```yaml
+tuning:
+  sysctls:
+    enabled: true
+    values:
+      fs.inotify.max_user_instances: null   # drop the default
+      vm.max_map_count: 262144
+```
+
+Values are only ever applied with `sysctl -w`, never written to `/etc/sysctl.d`, so a node reboot resets them
+and the next pass reapplies them — and uninstalling the chart leaves nothing behind on the node.
+
+## Airgapped / offline nodes
+
+Out of the box this chart reaches the network twice per build: `apt-get` for the toolchain and the kernel
+headers, and `git clone` for the module sources. Both are avoidable. With a **pre-baked builder image** the
+reconcile loop performs no network operation at all, which is what makes the chart installable in an
+airgapped environment.
+
+Two things make that work:
+
+1. **The presence check.** Before any package installation the script checks whether what this pass needs is
+   already there — `gcc`, `make`, `insmod` (from `kmod`), `openssl` when Secure Boot signing is configured,
+   `git` only when a clone is still needed, and the kernel build tree at `/lib/modules/$(uname -r)/build`. If
+   everything is present it logs `build prerequisites already present; skipping package installation` and
+   goes straight to the build. This check runs before any distro-specific logic, so a pre-baked image does
+   not have to be Debian- or Ubuntu-based, and a missing `apt-get` is only an error for an image that is
+   *not* pre-baked.
+2. **`modules.*.sourcePath`.** Set it to a directory inside the builder image holding an already-vendored
+   module source tree. The script copies that tree into its work directory and builds from it instead of
+   cloning. When every enabled module has a `sourcePath`, `git` disappears from the rendered script entirely.
+
+### The kernel build tree comes from the node, not the image
+
+`/lib/modules` and `/usr/src` are host paths bind-mounted into the container, so they **shadow** whatever the
+builder image has at those paths. Baking `linux-headers-*` into the image does not help: at runtime the
+container sees the node's copies. Pre-install the matching headers in the **node image** (they are what
+`/lib/modules/$(uname -r)/build` resolves to), or leave the runtime `apt-get` path in place on nodes that can
+still reach their OS package repositories.
+
+### Build and push the builder image
+
+Bake the toolchain and the module sources, on a machine that does have network access:
+
+```dockerfile
+FROM ubuntu:22.04
+
+# Everything the presence check looks for: gcc + make (build-essential), insmod (kmod), and
+# openssl, which the kernel's sign-file helper needs on Secure Boot nodes. libelf1 is a runtime
+# library of kbuild's objtool — module compiles fail with "Error 127" without it.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends build-essential kmod openssl libelf1 \
+ && rm -rf /var/lib/apt/lists/*
+
+# Optional: kernel headers for the node kernels you run. These are masked at runtime by the
+# /lib/modules and /usr/src host mounts, so they only help if the node itself has none and you
+# also mount them elsewhere -- prefer installing linux-headers-$(uname -r) in the node image.
+# ARG KERNEL_RELEASE=5.15.0-113-generic
+# RUN apt-get update \
+#  && apt-get install -y --no-install-recommends "linux-headers-${KERNEL_RELEASE}" \
+#  && rm -rf /var/lib/apt/lists/*
+
+# Vendored module sources, so nothing is cloned at runtime. Fetch these on the connected
+# machine first, e.g.
+#   git clone --depth 1 --branch v0.13.2 https://github.com/umlaeute/v4l2loopback.git
+#   git clone --depth 1 https://git.zx2c4.com/wireguard-linux-compat
+COPY v4l2loopback/ /opt/kasm-modules/v4l2loopback/
+COPY wireguard-linux-compat/ /opt/kasm-modules/wireguard-linux-compat/
+```
+
+```console
+docker build -t registry.example.internal/kasm/node-prep-builder:22.04-v0.13.2 .
+docker push registry.example.internal/kasm/node-prep-builder:22.04-v0.13.2
+```
+
+### Point the chart at it
+
+```yaml
+image:
+  registry: registry.example.internal
+  repository: kasm/node-prep-builder
+  tag: "22.04-v0.13.2"
+
+modules:
+  v4l2loopback:
+    enabled: true
+    sourcePath: /opt/kasm-modules/v4l2loopback
+  wireguard:
+    # Only on kernels older than 5.6.
+    enabled: false
+    sourcePath: /opt/kasm-modules/wireguard-linux-compat
+```
+
+`modules.*.sourceRepo` and `modules.*.sourceRef` are ignored while `sourcePath` is set — keep them pointed at
+the upstream you vendored from, as a record of what the image contains. Confirm the offline path is actually
+taken by looking for the skip line in the pod log:
+
+```console
+kubectl logs -l app.kubernetes.io/component=node-prep | grep 'build prerequisites already present'
+```
+
+If that line never appears, the image is missing one of the prerequisites and the script has fallen back to
+`apt-get` — which is exactly what will fail on an airgapped node.
+
+## Usage
+
+Installing with every module *and* every `tuning.*` feature disabled is a mistake, and the chart fails the
+render with an explanatory error rather than installing a DaemonSet that does nothing. A module delegated to
+KMM counts as enabled: that install renders a `Module` and, if nothing else needs the reconcile loop, no
+DaemonSet at all.
+
+Restrict the DaemonSet to the nodes that actually host workspace sessions, and give
+`kasm-video-device-plugin` the same selector so `kasm.com/video` is only advertised where the module is
+loaded:
+
+```yaml
+nodeSelector:
+  kasm.com/workspaces: "true"
+tolerations:
+  - key: kasm.com/workspaces
+    operator: Exists
+    effect: NoSchedule
+```
+
+Watch a rollout with `kubectl logs -l app.kubernetes.io/component=node-prep -f`, and confirm the result on a
+node with `lsmod | grep v4l2loopback` and `ls /dev/video*`.
+
+## Chart value settings in `values.yaml`
+
+## Values
+
+<table>
+	<thead>
+		<th>Key</th>
+		<th>Type</th>
+		<th>Default</th>
+		<th>Description</th>
+	</thead>
+	<tbody>
+		<tr>
+			<td id="fullnameOverride"><a href="./values.yaml#L9">fullnameOverride</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+""
+</pre>
+</div>
+			</td>
+			<td>Override the fully qualified name of every resource this chart creates. Leave empty to use the standard `<release name>-<chart name>` naming. </td>
+		</tr>
+		<tr>
+			<td id="image--registry"><a href="./values.yaml#L22">image.registry</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+docker.io
+</pre>
+</div>
+			</td>
+			<td>Container registry that hosts the builder image. Point this at a private registry or a pull-through mirror for air-gapped clusters. </td>
+		</tr>
+		<tr>
+			<td id="image--repository"><a href="./values.yaml#L25">image.repository</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+library/ubuntu
+</pre>
+</div>
+			</td>
+			<td>Repository of the builder image within `image.registry`. </td>
+		</tr>
+		<tr>
+			<td id="image--tag"><a href="./values.yaml#L29">image.tag</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+"22.04"
+</pre>
+</div>
+			</td>
+			<td>Tag of the builder image. May carry a digest suffix (for example `22.04@sha256:<digest>`) to pin the image immutably. </td>
+		</tr>
+		<tr>
+			<td id="modules--v4l2loopback--enabled"><a href="./values.yaml#L42">modules.v4l2loopback.enabled</a></td>
+			<td>
+bool
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+true
+</pre>
+</div>
+			</td>
+			<td>Build and load the v4l2loopback kernel module on every matching node. Required for webcam passthrough (`KASM_SVC_WEBCAM=1`) into workspace sessions. </td>
+		</tr>
+		<tr>
+			<td id="modules--v4l2loopback--exclusiveCaps"><a href="./values.yaml#L62">modules.v4l2loopback.exclusiveCaps</a></td>
+			<td>
+bool
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+true
+</pre>
+</div>
+			</td>
+			<td>Announce the video capture capability only once a producer has opened the device (`exclusive_caps=1`). Required by Chrome/Chromium based applications inside the workspace, which ignore loopback devices that advertise capture with no stream attached. </td>
+		</tr>
+		<tr>
+			<td id="modules--v4l2loopback--kmm--build--enabled"><a href="./values.yaml#L137">modules.v4l2loopback.kmm.build.enabled</a></td>
+			<td>
+bool
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+true
+</pre>
+</div>
+			</td>
+			<td>Let KMM build the kmod image in the cluster. The build pod needs to reach the distribution's `linux-headers-<kernel>` package, the module source in `modules.v4l2loopback.sourceRepo`, and the registry above (to push). Set to `false` for the airgapped path: no Dockerfile ConfigMap is rendered and no `build` block appears on the `Module`, so KMM only ever *pulls* images you built in connected CI and mirrored, one `<registry>/<repository>:<kernel release>` tag per kernel in the fleet. </td>
+		</tr>
+		<tr>
+			<td id="modules--v4l2loopback--kmm--image--registry"><a href="./values.yaml#L106">modules.v4l2loopback.kmm.image.registry</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+""
+</pre>
+</div>
+			</td>
+			<td>Registry hosting the kmod image. **Required when `modules.v4l2loopback.method` is `kmm`.** With in-cluster builds this is also the registry the kaniko build pod pushes to, so the credentials in `modules.v4l2loopback.kmm.imageRepoSecret` need write access to it. </td>
+		</tr>
+		<tr>
+			<td id="modules--v4l2loopback--kmm--image--repository"><a href="./values.yaml#L111">modules.v4l2loopback.kmm.image.repository</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+""
+</pre>
+</div>
+			</td>
+			<td>Repository of the kmod image within `modules.v4l2loopback.kmm.image.registry` (for example `kasm/v4l2loopback`). **Required when `modules.v4l2loopback.method` is `kmm`.** </td>
+		</tr>
+		<tr>
+			<td id="modules--v4l2loopback--kmm--image--tag"><a href="./values.yaml#L119">modules.v4l2loopback.kmm.image.tag</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+""
+</pre>
+</div>
+			</td>
+			<td>Tag of the kmod image. Leave empty (the default) to tag per kernel: the rendered `containerImage` then ends in the literal `${KERNEL_FULL_VERSION}`, which KMM substitutes with each node's kernel release, so one entry covers a fleet running several kernels. Set it to pin a single image for every matching kernel instead — sensible only when the fleet is on one kernel. May carry a digest suffix (`1.0@sha256:<digest>`) to pin immutably. </td>
+		</tr>
+		<tr>
+			<td id="modules--v4l2loopback--kmm--imageRepoSecret"><a href="./values.yaml#L125">modules.v4l2loopback.kmm.imageRepoSecret</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+""
+</pre>
+</div>
+			</td>
+			<td>Name of an existing `kubernetes.io/dockerconfigjson` Secret in the release namespace, used both to pull the kmod image onto the nodes and to push the result of an in-cluster build (`spec.imageRepoSecret` on the `Module`). Leave empty for a registry that needs no credentials. </td>
+		</tr>
+		<tr>
+			<td id="modules--v4l2loopback--kmm--kernelRegexp"><a href="./values.yaml#L94">modules.v4l2loopback.kmm.kernelRegexp</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+^.*$
+</pre>
+</div>
+			</td>
+			<td>Regular expression matched against each node's kernel release, deciding which nodes this mapping applies to (`spec.moduleLoader.container.kernelMappings[].regexp` on the `Module`). The default matches every kernel, which is what a single-image fleet wants. Narrow it (for example `^6\.8\..*$`) when different kernel families need different images. </td>
+		</tr>
+		<tr>
+			<td id="modules--v4l2loopback--kmm--sign--certSecret"><a href="./values.yaml#L157">modules.v4l2loopback.kmm.sign.certSecret</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+""
+</pre>
+</div>
+			</td>
+			<td>Name of the Secret holding the **public** certificate (DER). **Required when `modules.v4l2loopback.kmm.sign.enabled` is set.** KMM expects the certificate under the Secret key `cert`. </td>
+		</tr>
+		<tr>
+			<td id="modules--v4l2loopback--kmm--sign--enabled"><a href="./values.yaml#L147">modules.v4l2loopback.kmm.sign.enabled</a></td>
+			<td>
+bool
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+false
+</pre>
+</div>
+			</td>
+			<td>Have KMM sign the built module for Secure Boot nodes (`spec.moduleLoader.container.kernelMappings[].sign` on the `Module`). This is the KMM-mode counterpart of `secureBoot.existingMokSecret`, which only signs modules the DaemonSet builds. </td>
+		</tr>
+		<tr>
+			<td id="modules--v4l2loopback--kmm--sign--keySecret"><a href="./values.yaml#L152">modules.v4l2loopback.kmm.sign.keySecret</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+""
+</pre>
+</div>
+			</td>
+			<td>Name of the Secret holding the **private** signing key. **Required when `modules.v4l2loopback.kmm.sign.enabled` is set.** KMM expects the key under the Secret key `key`. </td>
+		</tr>
+		<tr>
+			<td id="modules--v4l2loopback--method"><a href="./values.yaml#L52">modules.v4l2loopback.method</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+build
+</pre>
+</div>
+			</td>
+			<td>How the module reaches the node. `build` (the default) compiles it from source on every node inside this chart's privileged DaemonSet. `kmm` instead delegates the whole lifecycle to the [Kernel Module Management](https://kmm.sigs.k8s.io/) operator: this chart renders a KMM `Module` custom resource (and, unless `modules.v4l2loopback.kmm.build.enabled` is false, the Dockerfile ConfigMap it builds from) and drops v4l2loopback out of the DaemonSet's reconcile script entirely. **`kmm` requires the KMM operator to already be installed in the cluster** — it ships no official Helm chart, so install it with `make kmm-install` (or the pinned `kubectl apply -k` URL that target runs). See "KMM mode" in this chart's README. </td>
+		</tr>
+		<tr>
+			<td id="modules--v4l2loopback--sourcePath"><a href="./values.yaml#L81">modules.v4l2loopback.sourcePath</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+""
+</pre>
+</div>
+			</td>
+			<td>Absolute path *inside the builder image* holding an already-vendored v4l2loopback source tree (for example `/opt/kasm-modules/v4l2loopback`). When set, the reconcile script copies that tree into its work directory and builds from it instead of running `git clone`, so the node needs no network access at all. This is the airgapped/offline path: bake the sources into a custom builder image, push it to your internal registry, and point `image.*` at it. Leave empty to clone from `modules.v4l2loopback.sourceRepo`. **Applies to `method: build` only** — a KMM in-cluster build always clones from `modules.v4l2loopback.sourceRepo`, and the airgapped KMM path is prebuilt per-kernel images (`modules.v4l2loopback.kmm.build.enabled: false`) instead. Setting it together with `method: kmm` fails the render. </td>
+		</tr>
+		<tr>
+			<td id="modules--v4l2loopback--sourceRef"><a href="./values.yaml#L70">modules.v4l2loopback.sourceRef</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+v0.13.2
+</pre>
+</div>
+			</td>
+			<td>Git tag, branch, or commit to build. Pinning a released tag keeps builds reproducible across nodes. </td>
+		</tr>
+		<tr>
+			<td id="modules--v4l2loopback--sourceRepo"><a href="./values.yaml#L66">modules.v4l2loopback.sourceRepo</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+https://github.com/umlaeute/v4l2loopback.git
+</pre>
+</div>
+			</td>
+			<td>Git repository the module sources are cloned from. Point this at an internal mirror when nodes cannot reach GitHub. </td>
+		</tr>
+		<tr>
+			<td id="modules--v4l2loopback--videoDevices"><a href="./values.yaml#L57">modules.v4l2loopback.videoDevices</a></td>
+			<td>
+int
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+4
+</pre>
+</div>
+			</td>
+			<td>Number of virtual video devices to create per node (`devices=` module parameter). This is the upper bound on concurrent webcam-enabled sessions on that node, so size it against the node's workspace capacity. </td>
+		</tr>
+		<tr>
+			<td id="modules--wireguard--enabled"><a href="./values.yaml#L166">modules.wireguard.enabled</a></td>
+			<td>
+bool
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+false
+</pre>
+</div>
+			</td>
+			<td>Build and load the out-of-tree WireGuard module on every matching node. Leave disabled unless nodes run a kernel older than 5.6; the reconcile script detects an in-tree WireGuard (`wg_` symbols in `/proc/kallsyms`) and skips the build even when this is enabled. </td>
+		</tr>
+		<tr>
+			<td id="modules--wireguard--method"><a href="./values.yaml#L172">modules.wireguard.method</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+build
+</pre>
+</div>
+			</td>
+			<td>How the module reaches the node. Only `build` is supported here: this key exists so the two modules read the same way, not because there is a choice to make. `kmm` fails the render, because the only nodes that need an out-of-tree WireGuard are those on kernels older than 5.6 — precisely the fleet where delegating to an operator buys nothing. </td>
+		</tr>
+		<tr>
+			<td id="modules--wireguard--sourcePath"><a href="./values.yaml#L183">modules.wireguard.sourcePath</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+""
+</pre>
+</div>
+			</td>
+			<td>Absolute path *inside the builder image* holding an already-vendored `wireguard-linux-compat` source tree (for example `/opt/kasm-modules/wireguard-linux-compat`). When set, the reconcile script copies that tree into its work directory and builds from it instead of running `git clone`, so the node needs no network access at all. This is the airgapped/offline path; see `modules.v4l2loopback.sourcePath`. Leave empty to clone from `modules.wireguard.sourceRepo`. </td>
+		</tr>
+		<tr>
+			<td id="modules--wireguard--sourceRepo"><a href="./values.yaml#L176">modules.wireguard.sourceRepo</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+https://git.zx2c4.com/wireguard-linux-compat
+</pre>
+</div>
+			</td>
+			<td>Git repository the WireGuard compatibility module is cloned from. Point this at an internal mirror when nodes cannot reach the upstream host. </td>
+		</tr>
+		<tr>
+			<td id="nameOverride"><a href="./values.yaml#L4">nameOverride</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+""
+</pre>
+</div>
+			</td>
+			<td>Override the chart name used when building resource names and the `app.kubernetes.io/name` label. Leave empty to use the chart name (`kasm-node-prep`). </td>
+		</tr>
+		<tr>
+			<td id="nodeSelector"><a href="./values.yaml#L279">nodeSelector</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+{}
+</pre>
+</div>
+			</td>
+			<td>Node labels that select which nodes get prepared. Leave empty to run on every node, or restrict it to the nodes that host Kasm workspace sessions. Pair it with the matching `kasm-video-device-plugin` selector so the device plugin only advertises `kasm.com/video` where the module is actually loaded. </td>
+		</tr>
+		<tr>
+			<td id="podAnnotations"><a href="./values.yaml#L324">podAnnotations</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+{}
+</pre>
+</div>
+			</td>
+			<td>Extra annotations to add to the DaemonSet pods, merged with the reconcile script checksum annotation this chart always sets. </td>
+		</tr>
+		<tr>
+			<td id="podLabels"><a href="./values.yaml#L328">podLabels</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+{}
+</pre>
+</div>
+			</td>
+			<td>Extra labels to add to the DaemonSet pods, merged with the chart's standard selector labels. </td>
+		</tr>
+		<tr>
+			<td id="reconcileIntervalSeconds"><a href="./values.yaml#L260">reconcileIntervalSeconds</a></td>
+			<td>
+int
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+300
+</pre>
+</div>
+			</td>
+			<td>Seconds to sleep between reconcile passes. Every pass re-checks whether each enabled module is loaded and rebuilds it if it is not, and re-asserts any enabled `tuning.*` state, which is what makes both survive node reboots: after a reboot the check fails and the state is applied again. </td>
+		</tr>
+		<tr>
+			<td id="resources"><a href="./values.yaml#L295">resources</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+limits:
+    cpu: 1000m
+    memory: 1Gi
+requests:
+    cpu: 100m
+    memory: 256Mi
+</pre>
+</div>
+			</td>
+			<td>CPU and memory requests and limits for the node prep container. Module builds are bursty: compiling against the node's kernel headers is short but CPU hungry, while the idle reconcile loop uses almost nothing. Both requests and limits are always set. </td>
+		</tr>
+		<tr>
+			<td id="resources--limits--cpu"><a href="./values.yaml#L313">resources.limits.cpu</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+1000m
+</pre>
+</div>
+			</td>
+			<td>CPU limit for the node prep container, and the knob that decides how long a module build takes: the compile is bounded by this limit, so 1000m is roughly one core's worth of `make`. Raise it to shorten the window in which a freshly booted node has no `/dev/video*` yet; lower it to keep builds from competing with the workspace sessions sharing the node. </td>
+		</tr>
+		<tr>
+			<td id="resources--limits--memory"><a href="./values.yaml#L319">resources.limits.memory</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+1Gi
+</pre>
+</div>
+			</td>
+			<td>Memory limit for the node prep container. It has to cover an out-of-tree kernel module compile — the unpacked kernel headers, the module source tree, and gcc — not just the idle loop. Set it too low and the build is OOMKilled part way through, which the reconcile loop then retries every `reconcileIntervalSeconds` without ever finishing. </td>
+		</tr>
+		<tr>
+			<td id="resources--requests--cpu"><a href="./values.yaml#L301">resources.requests.cpu</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+100m
+</pre>
+</div>
+			</td>
+			<td>CPU request for the node prep container. Between builds the reconcile loop only sleeps and re-checks, so the request is sized for that idle steady state rather than for a compile; what a build actually gets to use is `resources.limits.cpu`. </td>
+		</tr>
+		<tr>
+			<td id="resources--requests--memory"><a href="./values.yaml#L306">resources.requests.memory</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+256Mi
+</pre>
+</div>
+			</td>
+			<td>Memory request for the node prep container. This is the idle floor, the reconcile loop itself; the real consumer is a kernel-module compile, which is what `resources.limits.memory` has to cover. </td>
+		</tr>
+		<tr>
+			<td id="secureBoot--existingMokSecret"><a href="./values.yaml#L272">secureBoot.existingMokSecret</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+""
+</pre>
+</div>
+			</td>
+			<td>Name of an existing Secret holding the MOK signing key pair, with keys `mokPrivateKey` (PEM private key) and `mokPublicKey` (DER certificate). When set, the Secret is mounted read-only at `/etc/kasm-mok` and every built module is signed with the kernel's `sign-file` helper before it is inserted. Leave empty on nodes that do not enforce Secure Boot. </td>
+		</tr>
+		<tr>
+			<td id="tolerations"><a href="./values.yaml#L284">tolerations</a></td>
+			<td>
+list
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+[]
+</pre>
+</div>
+			</td>
+			<td>Tolerations for the DaemonSet pods, so nodes carrying taints (for example dedicated workspace nodes) still get their kernel modules prepared. </td>
+		</tr>
+		<tr>
+			<td id="tuning--swap--enabled"><a href="./values.yaml#L231">tuning.swap.enabled</a></td>
+			<td>
+bool
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+false
+</pre>
+</div>
+			</td>
+			<td>Create and activate a swapfile on every matching node. The reconcile loop refuses to do so until it can confirm the node's kubelet tolerates swap (see `tuning.swap.force`). </td>
+		</tr>
+		<tr>
+			<td id="tuning--swap--force"><a href="./values.yaml#L254">tuning.swap.force</a></td>
+			<td>
+bool
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+false
+</pre>
+</div>
+			</td>
+			<td>Skip the kubelet swap-support check and activate swap unconditionally. Only set this when the kubelet is configured somewhere the reconcile script cannot read (a systemd drop-in, a cloud-init unit, a distribution-specific config path) **and** you have verified `failSwapOn: false` is in effect. Enabling swap under a kubelet that still defaults to `failSwapOn: true` takes the node out at its next kubelet restart or reboot. </td>
+		</tr>
+		<tr>
+			<td id="tuning--swap--hostPath"><a href="./values.yaml#L241">tuning.swap.hostPath</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+/var/lib/kasm-node-prep
+</pre>
+</div>
+			</td>
+			<td>Host directory the swapfile lives in; the file itself is `<hostPath>/kasm.swap`. Mounted into the DaemonSet at the same path so `/proc/swaps` reads identically inside and outside the container. Point this at a directory on a disk with room for `tuning.swap.sizeMib`. </td>
+		</tr>
+		<tr>
+			<td id="tuning--swap--sizeMib"><a href="./values.yaml#L236">tuning.swap.sizeMib</a></td>
+			<td>
+int
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+0
+</pre>
+</div>
+			</td>
+			<td>Size of the swapfile in MiB. `0` means auto: half of the node's `MemTotal`, clamped to `[4096, 16384]` — the range of the menu Kasm's own agent installer offers, whose documented example (`--swap-size 8192`) is half of a 16 GiB node. </td>
+		</tr>
+		<tr>
+			<td id="tuning--swap--swappiness"><a href="./values.yaml#L247">tuning.swap.swappiness</a></td>
+			<td>
+int
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+80
+</pre>
+</div>
+			</td>
+			<td>`vm.swappiness` to set alongside the swapfile, re-applied every pass. Kasm's rationale for swap is parking the memory of *stopped and idle* Workspaces rather than absorbing peak load, so this defaults high (the kernel default is 60): idle desktop pages should move to disk readily and leave RAM for sessions that are actually being used. </td>
+		</tr>
+		<tr>
+			<td id="tuning--sysctls--enabled"><a href="./values.yaml#L197">tuning.sysctls.enabled</a></td>
+			<td>
+bool
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+false
+</pre>
+</div>
+			</td>
+			<td>Apply `tuning.sysctls.values` on every matching node. The DaemonSet is already privileged, so it can write the node's `/proc/sys`; no extra host mount is needed. </td>
+		</tr>
+		<tr>
+			<td id="tuning--sysctls--values"><a href="./values.yaml#L207">tuning.sysctls.values</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+fs.inotify.max_user_instances: 1024
+fs.inotify.max_user_watches: 524288
+</pre>
+</div>
+			</td>
+			<td>Kernel tunables to set, as `key: value` pairs, applied with `sysctl -w` once per reconcile pass. Setting an already-correct value is a no-op, and because nothing is persisted to `/etc/sysctl.d` the loop is also what re-applies them after a node reboot. The defaults raise the inotify limits for desktop-session density: every session runs a desktop environment, a file manager and a browser, each of which consumes inotify instances and watches. The kernel's limit of 128 instances is per *UID*, and workspace sessions on a node share one, so it is effectively a per-node budget that a handful of concurrent sessions exhausts. This is Kasm-independent engineering judgement — Kasm's own installer sets no sysctls at all. </td>
+		</tr>
+		<tr>
+			<td id="updateStrategy"><a href="./values.yaml#L289">updateStrategy</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+RollingUpdate
+</pre>
+</div>
+			</td>
+			<td>DaemonSet update strategy type. `RollingUpdate` restarts the reconcile pods gradually; `OnDelete` leaves running pods untouched until they are deleted manually. </td>
+		</tr>
+	</tbody>
+</table>
+

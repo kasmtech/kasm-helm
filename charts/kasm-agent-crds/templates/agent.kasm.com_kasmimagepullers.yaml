@@ -1,0 +1,359 @@
+# CustomResourceDefinition rendered as an ordinary Helm template, so this release owns its full
+# lifecycle: `helm upgrade` applies schema changes, and the `helm.sh/resource-policy: keep`
+# annotation makes `helm uninstall` leave the CRD, and every custom resource stored in it, in place.
+# Schema synced from charts/kasm-agent-operator/crds/agent.kasm.com_kasmimagepullers.yaml, which is
+# itself copied VERBATIM from config/crd/bases/ in the kasm-agent-operator repo. Do not hand-edit
+# either copy independently; `make crds-sync-check` fails when the two diverge.
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+    helm.sh/resource-policy: keep
+  name: kasmimagepullers.agent.kasm.com
+spec:
+  group: agent.kasm.com
+  names:
+    kind: KasmImagePuller
+    listKind: KasmImagePullerList
+    plural: kasmimagepullers
+    shortNames:
+    - kimg
+    singular: kasmimagepuller
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.summary.imagesCount
+      name: Images
+      type: integer
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .status.daemonSet.number
+      name: Nodes
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: KasmImagePuller pre-pulls workspace images onto nodes via an
+          idle DaemonSet.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              KasmImagePullerSpec pre-stages OCI images onto nodes to remove cold-start pull
+              latency. The controller runs a DaemonSet whose pod holds one idle ("sleep")
+              container per image, forcing the kubelet to pull and retain each image on
+              every targeted node.
+            properties:
+              annotations:
+                additionalProperties:
+                  type: string
+                type: object
+              imagePullPolicy:
+                default: IfNotPresent
+                description: ImagePullPolicy for the staged images.
+                enum:
+                - Always
+                - IfNotPresent
+                - Never
+                type: string
+              imagePullSecrets:
+                description: |-
+                  ImagePullSecrets are pull secrets applied to the DaemonSet pod for all
+                  images (in addition to any per-image secrets).
+                items:
+                  description: |-
+                    LocalObjectReference contains enough information to let you locate the
+                    referenced object inside the same namespace.
+                  properties:
+                    name:
+                      default: ""
+                      description: |-
+                        Name of the referent.
+                        This field is effectively required, but due to backwards compatibility is
+                        allowed to be empty. Instances of this type with an empty value here are
+                        almost certainly wrong.
+                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                      type: string
+                  type: object
+                  x-kubernetes-map-type: atomic
+                type: array
+              images:
+                description: |-
+                  Images is the catalog to stage (written by the agent from the manager's
+                  heartbeat image list).
+                items:
+                  description: PulledImage is one image to stage on every targeted
+                    node.
+                  properties:
+                    image:
+                      description: Image is the full image reference (registry/repo:tag).
+                      minLength: 1
+                      type: string
+                    imagePullSecrets:
+                      description: |-
+                        ImagePullSecrets are pull secrets for this specific image. They are merged
+                        into the DaemonSet pod's imagePullSecrets (the kubelet selects the matching
+                        secret per image), so per-image credentials work within one pod.
+                      items:
+                        description: |-
+                          LocalObjectReference contains enough information to let you locate the
+                          referenced object inside the same namespace.
+                        properties:
+                          name:
+                            default: ""
+                            description: |-
+                              Name of the referent.
+                              This field is effectively required, but due to backwards compatibility is
+                              allowed to be empty. Instances of this type with an empty value here are
+                              almost certainly wrong.
+                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                            type: string
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      type: array
+                    registry:
+                      description: |-
+                        Registry is an optional registry hostname override (informational; the
+                        reference in Image is authoritative for the pull).
+                      type: string
+                  required:
+                  - image
+                  type: object
+                type: array
+              labels:
+                additionalProperties:
+                  type: string
+                description: Labels/Annotations applied to resources created by this
+                  CR.
+                type: object
+              nodeSelector:
+                additionalProperties:
+                  type: string
+                description: NodeSelector restricts which nodes pre-pull images. Empty
+                  = all nodes.
+                type: object
+              pruneMode:
+                description: |-
+                  PruneMode is advisory metadata from the agent describing how unreferenced
+                  images should be handled; the controller stages exactly spec.images.
+                type: string
+              resources:
+                description: |-
+                  Resources are the per-image idle container's requests/limits (kept tiny —
+                  the container only sleeps).
+                properties:
+                  claims:
+                    description: |-
+                      Claims lists the names of resources, defined in spec.resourceClaims,
+                      that are used by this container.
+
+                      This field depends on the
+                      DynamicResourceAllocation feature gate.
+
+                      This field is immutable. It can only be set for containers.
+                    items:
+                      description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                      properties:
+                        name:
+                          description: |-
+                            Name must match the name of one entry in pod.spec.resourceClaims of
+                            the Pod where this field is used. It makes that resource available
+                            inside a container.
+                          type: string
+                        request:
+                          description: |-
+                            Request is the name chosen for a request in the referenced claim.
+                            If empty, everything from the claim is made available, otherwise
+                            only the result of this request.
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  limits:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    description: |-
+                      Limits describes the maximum amount of compute resources allowed.
+                      More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                    type: object
+                  requests:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    description: |-
+                      Requests describes the minimum amount of compute resources required.
+                      If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                      otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                      More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                    type: object
+                type: object
+            type: object
+          status:
+            description: KasmImagePullerStatus defines the observed state.
+            properties:
+              conditions:
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              daemonSet:
+                description: DaemonSetRef summarizes the managed DaemonSet.
+                properties:
+                  desired:
+                    description: Desired is the number of nodes that should be running
+                      the DaemonSet pod.
+                    format: int32
+                    type: integer
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+                  number:
+                    description: Number is the number of nodes currently running the
+                      DaemonSet pod.
+                    format: int32
+                    type: integer
+                type: object
+              lastReconcileTime:
+                format: date-time
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+              pulledImages:
+                items:
+                  description: |-
+                    PulledImageStatus is per-image availability aggregated across nodes. This is
+                    what the agent surfaces as docker_images in its heartbeat.
+                  properties:
+                    name:
+                      type: string
+                    nodesAvailable:
+                      format: int32
+                      type: integer
+                    nodesDesired:
+                      format: int32
+                      type: integer
+                    repoDigests:
+                      description: RepoDigests are the sha256 repo digests reported
+                        by the runtime (imageID).
+                      items:
+                        type: string
+                      type: array
+                    status:
+                      enum:
+                      - pulled
+                      - failed
+                      - unknown
+                      type: string
+                    tags:
+                      items:
+                        type: string
+                      type: array
+                  required:
+                  - name
+                  type: object
+                type: array
+              summary:
+                description: ImagePullerSummary is a quick rollup for the printer
+                  columns.
+                properties:
+                  failures:
+                    format: int32
+                    type: integer
+                  imagesCount:
+                    format: int32
+                    type: integer
+                type: object
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

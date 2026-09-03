@@ -1,0 +1,154 @@
+# nameOverride -- Override the chart name used to build resource names and the `app.kubernetes.io/name`
+# label. Leave empty to use the chart name, `kasm-agent-operator`.
+#
+# This only affects chart-generated names (the operator Deployment). The RBAC objects this chart ships
+# keep the fixed names the operator and the kustomize deployment use (`manager-role`, `kasm-agent`, and
+# so on) and are not affected by this value.
+#
+nameOverride: ""
+
+# fullnameOverride -- Override the fully qualified name of the operator Deployment. Leave empty to build
+# it from the release name and the chart name (`<release>-kasm-agent-operator`).
+#
+fullnameOverride: ""
+
+# replicas -- The number of controller-manager replicas to run. The operator uses leader election
+# (see `leaderElect`), so only one replica reconciles at a time; additional replicas are warm standbys.
+#
+replicas: 1
+
+# leaderElect -- Pass `--leader-elect` to the controller-manager so that exactly one replica reconciles
+# at a time. Leave enabled unless you are running a single replica in a development cluster and want to
+# avoid the lease acquisition delay on restart.
+#
+leaderElect: true
+
+# image -- The controller-manager container image.
+#
+image:
+  # image.registry -- The registry the operator image is pulled from.
+  #
+  registry: docker.io
+  # image.repository -- The repository of the operator image, without the registry or the tag.
+  #
+  repository: kasmweb/kasm-agent-operator
+  # image.tag -- The tag of the operator image. Leave empty to use the chart's `appVersion`.
+  #
+  tag: ""
+  # image.pullPolicy -- The image pull policy for the operator container.
+  #
+  pullPolicy: IfNotPresent
+
+# imagePullSecrets -- A list of Secret references used to pull the operator image, each entry an object
+# with a `name` key. The referenced Secrets must already exist in the release namespace; this chart does
+# not create them.
+#
+# Example:
+#   imagePullSecrets:
+#     - name: kasm-ai
+#
+imagePullSecrets: []
+
+# serviceAccount -- The ServiceAccount the controller-manager runs as, and which the RBAC this chart
+# ships is bound to.
+#
+serviceAccount:
+  # serviceAccount.create -- Create the ServiceAccount. Disable it if the ServiceAccount named below is
+  # managed outside this chart; the ClusterRoleBinding and RoleBinding still reference it.
+  #
+  create: true
+  # serviceAccount.name -- The name of the ServiceAccount. The default matches the name used by the
+  # operator's kustomize deployment, so an existing cluster keeps the same identity.
+  #
+  name: controller-manager
+  # serviceAccount.annotations -- Annotations to add to the ServiceAccount, for example an IAM role
+  # binding annotation on a cloud-managed cluster.
+  #
+  annotations: {}
+
+# rbac -- The cluster RBAC the operator, and the workloads it reconciles, require.
+#
+rbac:
+  # rbac.aggregateRoles -- Install the convenience admin/editor/viewer ClusterRoles scaffolded for each
+  # custom resource kind. They are not used by the operator itself; they exist so a cluster administrator
+  # can delegate access to the Kasm custom resources. Disabling them does not affect the operator, the
+  # `kasm-agent` ClusterRole, or the `kasm-nginx-sidecar` ClusterRole.
+  #
+  aggregateRoles: true
+
+# otel -- OpenTelemetry export configuration for the operator's traces and metrics.
+#
+otel:
+  # otel.enabled -- Set the OTLP exporter environment variables on the controller-manager container.
+  # Disable it to leave the OTLP endpoint unset, which makes the operator's SDK fall back to its own
+  # default endpoint (localhost) and drop the exported telemetry.
+  #
+  enabled: true
+  # otel.endpoint -- The OTLP HTTP endpoint the operator exports to. Leave empty to point at the
+  # collector deployed alongside this chart by the `kasm-agent` umbrella chart,
+  # `http://<release>-kasm-otel-collector:4318`.
+  #
+  endpoint: ""
+
+# extraEnv -- Additional environment variables to append to the controller-manager container, in the
+# native Kubernetes `EnvVar` form. Entries are appended after the OTLP variables, so an entry that
+# repeats an OTLP variable name overrides it.
+#
+# Example:
+#   extraEnv:
+#     - name: LOG_LEVEL
+#       value: debug
+#
+extraEnv: []
+
+# resources -- CPU and memory requests and limits for the controller-manager container. Both requests
+# and limits must set `cpu` and `memory`; the repository's Kyverno policies reject a container that
+# leaves any of the four unset.
+#
+resources:
+  limits:
+    # resources.limits.cpu -- The CPU limit for the controller-manager container. The default is carried
+    # over from the operator's own kustomize manifests, where 100m has been enough for a controller that
+    # spends most of its time watching. Raise it if reconcile latency climbs on a cluster with many
+    # `Agent` or `KasmWorkspace` objects; a throttled controller does not fail, it just falls behind.
+    #
+    cpu: 100m
+    # resources.limits.memory -- The memory limit for the controller-manager container, also carried over
+    # from the operator's kustomize manifests. The controller's informer caches hold every object it
+    # watches, so this is the value to raise on a large cluster rather than letting the manager be
+    # OOMKilled part way through a reconcile.
+    #
+    memory: 256Mi
+  requests:
+    # resources.requests.cpu -- The CPU request for the controller-manager container. It deliberately
+    # matches `resources.limits.cpu`, which puts the operator Pod in the Guaranteed QoS class so the
+    # scheduler reserves the capacity and the kubelet does not pick it first under node pressure.
+    #
+    cpu: 100m
+    # resources.requests.memory -- The memory request for the controller-manager container. It matches
+    # `resources.limits.memory` for the same Guaranteed QoS reason, so keep the two in step if you raise
+    # either.
+    #
+    memory: 256Mi
+
+# podAnnotations -- Additional annotations to add to the operator Pod. The chart's own
+# `kubectl.kubernetes.io/default-container` annotation always wins and cannot be overridden here.
+#
+podAnnotations: {}
+
+# podLabels -- Additional labels to add to the operator Pod, merged with the chart's own labels. The
+# chart's labels, including the immutable selector labels, always win and cannot be overridden here.
+#
+podLabels: {}
+
+# nodeSelector -- Node labels the operator Pod must match to be scheduled.
+#
+nodeSelector: {}
+
+# tolerations -- Tolerations for the operator Pod, allowing it onto tainted nodes.
+#
+tolerations: []
+
+# affinity -- Affinity and anti-affinity rules for the operator Pod.
+#
+affinity: {}

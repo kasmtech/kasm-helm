@@ -1,0 +1,25 @@
+{{/*
+  Binds the Events Role to the collector's ServiceAccount. Rendered alongside
+  role.yaml, only when the k8s_events receiver is enabled.
+*/}}
+{{- if .Values.receivers.k8sEvents.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "kasmOtelCollector.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kasmOtelCollector.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "kasmOtelCollector.fullname" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "kasmOtelCollector.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

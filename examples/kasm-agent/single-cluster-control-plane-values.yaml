@@ -1,0 +1,83 @@
+# kasm-helm (control plane) values for the RECOMMENDED two-namespace, single-cluster
+# deployment — the counterpart of examples/kasm-agent/single-cluster-agent-values.yaml
+# (namespace `kasm-agent`), whose header carries the full install order. See "Running
+# alongside the kasm-helm control plane" in charts/kasm-agent/README.md for the
+# pairing walkthrough. For everything in ONE namespace and one release instead, use
+# examples/kasm-agent/platform-values.yaml with the kasm-platform chart.
+#
+#   helm install kasm charts/kasm-helm -n kasm --create-namespace \
+#     -f examples/kasm-agent/single-cluster-control-plane-values.yaml
+#
+# Hostname plan (pick both under ONE parent domain — the auth cookie must cover both):
+#   control plane UI/API:  kasm.example.com        (publicAddr here)
+#   agent session proxy:   sessions.example.com    (agent.publicHostname in the agent chart)
+#   auth cookie domain:    example.com             (kasm_auth_domain below)
+
+deploymentSize: small
+publicAddr: kasm.example.com
+
+# ClusterIP + the chart's own Ingress. Never LoadBalancer next to an ingress
+# controller that already binds the node's :443.
+proxyService:
+  type: ClusterIP
+ingress:
+  enabled: true
+  ingressClassName: traefik
+  backendProtocol: http
+
+certificate:
+  # A kubernetes.io/tls Secret for publicAddr; issue it with cert-manager or supply
+  # your own. Users' browsers must trust it.
+  secretName: kasm-tls
+
+kasmSecrets:
+  passwords:
+    # Pinning the manager token here means the agent chart can reference a known
+    # value instead of reading it back after install:
+    #   kubectl create secret generic kasm-manager-token -n kasm-agent \
+    #     --from-literal=token='<the same value>'
+    # Leave the other passwords unset so they stay randomly generated.
+    manager-token: "change-me-agent-registration-token"
+
+# The Kubernetes agent's session proxy is reached DIRECTLY by browsers (that is what
+# the agent chart's httpRoute/ingress/route expose). The seeded defaults — proxied
+# connections and a request-host auth scope — both break that; these preseed values
+# fix them at database initialization. On an EXISTING control plane change the same
+# three settings in the admin UI (Infrastructure -> Zones; Settings -> Auth) instead:
+# the preseed only runs on a fresh database.
+kasmZones:
+  - name: default
+    proxyAddress: kasm.example.com
+    # Browsers connect straight to the agent's hostname instead of being relayed
+    # through the control-plane proxy (which forwards the original Host header and
+    # 404s behind host-routing ingress).
+    proxy_connections: false
+    # Where the agent-side session proxy validates sessions; the $request_host$
+    # default would point it at the agent's own hostname.
+    upstream_auth_address: kasm.example.com
+
+kasmConfig:
+  # Required for the kasmZones above to reach the database: the preseed is generated
+  # only when this is true, and only applies on a fresh install.
+  generatePreseed: true
+
+  # The "Kasm Authorization Domain" (kasm_auth_domain) global setting: the PARENT
+  # domain covering both hostnames — example.com here — so the session cookie reaches
+  # the agent's hostname. The $request_host$ default pins it to the control-plane
+  # hostname and every direct session connection 401s.
+  #
+  # Like the zone settings above, this applies at database initialization, so it
+  # covers FRESH INSTALLS only. On an existing control plane set it in the admin UI
+  # (Settings -> Auth) or with POST /api/admin/update_setting (top-level setting_id
+  # from get_settings, plus value).
+  #
+  # Note this is NOT a kasmConfig.config.settings entry. Routing kasm_auth_domain
+  # through config.settings used to be the broken path: the settings preseed
+  # CONCATENATED the two lists instead of upserting, so any setting already present in
+  # Kasm's default seed got a duplicate row, and the duplicate broke /api/authenticate
+  # outright (500, MultipleResultsFound) until one row was deleted by hand. That merge
+  # now upserts on name + category, so config.settings is safe for seed-existing
+  # settings too — but authDomain is the supported route for this one: it is applied
+  # last, against the finished seed file, so it wins over the config.settings merge
+  # and over existingDefaultPropertiesSecret.
+  authDomain: example.com

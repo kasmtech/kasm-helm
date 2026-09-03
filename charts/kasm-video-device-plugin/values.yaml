@@ -1,0 +1,113 @@
+# nameOverride -- Override the chart name used when building resource names and the `app.kubernetes.io/name`
+# label. Leave empty to use the chart name (`kasm-video-device-plugin`).
+#
+nameOverride: ""
+
+# fullnameOverride -- Override the fully qualified name of every resource this chart creates. Leave empty to
+# use the standard `<release name>-<chart name>` naming.
+#
+fullnameOverride: ""
+
+# Configure the device plugin image. This chart deploys Kasm's own video-device-plugin (built from
+# apps/kasm-video-device-plugin in kasm-monorepo), which implements the kubelet Device Plugin API and
+# advertises /dev/<devicePrefix>* host device files as one extended resource.
+#
+image:
+  # image.registry -- Container registry that hosts the device plugin image. Point this at a private registry
+  # or a pull-through mirror for air-gapped clusters.
+  #
+  registry: docker.io
+  # image.repository -- Repository of the device plugin image within `image.registry`.
+  #
+  repository: kasmweb/kasm-video-device-plugin
+  # image.tag -- Tag of the device plugin image. Leave empty to use the chart's `appVersion`.
+  #
+  tag: ""
+  # image.pullPolicy -- Image pull policy for the device plugin container.
+  #
+  pullPolicy: IfNotPresent
+
+# imagePullSecrets -- Names of existing `kubernetes.io/dockerconfigjson` Secrets in the release namespace, used
+# to pull the device plugin image from a private registry.
+#
+imagePullSecrets: []
+
+# devicePrefix -- Prefix matched against entries in /dev to decide which host device files to advertise (e.g.
+# "video" matches video0, video1, ...). The plugin re-scans /dev every 10 seconds, so devices created or
+# removed while it runs are picked up without a restart.
+#
+devicePrefix: video
+
+# maxDevices -- Maximum number of matching devices to advertise. Extra devices beyond this count (sorted
+# numerically by suffix, so video10 is not treated as smaller than video2) are ignored.
+#
+maxDevices: 128
+
+# resourceName -- Kubernetes extended resource name the plugin registers under with kubelet. Must match the
+# resource key in workspace pod limits — this is the resource the Kasm agent requests when
+# `KASM_SVC_WEBCAM=1`.
+#
+resourceName: kasm.com/video
+
+# allocateEnvVar -- Env var injected into a container that is allocated exactly one device, set to that
+# device's host path (e.g. `KASM_VIDEO_DEVICE=/dev/video3`). The exec job reads this to discover which device
+# kubelet assigned. Not set when a container is allocated more than one device.
+#
+allocateEnvVar: KASM_VIDEO_DEVICE
+
+# nodeSelector -- Node labels that select which nodes run the device plugin. Set this to the same selector
+# used by the `kasm-node-prep` chart so `kasm.com/video` is only advertised on nodes where the v4l2loopback
+# module is actually loaded; otherwise the scheduler can place a webcam session on a node with no devices.
+#
+nodeSelector: {}
+
+# tolerations -- Tolerations for the DaemonSet pods, so nodes carrying taints (for example dedicated
+# workspace nodes) still advertise their video devices.
+#
+tolerations: []
+
+# updateStrategy -- DaemonSet update strategy type. `RollingUpdate` restarts the plugin pods gradually;
+# `OnDelete` leaves running pods untouched until they are deleted manually.
+#
+updateStrategy: RollingUpdate
+
+# resources -- CPU and memory requests and limits for the device plugin container. The plugin only watches
+# device paths and answers kubelet, so it stays small. Both requests and limits are always set.
+#
+resources:
+  requests:
+    # resources.requests.cpu -- CPU request for the device plugin container. All the plugin does is re-scan
+    # `/dev` every 10 seconds and answer kubelet's gRPC calls, so there is no per-session work and the request
+    # is effectively an idle reservation.
+    #
+    cpu: 10m
+    # resources.requests.memory -- Memory request for the device plugin container. It holds only the list of
+    # matching device files (at most `maxDevices` entries) and its gRPC server, so this stays flat no matter
+    # how many webcam sessions are running on the node.
+    #
+    memory: 32Mi
+  limits:
+    # resources.limits.cpu -- CPU limit for the device plugin container. Headroom over the request for the
+    # periodic `/dev` re-scan and for the burst of Allocate calls when several webcam sessions start at once;
+    # the plugin is near-idle the rest of the time, so there is little reason to raise this.
+    #
+    cpu: 50m
+    # resources.limits.memory -- Memory limit for the device plugin container. Comfortably above what the
+    # plugin actually uses — it is here to bound a runaway and to satisfy the repository's Kyverno policies,
+    # which reject a container with no memory limit, not because the plugin is expected to approach it.
+    #
+    memory: 64Mi
+
+# priorityClassName -- Priority class for the DaemonSet pods. Device plugins should outlive node pressure:
+# if this pod is evicted, kubelet stops advertising `kasm.com/video` and webcam sessions become
+# unschedulable on that node. Set to an empty string to use the namespace default instead.
+#
+priorityClassName: system-node-critical
+
+# podAnnotations -- Extra annotations to add to the DaemonSet pods.
+#
+podAnnotations: {}
+
+# podLabels -- Extra labels to add to the DaemonSet pods, merged with the chart's standard selector labels.
+#
+podLabels: {}

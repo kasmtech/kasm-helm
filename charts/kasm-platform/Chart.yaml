@@ -1,0 +1,43 @@
+apiVersion: v2
+name: kasm-platform
+description: "The complete Kasm Workspaces stack for Kubernetes: the control plane and the Kubernetes agent in one release, each independently switchable"
+type: application
+icon: https://kasm-static-content.s3.amazonaws.com/icons/kasm-logo-small.png
+home: https://kasm.com
+keywords:
+  - kasm
+  - vdi
+  - workspaces
+  - platform
+  - control-plane
+  - agent
+maintainers:
+  - name: Kasm Technologies, Inc.
+    url: https://github.com/kasmtech/kasm-helm
+version: 0.1.0
+appVersion: "develop"
+dependencies:
+  # The Kasm Workspaces control plane: the web UI, the manager/API services, the session proxy,
+  # Guacamole, the RDP gateways, and the PostgreSQL database. This is the half users log in to and
+  # the half agents register with.
+  #
+  # Deliberately NOT aliased. The chart's helpers derive resource names and component labels from
+  # `.Chart.Name`, which Helm rewrites to the alias inside an aliased dependency, and the chart has
+  # no nameOverride to undo that. The un-aliased kebab-case key is the same precedent the
+  # kasm-agent umbrella sets for `nfs-server-provisioner`.
+  - name: kasm-helm
+    version: 1.1190.6
+    repository: file://../kasm-helm
+    condition: kasm-helm.enabled
+  # The Kasm Kubernetes agent umbrella: the agent operator (CRDs, cluster RBAC,
+  # controller-manager), the OpenTelemetry collector, the Agent custom resource and its session
+  # proxy, and the optional per-feature cluster infrastructure (node prep, video device plugin,
+  # rclone CSI driver, GPU Operator, NFS provisioner).
+  #
+  # Also un-aliased, for the same reason. Its own eight dependencies keep their aliases, so their
+  # conditions stay reachable from here as `kasm-agent.operator.enabled`,
+  # `kasm-agent.nodePrep.enabled`, and so on.
+  - name: kasm-agent
+    version: 0.1.0
+    repository: file://../kasm-agent
+    condition: kasm-agent.enabled

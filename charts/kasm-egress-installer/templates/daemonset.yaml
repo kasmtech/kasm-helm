@@ -1,0 +1,124 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "kasmEgressInstaller.fullname" . }}
+  labels:
+    {{- include "kasmEgressInstaller.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "kasmEgressInstaller.selectorLabels" . | nindent 6 }}
+  updateStrategy:
+    type: {{ .Values.updateStrategy }}
+  template:
+    metadata:
+      annotations:
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "kasmEgressInstaller.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "kasmEgressInstaller.fullname" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      # hostPID: the daemon resolves CNI_NETNS/mount-namespace paths (and, for Ziti, finds the mount
+      # namespace matching a given net namespace) by scanning /proc/<pid>/ns/* across every process on
+      # the node, which only works with visibility into the host PID namespace.
+      hostPID: true
+      # hostNetwork: avoids a CNI bootstrap deadlock — this pod itself must come up before it can
+      # finish patching the node's CNI chain, so it cannot depend on that chain already being usable.
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: egress-daemon
+          image: {{ include "kasmEgressInstaller.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # Full privileged, not a narrower capability set: this container calls nsenter into
+          # arbitrary other pods' network *and* mount namespaces (found via a /proc scan, not just
+          # the CNI-provided path), runs mknod for /dev/net/tun, manipulates iptables/routes, and
+          # unshares a new mount namespace to hand the Ziti tunnel process its own bind mount. See
+          # docs/egress-installer-port-notes.md in kasm-monorepo for the full review this was based
+          # on, including why this conflicts with a fleet's baseline host-namespace policy and needs
+          # an explicit decision before this chart is installed anywhere such a policy is enforced.
+          securityContext:
+            privileged: true
+          env:
+            - name: EGRESS_SOCKET_DIR
+              value: {{ .Values.socketDir | quote }}
+            - name: CNI_BIN_DIR
+              value: {{ include "kasmEgressInstaller.cniBinDir" . | quote }}
+            - name: CNI_CONF_DIRS
+              value: {{ join "," .Values.cniConfDirs | quote }}
+            - name: CONTAINERD_CONFIG_PATHS
+              value: {{ join "," .Values.containerdConfigPaths | quote }}
+            - name: OPENVPN_BINARY
+              value: {{ .Values.openvpnBinary | quote }}
+            {{- if .Values.excludedCIDRs }}
+            - name: EGRESS_EXCLUDE_CIDRS
+              value: {{ join "," .Values.excludedCIDRs | quote }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            # Must be a host path, not emptyDir: kasm-egress-cni runs directly on the host (invoked
+            # by the container runtime, outside any pod) and has to reach this same socket path.
+            - name: socket-dir
+              mountPath: {{ .Values.socketDir }}
+            - name: cni-bin
+              mountPath: {{ include "kasmEgressInstaller.cniBinDir" . }}
+            {{- range $i, $dir := .Values.cniConfDirs }}
+            - name: cni-conf-{{ $i }}
+              mountPath: {{ $dir }}
+            {{- end }}
+            {{- range $i, $dir := .Values.containerdConfigDirs }}
+            - name: containerd-conf-{{ $i }}
+              mountPath: {{ $dir }}
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: socket-dir
+          hostPath:
+            path: {{ .Values.socketDir }}
+            type: DirectoryOrCreate
+        - name: cni-bin
+          hostPath:
+            path: {{ include "kasmEgressInstaller.cniBinDir" . }}
+            type: DirectoryOrCreate
+        {{- range $i, $dir := .Values.cniConfDirs }}
+        - name: cni-conf-{{ $i }}
+          hostPath:
+            path: {{ $dir }}
+            type: DirectoryOrCreate
+        {{- end }}
+        {{/*
+          DirectoryOrCreate, not File/FileOrCreate on the individual config paths: only one of k3s
+          or RKE2's containerd config exists on any given node, and mounting a specific missing file
+          would either wedge the pod in ContainerCreating (type: File) or plant an empty file that
+          the daemon would misread as "containerd detected but misconfigured" (type: FileOrCreate on
+          an absent path). Mounting each distro's parent directory instead means an inapplicable
+          distro's mount is just an empty, otherwise-untouched directory — mirrors the same
+          k3s-vs-RKE2 handling in the kasm-node-prep chart.
+        */}}
+        {{- range $i, $dir := .Values.containerdConfigDirs }}
+        - name: containerd-conf-{{ $i }}
+          hostPath:
+            path: {{ $dir }}
+            type: DirectoryOrCreate
+        {{- end }}

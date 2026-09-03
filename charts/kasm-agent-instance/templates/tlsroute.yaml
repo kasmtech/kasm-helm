@@ -1,0 +1,68 @@
+{{/*
+  Gateway API TLSRoute exposing the session proxy at the agent's public
+  hostname. This is the fourth external-access option in this chart, alongside
+  httproute.yaml (Gateway API, HTTP), ingress.yaml and route.yaml (OpenShift) -
+  enable at most one of the four, since all of them point at the same Service.
+
+  This one is SNI-based TLS *passthrough*: the Gateway reads only the SNI server
+  name from the TLS handshake and splices the connection through untouched, so
+  browsers get end-to-end TLS to the session proxy's own certificate - the one in
+  sessionProxy.certSecretName. That is the same shape as the OpenShift Route's
+  default `passthrough` termination, but available on any cluster with the
+  Gateway API instead of only on OpenShift. The certificate therefore has to be
+  valid for the hostnames below, not just for the in-cluster Service name.
+
+  The Gateway has to cooperate: it needs a listener with `protocol: TLS` and
+  `tls.mode: Passthrough` whose allowedRoutes admits this namespace. A plain
+  HTTPS (terminate) listener will not serve this route.
+
+  TLSRoute lives in the Gateway API's *experimental* channel and is still
+  v1alpha2 - it was never promoted alongside HTTPRoute's v1 - so the standard
+  channel CRDs installed for httproute.yaml are not enough on their own.
+
+  The backend Service is NOT created by this chart: the Agent controller creates
+  it from agent.yaml and names it "<Agent name>-session-proxy", which is why the
+  backendRef is built from .Values.name rather than from the chart fullname. The
+  default backend port, 4444, is the proxy's own HTTPS listener - the only one
+  that makes sense here, since nothing decrypts the connection on the way.
+
+  Only the parentRef crosses namespaces; the backendRef stays in-namespace, so
+  no ReferenceGrant is needed.
+
+  Kasm sessions are long-lived websockets. Nothing here speaks HTTP, so there
+  are no proxy-read-timeout style knobs to set and no websocket upgrade to
+  allow; what bounds a session instead is the layer-4 idle timeout of the
+  Gateway's data plane and of any load balancer in front of it.
+*/}}
+{{- if .Values.tlsRoute.enabled }}
+{{- $hostnames := .Values.tlsRoute.hostnames | default (list (include "kasmAgentInstance.publicHostname" .)) }}
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: TLSRoute
+metadata:
+  name: {{ include "kasmAgentInstance.fullname" . }}-session-proxy
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kasmAgentInstance.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.tlsRoute.parentRefs }}
+  parentRefs:
+    {{- range . }}
+    - name: {{ .name }}
+      {{- with .namespace }}
+      namespace: {{ . }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+  hostnames:
+    {{- range $hostnames }}
+    - {{ . | quote }}
+    {{- end }}
+  rules:
+    - backendRefs:
+        - name: {{ printf "%s-session-proxy" .Values.name }}
+          port: {{ .Values.tlsRoute.backendPort }}
+{{- end }}

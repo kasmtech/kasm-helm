@@ -1,0 +1,18 @@
+annotations:
+  category: Monitoring
+apiVersion: v2
+appVersion: "0.156.0"
+name: kasm-otel-collector
+description: An OpenTelemetry Collector that receives OTLP traces, metrics, and logs from the Kasm agent components and fans them out to external observability backends. Deployed as a subchart of the kasm-agent umbrella chart under the `otelCollector` alias.
+icon: https://kasm-static-content.s3.amazonaws.com/icons/kasm-logo-small.png
+home: https://kasm.com
+keywords:
+  - kasm
+  - opentelemetry
+  - otel
+  - observability
+  - telemetry
+maintainers:
+  - name: Kasm Technologies, Inc.
+    url: https://github.com/kasmtech/kasm-helm
+version: 0.1.0

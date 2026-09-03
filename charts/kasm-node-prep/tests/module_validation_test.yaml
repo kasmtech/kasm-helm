@@ -1,0 +1,159 @@
+suite: negative path / nothing enabled
+
+# configmap.yaml is listed so the DaemonSet's checksum/config annotation can resolve it.
+templates:
+  - templates/daemonset.yaml
+  - templates/configmap.yaml
+
+tests:
+  - it: fails with a clear message when no module and no tuning feature is enabled
+    template: templates/daemonset.yaml
+    set:
+      modules:
+        v4l2loopback:
+          enabled: false
+        wireguard:
+          enabled: false
+    asserts:
+      - failedTemplate:
+          errorMessage: "kasm-node-prep: nothing is enabled, so this chart has no work to do. Enable at least one of modules.v4l2loopback.enabled (webcam support, built on the node or delegated to KMM with modules.v4l2loopback.method=kmm), modules.wireguard.enabled (VPN sidecars on kernels < 5.6), tuning.sysctls.enabled (kernel tunables) or tuning.swap.enabled (node swapfile), or disable this chart entirely (nodePrep.enabled=false on the umbrella chart)."
+
+  - it: renders the daemonset when only wireguard is enabled
+    template: templates/daemonset.yaml
+    set:
+      modules:
+        v4l2loopback:
+          enabled: false
+        wireguard:
+          enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: DaemonSet
+
+  - it: renders the configmap when only v4l2loopback is enabled
+    template: templates/configmap.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ConfigMap
+
+  # --- Tuning-only installs ---------------------------------------------------------------------
+  #
+  # Node tuning is a reason to run the DaemonSet in its own right: a cluster whose node image
+  # already ships every kernel module can still want the swapfile or the sysctls.
+
+  - it: renders the daemonset when every module is off but sysctl tuning is on
+    template: templates/daemonset.yaml
+    set:
+      modules:
+        v4l2loopback:
+          enabled: false
+        wireguard:
+          enabled: false
+      tuning:
+        sysctls:
+          enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: DaemonSet
+
+  - it: renders the daemonset when every module is off but swap tuning is on
+    template: templates/daemonset.yaml
+    set:
+      modules:
+        v4l2loopback:
+          enabled: false
+        wireguard:
+          enabled: false
+      tuning:
+        swap:
+          enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: DaemonSet
+
+  - it: still fails when tuning is present but every feature under it is off
+    template: templates/daemonset.yaml
+    set:
+      modules:
+        v4l2loopback:
+          enabled: false
+        wireguard:
+          enabled: false
+      tuning:
+        sysctls:
+          enabled: false
+        swap:
+          enabled: false
+    asserts:
+      - failedTemplate:
+          errorMessage: "kasm-node-prep: nothing is enabled, so this chart has no work to do. Enable at least one of modules.v4l2loopback.enabled (webcam support, built on the node or delegated to KMM with modules.v4l2loopback.method=kmm), modules.wireguard.enabled (VPN sidecars on kernels < 5.6), tuning.sysctls.enabled (kernel tunables) or tuning.swap.enabled (node swapfile), or disable this chart entirely (nodePrep.enabled=false on the umbrella chart)."
+
+  # --- KMM-only installs ------------------------------------------------------------------------
+  #
+  # A module delegated to the Kernel Module Management operator leaves the DaemonSet with nothing
+  # to do, but the Module CR is real work, so the install is valid and simply renders no DaemonSet
+  # and no reconcile-script ConfigMap.
+
+  - it: renders neither the daemonset nor the script configmap for a kmm-only install
+    set:
+      modules:
+        v4l2loopback:
+          method: kmm
+          kmm:
+            image:
+              registry: registry.contoso.com
+              repository: kasm/v4l2loopback
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/daemonset.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/configmap.yaml
+
+  - it: still renders both when a kmm module is paired with node tuning
+    set:
+      modules:
+        v4l2loopback:
+          method: kmm
+          kmm:
+            image:
+              registry: registry.contoso.com
+              repository: kasm/v4l2loopback
+      tuning:
+        sysctls:
+          enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/daemonset.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/configmap.yaml
+
+  - it: still renders both when a kmm module is paired with a module built on the node
+    set:
+      modules:
+        v4l2loopback:
+          method: kmm
+          kmm:
+            image:
+              registry: registry.contoso.com
+              repository: kasm/v4l2loopback
+        wireguard:
+          enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/daemonset.yaml
+      - isKind:
+          of: DaemonSet
+        template: templates/daemonset.yaml

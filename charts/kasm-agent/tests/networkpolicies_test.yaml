@@ -1,0 +1,333 @@
+suite: baseline network policies
+templates:
+  - templates/networkpolicies.yaml
+release:
+  name: kasm
+  namespace: kasm-agent
+
+tests:
+  - it: renders nothing when networkPolicies.enabled is false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders the seven baseline policies, all namespaced NetworkPolicies
+    set:
+      networkPolicies:
+        enabled: true
+    asserts:
+      - hasDocuments:
+          count: 7
+      - isKind:
+          of: NetworkPolicy
+      - isAPIVersion:
+          of: networking.k8s.io/v1
+      - equal:
+          path: metadata.namespace
+          value: kasm-agent
+      - equal:
+          path: metadata.name
+          value: kasm-kasm-agent-default-deny
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: kasm-kasm-agent-allow-dns
+        documentIndex: 1
+      - equal:
+          path: metadata.name
+          value: kasm-kasm-agent-allow-intra-namespace
+        documentIndex: 2
+      - equal:
+          path: metadata.name
+          value: kasm-kasm-agent-allow-apiserver-egress
+        documentIndex: 3
+      - equal:
+          path: metadata.name
+          value: kasm-kasm-agent-allow-manager-egress
+        documentIndex: 4
+      - equal:
+          path: metadata.name
+          value: kasm-kasm-agent-allow-session-ingress
+        documentIndex: 5
+      - equal:
+          path: metadata.name
+          value: kasm-kasm-agent-allow-otlp-backend-egress
+        documentIndex: 6
+
+  - it: default-deny isolates every pod in both directions
+    set:
+      networkPolicies:
+        enabled: true
+    documentSelector:
+      path: metadata.name
+      value: kasm-kasm-agent-default-deny
+    asserts:
+      - equal:
+          path: spec.podSelector
+          value: {}
+      - equal:
+          path: spec.policyTypes
+          value:
+            - Ingress
+            - Egress
+      - notExists:
+          path: spec.ingress
+      - notExists:
+          path: spec.egress
+
+  - it: allow-dns opens UDP and TCP 53 to any destination
+    set:
+      networkPolicies:
+        enabled: true
+    documentSelector:
+      path: metadata.name
+      value: kasm-kasm-agent-allow-dns
+    asserts:
+      - equal:
+          path: spec.policyTypes
+          value:
+            - Egress
+      - equal:
+          path: spec.egress[0].ports
+          value:
+            - protocol: UDP
+              port: 53
+            - protocol: TCP
+              port: 53
+      - notExists:
+          path: spec.egress[0].to
+
+  - it: allow-intra-namespace permits pod-to-pod traffic in both directions
+    set:
+      networkPolicies:
+        enabled: true
+    documentSelector:
+      path: metadata.name
+      value: kasm-kasm-agent-allow-intra-namespace
+    asserts:
+      - equal:
+          path: spec.ingress[0].from
+          value:
+            - podSelector: {}
+      - equal:
+          path: spec.egress[0].to
+          value:
+            - podSelector: {}
+
+  - it: allows egress to the API server on 6443 and 443 anywhere by default
+    set:
+      networkPolicies:
+        enabled: true
+    documentSelector:
+      path: metadata.name
+      value: kasm-kasm-agent-allow-apiserver-egress
+    asserts:
+      - equal:
+          path: spec.egress[0].to[0].ipBlock.cidr
+          value: 0.0.0.0/0
+      - equal:
+          path: spec.egress[0].ports
+          value:
+            - protocol: TCP
+              port: 6443
+            - protocol: TCP
+              port: 443
+
+  - it: honours a tightened apiServer CIDR and port list
+    set:
+      networkPolicies:
+        enabled: true
+        apiServer:
+          cidr: 10.0.0.10/32
+          ports:
+            - 6443
+    documentSelector:
+      path: metadata.name
+      value: kasm-kasm-agent-allow-apiserver-egress
+    asserts:
+      - equal:
+          path: spec.egress[0].to[0].ipBlock.cidr
+          value: 10.0.0.10/32
+      - equal:
+          path: spec.egress[0].ports
+          value:
+            - protocol: TCP
+              port: 6443
+
+  - it: allows egress to the Kasm manager on 443 and 80 anywhere by default
+    set:
+      networkPolicies:
+        enabled: true
+    documentSelector:
+      path: metadata.name
+      value: kasm-kasm-agent-allow-manager-egress
+    asserts:
+      - equal:
+          path: spec.egress[0].to[0].ipBlock.cidr
+          value: 0.0.0.0/0
+      - equal:
+          path: spec.egress[0].ports
+          value:
+            - protocol: TCP
+              port: 443
+            - protocol: TCP
+              port: 80
+
+  - it: honours a tightened manager CIDR
+    set:
+      networkPolicies:
+        enabled: true
+        manager:
+          cidr: 192.168.50.0/24
+    documentSelector:
+      path: metadata.name
+      value: kasm-kasm-agent-allow-manager-egress
+    asserts:
+      - equal:
+          path: spec.egress[0].to[0].ipBlock.cidr
+          value: 192.168.50.0/24
+
+  - it: allows egress to the telemetry backends on the OTLP and ClickHouse ports
+    set:
+      networkPolicies:
+        enabled: true
+    documentSelector:
+      path: metadata.name
+      value: kasm-kasm-agent-allow-otlp-backend-egress
+    asserts:
+      - equal:
+          path: spec.egress[0].to[0].ipBlock.cidr
+          value: 0.0.0.0/0
+      - equal:
+          path: spec.egress[0].ports
+          value:
+            - protocol: TCP
+              port: 4317
+            - protocol: TCP
+              port: 4318
+            - protocol: TCP
+              port: 9000
+
+  - it: leaves session proxy ingress open to anywhere by default
+    set:
+      networkPolicies:
+        enabled: true
+    documentSelector:
+      path: metadata.name
+      value: kasm-kasm-agent-allow-session-ingress
+    asserts:
+      - equal:
+          path: spec.podSelector.matchLabels["app.kubernetes.io/component"]
+          value: session-proxy
+      - equal:
+          path: spec.policyTypes
+          value:
+            - Ingress
+      - equal:
+          path: spec.ingress[0].ports
+          value:
+            - protocol: TCP
+              port: 4444
+            - protocol: TCP
+              port: 4445
+      - notExists:
+          path: spec.ingress[0].from
+
+  - it: restricts session proxy ingress to the configured peers and ports
+    set:
+      networkPolicies:
+        enabled: true
+        sessionProxy:
+          ports:
+            - 4444
+          from:
+            - namespaceSelector:
+                matchLabels:
+                  kubernetes.io/metadata.name: ingress-nginx
+    documentSelector:
+      path: metadata.name
+      value: kasm-kasm-agent-allow-session-ingress
+    asserts:
+      - equal:
+          path: spec.ingress[0].ports
+          value:
+            - protocol: TCP
+              port: 4444
+      - equal:
+          path: spec.ingress[0].from
+          value:
+            - namespaceSelector:
+                matchLabels:
+                  kubernetes.io/metadata.name: ingress-nginx
+
+  - it: renders string-form extraPolicies through tpl
+    set:
+      networkPolicies:
+        enabled: true
+        extraPolicies:
+          - |
+            apiVersion: networking.k8s.io/v1
+            kind: NetworkPolicy
+            metadata:
+              name: {{ .Release.Name }}-allow-registry-egress
+              namespace: {{ .Release.Namespace }}
+            spec:
+              podSelector: {}
+              policyTypes:
+                - Egress
+    asserts:
+      - hasDocuments:
+          count: 8
+      - equal:
+          path: metadata.name
+          value: kasm-allow-registry-egress
+        documentIndex: 7
+      - equal:
+          path: metadata.namespace
+          value: kasm-agent
+        documentIndex: 7
+
+  - it: renders object-form extraPolicies
+    set:
+      networkPolicies:
+        enabled: true
+        extraPolicies:
+          - apiVersion: networking.k8s.io/v1
+            kind: NetworkPolicy
+            metadata:
+              name: allow-extra-object-form
+            spec:
+              podSelector: {}
+              policyTypes:
+                - Ingress
+    asserts:
+      - hasDocuments:
+          count: 8
+      - equal:
+          path: metadata.name
+          value: allow-extra-object-form
+        documentIndex: 7
+      - equal:
+          path: spec.policyTypes
+          value:
+            - Ingress
+        documentIndex: 7
+
+  - it: renders only the baseline when extraPolicies is empty
+    set:
+      networkPolicies:
+        enabled: true
+        extraPolicies: []
+    asserts:
+      - hasDocuments:
+          count: 7
+
+  - it: fails when extraPolicies is not a list
+    set:
+      networkPolicies:
+        enabled: true
+        extraPolicies:
+          name: not-a-list
+    asserts:
+      - failedTemplate:
+          errorMessage: "networkPolicies.extraPolicies must be an array (YAML list). Each item may be a string or an object."

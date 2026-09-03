@@ -1,0 +1,82 @@
+{{- include "kasmNodePrep.validateEnabled" . }}
+{{- include "kasmNodePrep.validateMethods" . }}
+{{/*
+  The Kernel Module Management custom resource that replaces this chart's own build of
+  v4l2loopback when modules.v4l2loopback.method is "kmm".
+
+  Schema: kmm.sigs.x-k8s.io/v1beta1 Module, as shipped in
+  config/crd/bases/kmm.sigs.x-k8s.io_modules.yaml at KMM v2.7.0 (the tag `make kmm-install`
+  applies). Nothing here is rendered while the method is "build".
+
+  KMM does the work this chart's DaemonSet would otherwise do, one level up: it watches the
+  kernel releases actually present on the selected nodes, resolves each against kernelMappings,
+  builds the kmod image for that kernel if it has to, and runs its own worker pods to modprobe
+  the module. So the DaemonSet drops v4l2loopback entirely -- see the method switch in
+  templates/configmap.yaml.
+*/}}
+{{- if include "kasmNodePrep.v4l2loopbackKmm" . }}
+{{- $v4l2 := .Values.modules.v4l2loopback }}
+{{- $kmm := $v4l2.kmm }}
+apiVersion: kmm.sigs.x-k8s.io/v1beta1
+kind: Module
+metadata:
+  name: {{ include "kasmNodePrep.kmmModuleName" . }}
+  labels:
+    {{- include "kasmNodePrep.labels" . | nindent 4 }}
+spec:
+  moduleLoader:
+    container:
+      # The same module parameters the reconcile script would pass to modprobe, so switching
+      # method between "build" and "kmm" changes who loads v4l2loopback, not how it behaves.
+      modprobe:
+        moduleName: v4l2loopback
+        parameters:
+          - devices={{ $v4l2.videoDevices }}
+          - exclusive_caps={{ ternary 1 0 $v4l2.exclusiveCaps }}
+      kernelMappings:
+        - regexp: {{ $kmm.kernelRegexp | quote }}
+          # With modules.v4l2loopback.kmm.image.tag empty this ends in the literal
+          # ${KERNEL_FULL_VERSION}: KMM -- not Helm, and not a shell -- substitutes each node's
+          # kernel release into it, so one mapping covers a fleet running several kernels.
+          containerImage: {{ include "kasmNodePrep.kmmImage" . | quote }}
+          {{- if $kmm.build.enabled }}
+          # In-cluster kaniko build of the image above, from the Dockerfile in this ConfigMap,
+          # run once per kernel release KMM sees and pushed to the registry with
+          # spec.imageRepoSecret. Drop it (kmm.build.enabled=false) to only ever pull prebuilt
+          # per-kernel images -- the airgapped path.
+          build:
+            dockerfileConfigMap:
+              name: {{ include "kasmNodePrep.kmmDockerfileConfigMapName" . }}
+          {{- end }}
+          {{- if $kmm.sign.enabled }}
+          # Secure Boot: KMM signs the built module in-cluster, between the build and the push,
+          # so an unsigned .ko never reaches a node. The certificate still has to be enrolled in
+          # each node's UEFI MOK database out of band.
+          #
+          # A glob rather than an interpolated kernel release: the CRD documents Ash globs here,
+          # and one pattern then matches whatever kernel directory the build produced.
+          sign:
+            keySecret:
+              name: {{ $kmm.sign.keySecret }}
+            certSecret:
+              name: {{ $kmm.sign.certSecret }}
+            filesToSign:
+              - /opt/lib/modules/*/extra/v4l2loopback.ko
+          {{- end }}
+  {{- if $kmm.imageRepoSecret }}
+  # Used both to pull the kmod image onto the nodes and to push the result of an in-cluster build.
+  imageRepoSecret:
+    name: {{ $kmm.imageRepoSecret }}
+  {{- end }}
+  {{- with .Values.tolerations }}
+  # The same tolerations the DaemonSet carries: KMM's worker pods have to reach the same tainted
+  # nodes the module is meant for.
+  tolerations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  # Which nodes the module is loaded on -- and, with an in-cluster build, which kernel releases
+  # KMM has to build for. Required by the CRD; an empty map selects every node, matching a
+  # DaemonSet rendered with no nodeSelector.
+  selector:
+    {{- toYaml .Values.nodeSelector | nindent 4 }}
+{{- end }}

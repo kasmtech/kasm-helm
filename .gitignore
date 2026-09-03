@@ -28,6 +28,7 @@ example_properties.yaml
 ## Tooling / build outputs
 bin/
 .rendered/
+.rendered-infra/
 *.egg-info/
 dist/
 build/
@@ -35,6 +36,8 @@ build/
 .kind/
 .gitlab-ci-local/
 .e2e-old-chart/
+charts/kasm-agent/charts/
+charts/kasm-platform/charts/
 
 ## OS/editor
 .DS_Store

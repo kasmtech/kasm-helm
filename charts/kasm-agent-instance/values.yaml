@@ -1,0 +1,499 @@
+# nameOverride -- Override the chart name used to build the names of the satellite objects (token Secret,
+# Certificate, KasmImagePuller, HTTPRoute) and the `app.kubernetes.io/name` label. The Agent custom resource
+# itself is named by `name`, not by this.
+#
+nameOverride: ""
+
+# fullnameOverride -- Fully override the generated name prefix for the satellite objects. When set, those names
+# are derived from this instead of from the release name and the chart name.
+#
+fullnameOverride: ""
+
+# commonLabels -- Custom labels to apply to every resource created by this chart.
+#
+commonLabels: {}
+
+# commonAnnotations -- Custom annotations to apply to every resource created by this chart.
+#
+commonAnnotations: {}
+
+# name -- Name of the Agent custom resource. The operator derives the names of the objects it creates from this,
+# most visibly the session-proxy Service, which it names `<name>-session-proxy`.
+#
+name: "k8s-agent"
+
+# image -- The Kasm agent API container image, deployed by the operator as `spec.image`.
+#
+image:
+  # image.registry -- Registry that hosts the agent image.
+  registry: docker.io
+  # image.repository -- Repository of the agent image, without the registry or tag.
+  repository: kasmweb/kasm-agent-api
+  # image.tag -- Tag of the agent image. Leave empty to fall back to the chart's `appVersion`.
+  tag: ""
+
+# manager -- The Kasm control plane this agent registers and heartbeats with.
+#
+manager:
+  # manager.hostname -- REQUIRED. Hostname of the Kasm manager (or the proxy in front of it) the agent
+  # heartbeats to. Templating fails when this is empty - there is no sensible default.
+  hostname: ""
+  # manager.port -- Port the manager listens on.
+  port: 443
+  # manager.scheme -- URL scheme used to reach the manager - `https` or `http`.
+  scheme: https
+  # manager.pathPrefix -- Prefix prepended to manager API paths. When reaching the manager through its public
+  # proxy this is `/manager_api`; set it empty only for direct manager-Service access.
+  pathPrefix: /manager_api
+  # manager.token -- The shared manager token, in plaintext. When set (and `manager.existingTokenSecret` is
+  # not), this chart creates a Secret named `<fullname>-manager-token` holding it and points the Agent at that.
+  # Prefer `manager.existingTokenSecret` for anything but a throwaway environment - a value set here lands in
+  # the Helm release history.
+  token: ""
+  # manager.existingTokenSecret -- Name of an existing Secret holding the manager token. Takes precedence over
+  # `manager.token`; when set, this chart creates no Secret of its own. One of the two must be set.
+  existingTokenSecret: ""
+  # manager.tokenSecretKey -- Key inside `manager.existingTokenSecret` that holds the token.
+  tokenSecretKey: token
+
+# publicHostname -- REQUIRED. This agent's externally reachable address, advertised to the manager as where
+# browsers should connect. Templating fails when this is empty.
+#
+publicHostname: ""
+
+# publicPort -- Port the session proxy is reachable on publicly.
+#
+publicPort: 443
+
+# zone -- Deployment zone the agent reports to the manager. Must match a zone configured on the control plane.
+#
+zone: "default"
+
+# sessionProxy -- The nginx session proxy the operator deploys alongside the agent. It terminates the browser
+# connection and routes it to the workspace container for the session.
+#
+sessionProxy:
+  # sessionProxy.image -- The nginx session-proxy container image.
+  image:
+    # sessionProxy.image.registry -- Registry that hosts the nginx image.
+    registry: docker.io
+    # sessionProxy.image.repository -- Repository of the nginx image, without the registry or tag.
+    repository: kasmweb/nginx
+    # sessionProxy.image.tag -- Tag of the nginx image. This one has no fallback: it tracks upstream nginx, not
+    # the Kasm release, so templating fails if it is emptied.
+    tag: "1.25.3"
+  # sessionProxy.sidecarImage -- The kasm-nginx-sidecar image that materializes per-session nginx config and
+  # reloads the proxy.
+  sidecarImage:
+    # sessionProxy.sidecarImage.registry -- Registry that hosts the sidecar image.
+    registry: docker.io
+    # sessionProxy.sidecarImage.repository -- Repository of the sidecar image, without the registry or tag.
+    repository: kasmweb/kasm-nginx-sidecar
+    # sessionProxy.sidecarImage.tag -- Tag of the sidecar image. Leave empty to fall back to the chart's
+    # `appVersion`.
+    tag: ""
+  # sessionProxy.replicas -- Replica count for the session-proxy Deployment the operator creates.
+  replicas: 1
+  # sessionProxy.probeTimeoutSeconds -- How long the sidecar waits for a session to become ready before giving up.
+  probeTimeoutSeconds: 120
+  # sessionProxy.reconcileIntervalSeconds -- The sidecar's session reconcile interval.
+  reconcileIntervalSeconds: 30
+  # sessionProxy.certSecretName -- Name of the TLS Secret (keys `tls.crt`/`tls.key`) served on the proxy's HTTPS
+  # listener. The proxy will not start without it, so either enable `sessionProxy.certificate` below or create
+  # this Secret out of band.
+  certSecretName: kasm-session-proxy-tls
+  # sessionProxy.certificate -- Optionally have cert-manager issue the session proxy's TLS certificate into
+  # `sessionProxy.certSecretName`.
+  certificate:
+    # sessionProxy.certificate.enabled -- Render a cert-manager Certificate for the session proxy. Requires
+    # cert-manager and a usable issuer in the cluster.
+    enabled: false
+    # sessionProxy.certificate.commonName -- Certificate common name. Defaults to `publicHostname` when empty.
+    commonName: ""
+    # sessionProxy.certificate.dnsNames -- Subject alternative names on the certificate. Defaults to a
+    # single-entry list holding `publicHostname` when empty. Add a wildcard entry here if sessions are served
+    # from per-session subdomains.
+    dnsNames: []
+    # sessionProxy.certificate.issuerRef -- The cert-manager issuer that signs the certificate.
+    issuerRef:
+      # sessionProxy.certificate.issuerRef.name -- REQUIRED when `sessionProxy.certificate.enabled` is true.
+      # Name of the Issuer or ClusterIssuer.
+      name: ""
+      # sessionProxy.certificate.issuerRef.kind -- Kind of the issuer - `ClusterIssuer` or `Issuer`.
+      kind: ClusterIssuer
+      # sessionProxy.certificate.issuerRef.group -- API group of the issuer.
+      group: cert-manager.io
+  # sessionProxy.service -- Overrides for the session-proxy Service the operator creates. Left alone, the
+  # operator creates a plain `ClusterIP` Service and something in front of it - `httpRoute`, `ingress`,
+  # `route` or `tlsRoute` - publishes it. Set these to publish the session proxy directly instead, with no
+  # ingress layer at all. The whole block is omitted from the Agent resource while it holds nothing but
+  # defaults, which leaves the operator's own defaults in charge.
+  service:
+    # sessionProxy.service.type -- Type of the session-proxy Service - `ClusterIP`, `NodePort` or
+    # `LoadBalancer`. `ClusterIP`, the default, keeps the proxy in-cluster and expects one of the route or
+    # ingress options to publish it. `NodePort` publishes it on a port of every node; `LoadBalancer`
+    # additionally asks the cloud provider (or MetalLB) for an external address. Both of the latter need the
+    # surrounding environment to actually route those ports to the nodes - VM or cloud firewalls that only
+    # forward 443/80 will refuse the connection before Kubernetes ever sees it.
+    type: ClusterIP
+    # sessionProxy.service.annotations -- Annotations set on the session-proxy Service. This is where cloud
+    # load-balancer attributes belong: NLB versus ALB, an internal-only scheme, a MetalLB address pool, or
+    # PROXY protocol on the load balancer itself (which the listeners then have to be told to expect - see
+    # `sessionProxy.proxyProtocol`). Omitted from the Agent resource when empty.
+    # Example (AWS NLB, PROXY protocol v2 towards the pods):
+    #   annotations:
+    #     service.beta.kubernetes.io/aws-load-balancer-type: external
+    #     service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
+    #     service.beta.kubernetes.io/aws-load-balancer-proxy-protocol: "*"
+    annotations: {}
+    # sessionProxy.service.externalTrafficPolicy -- How the Service treats the client source address -
+    # `Cluster` or `Local`. `Cluster`, the Kubernetes default, SNATs it, so the session proxy sees the node's
+    # address instead of the user's. `Local` preserves the real client IP, but only routes traffic through
+    # nodes that are hosting a session-proxy pod: a node without one blackholes the connection. Pair it with
+    # a load balancer that honours the Service's health check, or make sure every node it advertises runs a
+    # proxy pod (raise `sessionProxy.replicas`, or pin the pods with `nodeSelector`). Omitted from the Agent
+    # resource when empty, which leaves the operator and Kubernetes at `Cluster`.
+    externalTrafficPolicy: ""
+    # sessionProxy.service.httpsNodePort -- Pin the node port for the proxy's own HTTPS listener (4444)
+    # instead of letting Kubernetes allocate one. Applies to the `NodePort` and `LoadBalancer` types only,
+    # and must fall inside the cluster's node-port range - the CRD rejects anything outside 30000-32767.
+    # Omitted from the Agent resource when empty. Leave it unset unless a firewall rule or an external load
+    # balancer has to be pointed at a fixed port: the operator carries whatever port Kubernetes allocated
+    # across reconciles, so an unpinned port is stable in practice anyway.
+    httpsNodePort: ""
+    # sessionProxy.service.httpNodePort -- Pin the node port for the proxy's plain-HTTP listener (4445), the
+    # one to use when TLS is terminated by something in front. Same rules as `httpsNodePort`: `NodePort` and
+    # `LoadBalancer` types only, inside 30000-32767, omitted from the Agent resource when empty, and stable
+    # across reconciles even when left unpinned.
+    httpNodePort: ""
+  # sessionProxy.proxyProtocol -- PROXY protocol on the session proxy's nginx listeners, so the real client
+  # address survives an external L4 proxy that cannot set `X-Forwarded-For`. This is the layer-7 companion to
+  # `sessionProxy.service.externalTrafficPolicy: Local`; use one or the other, whichever matches how traffic
+  # actually reaches the proxy. The whole block is omitted from the Agent resource while it is disabled and
+  # no trusted CIDRs are set.
+  proxyProtocol:
+    # sessionProxy.proxyProtocol.enabled -- Turn on `proxy_protocol` on both session-proxy listeners.
+    # REQUIRES the load balancer or proxy in front to actually send a PROXY protocol header on every
+    # connection: nginx expects the header and cannot fall back, so a plain client - a browser reaching the
+    # NodePort directly, a health check, `curl` against the Service - fails on these listeners once this is
+    # on. Enable it together with the matching setting on the fronting proxy, never on its own.
+    enabled: false
+    # sessionProxy.proxyProtocol.trustedCIDRs -- Source ranges nginx trusts to send an accurate PROXY
+    # protocol header, normally the fronting load balancer's own address range (its node subnet, the cloud
+    # LB's CIDR, the MetalLB pool). Omitted from the Agent resource when empty.
+    # Example:
+    #   trustedCIDRs:
+    #     - 10.0.0.0/16
+    #     - 192.168.1.0/24
+    trustedCIDRs: []
+
+# heartbeatIntervalSeconds -- How often the agent heartbeats the manager.
+#
+heartbeatIntervalSeconds: 5
+
+# metricsIntervalSeconds -- The agent's node/pod metrics scrape interval.
+#
+metricsIntervalSeconds: 30
+
+# imageAvailabilityPolicy -- Controls which workspace images the agent reports to the manager as available.
+#
+imageAvailabilityPolicy: "all"
+
+# imagePullPolicy -- Pull policy applied to the agent and session-proxy containers.
+#
+imagePullPolicy: IfNotPresent
+
+# logLevel -- Log level for the agent container.
+#
+logLevel: INFO
+
+# imagePullSecrets -- Pull secrets for the agent and session-proxy images, as a list of `{name: <secret>}`
+# references. Omitted from the Agent resource entirely when empty.
+#
+imagePullSecrets: []
+
+# nodeSelector -- Node selector pinning the agent and session-proxy pods. Omitted from the Agent resource
+# entirely when empty.
+#
+nodeSelector: {}
+
+# workspacesNodeSelector -- Node selector the agent applies to the workspace pods it launches. Distinct from
+# `nodeSelector`, which places the agent itself. Omitted from the Agent resource entirely when empty.
+#
+workspacesNodeSelector: {}
+
+# workspaceImagePullSecrets -- Pull secrets the agent injects into launched workspace pods, for private
+# workspace images. Distinct from `imagePullSecrets`, which pulls the agent and proxy images. Omitted from the
+# Agent resource entirely when empty.
+#
+workspaceImagePullSecrets: []
+
+# storageMappings -- rclone CSI storage mappings for workspace volumes. The whole block is omitted from the
+# Agent resource when it is disabled and no installation ID is set.
+#
+storageMappings:
+  # storageMappings.enabled -- Turn on rclone CSI storage mappings.
+  enabled: false
+  # storageMappings.installationID -- Scopes the derived StorageClass and Secret names. Defaults to the Agent
+  # resource name when empty.
+  installationID: ""
+
+# serverID -- The stable UUID this agent registers under. Leave empty to have the operator generate one and
+# record it in the Agent's status; set it to adopt an existing registration. Omitted from the Agent resource
+# when empty.
+#
+serverID: ""
+
+# apiServerURL -- Split-horizon override for the base URL the agent uses for manager ADMIN calls (for
+# example file-mapping fetches). Defaults to `manager.scheme://manager.hostname:manager.port` when empty.
+# Set it when agents should reach the manager on an internal address (an in-cluster Service, a private
+# LB) while `manager.hostname` stays the public name — e.g. `https://kasm-proxy.kasm.svc.cluster.local`.
+# Omitted from the Agent resource when empty.
+#
+apiServerURL: ""
+
+# resources -- Compute resources for the agent container, passed through to `spec.resources` verbatim. Omitted
+# from the Agent resource when empty, in which case the operator applies its own defaults.
+#
+resources: {}
+
+# otel -- OpenTelemetry export settings, rendered as environment variables on the Agent.
+#
+otel:
+  # otel.enabled -- Point the agent at an OTLP endpoint. Enabled by default so the agent reports to the
+  # collector deployed alongside it.
+  enabled: true
+  # otel.endpoint -- OTLP/HTTP endpoint the agent exports to. Defaults to the in-cluster kasm-otel-collector
+  # Service for this release (`http://<release>-kasm-otel-collector:4318`) when empty.
+  endpoint: ""
+
+# gpu -- GPU workspace support.
+#
+gpu:
+  # gpu.enabled -- Tell the agent that the NVIDIA GPU operator is installed, so it can schedule GPU workspaces.
+  enabled: false
+
+# env -- Additional environment variables appended to the Agent's `spec.env`, as a list of Kubernetes EnvVar
+# objects. The operator merges environment variables by name, so an entry here with the same name as one this
+# chart generates (for example `OTEL_EXPORTER_OTLP_ENDPOINT`) wins.
+#
+env: []
+
+# imagePuller -- Optionally pre-pull workspace images onto every targeted node with a KasmImagePuller resource,
+# so the first session on a node does not wait for a cold image pull.
+#
+imagePuller:
+  # imagePuller.enabled -- Render the KasmImagePuller resource.
+  enabled: false
+  # imagePuller.imagePullPolicy -- Pull policy for the staged images.
+  imagePullPolicy: IfNotPresent
+  # imagePuller.images -- Catalog of images to stage, as a list of `{image, registry, imagePullSecrets}`
+  # objects passed through to the resource verbatim. `image` is the full reference and is authoritative for the
+  # pull; `registry` is informational; `imagePullSecrets` is an optional per-image list of
+  # `{name: <secret>}` references.
+  # Example:
+  #   images:
+  #     - image: kasmweb/chrome:1.18.0
+  #       registry: https://index.docker.io/v1/
+  #     - image: registry.example.com/team/custom-workspace:1.0
+  #       registry: https://registry.example.com
+  #       imagePullSecrets:
+  #         - name: example-registry
+  images: []
+  # imagePuller.resources -- Compute resources for the image-puller DaemonSet's containers, passed through
+  # verbatim. Omitted from the resource when empty.
+  resources: {}
+
+# httpRoute -- Optionally expose the operator-created session-proxy Service through a Gateway API Gateway.
+#
+httpRoute:
+  # httpRoute.enabled -- Render the HTTPRoute. Requires the Gateway API CRDs and a Gateway in the cluster.
+  # `httpRoute`, `ingress`, `route`, `tlsRoute` and `gatewayRoute` are alternatives - enable at most one of
+  # the five, since all of them point at the same operator-created session-proxy Service.
+  enabled: false
+  # httpRoute.parentRefs -- Gateways to attach the route to, as a list of `{name, namespace}` objects. The route
+  # attaches to nothing - and the session proxy stays unreachable through the Gateway - if this is left empty.
+  # Example:
+  #   parentRefs:
+  #     - name: traefik-gateway
+  #       namespace: kube-system
+  parentRefs: []
+  # httpRoute.hostnames -- Hostnames the route matches. Defaults to a single-entry list holding
+  # `publicHostname` when empty.
+  hostnames: []
+  # httpRoute.backendPort -- Port on the session-proxy Service to forward to. The default, 4445, is the proxy's
+  # plain-HTTP listener; TLS for the public hostname is expected to terminate at the Gateway. Use 4444 to
+  # forward to the proxy's own HTTPS listener instead.
+  backendPort: 4445
+
+# ingress -- Optionally expose the operator-created session-proxy Service through a classic
+# `networking.k8s.io/v1` Ingress, for clusters without the Gateway API.
+#
+ingress:
+  # ingress.enabled -- Render the Ingress. `httpRoute`, `ingress`, `route`, `tlsRoute` and `gatewayRoute` are
+  # alternatives - enable at most one of the five, since all point at the same operator-created session-proxy Service. Kasm sessions
+  # are long-lived VNC websockets, so whichever controller backs this ingress class must allow websocket
+  # upgrades and use read and send timeouts of at least 3600s; see `ingress.annotations` below.
+  enabled: false
+  # ingress.className -- `ingressClassName` of the controller that should serve this Ingress. Omitted from the
+  # resource when empty, which leaves the cluster's default IngressClass to claim it.
+  className: ""
+  # ingress.annotations -- Annotations for the Ingress, merged over `commonAnnotations`. This is where the
+  # controller-specific websocket and timeout settings go - without them sessions are cut off at the
+  # controller's default read timeout (60s on ingress-nginx).
+  # Example (ingress-nginx):
+  #   annotations:
+  #     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+  #     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+  annotations: {}
+  # ingress.hosts -- Hostnames the Ingress serves, as a list of strings. Each gets one `/` `Prefix` rule to the
+  # session-proxy Service. Defaults to a single-entry list holding `publicHostname` when empty.
+  # Example:
+  #   hosts:
+  #     - agent.example.com
+  hosts: []
+  # ingress.tls -- TLS blocks for the Ingress, as a standard list of `{secretName, hosts}` objects, passed
+  # through verbatim. Empty means the Ingress serves plain HTTP.
+  # Example:
+  #   tls:
+  #     - secretName: kasm-agent-public-tls
+  #       hosts:
+  #         - agent.example.com
+  tls: []
+  # ingress.backendPort -- Port on the session-proxy Service to forward to. The default, 4445, is the proxy's
+  # plain-HTTP listener; TLS for the public hostname is expected to terminate at the Ingress. Use 4444 to
+  # forward to the proxy's own HTTPS listener instead, which on most controllers also needs a backend-protocol
+  # annotation (`nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"` on ingress-nginx).
+  backendPort: 4445
+
+# route -- Optionally expose the operator-created session-proxy Service through an OpenShift Route, the
+# native option on OpenShift clusters.
+#
+route:
+  # route.enabled -- Render the Route. Requires OpenShift (the `route.openshift.io` API). `httpRoute`,
+  # `ingress`, `route`, `tlsRoute` and `gatewayRoute` are alternatives - enable at most one of the five, since
+  # all of them point at the same operator-created session-proxy Service. Kasm sessions are long-lived VNC websockets and the OpenShift
+  # router's default connection timeout is 30s, so a timeout annotation is effectively mandatory; see
+  # `route.annotations` below.
+  enabled: false
+  # route.host -- Hostname the Route serves. Defaults to `publicHostname` when empty. Under the default
+  # passthrough termination this hostname is matched against the session proxy's own certificate, so that
+  # certificate has to cover it.
+  host: ""
+  # route.annotations -- Annotations for the Route, merged over `commonAnnotations`. The router timeout belongs
+  # here: without it OpenShift closes idle session websockets after 30 seconds.
+  # Example:
+  #   annotations:
+  #     haproxy.router.openshift.io/timeout: "3600s"
+  annotations: {}
+  # route.backendPort -- Port on the session-proxy Service to route to. Leave empty to pick it from
+  # `route.tls.termination`: 4444, the proxy's own HTTPS listener, for `passthrough` and `reencrypt`; 4445, its
+  # plain-HTTP listener, for `edge`. Set it only to override that pairing.
+  backendPort: ""
+  # route.tls -- TLS settings for the Route.
+  tls:
+    # route.tls.termination -- Where TLS terminates - `passthrough`, `edge` or `reencrypt`. The default,
+    # `passthrough`, gives end-to-end TLS: the router forwards the connection untouched and browsers see the
+    # session proxy's own certificate from `sessionProxy.certSecretName`. Use `edge` to terminate at the router
+    # instead, in which case supply `key`/`certificate` below or let the router serve its default certificate.
+    # Example (terminate TLS at the OpenShift router instead of at the session proxy):
+    #   route:
+    #     enabled: true
+    #     annotations:
+    #       haproxy.router.openshift.io/timeout: "3600s"
+    #     tls:
+    #       termination: edge
+    #       insecureEdgeTerminationPolicy: Redirect
+    termination: "passthrough"
+    # route.tls.insecureEdgeTerminationPolicy -- What the Route does with plain-HTTP requests - `Redirect`,
+    # `Allow`, or `None`. Omitted from the Route when empty. `Redirect` is the usual choice for `edge`;
+    # `passthrough` supports only `Redirect` and `None`.
+    insecureEdgeTerminationPolicy: ""
+    # route.tls.key -- PEM private key the router serves, for `edge` and `reencrypt`. Omitted when empty. This
+    # lands in the Helm release history in plaintext - prefer letting the router use its own certificate, or
+    # passthrough with a cert-manager-issued proxy certificate.
+    key: ""
+    # route.tls.certificate -- PEM certificate the router serves, for `edge` and `reencrypt`. Omitted when
+    # empty.
+    certificate: ""
+    # route.tls.caCertificate -- PEM CA certificate that signed `certificate`. Omitted when empty.
+    caCertificate: ""
+    # route.tls.destinationCACertificate -- PEM CA certificate the router uses to validate the session proxy's
+    # certificate on a `reencrypt` Route. Omitted when empty.
+    destinationCACertificate: ""
+
+# tlsRoute -- Optionally expose the operator-created session-proxy Service through a Gateway API TLSRoute:
+# SNI-based TLS passthrough, giving end-to-end TLS to the session proxy's own certificate the way an
+# OpenShift `passthrough` Route does, but on any cluster with the Gateway API rather than only on OpenShift.
+#
+tlsRoute:
+  # tlsRoute.enabled -- Render the TLSRoute from this chart. Requires the Gateway API *experimental* channel
+  # CRDs - TLSRoute is not part of the standard channel - and a Gateway that has a listener with
+  # `protocol: TLS` and `tls.mode: Passthrough` whose `allowedRoutes` admits this namespace. `httpRoute`,
+  # `ingress`, `route`, `tlsRoute` and `gatewayRoute` are alternatives - enable at most one of the five, since
+  # all of them point at the same operator-created session-proxy Service. `gatewayRoute` below produces the
+  # same passthrough route but has the operator create and reconcile it; prefer that when the operator
+  # supports it, and reach for this chart-managed one otherwise. Nothing decrypts the connection on the way, so the Gateway sets
+  # no timeouts and applies no HTTP rules: Kasm's long-lived session websockets are bounded only by the
+  # layer-4 idle timeout of the Gateway's data plane and of anything in front of it.
+  enabled: false
+  # tlsRoute.parentRefs -- Gateways to attach the route to, as a list of `{name, namespace}` objects. The
+  # route attaches to nothing - and the session proxy stays unreachable through the Gateway - if this is left
+  # empty. Only the `parentRefs` cross namespaces; the backend stays in this one, so no `ReferenceGrant` is
+  # needed.
+  # Example:
+  #   parentRefs:
+  #     - name: traefik-gateway
+  #       namespace: kube-system
+  parentRefs: []
+  # tlsRoute.hostnames -- SNI hostnames the route matches. Defaults to a single-entry list holding
+  # `publicHostname` when empty. Because the connection is passed through untouched, the browser validates
+  # the session proxy's own certificate (`sessionProxy.certSecretName`) against these names, so that
+  # certificate has to cover them - enable `sessionProxy.certificate` or provision the Secret out of band.
+  hostnames: []
+  # tlsRoute.backendPort -- Port on the session-proxy Service to forward to. The default, 4444, is the
+  # proxy's own HTTPS listener - the only port that makes sense under passthrough, since nothing terminates
+  # TLS before the connection gets there.
+  backendPort: 4444
+
+# gatewayRoute -- Optionally have the OPERATOR create the Gateway API TLSRoute, rather than rendering one
+# from this chart. Same end result as `tlsRoute` - SNI-based TLS passthrough to the session proxy's own
+# certificate - but the operator owns the route: it creates it, reconciles it, and keeps it aligned with the
+# session-proxy Service it also owns, so the two cannot drift apart. `tlsRoute` is the chart-managed
+# equivalent, for operator builds that predate this field or when the route has to live in the Helm release
+# (owned by it, torn down with it, patched by other release tooling) rather than under the operator's
+# ownership. Prefer this one whenever the operator supports it. The whole block is omitted from the Agent
+# resource when disabled.
+#
+gatewayRoute:
+  # gatewayRoute.enabled -- Have the operator create the TLSRoute. Same cluster-side prerequisites as
+  # `tlsRoute`: the Gateway API *experimental* channel CRDs, and a Gateway with a `protocol: TLS` /
+  # `tls.mode: Passthrough` listener whose `allowedRoutes` admits this namespace. `httpRoute`, `ingress`,
+  # `route`, `tlsRoute` and `gatewayRoute` are alternatives - enable at most one of the five, since all of
+  # them point at the same session-proxy Service. Between the two passthrough options, prefer `gatewayRoute`
+  # when the operator supports it and fall back to `tlsRoute` when it does not.
+  enabled: false
+  # gatewayRoute.parentRef -- The single Gateway the operator attaches the TLSRoute to. Note the shape
+  # differs from `tlsRoute.parentRefs`: the CRD takes one reference, not a list.
+  parentRef:
+    # gatewayRoute.parentRef.name -- REQUIRED when `gatewayRoute.enabled` is true. Name of the Gateway
+    # resource. Templating fails when it is empty, since the CRD rejects the resource without it.
+    name: ""
+    # gatewayRoute.parentRef.namespace -- Namespace of the Gateway. Omitted from the Agent resource when
+    # empty, which lets the operator default it to the Agent's own namespace.
+    namespace: ""
+    # gatewayRoute.parentRef.sectionName -- Selects one specific listener on the Gateway, by its `name`, in
+    # place of every listener that would otherwise accept the route. Use it when the Gateway carries more
+    # than one listener and only one of them is the `Passthrough` TLS listener. Omitted from the Agent
+    # resource when empty.
+    sectionName: ""
+  # gatewayRoute.hostnames -- SNI hostnames the route matches. Unlike `tlsRoute.hostnames`, which this chart
+  # defaults, these are defaulted by the *operator* to `[publicHostname]`, so leaving this empty is the
+  # normal case - it is omitted from the Agent resource and the operator fills it in. The session proxy's own
+  # certificate (`sessionProxy.certSecretName`) still has to cover whatever names end up in force, since the
+  # connection reaches it undecrypted.
+  # Example:
+  #   hostnames:
+  #     - agent.example.com
+  #     - alt.example.com
+  hostnames: []

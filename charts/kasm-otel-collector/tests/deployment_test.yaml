@@ -1,0 +1,232 @@
+suite: collector deployment
+templates:
+  - templates/deployment.yaml
+tests:
+  - it: renders a single-replica deployment with the collector container
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-kasm-otel-collector
+      - equal:
+          path: spec.replicas
+          value: 1
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: otel-collector
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --config=/etc/otelcol-contrib/config.yaml
+
+  - it: joins registry, repository and tag into the image reference
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: docker.io/otel/opentelemetry-collector-contrib:0.156.0
+
+  - it: falls back to the chart appVersion when image.tag is empty
+    set:
+      image:
+        registry: registry.example.com
+        repository: mirror/opentelemetry-collector-contrib
+        tag: ""
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: registry.example.com/mirror/opentelemetry-collector-contrib:0.156.0
+
+  - it: uses an explicit image tag when one is set
+    set:
+      image:
+        tag: 0.157.0
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: docker.io/otel/opentelemetry-collector-contrib:0.157.0
+
+  - it: omits the registry from the image reference when it is empty
+    set:
+      image:
+        registry: ""
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: otel/opentelemetry-collector-contrib:0.156.0
+
+  - it: exposes the otlp and health-check container ports
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            name: otlp-http
+            containerPort: 4318
+            protocol: TCP
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            name: otlp-grpc
+            containerPort: 4317
+            protocol: TCP
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            name: health-check
+            containerPort: 13133
+            protocol: TCP
+
+  - it: probes the health_check extension over http
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.port
+          value: health-check
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.port
+          value: health-check
+
+  - it: sets cpu and memory on both requests and limits
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources
+          value:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 512Mi
+
+  - it: hardens the pod and container security contexts
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.securityContext.seccompProfile.type
+          value: RuntimeDefault
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - contains:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          content: ALL
+
+  - it: annotates the pod with a checksum over the rendered config
+    asserts:
+      - matchRegex:
+          path: spec.template.metadata.annotations["checksum/config"]
+          pattern: "^[0-9a-f]{64}$"
+      - equal:
+          path: spec.template.metadata.annotations["checksum/config"]
+          value: 2c16bbb87628d264214d138380f1297dbc89cea9271faf3336670cba5477f685
+
+  - it: changes the config checksum when an exporter toggle changes, so the pods roll
+    set:
+      exporters:
+        debug:
+          enabled: true
+    asserts:
+      - notEqual:
+          path: spec.template.metadata.annotations["checksum/config"]
+          value: 2c16bbb87628d264214d138380f1297dbc89cea9271faf3336670cba5477f685
+
+  - it: keeps custom pod annotations alongside the config checksum
+    set:
+      podAnnotations:
+        prometheus.io/scrape: "false"
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["prometheus.io/scrape"]
+          value: "false"
+      - matchRegex:
+          path: spec.template.metadata.annotations["checksum/config"]
+          pattern: "^[0-9a-f]{64}$"
+
+  - it: omits the CLICKHOUSE_PASSWORD env when the clickhouse exporter is disabled
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].env
+
+  - it: injects CLICKHOUSE_PASSWORD from the existing secret when clickhouse is enabled
+    set:
+      exporters:
+        clickhouse:
+          enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CLICKHOUSE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: clickhouse-otel
+                key: password
+
+  - it: honours a custom clickhouse secret name and key
+    set:
+      exporters:
+        clickhouse:
+          enabled: true
+          existingSecret: my-clickhouse
+          existingSecretKey: ch-password
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CLICKHOUSE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: my-clickhouse
+                key: ch-password
+
+  - it: mounts the config configmap read-only at the collector config path
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: config
+            mountPath: /etc/otelcol-contrib
+            readOnly: true
+      - equal:
+          path: spec.template.spec.volumes[0].configMap.name
+          value: RELEASE-NAME-kasm-otel-collector-config
+
+  - it: applies the scheduling knobs when they are set
+    set:
+      nodeSelector:
+        kubernetes.io/os: linux
+      priorityClassName: system-cluster-critical
+      tolerations:
+        - key: observability
+          operator: Exists
+          effect: NoSchedule
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector["kubernetes.io/os"]
+          value: linux
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: system-cluster-critical
+      - contains:
+          path: spec.template.spec.tolerations
+          content:
+            key: observability
+            operator: Exists
+            effect: NoSchedule
+
+  - it: honours fullnameOverride for the deployment and its configmap reference
+    set:
+      fullnameOverride: otelcol
+    asserts:
+      - equal:
+          path: metadata.name
+          value: otelcol
+      - equal:
+          path: spec.template.spec.volumes[0].configMap.name
+          value: otelcol-config

@@ -1,0 +1,11 @@
+apiVersion: v2
+name: kasm-agent-operator
+description: The Kasm Agent Kubernetes operator. Installs the agent.kasm.com and pools.kasm.ai CustomResourceDefinitions, the cluster RBAC the operator and the workloads it reconciles require, and the controller-manager Deployment that reconciles Agent, KasmWorkspace, KasmImagePuller, WarmPool, and WarmPoolInstance resources.
+appVersion: "develop"
+keywords:
+  - kasm
+  - operator
+maintainers:
+  - name: Kasm Technologies, Inc.
+    url: https://github.com/kasmtech/kasm-helm
+version: 0.1.0

@@ -1,0 +1,96 @@
+# Copy-paste-ready values for installing the kasm-agent umbrella chart on the k3s-agent-dev-cluster
+# lab cluster. Mirrors tests/values-agent/dev-parity.yaml (see that file for the CI-exercised
+# version of this scenario) but with fuller comments and a few commented-out variants for things
+# that only apply outside a throwaway test render.
+#
+#   helm dependency build charts/kasm-agent
+#   helm upgrade --install kasm-agent charts/kasm-agent -n kasm-agent --create-namespace \
+#     -f examples/kasm-agent/dev-cluster-values.yaml
+#
+# OUT-OF-CHART PREREQUISITES -- none of these are installed or validated by this chart; all must
+# exist in the cluster before the install above:
+#
+#   1. The manager token Secret this release points at via agent.manager.existingTokenSecret:
+#        kubectl -n kasm-agent create secret generic kasm-manager-token \
+#          --from-literal=token=<the shared token from the Kasm manager>
+#      (see ~/projects/lab/kasm-operator/dave_dev_configs/kasm-manager-token.yaml for the dev
+#      cluster's fixed dev token, if reusing it).
+#
+#   2. Traefik's Gateway API provider, which the k3s cluster does not enable by default. Without
+#      it, the HTTPRoute this chart renders (agent.httpRoute.enabled below) has nothing watching
+#      it and Accepted stays False. Apply the HelmChartConfig at:
+#        ~/projects/lab/kasm-operator/dave_dev_configs/traefik-gateway-provider.yaml
+#      (kube-system, applied once per cluster -- k3s reconciles it automatically). It also opens
+#      the "websecure" listener on :8443 for the public HTTPS hostname; without it only plain HTTP
+#      on :8000 is reachable via Gateway API.
+#
+#   3. The LGTM (Grafana/Tempo/Loki/Prometheus) and ClickHouse backends the OpenTelemetry collector
+#      exports to, from the otel-backend repo:
+#        cd ~/projects/otel-backend && tilt up --port 10360
+#        tilt trigger wire-kasm-collector   # mirrors the clickhouse-otel Secret into kasm-agent
+#                                            # and points the collector's OTLP exporter at lgtm
+#      The default otlp exporter endpoint (lgtm.observability.svc.cluster.local:4317, set in the
+#      kasm-otel-collector subchart's own values.yaml) matches where that Tiltfile deploys LGTM;
+#      no override needed here unless the backend moves.
+#
+agent:
+  manager:
+    hostname: zonea.192.168.9.232.nip.io
+    # Prefer existingTokenSecret over an inline manager.token -- token never lands in the Helm
+    # release history this way. Create the Secret first; see prerequisite #1 above.
+    existingTokenSecret: kasm-manager-token
+  publicHostname: 192.168.9.126.nip.io
+  zone: zonea
+  sessionProxy:
+    # Pre-created out of band. Swap for the commented cert-manager block below to have the cluster
+    # issue this instead.
+    certSecretName: kasm-session-proxy-tls
+    # --- Alternative: let cert-manager issue the session-proxy certificate instead of pre-creating
+    # --- kasm-session-proxy-tls by hand. Requires cert-manager and the openbao ClusterIssuer to be
+    # --- installed in the cluster already (both out of chart, same as the Secret they replace).
+    # certificate:
+    #   enabled: true
+    #   issuerRef:
+    #     name: openbao-cluster-issuer
+    #     kind: ClusterIssuer
+  httpRoute:
+    enabled: true
+    parentRefs:
+      - name: traefik-gateway
+        namespace: kube-system
+  imagePuller:
+    enabled: true
+    images:
+      - image: kasmweb/chrome:develop
+        registry: https://index.docker.io/v1/
+      - image: kasmweb/alpine-323-desktop:develop
+        registry: https://index.docker.io/v1/
+  # --- Alternative: pull the agent API / session-proxy / sidecar images from a private registry
+  # --- mirror instead of Docker Hub. Uncomment and point registry/repository at the mirror; leave
+  # --- tag empty to keep tracking the chart's appVersion, or pin it alongside the mirror.
+  # image:
+  #   registry: harbor.mango-mora.ts.net
+  #   repository: kasm/kasm-agent-api
+  # sessionProxy:
+  #   sidecarImage:
+  #     registry: harbor.mango-mora.ts.net
+  #     repository: kasm/kasm-nginx-sidecar
+  # imagePullSecrets:
+  #   - name: harbor-mango-mora
+
+# --- Alternative: point the operator's image at the same private registry mirror as the agent
+# --- above (independent of it -- the operator is a separate subchart/deployment).
+# operator:
+#   image:
+#     registry: harbor.mango-mora.ts.net
+#     repository: kasm/kasm-agent-operator
+
+otelCollector:
+  exporters:
+    clickhouse:
+      # Requires the clickhouse-otel Secret (key "password") to exist in this release's namespace
+      # before install -- see prerequisite #3 above; `tilt trigger wire-kasm-collector` creates it.
+      enabled: true
+      existingSecret: clickhouse-otel
+    debug:
+      enabled: false

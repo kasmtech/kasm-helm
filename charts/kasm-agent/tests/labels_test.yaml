@@ -1,0 +1,66 @@
+suite: umbrella labels helper
+templates:
+  - templates/networkpolicies.yaml
+release:
+  name: kasm
+  namespace: kasm-agent
+chart:
+  version: 0.1.0
+  appVersion: develop
+set:
+  networkPolicies:
+    enabled: true
+
+tests:
+  - it: stamps the standard labels on every umbrella-owned policy
+    documentSelector:
+      path: metadata.name
+      value: kasm-kasm-agent-default-deny
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: kasm-agent
+      - equal:
+          path: metadata.labels["app.kubernetes.io/instance"]
+          value: kasm
+      - equal:
+          path: metadata.labels["app.kubernetes.io/version"]
+          value: develop
+      - equal:
+          path: metadata.labels["app.kubernetes.io/managed-by"]
+          value: Helm
+      - equal:
+          path: metadata.labels["app.kubernetes.io/part-of"]
+          value: kasm-ai
+      - equal:
+          path: metadata.labels["helm.sh/chart"]
+          value: kasm-agent-0.1.0
+
+  - it: tracks the release name and chart version
+    release:
+      name: prod
+      namespace: kasm-agent
+    chart:
+      version: 9.9.9
+      appVersion: "1.2.3"
+    documentSelector:
+      path: metadata.name
+      value: prod-kasm-agent-allow-dns
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/instance"]
+          value: prod
+      - equal:
+          path: metadata.labels["app.kubernetes.io/version"]
+          value: "1.2.3"
+      - equal:
+          path: metadata.labels["helm.sh/chart"]
+          value: kasm-agent-9.9.9
+
+  - it: does not set a component label on namespace-wide policies
+    documentSelector:
+      path: metadata.name
+      value: kasm-kasm-agent-allow-intra-namespace
+    asserts:
+      - notExists:
+          path: metadata.labels["app.kubernetes.io/component"]

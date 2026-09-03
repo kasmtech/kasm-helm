@@ -1,0 +1,112 @@
+# Kasm OpenTelemetry Collector
+
+{{ template "chart.badgesSection" . }}
+
+{{ template "chart.description" . }}
+
+{{ template "chart.homepageLine" . }}
+
+> **Part of the [`kasm-agent`](../kasm-agent/README.md) umbrella.** This collector normally ships as
+> the `otelCollector` dependency of the [`kasm-agent`](../kasm-agent/README.md) chart (or the
+> full-stack [`kasm-platform`](../kasm-platform/README.md) chart), not on its own. Install it
+> standalone only to run a collector the agent and operator point at.
+
+{{ template "chart.maintainersSection" . }}
+
+{{ template "chart.sourcesSection" . }}
+
+{{ template "chart.requirementsSection" . }}
+
+## Documentation
+
+Please see our [official documentation site](https://docs.kasm.com) for more information.
+
+> **Note:** Make sure to select the correct Kasm Workspaces version in the top-right version selector on the documentation site to ensure the guides match your deployment.
+
+## Prerequisites
+
+* Kubernetes 1.26 or newer — the shared floor for the whole `kasm-agent` family (older versions of Kubernetes may work, however, we try to keep this chart updated to [supported versions of Kubernetes](https://kubernetes.io/releases/))
+* Helm 3.18.x or newer ([installation](https://helm.sh/docs/helm/helm_install/))
+* An OTLP-capable backend to export to, reachable from the cluster. The default endpoint targets a Grafana LGTM stack at `lgtm.observability.svc.cluster.local:4317`.
+* When `exporters.clickhouse.enabled` is set, a Secret holding the ClickHouse password must already exist in the release namespace - see `exporters.clickhouse.existingSecret`. The collector refuses to start when that password is unresolvable.
+
+## What this chart deploys
+
+* A ConfigMap holding the collector's `config.yaml`, rendered from the values below.
+* A Deployment running the `opentelemetry-collector-contrib` distribution, with a `checksum/config` pod annotation so a configuration change rolls the pods.
+* A ClusterIP Service exposing OTLP/HTTP on 4318 and OTLP/gRPC on 4317.
+* A ServiceAccount, plus a namespace-scoped Role and RoleBinding granting read access to Events - rendered only when the `k8s_events` receiver is enabled.
+
+## Pipelines
+
+Three pipelines are assembled from whichever exporters are enabled:
+
+| Pipeline | Receivers | Processors | Exporters |
+| --- | --- | --- | --- |
+| `traces` | `otlp` | `memory_limiter`, `filter/probes`, `batch` | every enabled exporter |
+| `metrics` | `otlp` | `memory_limiter`, `batch` | every enabled exporter except `clickhouse/archive` |
+| `logs` | `otlp`, plus `k8s_events` when enabled | `memory_limiter`, `transform/k8s_events` and `resource/k8s_events` when `k8s_events` is enabled, `batch/logs` | every enabled exporter |
+
+Metrics deliberately do not go to ClickHouse: Prometheus already keeps them cumulative and cheap, and ClickHouse adds nothing for that shape. The `metrics` pipeline is dropped entirely if ClickHouse is the only exporter enabled.
+
+Templating fails if no exporter is enabled at all, rather than deploying a collector that silently drops every signal it receives.
+
+{{ define "chart.valueDefaultColumnRender" }}
+{{- $defaultValue := (default .Default .AutoDefault)  -}}
+{{- $notationType := .NotationType }}
+{{- if (and (hasPrefix "`" $defaultValue) (hasSuffix "`" $defaultValue) ) -}}
+{{- $defaultValue = (toYaml (fromJson (trimAll "`" (default .Default .AutoDefault) ) ) ) -}}
+{{- $notationType = "json" }}
+{{- end -}}
+{{- if (eq $notationType "tpl" ) }}
+<pre lang="{{ $notationType }}">
+{{ .Key }}: |
+{{- $defaultValue | nindent 2 }}
+</pre>
+{{- else if (eq $notationType "email") }}
+<a href="mailto:{{ $defaultValue }}" style="color: green;">"{{ $defaultValue }}"</a>
+{{- else }}
+<pre lang="{{ $notationType }}">
+{{ $defaultValue }}
+</pre>
+{{- end }}
+{{ end }}
+
+{{ define "chart.typeColumnRender" }}
+{{- if (eq .Type "string/email") }}
+<a href="#stringemail" title="{{- template "chart.valuetypes.email" -}}">{{.Type}}</a>
+{{- else if (eq .Type "k8s/storage/persistent-volume/access-modes" )}}
+<a target="_blank" 
+   href="https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes"
+   >{{- .Type }}</a>
+{{- else }}
+{{ .Type }}
+{{- end }}
+{{ end }}
+
+{{ define "chart.valuesTableHtml" }}
+<table>
+	<thead>
+		<th>Key</th>
+		<th>Type</th>
+		<th>Default</th>
+		<th>Description</th>
+	</thead>
+	<tbody>
+	{{- range .Values }}
+		<tr>
+			<td id="{{ .Key | replace "." "--" }}"><a href="./values.yaml#L{{ .LineNumber }}">{{ .Key }}</a></td>
+			<td>{{- template "chart.typeColumnRender" . -}}</td>
+			<td>
+				<div style="max-width: 520px;">{{ template "chart.valueDefaultColumnRender" . }}</div>
+			</td>
+			<td>{{ if .Description }}{{ .Description }}{{ else }}{{ .AutoDescription }}{{ end }}</td>
+		</tr>
+	{{- end }}
+	</tbody>
+</table>
+{{ end }}
+
+## Chart value settings in `values.yaml`
+
+{{ template "chart.valuesSectionHtml" . }}

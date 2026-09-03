@@ -1,0 +1,71 @@
+# Default values for the kasm-platform umbrella chart.
+#
+# This chart owns almost nothing of its own. It composes two charts that are complete on their
+# own — the Kasm Workspaces control plane (`kasm-helm`) and the Kasm Kubernetes agent umbrella
+# (`kasm-agent`) — into a single release and gets out of the way. One deliberate non-feature: no
+# hook Jobs. The "Kasm Authorization Domain" the two halves have to agree on is a control-plane
+# value on a fresh install (`kasm-helm.kasmConfig.authDomain`); on an existing database it stays a
+# documented manual step (see the README) rather than a baked-in hook Job.
+#
+# Neither dependency is aliased, so each one keeps its own kebab-case chart name as its values key,
+# and EVERY value either chart documents is set here nested under that key. This file deliberately
+# does NOT restate their defaults: their own `values.yaml` files remain the single source of truth,
+# and their defaults flow through unchanged. Read `charts/kasm-helm/README.md` and
+# `charts/kasm-agent/README.md` for the two value references.
+#
+# Templates in this chart reach the two blocks with `index .Values "kasm-helm"` /
+# `index .Values "kasm-agent"`, because `.Values.kasm-helm` is not valid Go template syntax.
+
+# kasm-helm -- The Kasm Workspaces control plane (the `kasm-helm` chart). The web UI, the
+# manager/API services, the session proxy, Guacamole, the RDP gateways, and the PostgreSQL database.
+#
+# ALL of that chart's values nest under this key — this chart adds only `enabled` and restates
+# nothing else, so every default in `charts/kasm-helm/values.yaml` still applies. For example, the
+# chart's own `publicAddr` and `ingress.enabled` are set from here as:
+#
+#   kasm-helm:
+#     publicAddr: kasm.example.com
+#     ingress:
+#       enabled: true
+#       ingressClassName: traefik
+#
+# See `charts/kasm-helm/README.md` for the full value reference.
+#
+kasm-helm:
+  # kasm-helm.enabled -- Install the Kasm control plane with this release. Set to false to install
+  # only the Kubernetes agent, registering it with a Kasm manager that already exists elsewhere
+  # (another cluster, a VM deployment, or a Kasm-hosted one).
+  #
+  enabled: true
+
+# kasm-agent -- The Kasm Kubernetes agent (the `kasm-agent` umbrella chart). The agent operator, the
+# OpenTelemetry collector, the `Agent` custom resource and its session proxy, and the optional
+# per-feature cluster infrastructure.
+#
+# ALL of that chart's values nest under this key, its own aliased subcharts included, so its
+# subchart conditions stay reachable from here (`kasm-agent.operator.enabled`,
+# `kasm-agent.nodePrep.enabled`, `kasm-agent.gpuOperator.enabled`, ...). This chart adds only
+# `enabled` and restates nothing else. For example, the three values the agent cannot be installed
+# without are set from here as:
+#
+#   kasm-agent:
+#     agent:
+#       manager:
+#         hostname: kasm.example.com
+#         token: "<the control plane's manager-token>"
+#       publicHostname: sessions.example.com
+#
+# See `charts/kasm-agent/README.md` for the full value reference, and its "Running alongside the
+# kasm-helm control plane" section for what has to line up between the two halves.
+#
+kasm-agent:
+  # kasm-agent.enabled -- Install the Kasm Kubernetes agent with this release. Set to false to
+  # install only the control plane, and add agents (Kubernetes or otherwise) separately.
+  #
+  enabled: true
+
+# extraObjects -- Deploy additional Kubernetes manifests alongside this release.
+# This field is expected to be either a list of strings or a list of objects. Each entry is
+# rendered through `tpl`, so Helm templating may be used inside it.
+#
+extraObjects: []

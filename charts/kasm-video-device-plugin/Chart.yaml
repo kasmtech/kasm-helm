@@ -1,0 +1,17 @@
+annotations:
+  category: Virtual Desktop
+apiVersion: v2
+appVersion: "latest"
+name: kasm-video-device-plugin
+description: Kubelet device plugin DaemonSet that advertises the v4l2loopback video devices on each node as the extended resource kasm.com/video, so Kasm Workspaces sessions with webcam support can request kasm.com/video and have kubelet assign them a dedicated /dev/video* device.
+icon: https://kasm-static-content.s3.amazonaws.com/icons/kasm-logo-small.png
+home: https://kasm.com
+keywords:
+  - kasm
+  - device-plugin
+  - v4l2loopback
+  - webcam
+maintainers:
+  - name: Kasm Technologies, Inc.
+    url: https://github.com/kasmtech/kasm-helm
+version: 0.1.0

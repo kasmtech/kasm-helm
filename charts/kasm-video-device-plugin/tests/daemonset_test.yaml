@@ -1,0 +1,224 @@
+suite: video device plugin daemonset
+
+templates:
+  - templates/daemonset.yaml
+
+tests:
+  - it: advertises kasm.com/video from /dev/video* by default
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: DaemonSet
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-kasm-video-device-plugin
+      - equal:
+          path: spec.template.spec.containers[0].env
+          value:
+            - name: DEVICE_PREFIX
+              value: video
+            - name: MAX_DEVICES
+              value: "128"
+            - name: RESOURCE_NAME
+              value: kasm.com/video
+            - name: DEVICE_ENV_VAR
+              value: KASM_VIDEO_DEVICE
+
+  - it: renders a custom device prefix, cap, resource name and allocate env var
+    set:
+      devicePrefix: cam
+      maxDevices: 4
+      resourceName: contoso.com/webcam
+      allocateEnvVar: CONTOSO_WEBCAM_DEVICE
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env
+          value:
+            - name: DEVICE_PREFIX
+              value: cam
+            - name: MAX_DEVICES
+              value: "4"
+            - name: RESOURCE_NAME
+              value: contoso.com/webcam
+            - name: DEVICE_ENV_VAR
+              value: CONTOSO_WEBCAM_DEVICE
+
+  - it: uses the Kasm-built image by default
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: docker.io/kasmweb/kasm-video-device-plugin:latest
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: IfNotPresent
+
+  - it: allows the image to be sourced from a mirror
+    set:
+      image:
+        registry: registry.contoso.com
+        repository: mirrors/kasm-video-device-plugin
+        tag: v0.1.0
+        pullPolicy: Always
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: registry.contoso.com/mirrors/kasm-video-device-plugin:v0.1.0
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: Always
+
+  - it: sets imagePullSecrets when configured
+    set:
+      imagePullSecrets:
+        - name: contoso-registry
+    asserts:
+      - equal:
+          path: spec.template.spec.imagePullSecrets
+          value:
+            - name: contoso-registry
+
+  - it: omits imagePullSecrets by default
+    asserts:
+      - isNull:
+          path: spec.template.spec.imagePullSecrets
+
+  - it: mounts the kubelet device plugin socket directory and the node device tree
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: device-plugin
+            hostPath:
+              path: /var/lib/kubelet/device-plugins
+              type: Directory
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: dev
+            hostPath:
+              path: /dev
+              type: Directory
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: device-plugin
+            mountPath: /var/lib/kubelet/device-plugins
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: dev
+            mountPath: /dev
+      - lengthEqual:
+          path: spec.template.spec.volumes
+          count: 2
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.privileged
+          value: true
+      - isNull:
+          path: spec.template.spec.hostNetwork
+      - isNull:
+          path: spec.template.spec.hostPID
+
+  - it: always sets cpu and memory requests and limits
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 10m
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 32Mi
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: 50m
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 64Mi
+
+  - it: runs at system-node-critical priority by default and can drop the priority class
+    asserts:
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: system-node-critical
+
+  - it: omits the priority class when it is cleared
+    set:
+      priorityClassName: ""
+    asserts:
+      - isNull:
+          path: spec.template.spec.priorityClassName
+
+  - it: applies scheduling, strategy, label and annotation overrides
+    set:
+      nodeSelector:
+        kasm.com/workspaces: "true"
+      tolerations:
+        - key: kasm.com/workspaces
+          operator: Exists
+          effect: NoSchedule
+      updateStrategy: OnDelete
+      podAnnotations:
+        contoso.com/owner: platform
+      podLabels:
+        contoso.com/tier: node
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector["kasm.com/workspaces"]
+          value: "true"
+      - contains:
+          path: spec.template.spec.tolerations
+          content:
+            key: kasm.com/workspaces
+            operator: Exists
+            effect: NoSchedule
+      - equal:
+          path: spec.updateStrategy.type
+          value: OnDelete
+      - equal:
+          path: spec.template.metadata.annotations["contoso.com/owner"]
+          value: platform
+      - equal:
+          path: spec.template.metadata.labels["contoso.com/tier"]
+          value: node
+
+  - it: carries the standard chart labels
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: kasm-video-device-plugin
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: video-device-plugin
+      - equal:
+          path: metadata.labels["app.kubernetes.io/part-of"]
+          value: kasm-ai
+      - equal:
+          path: metadata.labels["app.kubernetes.io/managed-by"]
+          value: Helm
+      - equal:
+          path: metadata.labels["helm.sh/chart"]
+          value: kasm-video-device-plugin-0.1.0
+      - equal:
+          path: metadata.labels["app.kubernetes.io/version"]
+          value: latest
+
+  - it: honors fullnameOverride
+    set:
+      fullnameOverride: video-device-plugin
+    asserts:
+      - equal:
+          path: metadata.name
+          value: video-device-plugin
+
+  # Helm rewrites .Chart.Name to the dependency alias for an aliased subchart, so the camelCase
+  # umbrella alias has to normalize into a DNS-safe resource name.
+  - it: normalizes a camelCase nameOverride the way an umbrella alias would arrive
+    set:
+      nameOverride: videoDevicePlugin
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-video-device-plugin
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: video-device-plugin

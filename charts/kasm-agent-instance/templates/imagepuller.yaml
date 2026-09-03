@@ -1,0 +1,31 @@
+{{/*
+  KasmImagePuller: stages workspace images onto every targeted node ahead of
+  time, so the first session on a node does not wait for a cold image pull.
+
+  The operator reconciles this into a DaemonSet; the images list is passed
+  through verbatim, since `image` there is the authoritative pull reference and
+  `registry` is informational.
+*/}}
+{{- if .Values.imagePuller.enabled }}
+apiVersion: agent.kasm.com/v1alpha1
+kind: KasmImagePuller
+metadata:
+  name: {{ include "kasmAgentInstance.fullname" . }}-image-puller
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kasmAgentInstance.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  imagePullPolicy: {{ .Values.imagePuller.imagePullPolicy }}
+  {{- with .Values.imagePuller.images }}
+  images:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.imagePuller.resources }}
+  resources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

@@ -1,0 +1,39 @@
+# Mirrors the k3s-agent-dev-cluster Tilt deployment (see the kasm-operator dev configs repo).
+#
+# Out-of-chart pieces this scenario assumes exist in the target cluster, none of which this chart
+# installs or validates rendering against:
+#   - A Traefik HelmChartConfig enabling the Gateway API provider (k3s ships Traefik without it),
+#     so the `traefik-gateway` Gateway that httpRoute.parentRefs below attaches to actually exists.
+#   - The otel-backend repo's LGTM stack + ClickHouse, which is what
+#     otelCollector.exporters.clickhouse (and the default otlp exporter) point at.
+#   - The `kasm-manager-token` and `kasm-session-proxy-tls` Secrets, created out of band before
+#     install (this scenario intentionally has no manager.token or certificate.enabled, so the
+#     chart creates neither).
+agent:
+  manager:
+    hostname: zonea.192.168.9.232.nip.io
+    existingTokenSecret: kasm-manager-token
+  publicHostname: 192.168.9.126.nip.io
+  zone: zonea
+  sessionProxy:
+    certSecretName: kasm-session-proxy-tls
+  httpRoute:
+    enabled: true
+    parentRefs:
+      - name: traefik-gateway
+        namespace: kube-system
+  imagePuller:
+    enabled: true
+    images:
+      - image: kasmweb/chrome:develop
+        registry: https://index.docker.io/v1/
+      - image: kasmweb/alpine-323-desktop:develop
+        registry: https://index.docker.io/v1/
+
+otelCollector:
+  exporters:
+    clickhouse:
+      enabled: true
+      existingSecret: clickhouse-otel
+    debug:
+      enabled: false

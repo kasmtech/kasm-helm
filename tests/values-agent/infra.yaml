@@ -1,0 +1,43 @@
+# Privileged / cluster-infra scenario: turns on the pieces that need a privileged Pod Security
+# Standard (nodePrep, egressInstaller) or pull in large third-party charts (videoDevicePlugin's node
+# selector pairing, csiRclone, gpuOperator, nfsProvisioner). Rendered to .rendered-infra/ instead of
+# .rendered/ and validated with kubeconform only — deliberately excluded from the kyverno
+# baseline-PSS gate that the rest of tests/values-agent/ is subject to.
+agent:
+  manager:
+    hostname: kasm.example.test
+    token: "placeholder-not-a-real-token"
+  publicHostname: agent.kasm.example.test
+
+nodePrep:
+  enabled: true
+  modules:
+    v4l2loopback:
+      enabled: true
+    wireguard:
+      enabled: true
+  secureBoot:
+    existingMokSecret: kasm-mok
+  # Node tuning is off by default; enabled here so the swap and sysctl code paths (and the three
+  # extra hostPath volumes swap adds) are covered by the render + kubeconform gate. force is left
+  # false so the rendered script carries the kubelet safety check, which is the interesting variant.
+  tuning:
+    sysctls:
+      enabled: true
+    swap:
+      enabled: true
+
+videoDevicePlugin:
+  enabled: true
+
+egressInstaller:
+  enabled: true
+
+csiRclone:
+  enabled: true
+
+gpuOperator:
+  enabled: true
+
+nfs-server-provisioner:
+  enabled: true

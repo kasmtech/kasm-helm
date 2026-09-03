@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 880" width="1000" height="880" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" role="img" aria-label="Kasm Helm chart dependency tree">
+<defs><marker id="ar/" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#57606a"/></marker><marker id="ard" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#9a6700"/></marker></defs>
+<rect x="2" y="2" width="996" height="876" rx="14" fill="#ffffff" stroke="#d0d7de"/>
+<text x="28" y="40" font-size="19" font-weight="700" fill="#1f2328">Kasm Helm chart dependency tree</text>
+<rect x="385" y="58" width="230" height="56" rx="9" fill="#ddf4ff" stroke="#54aeff" stroke-width="1.5"/>
+<text x="500.0" y="84" text-anchor="middle" font-size="14.5" font-weight="700" fill="#0a3069">kasm-platform</text>
+<text x="500.0" y="102" text-anchor="middle" font-size="11" fill="#57606a">top-level umbrella</text>
+<rect x="120" y="150" width="250" height="64" rx="9" fill="#dafbe1" stroke="#4ac26b" stroke-width="1.5"/>
+<text x="245.0" y="176" text-anchor="middle" font-size="14.5" font-weight="700" fill="#0f5323">kasm-helm</text>
+<text x="245.0" y="194" text-anchor="middle" font-size="11" fill="#57606a">control plane · GA</text>
+<text x="245.0" y="209" text-anchor="middle" font-size="11" fill="#57606a">sessions run outside K8s</text>
+<rect x="630" y="150" width="250" height="68" rx="9" fill="#ddf4ff" stroke="#54aeff" stroke-width="1.5"/>
+<text x="755.0" y="176" text-anchor="middle" font-size="14.5" font-weight="700" fill="#0a3069">kasm-agent</text>
+<text x="755.0" y="194" text-anchor="middle" font-size="11" fill="#57606a">agent umbrella</text>
+<text x="755.0" y="209" text-anchor="middle" font-size="11" fill="#57606a">9 dependencies</text>
+<path d="M455 114 L245 150" fill="none" stroke="#57606a" stroke-width="1.6" marker-end="url(#ar/)"/>
+<rect x="289.6" y="122.0" width="120.80000000000001" height="17" rx="4" fill="#ffffff" stroke="#eaeef2"/>
+<text x="350.0" y="134.0" text-anchor="middle" font-size="10.5" font-family="ui-monospace,Menlo,monospace" fill="#4b535d">kasm-helm.enabled</text>
+<path d="M545 114 L755 150" fill="none" stroke="#57606a" stroke-width="1.6" marker-end="url(#ar/)"/>
+<rect x="586.4" y="122.0" width="127.2" height="17" rx="4" fill="#ffffff" stroke="#eaeef2"/>
+<text x="650.0" y="134.0" text-anchor="middle" font-size="10.5" font-family="ui-monospace,Menlo,monospace" fill="#4b535d">kasm-agent.enabled</text>
+<rect x="120" y="250" width="250" height="60" rx="9" fill="#fbefff" stroke="#c297ff" stroke-width="1.5"/>
+<text x="245.0" y="276" text-anchor="middle" font-size="14.5" font-weight="700" fill="#4c2889">kasm-agent-crds</text>
+<text x="245.0" y="294" text-anchor="middle" font-size="11" fill="#57606a">standalone · Helm-native</text>
+<text x="245.0" y="309" text-anchor="middle" font-size="11" fill="#57606a">CRD lifecycle</text>
+<rect x="40" y="336" width="600" height="330" rx="11" fill="#f9fbfd" stroke="#d0d7de"/>
+<text x="60" y="362" font-size="12.5" font-weight="700" fill="#57606a">kasm-agent local subcharts (file://)</text>
+<rect x="62" y="378" width="278" height="80" rx="9" fill="#ffffff" stroke="#54aeff" stroke-width="1.5"/>
+<text x="201.0" y="404" text-anchor="middle" font-size="14.5" font-weight="700" fill="#1f2328">kasm-agent-operator</text>
+<text x="201.0" y="422" text-anchor="middle" font-size="11" fill="#57606a">CRDs + RBAC + controller</text>
+<text x="201.0" y="437" text-anchor="middle" font-size="11" fill="#57606a">cluster singleton</text>
+<rect x="72" y="434" width="88" height="16" rx="8" fill="#eef2f5" stroke="#d0d7de"/>
+<text x="80" y="446" font-size="10.5" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" fill="#4b535d">operator</text>
+<circle cx="324" cy="394" r="5" fill="#1a7f37"/>
+<rect x="360" y="378" width="258" height="80" rx="9" fill="#ffffff" stroke="#54aeff" stroke-width="1.5"/>
+<text x="489.0" y="404" text-anchor="middle" font-size="14.5" font-weight="700" fill="#1f2328">kasm-otel-collector</text>
+<text x="489.0" y="422" text-anchor="middle" font-size="11" fill="#57606a">telemetry pipeline</text>
+<rect x="370" y="434" width="133" height="16" rx="8" fill="#eef2f5" stroke="#d0d7de"/>
+<text x="378" y="446" font-size="10.5" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" fill="#4b535d">otelCollector</text>
+<circle cx="602" cy="394" r="5" fill="#1a7f37"/>
+<rect x="62" y="470" width="278" height="80" rx="9" fill="#ffffff" stroke="#54aeff" stroke-width="1.5"/>
+<text x="201.0" y="496" text-anchor="middle" font-size="14.5" font-weight="700" fill="#1f2328">kasm-agent-instance</text>
+<text x="201.0" y="514" text-anchor="middle" font-size="11" fill="#57606a">Agent CR + session proxy</text>
+<text x="201.0" y="529" text-anchor="middle" font-size="11" fill="#57606a">5 external-access options</text>
+<rect x="72" y="526" width="61" height="16" rx="8" fill="#eef2f5" stroke="#d0d7de"/>
+<text x="80" y="538" font-size="10.5" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" fill="#4b535d">agent</text>
+<circle cx="324" cy="486" r="5" fill="#1a7f37"/>
+<rect x="360" y="470" width="258" height="80" rx="9" fill="#f6f8fa" stroke="#afb8c1" stroke-width="1.5"/>
+<text x="489.0" y="496" text-anchor="middle" font-size="14.5" font-weight="700" fill="#1f2328">kasm-node-prep</text>
+<text x="489.0" y="514" text-anchor="middle" font-size="11" fill="#57606a">kernel modules (build/KMM)</text>
+<text x="489.0" y="529" text-anchor="middle" font-size="11" fill="#57606a">+ node tuning</text>
+<rect x="370" y="526" width="88" height="16" rx="8" fill="#eef2f5" stroke="#d0d7de"/>
+<text x="378" y="538" font-size="10.5" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" fill="#4b535d">nodePrep</text>
+<circle cx="602" cy="486" r="5" fill="#8c959f"/>
+<rect x="62" y="562" width="278" height="80" rx="9" fill="#f6f8fa" stroke="#afb8c1" stroke-width="1.5"/>
+<text x="201.0" y="588" text-anchor="middle" font-size="14.5" font-weight="700" fill="#1f2328">kasm-video-device-plugin</text>
+<text x="201.0" y="606" text-anchor="middle" font-size="11" fill="#57606a">advertises kasm.com/video</text>
+<rect x="72" y="618" width="169" height="16" rx="8" fill="#eef2f5" stroke="#d0d7de"/>
+<text x="80" y="630" font-size="10.5" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" fill="#4b535d">videoDevicePlugin</text>
+<circle cx="324" cy="578" r="5" fill="#8c959f"/>
+<rect x="360" y="562" width="258" height="80" rx="9" fill="#f6f8fa" stroke="#afb8c1" stroke-width="1.5"/>
+<text x="489.0" y="588" text-anchor="middle" font-size="14.5" font-weight="700" fill="#1f2328">kasm-egress-installer</text>
+<text x="489.0" y="602" text-anchor="middle" font-size="11" fill="#57606a">VPN egress via CNI shim</text>
+<text x="489.0" y="615" text-anchor="middle" font-size="11" fill="#57606a">hostPID + hostNetwork · privileged</text>
+<rect x="370" y="618" width="151" height="16" rx="8" fill="#eef2f5" stroke="#d0d7de"/>
+<text x="378" y="630" font-size="10.5" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" fill="#4b535d">egressInstaller</text>
+<circle cx="602" cy="578" r="5" fill="#8c959f"/>
+<rect x="670" y="336" width="290" height="330" rx="11" fill="#fffbe6" stroke="#d4a72c" stroke-dasharray="7 4"/>
+<text x="690" y="362" font-size="12.5" font-weight="700" fill="#9a6700">third-party (all off by default)</text>
+<rect x="690" y="378" width="250" height="72" rx="9" fill="#ffffff" stroke="#d4a72c" stroke-width="1.5" stroke-dasharray="6 4"/>
+<text x="815.0" y="404" text-anchor="middle" font-size="14.5" font-weight="700" fill="#1f2328">csi-driver-rclone</text>
+<text x="815.0" y="422" text-anchor="middle" font-size="11" fill="#57606a">cloud storage mappings</text>
+<rect x="700" y="426" width="97" height="16" rx="8" fill="#eef2f5" stroke="#d0d7de"/>
+<text x="708" y="438" font-size="10.5" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" fill="#4b535d">csiRclone</text>
+<circle cx="924" cy="394" r="5" fill="#8c959f"/>
+<rect x="690" y="470" width="250" height="72" rx="9" fill="#ffffff" stroke="#d4a72c" stroke-width="1.5" stroke-dasharray="6 4"/>
+<text x="815.0" y="496" text-anchor="middle" font-size="14.5" font-weight="700" fill="#1f2328">gpu-operator</text>
+<text x="815.0" y="514" text-anchor="middle" font-size="11" fill="#57606a">NVIDIA GPU enablement</text>
+<rect x="700" y="518" width="115" height="16" rx="8" fill="#eef2f5" stroke="#d0d7de"/>
+<text x="708" y="530" font-size="10.5" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" fill="#4b535d">gpuOperator</text>
+<circle cx="924" cy="486" r="5" fill="#8c959f"/>
+<rect x="690" y="562" width="250" height="72" rx="9" fill="#ffffff" stroke="#d4a72c" stroke-width="1.5" stroke-dasharray="6 4"/>
+<text x="815.0" y="588" text-anchor="middle" font-size="14.5" font-weight="700" fill="#1f2328">nfs-server-provisioner</text>
+<text x="815.0" y="606" text-anchor="middle" font-size="11" fill="#57606a">RWX StorageClass</text>
+<circle cx="924" cy="578" r="5" fill="#8c959f"/>
+<path d="M720 218 L430 336" fill="none" stroke="#57606a" stroke-width="1.6" marker-end="url(#ar/)"/>
+<rect x="514.6" y="267.0" width="120.80000000000001" height="17" rx="4" fill="#ffffff" stroke="#eaeef2"/>
+<text x="575.0" y="279.0" text-anchor="middle" font-size="10.5" font-family="ui-monospace,Menlo,monospace" fill="#4b535d">6 local subcharts</text>
+<path d="M800 218 L820 336" fill="none" stroke="#9a6700" stroke-width="1.6" stroke-dasharray="6 5" marker-end="url(#ard)"/>
+<rect x="762.4" y="267.0" width="95.2" height="17" rx="4" fill="#ffffff" stroke="#eaeef2"/>
+<text x="810.0" y="279.0" text-anchor="middle" font-size="10.5" font-family="ui-monospace,Menlo,monospace" fill="#4b535d">3 third-party</text>
+<path d="M215 378 L235 310" fill="none" stroke="#8250df" stroke-width="1.6" stroke-dasharray="6 5"/>
+<text x="248" y="352" font-size="10.5" font-family="ui-monospace,Menlo,monospace" fill="#6639ba">same 5 CRDs · not a dependency</text>
+<text x="28" y="700" font-size="12.5" font-weight="700" fill="#57606a">Legend</text>
+<rect x="28" y="717" width="22" height="15" rx="4" fill="#ffffff" stroke="#54aeff" stroke-width="1.5"/>
+<circle cx="45" cy="721" r="4" fill="#1a7f37"/>
+<text x="58" y="728" font-size="11.5" fill="#57606a">subchart enabled by default</text>
+<rect x="250" y="717" width="22" height="15" rx="4" fill="#f6f8fa" stroke="#afb8c1" stroke-width="1.5"/>
+<circle cx="267" cy="721" r="4" fill="#8c959f"/>
+<text x="280" y="728" font-size="11.5" fill="#57606a">subchart off by default</text>
+<rect x="470" y="717" width="22" height="15" rx="4" fill="#dafbe1" stroke="#4ac26b" stroke-width="1.5"/>
+<text x="500" y="728" font-size="11.5" fill="#57606a">control plane (GA)</text>
+<rect x="680" y="717" width="22" height="15" rx="4" fill="#ffffff" stroke="#d4a72c" stroke-width="1.5" stroke-dasharray="4 3"/>
+<text x="710" y="728" font-size="11.5" fill="#57606a">third-party (optional)</text>
+<path d="M28 752 L50 752" stroke="#8250df" stroke-width="1.6" stroke-dasharray="6 5"/>
+<text x="58" y="756" font-size="11.5" fill="#57606a">dashed = relationship, not a Helm dependency</text>
+<text x="470" y="756" font-size="11.5" fill="#8c959f">kasm-platform 0.1.0 · develop preview · kasm-helm 1.1190.6 GA</text>
+</svg>
