@@ -1,6 +1,6 @@
 # Egress installer: node prerequisites
 
-> **Applies to:** feature-matrix row **6** (Egress VPN / per-session tunnel) — the "Outside the charts" cell reading *"a namespace that permits `privileged` **and** host namespaces … a runtime that honours chained CNI plugins"* — and the host-namespace half of row **25** (multi-tenancy) · **Charts/values:** `egressInstaller.enabled`, `egressInstaller.distro`, `egressInstaller.cniBinDir`, `egressInstaller.cniConfDirs`, `egressInstaller.socketDir`, `egressInstaller.excludedCIDRs`, `egressInstaller.priorityClassName`, `egressInstaller.updateStrategy`
+> **Applies to:** [Egress gateways (per-session VPN)](../feature-matrix.md#networking--access) — the namespace that has to permit `privileged` **and** host namespaces, and the runtime that has to honour chained CNI plugins — and the host-namespace half of [multi-tenancy](../feature-matrix.md#security--isolation) · **Charts/values:** `egressInstaller.enabled`, `egressInstaller.distro`, `egressInstaller.cniBinDir`, `egressInstaller.cniConfDirs`, `egressInstaller.socketDir`, `egressInstaller.excludedCIDRs`, `egressInstaller.priorityClassName`, `egressInstaller.updateStrategy`
 
 ## Why this is needed
 
@@ -32,6 +32,13 @@ Read [kasm-egress-installer § Read this before installing](../../charts/kasm-eg
   An unrecognized `distro` with no `cniBinDir` **fails template rendering** on purpose — a wrong directory is silent at runtime, so the chart would rather not install.
 - Distro variants: **k3s** — take the default. **kubeadm / vanilla** — `distro: vanilla`. **Managed (EKS / AKS / GKE)** — normally `/opt/cni/bin`, but whether the managed CNI honours a chained plugin is a per-cluster fact: verify with the test pod in *Verify* before relying on it (GKE Autopilot cannot run this workload at all). **RKE2 / OpenShift** — set `cniBinDir` explicitly from the runtime's own config.
 - `egressInstaller.cniConfDirs` and `egressInstaller.containerdConfigPaths` already cover the k3s / RKE2 / vanilla layouts as a **union**; entries that do not exist on a node are skipped, not errors. There is no matching `distro` choice for those.
+- **On Cilium, prepare the CNI config first.** The Cilium agent rewrites its own `05-cilium.conflist` on any change under `/etc/cni/net.d`, so it undoes the egress shim's patch within about a second. Install Cilium with `cni.customConf=true` and `cni.exclusive=false`, then restart its agents — Cilium does not roll them on a config change by default:
+
+  ```console
+  kubectl -n kube-system rollout restart ds/cilium
+  ```
+
+  Verified on Cilium 1.20. Without both settings the DaemonSet looks healthy and the chaining never sticks.
 
 ## Steps
 
@@ -150,6 +157,7 @@ Under [kasm-platform](../../charts/kasm-platform/README.md), nest the block unde
 
 | Symptom | Cause | Fix |
 | ------- | ----- | --- |
+| Conflist is patched, then reverts to stock a second later (Cilium) | The Cilium agent rewrites `05-cilium.conflist` whenever `/etc/cni/net.d` changes | Set `cni.customConf=true` and `cni.exclusive=false` on the Cilium install, then `kubectl -n kube-system rollout restart ds/cilium` |
 | DaemonSet is `Running`, conflists look patched, sessions get **no** egress tunnel and nothing errors anywhere | The shim was installed into a directory the runtime does not read plugins from — the chart's silent-failure mode | Compare the `installed CNI shim at …` log line against the containerd `bin_dir` from step 1; set `egressInstaller.distro` correctly or override `egressInstaller.cniBinDir` |
 | `helm install`/`template` fails: unrecognized `distro` with no `cniBinDir` | Deliberate — the chart refuses to guess a path whose wrongness would be silent | Set `egressInstaller.cniBinDir` explicitly |
 | Pods on the node are stuck `ContainerCreating` with a CNI plugin error; **all** pods, not just Kasm's | No daemon is running, and the chained shim hard-fails CNI `ADD` when it cannot reach its socket. Normally just a restart window; a crash-loop makes it permanent | Fix or scale the DaemonSet back up. Manual recovery: restore each `.conflist` from its sibling `.kasm-egress.bak` on the affected node |
@@ -164,6 +172,7 @@ Under [kasm-platform](../../charts/kasm-platform/README.md), nest the block unde
 - [ ] Namespace permits `privileged` **and** host namespaces (`hostPID`, `hostNetwork`) — policy exception decided and recorded.
 - [ ] The no-daemon failure window explicitly accepted; `priorityClassName: system-node-critical` left in place.
 - [ ] Runtime honours chained CNI plugins (k3s/RKE2 containerd verified; anything else proven with a test pod).
+- [ ] On Cilium: `cni.customConf=true`, `cni.exclusive=false`, and the Cilium agents restarted after setting them.
 - [ ] CNI bin dir determined from the runtime's containerd config, not guessed.
 - [ ] `egressInstaller.distro` set (`k3s` / `vanilla`) or `egressInstaller.cniBinDir` overridden.
 - [ ] `egressInstaller.socketDir` left as a host path.

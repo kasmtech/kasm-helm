@@ -444,19 +444,25 @@ activated with `swapon`. Point `hostPath` at a real node disk with room for it: 
 needs a `nodatacow` file, and overlayfs and tmpfs never will. Changing `sizeMib` later is picked up on the
 next pass — a swapfile of the wrong size that is not currently active is replaced.
 
-#### How much of it a workspace pod actually gets
+#### How much of it a workspace pod actually gets — today, none
 
-`LimitedSwap` gives swap **only to Burstable pods** — memory request below memory limit, which is what the
-Kasm operator stamps for a workspace by default. A *Guaranteed* workspace (request equal to limit) and a
-*BestEffort* one both get exactly zero, no matter how much swap the node has. For a Burstable pod the
-allowance is proportional:
+`LimitedSwap` gives a container swap **only when its memory request is strictly below its memory limit**.
+A container with request equal to limit gets exactly zero, whatever its QoS class or CPU allocation
+method; *BestEffort* and fully *Guaranteed* pods get zero too. This is the important part: the Kasm
+operator derives a workspace's memory request **and** limit from the same `memory_bytes`, so every
+session container runs with request = limit and therefore **gets no swap** — verified on k3s 1.36 and
+kubeadm 1.34. The swapfile this chart creates is still worth having: the agent, the session-proxy
+sidecar, CSI plugins and system pods are Burstable with memory headroom and do draw on it, which is what
+keeps the node itself off the OOM edge. But do not size a node expecting *sessions* to spill into swap,
+and do not read the formula below as a per-session allowance — it is the allowance for a Burstable pod
+whose request is below its limit, which a workspace is not:
 
 ```text
-pod swap limit = (pod memory request / node MemTotal) × total node swap
+container swap limit = (container memory request / node MemTotal) × total node swap   # request < limit only
 ```
 
-So a default Kasm workspace (2768Mi) on a 16 GiB node with an 8 GiB swapfile gets
-`2768 / 16384 × 8192 MiB ≈ 1384 MiB`. Sizing swap against node RAM therefore also sizes it per session.
+If a future operator release stamps a memory limit above the request, sessions would pick up swap by this
+formula automatically; until then the knob tunes everything on the node *except* the sessions.
 
 #### Why not zram
 

@@ -427,8 +427,9 @@ route:
 # OpenShift `passthrough` Route does, but on any cluster with the Gateway API rather than only on OpenShift.
 #
 tlsRoute:
-  # tlsRoute.enabled -- Render the TLSRoute from this chart. Requires the Gateway API *experimental* channel
-  # CRDs - TLSRoute is not part of the standard channel - and a Gateway that has a listener with
+  # tlsRoute.enabled -- Render the TLSRoute from this chart. Requires the TLSRoute CRD - standard channel
+  # as `v1` since Gateway API 1.5 (Kubernetes 1.31+); older experimental-channel installs serve only
+  # `v1alpha2`, which the chart falls back to (see `tlsRoute.apiVersion`) - and a Gateway that has a listener with
   # `protocol: TLS` and `tls.mode: Passthrough` whose `allowedRoutes` admits this namespace. `httpRoute`,
   # `ingress`, `route`, `tlsRoute` and `gatewayRoute` are alternatives - enable at most one of the five, since
   # all of them point at the same operator-created session-proxy Service. `gatewayRoute` below produces the
@@ -455,6 +456,12 @@ tlsRoute:
   # proxy's own HTTPS listener - the only port that makes sense under passthrough, since nothing terminates
   # TLS before the connection gets there.
   backendPort: 4444
+  # tlsRoute.apiVersion -- API version to render the TLSRoute with. Empty (the default) picks
+  # `gateway.networking.k8s.io/v1` when the cluster serves it (Gateway API 1.5+ standard channel), falls back
+  # to `gateway.networking.k8s.io/v1alpha2` when only the older experimental-channel CRD is served, and uses
+  # `v1` when rendering without a cluster (`helm template`). Set it to override that choice, for example when
+  # rendering offline for a cluster that still serves only `v1alpha2`.
+  apiVersion: ""
 
 # gatewayRoute -- Optionally have the OPERATOR create the Gateway API TLSRoute, rather than rendering one
 # from this chart. Same end result as `tlsRoute` - SNI-based TLS passthrough to the session proxy's own
@@ -467,7 +474,7 @@ tlsRoute:
 #
 gatewayRoute:
   # gatewayRoute.enabled -- Have the operator create the TLSRoute. Same cluster-side prerequisites as
-  # `tlsRoute`: the Gateway API *experimental* channel CRDs, and a Gateway with a `protocol: TLS` /
+  # `tlsRoute`: the TLSRoute CRD (standard channel since Gateway API 1.5), and a Gateway with a `protocol: TLS` /
   # `tls.mode: Passthrough` listener whose `allowedRoutes` admits this namespace. `httpRoute`, `ingress`,
   # `route`, `tlsRoute` and `gatewayRoute` are alternatives - enable at most one of the five, since all of
   # them point at the same session-proxy Service. Between the two passthrough options, prefer `gatewayRoute`

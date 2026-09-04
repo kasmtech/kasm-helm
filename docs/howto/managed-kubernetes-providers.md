@@ -32,8 +32,8 @@ generation, a cluster-creation-time choice, a region, or a control-plane version
 as a promise. The chart values are the half that *is* verified: every value in backticks below
 exists in one of this repo's `values.yaml` files.
 
-Values are written as they are set on the **`kasm-agent`** umbrella, the same convention the
-[feature matrix](../feature-matrix.md) uses: `agent.*` is the `kasm-agent-instance` subchart,
+Values are written as they are set on the **`kasm-agent`** umbrella, the same convention
+[What works on Kubernetes](../feature-matrix.md) uses: `agent.*` is the `kasm-agent-instance` subchart,
 `nodePrep.*` is `kasm-node-prep`, `egressInstaller.*` is `kasm-egress-installer`, and so on. Under
 [kasm-platform](../../charts/kasm-platform/README.md), prefix them with `kasm-agent.`.
 
@@ -103,9 +103,9 @@ One image tag per kernel release, built on a connected machine — the runbook i
 The alternative is a custom AMI with `v4l2loopback` already baked in, which takes `nodePrep` out of
 the picture for that module entirely.
 
-Two feature-matrix rows ride on this: **9** (webcam / `v4l2loopback`) and **16** (WireGuard, and
-only on kernels older than 5.6 — from 5.6 it is in-tree and `nodePrep.modules.wireguard.enabled`
-should stay `false`).
+Two features ride on this: [webcam passthrough](../feature-matrix.md#devices-gpu-webcam-audio)
+and [WireGuard](../feature-matrix.md#security--isolation) — the latter only on kernels older
+than 5.6; from 5.6 it is in-tree and `nodePrep.modules.wireguard.enabled` should stay `false`.
 
 ### RWX storage for profiles
 
@@ -163,7 +163,8 @@ The AWS Load Balancer Controller is the usual front door, in one of two shapes:
 Gateway API on EKS is provided by the ALB controller rather than by a separate implementation;
 whether it covers the `TLSRoute` passthrough shape `agent.gatewayRoute` / `agent.tlsRoute` needs is
 version-dependent — **verify against current provider docs** before designing around it. `TLSRoute`
-also ships only in the Gateway API's *experimental* channel, wherever you run it.
+is standard-channel `v1` since Gateway API 1.5, wherever you run it; older CRD bundles carry it only in
+the experimental channel.
 
 Client IP, pick exactly one:
 
@@ -239,10 +240,12 @@ DaemonSets that touch the node.
 
 What still runs: the whole control plane, and the agent's core — `operator.enabled=true`,
 `agent.enabled=true`, `otelCollector.enabled=true`, the session proxy, and sessions without webcam,
-VPN egress or GPU. In feature-matrix terms rows **6**, **7**, **8**, **9**, **15**, **16**, **17**
-and **26** drop out, along with the node-tuning half of row **1** and the cloud-storage mappings of
-row **3**. Rows **2**, **4**, **5**, **10**–**14**, **18**–**25** are unaffected. A common shape is
-a Fargate profile for the control plane and real EC2 nodes for sessions.
+VPN egress or GPU. What drops out: egress gateways, GPU (both kinds), webcam passthrough, image
+pre-pulling, WireGuard, host-path volume mappings, Secure Boot, cloud storage mappings, and node
+tuning. Everything else — persistent profiles, file mappings, network isolation, recording,
+printing, microphone, web filtering, SSH keys, node targeting, external access, TLS, private
+registries, autoscaling and multi-tenancy — is unaffected. A common shape is a Fargate profile
+for the control plane and real EC2 nodes for sessions.
 
 ---
 
@@ -339,23 +342,27 @@ namespaces. See [privileged workloads and cluster policy](privileged-workloads-a
 
 The network policy engine on AKS is a **cluster-creation-time** choice — Azure NPM, Calico or
 Cilium — and it is not something you switch on afterwards on an existing cluster in the general
-case. Decide it when the cluster is created if row 5 (network isolation) or row 25 (multi-tenancy)
+case. Decide it when the cluster is created if network isolation or multi-tenancy
 matters to you; **verify against current provider docs** for what your AKS version allows changing
 in place. Without an engine, `networkPolicies.enabled=true` renders objects nothing enforces.
 
 For the egress installer, AKS is `distro: vanilla` (`/opt/cni/bin`). Whether Azure CNI — in any of
 its overlay, node-subnet or Cilium-powered variants — honours a chained plugin appended to its
 `.conflist` is unverified here. Confirm the bin dir from containerd's config on a node, then run the
-test pod from [Verify](egress-installer-node-prerequisites.md#verify).
+test pod from [Verify](egress-installer-node-prerequisites.md#verify). On any Cilium-based dataplane,
+the Cilium agent also rewrites its own conflist whenever `/etc/cni/net.d` changes and undoes the
+shim within a second — it needs `cni.customConf=true` and `cni.exclusive=false`, plus an agent
+restart, before chaining holds ([egress installer prerequisites](egress-installer-node-prerequisites.md#before-you-start)).
 
 ### Serverless and restricted modes
 
 **AKS virtual nodes** (ACI-backed) are not real nodes: no privileged pods, no `hostPath`, no host
 namespaces, no DaemonSets scheduled onto them. `nodePrep`, `videoDevicePlugin`, `egressInstaller`,
 KMM, `gpuOperator`, the rclone CSI node plugin and `agent.imagePuller` are all **not possible**
-there. The same feature-matrix rows drop out as on Fargate: **6**, **7**, **8**, **9**, **15**,
-**16**, **17**, **26**, plus the node-tuning half of **1** and the mappings in **3**. Keep sessions
-that need any of those on a real node pool and use `agent.workspacesNodeSelector` to pin them.
+there. The same features drop out as on Fargate: egress gateways, GPU, webcam passthrough, image
+pre-pulling, WireGuard, host-path volume mappings, Secure Boot, node tuning and cloud storage
+mappings. Keep sessions that need any of those on a real node pool and use
+`agent.workspacesNodeSelector` to pin them.
 
 ---
 
@@ -489,8 +496,9 @@ driver, not the `gpuOperator` subchart running.
 
 What still runs: `operator.enabled=true`, `agent.enabled=true`, `otelCollector.enabled=true`, the
 session proxy, ingress, NetworkPolicy (Dataplane V2 is standard on Autopilot), and sessions without
-webcam, VPN egress or GPU. Feature-matrix rows **6**, **7**, **8**, **9**, **15**, **16**, **17**
-and **26** drop out, along with the node-tuning half of **1** and the mappings in **3**.
+webcam, VPN egress or GPU. Egress gateways, GPU (both kinds), webcam passthrough, image
+pre-pulling, WireGuard, host-path volume mappings, Secure Boot, node tuning and cloud storage
+mappings all drop out.
 
 ---
 
@@ -556,7 +564,7 @@ Client IP behaviour behind the OpenShift router is the router's, not the chart's
 it with `agent.sessionProxy.service.type=LoadBalancer`,
 `agent.sessionProxy.service.externalTrafficPolicy=Local` and
 `agent.sessionProxy.proxyProtocol.*` behave as they do anywhere else. Full comparison of the five
-exposure methods: [External access and TLS](external-access-and-tls.md#steps).
+exposure methods: [External access and TLS](external-access-and-tls.md#step-2--pick-one-exposure-option).
 
 ### Security baseline
 
@@ -607,9 +615,8 @@ first.
 OpenShift has no equivalent of Fargate or Autopilot in the sense that matters here: ROSA, ARO and
 hosted-control-plane variants all give you real worker nodes you can schedule DaemonSets onto. The
 restriction on OpenShift is **policy, not node access** — `restricted-v2` is the default SCC, and
-everything privileged stays blocked until it is granted. Nothing drops out of the feature matrix on
-capability grounds; things drop out because you decided not to grant the SCC, which is a decision
-you can revisit. Record which way you went.
+everything privileged stays blocked until it is granted. Nothing drops out on capability grounds;
+things drop out because you decided not to grant the SCC, which is a decision you can revisit. Record which way you went.
 
 Node tuning is also a policy-shaped problem here: kubelet settings come from a `KubeletConfig`
 MachineConfig object and the node **reboots** to apply it, so `nodePrep.tuning.swap.enabled=true`
@@ -668,9 +675,9 @@ changed afterwards.
 
 * [Cluster configuration how-tos](README.md) — the eleven per-topic procedures this page cuts
   across, each with its own verification commands.
-* [Feature matrix](../feature-matrix.md) — every Kasm workspace feature, the chart and values that
-  provide it, and what the cluster has to supply first.
+* [What works on Kubernetes](../feature-matrix.md) — every Kasm feature, whether it works, and
+  what it needs from the cluster.
 * [kasm-agent → Cluster preparation checklist](../../charts/kasm-agent/README.md#cluster-preparation-checklist)
-  — the same ground as a single table, per chart value.
+  — the short list: the features people turn on most often, and the values that turn them on.
 * [Architecture → Deployment topologies](../architecture.md#deployment-topologies) — namespace
   layouts, and why the two-namespace one keeps the control plane out of a `privileged` namespace.

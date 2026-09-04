@@ -163,6 +163,9 @@ spell this out.
 
 ## Which chart do I use?
 
+Just want the shortest working install? The [**Quickstart**](../README.md#quickstart) walks two
+paths — the whole stack on one cluster, or an agent added to a Kasm you already run — end to end.
+
 - **kasm-platform** — the whole stack, or either half via its toggles, in one
   release. Start here for a single-cluster install.
 - **kasm-helm** — the control plane on its own (GA). Sessions run on external
@@ -178,14 +181,17 @@ spell this out.
 - **kasm-agent-crds** — install as its own release, before kasm-agent or
   kasm-platform, only when you want Helm to own the CRD lifecycle.
 
-Working from a feature rather than a chart? [**Feature matrix**](feature-matrix.md) maps each
-Kasm workspace feature to the chart and values that provide it, and to what the cluster has to
-supply first.
+Working from a feature rather than a chart? [**What works on Kubernetes**](feature-matrix.md) says
+whether each Kasm feature works here, what it needs from the cluster, and the values that turn it
+on.
 
-Ready to prepare the cluster? [**Cluster configuration how-tos**](howto/README.md) turn that
-matrix's "Outside the charts" column into step-by-step procedures with verification commands.
-On a managed service? [**Managed Kubernetes providers: what changes**](howto/managed-kubernetes-providers.md)
-is the cross-provider view of those how-tos for EKS, AKS, GKE and OpenShift.
+Sizing a deployment before installing anything? [**Planning a Kasm agent deployment**](planning.md)
+is the decision sequence — topology, capacity, network, storage, security, install and day 2.
+
+Ready to prepare the cluster? [**Cluster configuration how-tos**](howto/README.md) are the
+step-by-step procedures, with the commands that prove each one worked. On a managed service,
+[**Managed Kubernetes providers: what changes**](howto/managed-kubernetes-providers.md) is the
+cross-provider view for EKS, AKS, GKE and OpenShift.
 
 ## Per-chart reference
 

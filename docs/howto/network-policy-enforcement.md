@@ -1,6 +1,6 @@
 # NetworkPolicy enforcement
 
-> **Applies to:** [Feature matrix](../feature-matrix.md) rows 5 (Network isolation), 13 (Web filtering / session proxy), 25 (Multi-tenancy / namespace isolation) and Telemetry · **Charts/values:** `networkPolicies.enabled`, `networkPolicies.apiServer.cidr`, `networkPolicies.apiServer.ports`, `networkPolicies.manager.cidr`, `networkPolicies.manager.ports`, `networkPolicies.sessionProxy.ports`, `networkPolicies.sessionProxy.from`, `networkPolicies.otelBackend.cidr`, `networkPolicies.otelBackend.ports`, `networkPolicies.extraPolicies`
+> **Applies to:** [Network isolation and web filtering](../feature-matrix.md#networking--access), [multi-tenancy](../feature-matrix.md#security--isolation) and [telemetry](../feature-matrix.md#observability--operations) · **Charts/values:** `networkPolicies.enabled`, `networkPolicies.apiServer.cidr`, `networkPolicies.apiServer.ports`, `networkPolicies.manager.cidr`, `networkPolicies.manager.ports`, `networkPolicies.sessionProxy.ports`, `networkPolicies.sessionProxy.from`, `networkPolicies.otelBackend.cidr`, `networkPolicies.otelBackend.ports`, `networkPolicies.extraPolicies`
 
 ## Why this is needed
 

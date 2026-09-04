@@ -1,6 +1,6 @@
 # Kernel modules and webcam passthrough
 
-> **Applies to:** feature-matrix rows **9** (webcam / v4l2loopback) and **16** (kernel module management / WireGuard) — the "Outside the charts" cells covering loadable modules, kernel headers, the KMM operator and a reachable registry · **Charts/values:** `nodePrep.modules.v4l2loopback.enabled`, `nodePrep.modules.v4l2loopback.method`, `nodePrep.modules.v4l2loopback.videoDevices`, `nodePrep.modules.v4l2loopback.kmm.image.registry`, `nodePrep.modules.v4l2loopback.kmm.imageRepoSecret`, `nodePrep.modules.v4l2loopback.kmm.build.enabled`, `nodePrep.modules.wireguard.enabled`, `videoDevicePlugin.enabled`
+> **Applies to:** [Webcam passthrough](../feature-matrix.md#devices-gpu-webcam-audio) and [WireGuard on kernels older than 5.6](../feature-matrix.md#security--isolation) — loadable modules, kernel headers, the KMM operator and a reachable registry · **Charts/values:** `nodePrep.modules.v4l2loopback.enabled`, `nodePrep.modules.v4l2loopback.method`, `nodePrep.modules.v4l2loopback.videoDevices`, `nodePrep.modules.v4l2loopback.kmm.image.registry`, `nodePrep.modules.v4l2loopback.kmm.imageRepoSecret`, `nodePrep.modules.v4l2loopback.kmm.build.enabled`, `nodePrep.modules.wireguard.enabled`, `videoDevicePlugin.enabled`
 
 ## Why this is needed
 

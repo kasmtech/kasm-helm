@@ -1,6 +1,6 @@
 # Node tuning and swap
 
-> **Applies to:** no numbered feature-matrix row — this is the node-side half of [kasm-agent § Workspace node best practices](../../charts/kasm-agent/README.md#workspace-node-best-practices), the tuning Kasm's Docker-agent installer performs on a host and a Kubernetes node never gets. It underpins session stability for rows **1** (core workspace) and **18** (node targeting / pool assignment) · **Charts/values:** `nodePrep.tuning.swap.enabled`, `nodePrep.tuning.swap.sizeMib`, `nodePrep.tuning.swap.hostPath`, `nodePrep.tuning.swap.swappiness`, `nodePrep.tuning.swap.force`, `nodePrep.tuning.sysctls.enabled`, `nodePrep.tuning.sysctls.values`
+> **Applies to:** [Node tuning and swap](../feature-matrix.md#observability--operations) — the node-side half of [kasm-agent § Workspace node best practices](../../charts/kasm-agent/README.md#workspace-node-best-practices), the tuning Kasm's Docker-agent installer performs on a host and a Kubernetes node never gets. It underpins session stability and node targeting · **Charts/values:** `nodePrep.tuning.swap.enabled`, `nodePrep.tuning.swap.sizeMib`, `nodePrep.tuning.swap.hostPath`, `nodePrep.tuning.swap.swappiness`, `nodePrep.tuning.swap.force`, `nodePrep.tuning.sysctls.enabled`, `nodePrep.tuning.sysctls.values`
 
 ## Why this is needed
 

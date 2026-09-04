@@ -263,12 +263,24 @@ spec:
                 type: array
               fileMappings:
                 items:
-                  description: FileMapping projects a ConfigMap of files into the
-                    workspace.
+                  description: |-
+                    FileMapping projects a ConfigMap of files into the workspace. Read-only
+                    mappings (the default) are subPath-mounted directly at mountPath; a
+                    Writable mapping is instead staged and copied into place at pod start,
+                    since a ConfigMap-backed mount can never itself be written to.
                   properties:
                     annotations:
                       additionalProperties:
                         type: string
+                      type: object
+                    binaryData:
+                      additionalProperties:
+                        format: byte
+                        type: string
+                      description: |-
+                        BinaryData holds file content that isn't valid UTF-8 (mirrors
+                        corev1.ConfigMap's data/binaryData split); a given file key is present
+                        in exactly one of Data or BinaryData, never both.
                       type: object
                     data:
                       additionalProperties:
@@ -285,6 +297,12 @@ spec:
                       type: string
                     name:
                       type: string
+                    writable:
+                      description: |-
+                        Writable requests that the file be copy-on-start rather than
+                        subPath-mounted, so the session user can edit it in place. Defaults to
+                        false (read-only, direct ConfigMap subPath mount).
+                      type: boolean
                   required:
                   - mountPath
                   - name

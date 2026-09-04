@@ -1,10 +1,10 @@
 # Secure Boot: signing kernel modules
 
-> **Applies to:** feature-matrix row **26** (Secure Boot / signed kernel modules), and the Secure Boot half of row **9** (webcam) — the "Outside the charts" cell reading *"MOK keys **enrolled in each node's UEFI** — a one-time manual step per node"* · **Charts/values:** `nodePrep.secureBoot.existingMokSecret`, `nodePrep.modules.v4l2loopback.kmm.sign.enabled`, `nodePrep.modules.v4l2loopback.kmm.sign.keySecret`, `nodePrep.modules.v4l2loopback.kmm.sign.certSecret`
+> **Applies to:** [Secure Boot nodes](../feature-matrix.md#security--isolation), and the Secure Boot half of [webcam passthrough](../feature-matrix.md#devices-gpu-webcam-audio) — the MOK keys that have to be **enrolled in each node's UEFI**, a one-time manual step per node · **Charts/values:** `nodePrep.secureBoot.existingMokSecret`, `nodePrep.modules.v4l2loopback.kmm.sign.enabled`, `nodePrep.modules.v4l2loopback.kmm.sign.keySecret`, `nodePrep.modules.v4l2loopback.kmm.sign.certSecret`
 
 ## Why this is needed
 
-On a node with UEFI Secure Boot enabled the kernel refuses to load an unsigned module. `v4l2loopback` (row 9) and an out-of-tree WireGuard (row 16) are both freshly built out-of-tree modules, so on such a node `insmod` fails and `/dev/video*` never appears — no matter how correct the rest of the configuration is.
+On a node with UEFI Secure Boot enabled the kernel refuses to load an unsigned module. `v4l2loopback` (webcam passthrough) and an out-of-tree WireGuard are both freshly built out-of-tree modules, so on such a node `insmod` fails and `/dev/video*` never appears — no matter how correct the rest of the configuration is.
 
 Two signing paths, matching the two module modes:
 

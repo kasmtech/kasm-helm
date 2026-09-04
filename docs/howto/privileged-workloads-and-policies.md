@@ -1,6 +1,6 @@
 # Privileged workloads and cluster policy
 
-> **Applies to:** feature-matrix rows **6** (per-session egress VPN), **9** (webcam), **16** (kernel module management / WireGuard), **25** (multi-tenancy / namespace isolation), **26** (Secure Boot) — the "Outside the charts" column entries that read *"the `privileged` Pod Security Standard on the namespace"* and *"a namespace that permits `privileged` **and** host namespaces"* · **Charts/values:** `nodePrep.enabled`, `videoDevicePlugin.enabled`, `egressInstaller.enabled`, `networkPolicies.enabled`
+> **Applies to:** every feature that needs a `privileged` namespace — [egress gateways](../feature-matrix.md#networking--access), and [webcam passthrough](../feature-matrix.md#devices-gpu-webcam-audio), [WireGuard, Secure Boot and multi-tenancy](../feature-matrix.md#security--isolation) — plus the host namespaces (`hostPID`, `hostNetwork`) that egress gateways need on top · **Charts/values:** `nodePrep.enabled`, `videoDevicePlugin.enabled`, `egressInstaller.enabled`, `networkPolicies.enabled`
 
 ## Why this is needed
 
@@ -13,7 +13,7 @@ Three charts in this repo ship DaemonSets that cannot be made unprivileged:
 | `kasm-egress-installer` | `nsenter` into other pods' netns, `mknod /dev/net/tun`, `iptables` | `hostPID`, `hostNetwork` |
 | KMM worker / build / sign pods (`method=kmm`) | KMM's own workers `modprobe` on the node | — |
 
-None of them satisfies the `baseline` or `restricted` [Pod Security Standard](https://kubernetes.io/docs/concepts/security/pod-security-admission/). A namespace that enforces either rejects them at admission — the DaemonSet exists, the pods never do. This page is the one-time namespace and policy preparation that has to happen before any of rows 6, 9, 16 or 26 will work.
+None of them satisfies the `baseline` or `restricted` [Pod Security Standard](https://kubernetes.io/docs/concepts/security/pod-security-admission/). A namespace that enforces either rejects them at admission — the DaemonSet exists, the pods never do. This page is the one-time namespace and policy preparation that has to happen before egress gateways, webcam passthrough, WireGuard or Secure Boot will work.
 
 See [kasm-node-prep § Security posture](../../charts/kasm-node-prep/README.md#security-posture), [kasm-video-device-plugin § Security posture](../../charts/kasm-video-device-plugin/README.md#security-posture) and [kasm-egress-installer § Security posture](../../charts/kasm-egress-installer/README.md#security-posture) for the full mount-by-mount breakdown.
 
@@ -36,7 +36,7 @@ See [kasm-node-prep § Security posture](../../charts/kasm-node-prep/README.md#s
    kubectl create namespace kasm-agent
    ```
 
-2. **Label it for the `privileged` profile.** This is the single line every one of rows 6, 9, 16 and 26 depends on:
+2. **Label it for the `privileged` profile.** This is the single line every one of those features depends on:
 
    ```console
    kubectl label namespace kasm-agent pod-security.kubernetes.io/enforce=privileged

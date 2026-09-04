@@ -16,9 +16,13 @@
   `tls.mode: Passthrough` whose allowedRoutes admits this namespace. A plain
   HTTPS (terminate) listener will not serve this route.
 
-  TLSRoute lives in the Gateway API's *experimental* channel and is still
-  v1alpha2 - it was never promoted alongside HTTPRoute's v1 - so the standard
-  channel CRDs installed for httproute.yaml are not enough on their own.
+  TLSRoute graduated to the Gateway API *standard* channel as v1 in release 1.5
+  (which needs Kubernetes 1.31+); the standard-channel CRDs from then on serve
+  ONLY v1, and v1alpha2 survives just in 1.5's experimental channel before
+  disappearing in 1.6. Older clusters, on the other hand, serve only v1alpha2.
+  So the apiVersion is chosen at render time: an explicit tlsRoute.apiVersion
+  wins; otherwise v1 when the cluster serves it, v1alpha2 when only the old
+  experimental CRD is served, and v1 when rendering without a cluster.
 
   The backend Service is NOT created by this chart: the Agent controller creates
   it from agent.yaml and names it "<Agent name>-session-proxy", which is why the
@@ -36,7 +40,17 @@
 */}}
 {{- if .Values.tlsRoute.enabled }}
 {{- $hostnames := .Values.tlsRoute.hostnames | default (list (include "kasmAgentInstance.publicHostname" .)) }}
-apiVersion: gateway.networking.k8s.io/v1alpha2
+{{- $api := .Values.tlsRoute.apiVersion }}
+{{- if not $api }}
+  {{- if .Capabilities.APIVersions.Has "gateway.networking.k8s.io/v1/TLSRoute" }}
+    {{- $api = "gateway.networking.k8s.io/v1" }}
+  {{- else if .Capabilities.APIVersions.Has "gateway.networking.k8s.io/v1alpha2/TLSRoute" }}
+    {{- $api = "gateway.networking.k8s.io/v1alpha2" }}
+  {{- else }}
+    {{- $api = "gateway.networking.k8s.io/v1" }}
+  {{- end }}
+{{- end }}
+apiVersion: {{ $api }}
 kind: TLSRoute
 metadata:
   name: {{ include "kasmAgentInstance.fullname" . }}-session-proxy

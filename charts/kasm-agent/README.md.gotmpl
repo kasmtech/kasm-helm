@@ -14,6 +14,9 @@ elsewhere — including a Kasm-hosted one), and from then on the manager schedul
 this cluster. This umbrella chart installs everything an agent needs on the Kubernetes side, plus
 the optional cluster infrastructure that individual Kasm features depend on.
 
+> New to this? The [repository README](../../README.md#quickstart) has the shortest path from
+> nothing to one running session. This page is the full reference for everything below that.
+
 ## What this chart installs
 
 Each dependency is aliased, so every value below is set as `<alias>.<subchart value>`.
@@ -79,11 +82,12 @@ The control-plane `kasm-helm` chart, installed separately, has a lower floor of 
 
 ## Quickstart
 
-The chart needs four things it cannot guess: which manager to register with, a token to register
-with, the hostname users will reach this agent's sessions on, and a TLS certificate for the session
-proxy.
+The chart needs five things it cannot guess: which manager to register with, a token to register
+with, the hostname users will reach this agent's sessions on, a TLS certificate for the session
+proxy, and one way to publish that proxy to the internet.
 
-Create the manager token as a Secret rather than putting it in a values file:
+Create the namespace, the manager token (as a Secret, rather than a value that lands in the release
+history), and the session proxy's certificate:
 
 ```console
 kubectl create namespace kasm-agent
@@ -91,6 +95,10 @@ kubectl create namespace kasm-agent
 kubectl create secret generic kasm-manager-token \
   --namespace kasm-agent \
   --from-literal=token='<registration token from the Kasm manager>'
+
+kubectl create secret tls kasm-agent-tls \
+  --namespace kasm-agent \
+  --cert=tls.crt --key=tls.key
 ```
 
 Then a minimal `values.yaml`:
@@ -101,24 +109,33 @@ agent:
     # The Kasm manager this agent registers with.
     hostname: kasm.example.com
     existingTokenSecret: kasm-manager-token
-    tokenSecretKey: token
-  # The hostname users' browsers reach this agent's session proxy on.
-  publicHostname: agent.example.com
+  # The hostname users' browsers reach this agent's session proxy on. It must differ from the
+  # manager's hostname and share a parent domain with it.
+  publicHostname: sessions.example.com
   sessionProxy:
     # A kubernetes.io/tls Secret that already exists in the release namespace.
-    certSecretName: kasm-session-proxy-tls
+    certSecretName: kasm-agent-tls
+  # Publish the session proxy. Enable exactly ONE of ingress / httpRoute / gatewayRoute /
+  # tlsRoute / route — see "External access" below.
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      # The one tuning value that is not optional: ingress-nginx cuts an idle websocket at 60s,
+      # so without these every session dies about a minute in.
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+      nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    tls:
+      - secretName: kasm-agent-tls
+        hosts:
+          - sessions.example.com
 ```
 
-Install from the OCI registry:
+Nothing else has to be set. `agent.zone` defaults to `default`, the zone a fresh `kasm-helm`
+install seeds — name yours only if it differs. `agent.manager.tokenSecretKey` defaults to `token`,
+the key the `kubectl create secret` above writes.
 
-```console
-helm install kasm-agent oci://registry-1.docker.io/kasmweb/kasm-agent \
-  --version {{ .Version }} \
-  --namespace kasm-agent \
-  --values values.yaml
-```
-
-Or, from a checkout of this repository — the six Kasm subcharts are `file://` dependencies, so
+Install from a checkout of this repository. The six Kasm subcharts are `file://` dependencies, so
 they have to be staged into `charts/` first:
 
 ```console
@@ -129,7 +146,25 @@ helm install kasm-agent charts/kasm-agent \
   --values values.yaml
 ```
 
-Post-install notes, including any cross-feature warnings, are available at any time with
+This chart is also published as an OCI artifact with every dependency embedded, which removes the
+checkout and the dependency build. Publishing a developer preview is a manual decision (see
+[Publishing](#publishing)), so check that the version you want is there before relying on it:
+
+```console
+helm install kasm-agent oci://registry-1.docker.io/kasmweb/kasm-agent \
+  --version {{ .Version }} \
+  --namespace kasm-agent \
+  --values values.yaml
+```
+
+Confirm the agent registered — `PHASE` reaches `Ready` once the manager has acknowledged it:
+
+```console
+kubectl get agents.agent.kasm.com -n kasm-agent
+```
+
+Then, in the Kasm admin UI, **Infrastructure** → the new agent → **Enable**; agents register
+disabled. Post-install notes, including any cross-feature warnings, are available at any time with
 `helm get notes kasm-agent -n kasm-agent`.
 
 Either command installs the operator's five CustomResourceDefinitions from its `crds/` directory,
@@ -153,7 +188,7 @@ agent:
         kind: ClusterIssuer
         name: letsencrypt-prod
       dnsNames:
-        - agent.example.com
+        - sessions.example.com
 ```
 
 Users' browsers connect to the session proxy directly, so its certificate has to be trusted by the
@@ -285,34 +320,28 @@ combination outright whenever an ingress or route is configured.
 
 ## Cluster preparation checklist
 
-Most Kasm features need something from the cluster before they will work. This table maps each
-feature to what the cluster has to provide and to the value that provides it. It covers the rows
-that need cluster preparation; for the complete picture — all 26 Kasm workspace features, including
-the ones the agent and operator handle with no configuration at all, and the ones with a known
-limitation on Kubernetes — see [**Kasm workspace features → what to install**](../../docs/feature-matrix.md).
+Most Kasm features need something from the cluster before they will work. Here is the short list —
+the features people turn on most often, and the values that turn them on.
+[**What works on Kubernetes**](../../docs/feature-matrix.md) is the full one: every feature, its
+status, what the cluster has to supply first, and the limits worth knowing.
 
-| Kasm feature | Required cluster infrastructure | Value that installs or enables it |
-| ------------ | ------------------------------- | --------------------------------- |
-| Persistent profiles | A ReadWriteMany StorageClass — NFS, EFS, Azure Files, or CephFS | `nfs-server-provisioner.enabled=true` (in-cluster NFS, plus `nfs-server-provisioner.persistence.enabled=true` so profiles survive a restart), or point Kasm at an RWX StorageClass the cluster already has |
-| Cloud storage mappings | The Veloxpack rclone CSI driver, and the FUSE kernel module present on every node | `csiRclone.enabled=true` together with `agent.storageMappings.enabled=true` |
-| Workspace network isolation | A CNI that actually enforces NetworkPolicy: Calico, Cilium, Antrea, or a managed equivalent | `networkPolicies.enabled=true` for the namespace baseline; the operator stamps per-workspace policies by itself |
-| GPU workspaces (CUDA) | NVIDIA drivers, the container toolkit, and the device plugin on GPU nodes | `gpuOperator.enabled=true` **and** `agent.gpu.enabled=true` — the operator alone advertises GPUs that nothing requests |
-| GPU workspaces (EGL/DRI) | GPU drivers pre-installed on the nodes, GPU nodes labelled | Outside this chart; prepare the node image, then schedule with `agent.env` / node selectors |
-| Webcam passthrough | Privileged pods allowed, kernel headers on nodes, the `v4l2loopback` module loaded, and the devices advertised | `nodePrep.enabled=true` with `nodePrep.modules.v4l2loopback.enabled=true`, plus `videoDevicePlugin.enabled=true`. At fleet scale, on Secure Boot nodes, or where the node image ships no toolchain, set `nodePrep.modules.v4l2loopback.method=kmm` to build the module once per kernel and load it through the Kernel Module Management operator instead — the nodes then need neither headers nor a compiler, but a container registry and the operator itself do become prerequisites ([KMM mode](../kasm-node-prep/README.md#kmm-mode)) |
-| WireGuard VPN egress | Privileged pods plus `NET_ADMIN`, and the `wireguard` module — only on kernels older than 5.6, which have no in-tree WireGuard | `nodePrep.enabled=true` with `nodePrep.modules.wireguard.enabled=true` |
-| Per-session VPN egress (OpenVPN / WireGuard / Ziti) | Privileged pods allowed to use the host PID and network namespaces (`hostPID`, `hostNetwork`); the node's CNI plugin bin directory writable, because the daemon installs its `kasm-egress-cni` shim there — set `egressInstaller.distro` (or `egressInstaller.cniBinDir`) to the path your runtime actually reads plugins from; a container runtime that honours chained CNI plugins (k3s/RKE2 containerd); and an explicit decision on the security trade-off the subchart's README opens with — a graceful shutdown (uninstall, a `helm upgrade` that disables it, a rolling update, a pod delete) restores the conflists from their `.kasm-egress.bak` backups and removes the shim, verified live on k3s; a hard crash skips that path and leaves the chain patched until the replacement pod re-installs it; the residual risk is the window with **no daemon running**, where the shim cannot reach its socket and fails *every* pod sandbox on that node, not just Kasm's | `egressInstaller.enabled=true` ([kasm-egress-installer](../kasm-egress-installer/README.md)) |
-| Image pre-pulling | DaemonSet pods with access to the container runtime socket | `agent.imagePuller.enabled=true` and `agent.imagePuller.images` |
-| External access to sessions | A Gateway API implementation, an ingress controller (nginx, Traefik), or a cloud load balancer — with a WebSocket (or L4) idle timeout of at least 3600s | `agent.httpRoute.enabled=true` with `agent.httpRoute.parentRefs` and `agent.httpRoute.hostnames`; or `agent.ingress`, `agent.route` (OpenShift), `agent.gatewayRoute` (operator-managed Gateway API TLS passthrough, preferred) or `agent.tlsRoute` (the chart-managed equivalent); or `agent.sessionProxy.service.type=NodePort`/`LoadBalancer` to publish the session proxy with no ingress layer |
-| Real client IPs on sessions | A load balancer that either preserves the source address or sends PROXY protocol | `agent.sessionProxy.service.externalTrafficPolicy=Local` (L4; only routes via nodes running a proxy pod), or `agent.sessionProxy.proxyProtocol.enabled=true` with `agent.sessionProxy.proxyProtocol.trustedCIDRs` (L7; the fronting proxy **must** send PROXY protocol) |
-| Private workspace registries | A `kubernetes.io/dockerconfigjson` Secret in the release namespace | `agent.workspaceImagePullSecrets` |
-| Secure Boot nodes | MOK signing keys enrolled in each node's UEFI, and the key pair stored in a Secret | `nodePrep.secureBoot.existingMokSecret` |
-| Session recording and web filtering | Workspace pods able to reach the Kasm API Service and the session proxy | Configured by the `agent` subchart from `agent.publicHostname` and `agent.sessionProxy.*` |
-| Telemetry | An external OTLP endpoint and/or ClickHouse | `otelCollector.exporters.otlp.*`, `otelCollector.exporters.clickhouse.*` |
+| Kasm feature | Value that turns it on |
+| ------------ | ---------------------- |
+| Persistent profiles | `nfs-server-provisioner.enabled=true` with `nfs-server-provisioner.persistence.enabled=true`, or point Kasm at an RWX StorageClass the cluster already has |
+| Cloud storage mappings | `csiRclone.enabled=true` **and** `agent.storageMappings.enabled=true` |
+| GPU workspaces | `gpuOperator.enabled=true` **and** `agent.gpu.enabled=true` |
+| Webcam passthrough | `nodePrep.enabled=true` with `nodePrep.modules.v4l2loopback.enabled=true`, **and** `videoDevicePlugin.enabled=true`. [KMM mode](../kasm-node-prep/README.md#kmm-mode) builds the module once per kernel instead of on every node |
+| Per-session VPN egress | `egressInstaller.enabled=true` with `egressInstaller.distro` ([kasm-egress-installer](../kasm-egress-installer/README.md)) |
+| Workspace network isolation | Nothing — the operator stamps a policy per session. `networkPolicies.enabled=true` adds the namespace baseline |
+| External access to sessions | Exactly one of `agent.gatewayRoute.enabled=true` (preferred), `agent.tlsRoute.enabled=true`, `agent.httpRoute.enabled=true`, `agent.ingress.enabled=true`, `agent.route.enabled=true` (OpenShift), or `agent.sessionProxy.service.type` |
+| Image pre-pulling | `agent.imagePuller.enabled=true` with `agent.imagePuller.images` |
+| Private workspace registries | `agent.workspaceImagePullSecrets` |
+| Telemetry | `otelCollector.exporters.otlp.*` and/or `otelCollector.exporters.clickhouse.*` |
 
-A short version, if you are onboarding a cluster from scratch: confirm the four prerequisites above,
-decide whether workspaces need persistent profiles (RWX storage), and only then turn on the
-feature-specific rows you actually need. Every row that touches `nodePrep` requires a namespace
-that permits the `privileged` Pod Security Standard:
+Two patterns are worth carrying away. Several features need **two** values — the cluster-side
+driver and the agent-side flag that makes Kasm ask for it — and setting one alone fails quietly.
+And every feature that touches a node (webcam, WireGuard, Secure Boot, per-session egress) needs a
+namespace that permits the `privileged` Pod Security Standard:
 
 ```console
 kubectl label namespace kasm-agent pod-security.kubernetes.io/enforce=privileged
@@ -364,9 +393,16 @@ Two caveats about what a session actually gets:
 * `LimitedSwap` gives each **Burstable** pod a share proportional to its memory request:
   `(pod memory request / node MemTotal) × total node swap`. A default workspace (2768Mi) on a 16 GiB
   node with an 8 GiB swapfile gets `2768 / 16384 × 8192 MiB ≈ 1384 MiB`.
-* **A Guaranteed workspace gets zero swap.** Setting a workspace's memory request equal to its limit
-  makes the pod Guaranteed, and Guaranteed and BestEffort pods are both excluded from `LimitedSwap`
-  entirely. If swap is the point, leave workspace pods Burstable.
+* **Workspace sessions get zero swap as the operator configures them today.** The kubelet's
+  `LimitedSwap` grants a container swap only when its **memory request is strictly less than its
+  memory limit** (a container with request = limit gets none, whatever its QoS class or CPU
+  allocation method; Guaranteed and BestEffort pods get none either way). Kasm derives a workspace's
+  memory request *and* limit from the same `memory_bytes`, so every session container has request =
+  limit and therefore no swap — verified on k3s 1.36 and kubeadm 1.34. The node's swapfile still
+  benefits other Burstable pods with memory headroom (the agent, sidecars, system pods). Two further
+  gotchas: the kubelet only sees swap it was (re)started *after* the swapfile exists — enabling
+  `nodePrep.tuning.swap` on an already-running kubelet needs one more kubelet restart before any pod
+  gets a share — and `swapBehavior: LimitedSwap` must be set or every pod's share is zero.
 
 Sizing, the `force` escape hatch, the zram question, and the full rationale are in
 [**Node tuning**](../kasm-node-prep/README.md#node-tuning) in the `kasm-node-prep` README.

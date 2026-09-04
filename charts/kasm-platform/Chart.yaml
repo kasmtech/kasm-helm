@@ -34,7 +34,7 @@ dependencies:
   # proxy, and the optional per-feature cluster infrastructure (node prep, video device plugin,
   # rclone CSI driver, GPU Operator, NFS provisioner).
   #
-  # Also un-aliased, for the same reason. Its own eight dependencies keep their aliases, so their
+  # Also un-aliased, for the same reason. Its own nine dependencies keep their aliases, so their
   # conditions stay reachable from here as `kasm-agent.operator.enabled`,
   # `kasm-agent.nodePrep.enabled`, and so on.
   - name: kasm-agent

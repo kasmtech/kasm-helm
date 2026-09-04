@@ -4,6 +4,10 @@ All notable changes to the kasm-agent-crds chart are documented here.
 
 ## [Unreleased]
 
+### Changed
+- CRDs updated from the operator (2026-09-04): `Agent` gains `spec.sessionProxy.otel.endpoint` (session-proxy sidecar OTLP endpoint override; empty disables the exporter), and `KasmWorkspace.spec.fileMappings[]` gains `binaryData` (binary file content, mirrors a ConfigMap's `binaryData`) and `writable` (copy-on-start so the session user can edit the file).
+
+
 ### Added
 
 - Initial release: ships the same five CustomResourceDefinitions as `charts/kasm-agent-operator/crds/` (agents, kasmworkspaces, and kasmimagepullers in the `agent.kasm.com` group; warmpools and warmpoolinstances in `pools.kasm.ai`) as ordinary Helm templates, so a release of this chart owns their lifecycle and `helm upgrade` applies schema changes — a hybrid alternative to the operator chart's bundled `crds/` install-time copy.

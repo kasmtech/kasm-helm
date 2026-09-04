@@ -1,6 +1,6 @@
 # Cloud storage mappings (rclone CSI)
 
-> **Applies to:** [Feature matrix](../feature-matrix.md) row 3 (Cloud storage mappings — rclone / S3 / Drive) · **Charts/values:** `csiRclone.enabled`, `agent.storageMappings.enabled`, `agent.storageMappings.installationID`, `csiRclone.driver.name`, `csiRclone.storageClasses`, `csiRclone.node.nodeSelector`
+> **Applies to:** [Cloud storage mappings](../feature-matrix.md#storage--profiles) · **Charts/values:** `csiRclone.enabled`, `agent.storageMappings.enabled`, `agent.storageMappings.installationID`, `csiRclone.driver.name`, `csiRclone.storageClasses`, `csiRclone.node.nodeSelector`
 
 ## Why this is needed
 
@@ -77,6 +77,25 @@ FUSE as a node-image prerequisite.
    `csiRclone.storageClasses` for Kasm mappings — that pass-through list is only for StorageClasses
    you want to declare yourself.
 
+   Three manager-side rules decide whether the mapping ever reaches a session:
+
+   * **Use a Custom provider for S3-compatible storage that is not AWS.** The built-in S3 provider
+     validates by running a live AWS `ListBuckets` when the mapping is created, so MinIO, Ceph RGW
+     and Cloudflare R2 are rejected before anything is saved. Create a **Custom** storage provider
+     instead, with `volume_config.driver: rclone` and the same `driver_opts` you would have given
+     the built-in one — `type: s3`, `s3-provider`, `s3-endpoint`, `s3-region`, the access keys, and
+     `path` set to the bucket. That path skips the validation call and mounts end to end.
+   * **One storage provider per distinct mount path.** The per-mapping `target` is not persisted:
+     every mapping on a provider mounts at that provider's `default_target`. Point two mappings at
+     one provider and they collide — the second lands at a hash-suffixed path instead. Per-mapping
+     `read_only` *is* honoured.
+   * **User-scoped mappings need a group setting.** A mapping assigned to a *user* rather than to a
+     group or an image is dropped silently unless that user's group has `allow_user_storage_mapping`
+     enabled; the API logs *"User-based storage mappings defined but not allowed via group
+     settings"*. A user mapping also disqualifies the session from pre-staging (*"User storage
+     mappings eliminates request from session staging"*). Group- and image-scoped mappings need
+     nothing extra.
+
 5. **Restrict the node plugin** to session nodes if sessions are pinned:
 
    ```yaml
@@ -127,6 +146,9 @@ Installing `kasm-agent` directly? Drop the `kasm-agent:` key and start at `csiRc
 | PVC created but the session pod stays `ContainerCreating`, events show `driver name rclone.csi.veloxpack.io not found` | The CSI driver is not installed in this cluster | `csiRclone.enabled=true` (in exactly one release) |
 | Mount fails on some nodes only, events mention `fuse` or `/dev/fuse` | FUSE missing on those nodes | `modprobe fuse` + persist; or keep sessions off those nodes with `agent.workspacesNodeSelector` |
 | `CSIDriver "rclone.csi.veloxpack.io" already exists` on install | A second release also sets `csiRclone.enabled=true` | Leave it enabled in one release only |
+| Creating an S3 mapping fails validation against MinIO / Ceph RGW / R2 | The built-in S3 provider runs a live AWS `ListBuckets` at create time | Use a **Custom** provider with `volume_config.driver: rclone` and the same `driver_opts` |
+| Two mappings on one provider, the second mounts at an unexpected hash-suffixed path | The per-mapping `target` is not persisted — the provider's `default_target` wins | One storage provider per distinct mount path |
+| A user-assigned mapping never appears in the session; the API logs "not allowed via group settings" | The user's group does not have `allow_user_storage_mapping` | Enable that group setting, or scope the mapping to the group or the image instead |
 | Credentials appear stale after rotating the remote | The StorageClass is keyed by a hash of the rclone INI — a changed INI is a new backend | Re-save the mapping in the manager and relaunch sessions |
 
 ## Checklist
@@ -137,4 +159,7 @@ Installing `kasm-agent` directly? Drop the `kasm-agent:` key and start at `csiRc
 - [ ] `kubectl get csidriver rclone.csi.veloxpack.io` returns the object
 - [ ] Node-plugin DaemonSet Running on every session node
 - [ ] Mapping configured in the Kasm manager, derived StorageClass visible
+- [ ] Non-AWS S3 endpoints configured as a **Custom** provider (`volume_config.driver: rclone`)
+- [ ] One storage provider per distinct mount path
+- [ ] User-scoped mappings only where the group has `allow_user_storage_mapping` enabled
 - [ ] A session launches with the remote mounted

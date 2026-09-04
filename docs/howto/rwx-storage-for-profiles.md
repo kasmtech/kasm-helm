@@ -1,6 +1,6 @@
 # RWX storage for persistent profiles
 
-> **Applies to:** [Feature matrix](../feature-matrix.md) row 2 (Persistent user profiles) · **Charts/values:** `nfs-server-provisioner.enabled`, `nfs-server-provisioner.persistence.enabled`, `nfs-server-provisioner.persistence.storageClass`, `nfs-server-provisioner.persistence.size`, `nfs-server-provisioner.storageClass.create`, `nfs-server-provisioner.storageClass.name`, `nfs-server-provisioner.storageClass.reclaimPolicy`, `nfs-server-provisioner.storageClass.mountOptions`
+> **Applies to:** [Persistent profiles](../feature-matrix.md#storage--profiles) · **Charts/values:** `nfs-server-provisioner.enabled`, `nfs-server-provisioner.persistence.enabled`, `nfs-server-provisioner.persistence.storageClass`, `nfs-server-provisioner.persistence.size`, `nfs-server-provisioner.storageClass.create`, `nfs-server-provisioner.storageClass.name`, `nfs-server-provisioner.storageClass.reclaimPolicy`, `nfs-server-provisioner.storageClass.mountOptions`
 
 ## Why this is needed
 

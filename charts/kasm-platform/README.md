@@ -19,6 +19,9 @@ agent's hostname actually authenticate) is a plain value on a fresh install,
 `kasm-helm.kasmConfig.authDomain`; on an existing database it stays a documented manual action.
 Both paths are spelled out below and in the chart's install NOTES.
 
+> New to this? The [repository README](../../README.md#quickstart) has the shortest path from
+> nothing to one running session. This page is the full reference for everything below that.
+
 ## What this chart installs
 
 Neither dependency is aliased, so each keeps its own chart name as its values key and every value
@@ -92,14 +95,15 @@ whenever `authDomain` is left unset.
 
 ## Quickstart: the whole stack in one namespace
 
-This is the complete configuration for a single-namespace, single-cluster install. It is also
-checked in as `examples/kasm-agent/platform-values.yaml`, ready to copy.
+This is the whole configuration for a single-namespace, single-cluster install — one TLS Secret
+(`kasm-tls`, covering both hostnames) created out of band, and nothing set that the two charts can
+default for themselves. Save it as `my-values.yaml`:
 
 ```yaml
 kasm-helm:
-  enabled: true
-  deploymentSize: small
   publicAddr: kasm.example.com
+  certificate:
+    secretName: kasm-tls
 
   # ClusterIP plus the chart's own Ingress. Never LoadBalancer next to an ingress controller that
   # already binds the node's :443 — the chart rejects that combination outright.
@@ -107,16 +111,7 @@ kasm-helm:
     type: ClusterIP
   ingress:
     enabled: true
-    ingressClassName: traefik
-    backendProtocol: http
-  certificate:
-    secretName: kasm-tls
-
-  kasmSecrets:
-    passwords:
-      # Pinning the token lets the agent half of this same release reference it without anyone
-      # reading it back after install. Leave the other keys unset so they stay random.
-      manager-token: "change-me-agent-registration-token"
+    ingressClassName: nginx
 
   # Two zone defaults break Kubernetes-agent sessions. Both are preseed-able on a FRESH database.
   kasmZones:
@@ -130,13 +125,13 @@ kasm-helm:
       # point it at the agent's own hostname.
       upstream_auth_address: kasm.example.com
   kasmConfig:
+    # What carries the kasmZones block above into the database.
     generatePreseed: true
     # The parent domain of publicAddr and the agent's publicHostname. Seeded at database
     # initialization, so a fresh install needs no post-install auth-domain step.
     authDomain: example.com
 
 kasm-agent:
-  enabled: true
   agent:
     manager:
       hostname: kasm.example.com
@@ -145,39 +140,35 @@ kasm-agent:
       existingTokenSecret: kasm-secrets
       tokenSecretKey: manager-token
     publicHostname: sessions.example.com
-    zone: default
     sessionProxy:
-      certSecretName: kasm-session-proxy-tls
+      certSecretName: kasm-tls
     ingress:
       enabled: true
-      className: traefik
+      className: nginx
+      annotations:
+        # The one tuning value that is not optional: ingress-nginx cuts an idle websocket at 60s,
+        # so without these every session dies about a minute in. Other controllers have their own
+        # knob — see charts/kasm-agent/README.md.
+        nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+        nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
       tls:
-        - secretName: kasm-agent-public-tls
+        - secretName: kasm-tls
           hosts:
             - sessions.example.com
-
-  # The agent umbrella's baseline policies model only the agent stack's traffic; in a shared
-  # namespace they would cut the control plane off.
-  networkPolicies:
-    enabled: false
 ```
 
-Note `existingTokenSecret: kasm-secrets` — that is `<release>-secrets` for a release named `kasm`.
-Adjust it if you name the release something else.
+Everything absent is defaulted: both halves are `enabled` already, the control plane sizes itself
+`small` and generates its own `manager-token` into `kasm-secrets` (which is `<release>-secrets` —
+adjust `existingTokenSecret` if you name the release something else), the agent joins the zone
+named `default`, and the umbrella's baseline NetworkPolicies stay off, which is what a shared
+namespace wants anyway.
+
+A longer commented variant, with the cert-manager and preseeded-workspace options spelled out, is
+checked in as `examples/kasm-agent/platform-values.yaml`.
 
 ### Install
 
-The chart is published as an OCI artifact whose package embeds all of its dependencies — both
-halves and every subchart under them — so no `helm dependency build` is needed. This is the
-simplest path:
-
-```console
-helm install kasm oci://registry-1.docker.io/kasmweb/kasm-platform \
-  --version 0.1.0 -n kasm --create-namespace \
-  -f examples/kasm-agent/platform-values.yaml --timeout 20m
-```
-
-Or, from a checkout of this repository, stage the dependencies first — inside-out, because
+Install from a checkout of this repository, staging the dependencies first — inside-out, because
 `kasm-agent`'s own vendored dependencies must exist before `kasm-platform` archives it (on a fresh
 clone neither is populated; `make deps-agent` does both):
 
@@ -185,7 +176,18 @@ clone neither is populated; `make deps-agent` does both):
 helm dependency build charts/kasm-agent
 helm dependency build charts/kasm-platform
 helm install kasm charts/kasm-platform -n kasm --create-namespace \
-  -f examples/kasm-agent/platform-values.yaml --timeout 20m
+  -f my-values.yaml --timeout 20m
+```
+
+The chart is also published as an OCI artifact whose package embeds all of its dependencies — both
+halves and every subchart under them — which removes the checkout and the dependency build
+entirely. Publishing a developer preview is a manual decision (see [Publishing](#publishing)), so
+check that the version you want is there before relying on it:
+
+```console
+helm install kasm oci://registry-1.docker.io/kasmweb/kasm-platform \
+  --version 0.1.0 -n kasm --create-namespace \
+  -f my-values.yaml --timeout 20m
 ```
 
 No namespace label is required. The operator's per-workspace NetworkPolicy admits the session proxy
@@ -238,9 +240,12 @@ kubectl get agents.agent.kasm.com -n kasm
 kubectl get secret kasm-secrets -n kasm -o jsonpath='{.data.admin-password}' | base64 -d; echo
 ```
 
-Then sign in at `https://kasm.example.com` as `admin@kasm.local`, confirm the agent shows up under
-Infrastructure, and launch a session — it should land on `https://sessions.example.com` without a
-401.
+Then, in a fresh private browser window (a stale cookie from an earlier install causes confusing
+401s), sign in at `https://kasm.example.com` as `admin@kasm.local` and make the clicks nothing in
+this chart can make for you: **Infrastructure** → the new agent → **Enable** (agents register
+disabled), then **Workspaces** → **Registry** → install a workspace (a new Kasm has an empty
+library) and assign it to the **All Users** group. Then launch a session — it should open on
+`https://sessions.example.com` without a 401.
 
 For a narrated, end-to-end walkthrough of this quickstart — two commands to a working session,
 with measured timings — see the [demo runbook](../../examples/kasm-agent/demo-runbook.md). For the

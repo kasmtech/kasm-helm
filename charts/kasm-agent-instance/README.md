@@ -31,7 +31,7 @@ Please see our [official documentation site](https://docs.kasm.com) for more inf
 * Helm 3.18.x or newer ([installation](https://helm.sh/docs/helm/helm_install/))
 * The Kasm agent operator, and its `agent.kasm.com` CRDs, installed in the cluster. This chart creates custom resources; it does not install the controller that reconciles them.
 * A reachable Kasm control plane, and the shared manager token for it.
-* [cert-manager](https://cert-manager.io/) when `sessionProxy.certificate.enabled` is set, the [Gateway API](https://gateway-api.sigs.k8s.io/) CRDs plus a Gateway when `httpRoute.enabled` is set, the Gateway API's **experimental** channel CRDs plus a Gateway with a `Passthrough` TLS listener when either `gatewayRoute.enabled` or `tlsRoute.enabled` is set, an ingress controller when `ingress.enabled` is set, and OpenShift (the `route.openshift.io` API) when `route.enabled` is set.
+* [cert-manager](https://cert-manager.io/) when `sessionProxy.certificate.enabled` is set, the [Gateway API](https://gateway-api.sigs.k8s.io/) CRDs plus a Gateway when `httpRoute.enabled` is set, the Gateway API CRDs at 1.5 or newer (`TLSRoute` is standard-channel `v1` there; older experimental-channel bundles also work) plus a Gateway with a `Passthrough` TLS listener when either `gatewayRoute.enabled` or `tlsRoute.enabled` is set, an ingress controller when `ingress.enabled` is set, and OpenShift (the `route.openshift.io` API) when `route.enabled` is set.
 
 ## What this chart deploys
 
@@ -55,7 +55,7 @@ Or skip the ingress layer entirely and publish the session-proxy Service itself 
 
 ### `gatewayRoute` vs `tlsRoute` — who owns the route
 
-Both produce a `gateway.networking.k8s.io/v1alpha2` `TLSRoute` doing SNI-based passthrough to the session proxy, and both need the same things from the cluster: `TLSRoute` ships in the Gateway API's **experimental** channel only, and the Gateway needs a listener with `protocol: TLS` and `tls.mode: Passthrough` whose `allowedRoutes` admits this namespace. What differs is ownership.
+Both produce a `TLSRoute` doing SNI-based passthrough to the session proxy, and both need the same things from the cluster: the `TLSRoute` CRD — in the Gateway API **standard** channel as `v1` since release 1.5, which needs Kubernetes 1.31 or newer (the chart-managed route falls back to `v1alpha2` on older, experimental-channel installs; see `tlsRoute.apiVersion`) — and the Gateway needs a listener with `protocol: TLS` and `tls.mode: Passthrough` whose `allowedRoutes` admits this namespace. What differs is ownership.
 
 **Prefer `gatewayRoute` when the operator supports it.** The operator creates and reconciles the route itself, alongside the session-proxy Service it already owns, so the two cannot drift apart:
 
@@ -185,7 +185,7 @@ The session proxy listens on two ports: 4445 is plain HTTP, and 4444 is its own 
 
 The `Route` defaults to `passthrough` termination, matching the Kasm operator's OpenShift example: the router forwards the TLS connection untouched, so browsers see the session proxy's certificate directly. That certificate therefore has to be valid for `route.host` - enable `sessionProxy.certificate` or provision `sessionProxy.certSecretName` out of band before using it. `route.backendPort` follows the termination mode when left empty: 4444 for `passthrough` and `reencrypt`, 4445 for `edge`, which terminates at the router instead. `reencrypt` additionally accepts a `route.tls.destinationCACertificate` for validating the proxy's certificate, and `edge` accepts `route.tls.key`/`certificate` plus an `insecureEdgeTerminationPolicy` of `Redirect`.
 
-Both `TLSRoute` options - operator-managed `gatewayRoute` and chart-managed `tlsRoute` - are passthrough too, and for the same reason browsers end up validating the session proxy's own certificate, but through the Gateway API rather than the OpenShift router. They are what to reach for when you want end-to-end TLS on a cluster that is not OpenShift. The Gateway matches on SNI alone and splices the connection through without decrypting it, which is why `tlsRoute.backendPort` defaults to 4444 (nothing terminates TLS earlier, so the plain-HTTP listener would never work) and why the proxy's certificate has to cover every hostname in force - whether set explicitly or defaulted to `publicHostname`. Both require support on the Gateway side that the `HTTPRoute` path does not: `TLSRoute` is an experimental-channel CRD, and the Gateway needs a listener declared with `protocol: TLS` and `tls.mode: Passthrough` - a normal terminating HTTPS listener will not serve it.
+Both `TLSRoute` options - operator-managed `gatewayRoute` and chart-managed `tlsRoute` - are passthrough too, and for the same reason browsers end up validating the session proxy's own certificate, but through the Gateway API rather than the OpenShift router. They are what to reach for when you want end-to-end TLS on a cluster that is not OpenShift. The Gateway matches on SNI alone and splices the connection through without decrypting it, which is why `tlsRoute.backendPort` defaults to 4444 (nothing terminates TLS earlier, so the plain-HTTP listener would never work) and why the proxy's certificate has to cover every hostname in force - whether set explicitly or defaulted to `publicHostname`. Both require support on the Gateway side that the `HTTPRoute` path does not: `TLSRoute` is standard-channel `v1` since Gateway API 1.5 (experimental-only, as `v1alpha2`, on older bundles), and the Gateway needs a listener declared with `protocol: TLS` and `tls.mode: Passthrough` - a normal terminating HTTPS listener will not serve it.
 
 Publishing the Service directly through `sessionProxy.service` leaves TLS wherever you put it: point an external load balancer at the HTTPS listener (4444) for end-to-end TLS to the proxy's own certificate, or at the plain-HTTP one (4445) when TLS is terminated in front.
 
@@ -317,7 +317,7 @@ string
 			<td>Fully override the generated name prefix for the satellite objects. When set, those names are derived from this instead of from the release name and the chart name. </td>
 		</tr>
 		<tr>
-			<td id="gatewayRoute"><a href="./values.yaml#L468">gatewayRoute</a></td>
+			<td id="gatewayRoute"><a href="./values.yaml#L475">gatewayRoute</a></td>
 			<td>
 object
 </td>
@@ -336,7 +336,7 @@ parentRef:
 			<td>Optionally have the OPERATOR create the Gateway API TLSRoute, rather than rendering one from this chart. Same end result as `tlsRoute` - SNI-based TLS passthrough to the session proxy's own certificate - but the operator owns the route: it creates it, reconciles it, and keeps it aligned with the session-proxy Service it also owns, so the two cannot drift apart. `tlsRoute` is the chart-managed equivalent, for operator builds that predate this field or when the route has to live in the Helm release (owned by it, torn down with it, patched by other release tooling) rather than under the operator's ownership. Prefer this one whenever the operator supports it. The whole block is omitted from the Agent resource when disabled. </td>
 		</tr>
 		<tr>
-			<td id="gatewayRoute--enabled"><a href="./values.yaml#L475">gatewayRoute.enabled</a></td>
+			<td id="gatewayRoute--enabled"><a href="./values.yaml#L482">gatewayRoute.enabled</a></td>
 			<td>
 bool
 </td>
@@ -347,10 +347,10 @@ false
 </pre>
 </div>
 			</td>
-			<td>Have the operator create the TLSRoute. Same cluster-side prerequisites as `tlsRoute`: the Gateway API *experimental* channel CRDs, and a Gateway with a `protocol: TLS` / `tls.mode: Passthrough` listener whose `allowedRoutes` admits this namespace. `httpRoute`, `ingress`, `route`, `tlsRoute` and `gatewayRoute` are alternatives - enable at most one of the five, since all of them point at the same session-proxy Service. Between the two passthrough options, prefer `gatewayRoute` when the operator supports it and fall back to `tlsRoute` when it does not.</td>
+			<td>Have the operator create the TLSRoute. Same cluster-side prerequisites as `tlsRoute`: the TLSRoute CRD (standard channel since Gateway API 1.5), and a Gateway with a `protocol: TLS` / `tls.mode: Passthrough` listener whose `allowedRoutes` admits this namespace. `httpRoute`, `ingress`, `route`, `tlsRoute` and `gatewayRoute` are alternatives - enable at most one of the five, since all of them point at the same session-proxy Service. Between the two passthrough options, prefer `gatewayRoute` when the operator supports it and fall back to `tlsRoute` when it does not.</td>
 		</tr>
 		<tr>
-			<td id="gatewayRoute--hostnames"><a href="./values.yaml#L499">gatewayRoute.hostnames</a></td>
+			<td id="gatewayRoute--hostnames"><a href="./values.yaml#L506">gatewayRoute.hostnames</a></td>
 			<td>
 list
 </td>
@@ -364,7 +364,7 @@ list
 			<td>SNI hostnames the route matches. Unlike `tlsRoute.hostnames`, which this chart defaults, these are defaulted by the *operator* to `[publicHostname]`, so leaving this empty is the normal case - it is omitted from the Agent resource and the operator fills it in. The session proxy's own certificate (`sessionProxy.certSecretName`) still has to cover whatever names end up in force, since the connection reaches it undecrypted. Example:   hostnames:     - agent.example.com     - alt.example.com</td>
 		</tr>
 		<tr>
-			<td id="gatewayRoute--parentRef"><a href="./values.yaml#L478">gatewayRoute.parentRef</a></td>
+			<td id="gatewayRoute--parentRef"><a href="./values.yaml#L485">gatewayRoute.parentRef</a></td>
 			<td>
 object
 </td>
@@ -380,7 +380,7 @@ sectionName: ""
 			<td>The single Gateway the operator attaches the TLSRoute to. Note the shape differs from `tlsRoute.parentRefs`: the CRD takes one reference, not a list.</td>
 		</tr>
 		<tr>
-			<td id="gatewayRoute--parentRef--name"><a href="./values.yaml#L481">gatewayRoute.parentRef.name</a></td>
+			<td id="gatewayRoute--parentRef--name"><a href="./values.yaml#L488">gatewayRoute.parentRef.name</a></td>
 			<td>
 string
 </td>
@@ -394,7 +394,7 @@ string
 			<td>REQUIRED when `gatewayRoute.enabled` is true. Name of the Gateway resource. Templating fails when it is empty, since the CRD rejects the resource without it.</td>
 		</tr>
 		<tr>
-			<td id="gatewayRoute--parentRef--namespace"><a href="./values.yaml#L484">gatewayRoute.parentRef.namespace</a></td>
+			<td id="gatewayRoute--parentRef--namespace"><a href="./values.yaml#L491">gatewayRoute.parentRef.namespace</a></td>
 			<td>
 string
 </td>
@@ -408,7 +408,7 @@ string
 			<td>Namespace of the Gateway. Omitted from the Agent resource when empty, which lets the operator default it to the Agent's own namespace.</td>
 		</tr>
 		<tr>
-			<td id="gatewayRoute--parentRef--sectionName"><a href="./values.yaml#L489">gatewayRoute.parentRef.sectionName</a></td>
+			<td id="gatewayRoute--parentRef--sectionName"><a href="./values.yaml#L496">gatewayRoute.parentRef.sectionName</a></td>
 			<td>
 string
 </td>
@@ -1798,6 +1798,7 @@ object
 			<td>
 				<div style="max-width: 520px;">
 <pre lang="json">
+apiVersion: ""
 backendPort: 4444
 enabled: false
 hostnames: []
@@ -1808,7 +1809,21 @@ parentRefs: []
 			<td>Optionally expose the operator-created session-proxy Service through a Gateway API TLSRoute: SNI-based TLS passthrough, giving end-to-end TLS to the session proxy's own certificate the way an OpenShift `passthrough` Route does, but on any cluster with the Gateway API rather than only on OpenShift. </td>
 		</tr>
 		<tr>
-			<td id="tlsRoute--backendPort"><a href="./values.yaml#L457">tlsRoute.backendPort</a></td>
+			<td id="tlsRoute--apiVersion"><a href="./values.yaml#L464">tlsRoute.apiVersion</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+""
+</pre>
+</div>
+			</td>
+			<td>API version to render the TLSRoute with. Empty (the default) picks `gateway.networking.k8s.io/v1` when the cluster serves it (Gateway API 1.5+ standard channel), falls back to `gateway.networking.k8s.io/v1alpha2` when only the older experimental-channel CRD is served, and uses `v1` when rendering without a cluster (`helm template`). Set it to override that choice, for example when rendering offline for a cluster that still serves only `v1alpha2`.</td>
+		</tr>
+		<tr>
+			<td id="tlsRoute--backendPort"><a href="./values.yaml#L458">tlsRoute.backendPort</a></td>
 			<td>
 int
 </td>
@@ -1822,7 +1837,7 @@ int
 			<td>Port on the session-proxy Service to forward to. The default, 4444, is the proxy's own HTTPS listener - the only port that makes sense under passthrough, since nothing terminates TLS before the connection gets there.</td>
 		</tr>
 		<tr>
-			<td id="tlsRoute--enabled"><a href="./values.yaml#L439">tlsRoute.enabled</a></td>
+			<td id="tlsRoute--enabled"><a href="./values.yaml#L440">tlsRoute.enabled</a></td>
 			<td>
 bool
 </td>
@@ -1833,10 +1848,10 @@ false
 </pre>
 </div>
 			</td>
-			<td>Render the TLSRoute from this chart. Requires the Gateway API *experimental* channel CRDs - TLSRoute is not part of the standard channel - and a Gateway that has a listener with `protocol: TLS` and `tls.mode: Passthrough` whose `allowedRoutes` admits this namespace. `httpRoute`, `ingress`, `route`, `tlsRoute` and `gatewayRoute` are alternatives - enable at most one of the five, since all of them point at the same operator-created session-proxy Service. `gatewayRoute` below produces the same passthrough route but has the operator create and reconcile it; prefer that when the operator supports it, and reach for this chart-managed one otherwise. Nothing decrypts the connection on the way, so the Gateway sets no timeouts and applies no HTTP rules: Kasm's long-lived session websockets are bounded only by the layer-4 idle timeout of the Gateway's data plane and of anything in front of it.</td>
+			<td>Render the TLSRoute from this chart. Requires the TLSRoute CRD - standard channel as `v1` since Gateway API 1.5 (Kubernetes 1.31+); older experimental-channel installs serve only `v1alpha2`, which the chart falls back to (see `tlsRoute.apiVersion`) - and a Gateway that has a listener with `protocol: TLS` and `tls.mode: Passthrough` whose `allowedRoutes` admits this namespace. `httpRoute`, `ingress`, `route`, `tlsRoute` and `gatewayRoute` are alternatives - enable at most one of the five, since all of them point at the same operator-created session-proxy Service. `gatewayRoute` below produces the same passthrough route but has the operator create and reconcile it; prefer that when the operator supports it, and reach for this chart-managed one otherwise. Nothing decrypts the connection on the way, so the Gateway sets no timeouts and applies no HTTP rules: Kasm's long-lived session websockets are bounded only by the layer-4 idle timeout of the Gateway's data plane and of anything in front of it.</td>
 		</tr>
 		<tr>
-			<td id="tlsRoute--hostnames"><a href="./values.yaml#L453">tlsRoute.hostnames</a></td>
+			<td id="tlsRoute--hostnames"><a href="./values.yaml#L454">tlsRoute.hostnames</a></td>
 			<td>
 list
 </td>
@@ -1850,7 +1865,7 @@ list
 			<td>SNI hostnames the route matches. Defaults to a single-entry list holding `publicHostname` when empty. Because the connection is passed through untouched, the browser validates the session proxy's own certificate (`sessionProxy.certSecretName`) against these names, so that certificate has to cover them - enable `sessionProxy.certificate` or provision the Secret out of band.</td>
 		</tr>
 		<tr>
-			<td id="tlsRoute--parentRefs"><a href="./values.yaml#L448">tlsRoute.parentRefs</a></td>
+			<td id="tlsRoute--parentRefs"><a href="./values.yaml#L449">tlsRoute.parentRefs</a></td>
 			<td>
 list
 </td>

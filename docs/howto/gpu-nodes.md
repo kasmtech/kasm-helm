@@ -1,6 +1,6 @@
 # GPU nodes (CUDA and EGL/DRI)
 
-> **Applies to:** [Feature matrix](../feature-matrix.md) rows 7 (GPU acceleration — CUDA/compute), 8 (GPU graphics acceleration — EGL/DRI) and 18 (Node targeting) · **Charts/values:** `gpuOperator.enabled`, `agent.gpu.enabled`, `gpuOperator.driver.enabled`, `gpuOperator.toolkit.enabled`, `gpuOperator.devicePlugin.enabled`, `gpuOperator.nfd.enabled`, `agent.workspacesNodeSelector`, `agent.nodeSelector`
+> **Applies to:** [GPU workspaces (CUDA) and GPU graphics acceleration (EGL/DRI)](../feature-matrix.md#devices-gpu-webcam-audio), and [node targeting](../feature-matrix.md#observability--operations) · **Charts/values:** `gpuOperator.enabled`, `agent.gpu.enabled`, `gpuOperator.driver.enabled`, `gpuOperator.toolkit.enabled`, `gpuOperator.devicePlugin.enabled`, `gpuOperator.nfd.enabled`, `agent.workspacesNodeSelector`, `agent.nodeSelector`
 
 > **Honest scope note.** This repository's lab clusters have **no GPU nodes**. The chart path below
 > is render-validated (it is exercised by the `infra` test scenario) but has not been run against

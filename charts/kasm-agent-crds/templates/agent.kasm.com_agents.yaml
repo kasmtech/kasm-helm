@@ -494,6 +494,18 @@ spec:
                     description: Image is the nginx session-proxy container image.
                     minLength: 1
                     type: string
+                  otel:
+                    description: Otel configures the sidecar's OTLP metrics exporter.
+                    properties:
+                      endpoint:
+                        description: |-
+                          Endpoint overrides the sidecar's OTEL_EXPORTER_OTLP_ENDPOINT. Defaults to
+                          the agent container's own OTLP endpoint (the OTEL_EXPORTER_OTLP_ENDPOINT
+                          entry in spec.env, if any) so both containers export to the same
+                          collector. When both this and the agent's endpoint are empty, the
+                          sidecar's OTLP exporter is disabled (no OTLP env vars are set).
+                        type: string
+                    type: object
                   probeTimeoutSeconds:
                     default: 120
                     description: |-

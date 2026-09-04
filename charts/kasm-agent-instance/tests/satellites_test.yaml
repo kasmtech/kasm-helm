@@ -618,7 +618,7 @@ tests:
       - isKind:
           of: TLSRoute
       - isAPIVersion:
-          of: gateway.networking.k8s.io/v1alpha2
+          of: gateway.networking.k8s.io/v1
       - equal:
           path: metadata.name
           value: RELEASE-NAME-kasm-agent-instance-session-proxy
@@ -637,6 +637,50 @@ tests:
       - equal:
           path: spec.rules[0].backendRefs[0].port
           value: 4444
+
+  - it: renders the tls route as v1 when the cluster serves the standard-channel TLSRoute
+    template: templates/tlsroute.yaml
+    capabilities:
+      apiVersions:
+        - gateway.networking.k8s.io/v1/TLSRoute
+        - gateway.networking.k8s.io/v1alpha2/TLSRoute
+    set:
+      tlsRoute:
+        enabled: true
+        parentRefs:
+          - name: traefik-gateway
+    asserts:
+      - isAPIVersion:
+          of: gateway.networking.k8s.io/v1
+
+  - it: falls back to v1alpha2 when only the experimental-channel TLSRoute is served
+    template: templates/tlsroute.yaml
+    capabilities:
+      apiVersions:
+        - gateway.networking.k8s.io/v1alpha2/TLSRoute
+    set:
+      tlsRoute:
+        enabled: true
+        parentRefs:
+          - name: traefik-gateway
+    asserts:
+      - isAPIVersion:
+          of: gateway.networking.k8s.io/v1alpha2
+
+  - it: honours an explicit tls route apiVersion
+    template: templates/tlsroute.yaml
+    capabilities:
+      apiVersions:
+        - gateway.networking.k8s.io/v1/TLSRoute
+    set:
+      tlsRoute:
+        enabled: true
+        apiVersion: gateway.networking.k8s.io/v1alpha3
+        parentRefs:
+          - name: traefik-gateway
+    asserts:
+      - isAPIVersion:
+          of: gateway.networking.k8s.io/v1alpha3
 
   - it: tracks the agent name in the tls route backend reference
     template: templates/tlsroute.yaml
