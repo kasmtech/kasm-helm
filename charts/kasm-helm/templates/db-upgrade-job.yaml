@@ -82,7 +82,7 @@ spec:
                 pg_restore -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -d $POSTGRES_DB /data/kasm-db-dump/$OLD_DB_BACKUP_FILENAME;
               fi
               {{- end }}
-              python3 /src/api_server/server.pyc --upgrade-database --cfg /opt/kasm/current/conf/app/api/api.app.config.yaml --alembic-config /src/database/migration/alembic.ini;
+              python /kasm/src/api_server/server.py --upgrade-database --cfg /opt/kasm/current/conf/app/api/api.app.config.yaml --alembic-config /kasm/src/database/migration/alembic.ini;
           {{- include "kasm.securityContext" (list . 1000 "container") | nindent 10 }}
           volumeMounts:
             - name: tmp-data

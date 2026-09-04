@@ -1021,8 +1021,8 @@ successThreshold: {{ $successThreshold }}
         sleep 5
       done
 
-      cp /src/api_server/data/migration/alembic.ini /tmp/alembic.ini
-      sed -i 's|script_location = %(here)s/alembic|script_location = /src/api_server/data/migration/alembic|g' /tmp/alembic.ini
+      cp /kasm/src/api_server/data/migration/alembic.ini /tmp/alembic.ini
+      sed -i 's|script_location = %(here)s/alembic|script_location = /kasm/src/api_server/data/migration/alembic|g' /tmp/alembic.ini
       sed -i 's/# sourceless = false/sourceless = true/g' /tmp/alembic.ini
       cat /tmp/alembic.ini
 
