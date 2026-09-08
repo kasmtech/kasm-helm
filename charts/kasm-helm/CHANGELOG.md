@@ -27,6 +27,7 @@ See [Migrating to connection-proxy](./README.md#migrating-to-connection-proxy) f
   - `/__healthcheck` (new) → served directly by nginx itself, for pod readiness; Guac keeps its existing
 
 - The previous restriction limiting `rdpGateway` to a single replica is removed; connection-proxy now scales 1/2/3 by `deploymentSize` like every other zone-scoped component. <!-- hash:a5a100c96fdc34e08c415ae7337da9485ad14ebc -->
+- Helper scripts updated to reflect docker image changes. <!-- hash:627002acaf9cabde47c779f050165ea7d0f0b71c -->
 
 ### Fixed
 
@@ -34,7 +35,6 @@ See [Migrating to connection-proxy](./README.md#migrating-to-connection-proxy) f
 - `components.connectionProxy.labels`/`annotations` were never applied to the connection-proxy StatefulSet: `kasm.metadata` looks up component-scoped values by exact key against `values.yaml`, and the template passed the kebab-case `connection-proxy` instead of `connectionProxy`. <!-- hash:cb83115f48e0be49c373052ae0276c4468ad769f -->
 - With more than one primary-region zone, every zone's connection-proxy replicas silently reused the same `directRdpService.perServiceSettings` list and the same `RDP_ACCESS_URLS`, so every zone advertised identical RDP addresses. `perServiceSettings` entries now take a `zone` field; with more than one zone, every entry must set it, and rendering fails if it's missing, unrecognized, or a zone ends up short of entries for its replica count. <!-- hash:cb83115f48e0be49c373052ae0276c4468ad769f -->
 - The rdp-https-gateway app-config ConfigMap's `app.kubernetes.io/name` label exceeded Kubernetes' 63-character label-value limit under CI's long `kasm-e2e-<job-id>` release names, failing installs with `logFormat: json`. Shortened the four connection-proxy ConfigMap component identifiers. <!-- hash:29475046a26a06c9f16b585fdc33e0e6703b3392 -->
-
 ## [1.1190.6] - 2026-07-28
 
 ### Changed
