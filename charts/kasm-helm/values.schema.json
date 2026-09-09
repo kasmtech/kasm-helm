@@ -38,6 +38,12 @@
           "description": "The CA certificates to be stored in the configmap. This is an object where you can paste your PEM-formatted CA certificates in a key-value format where the key is the file name and the value is the PEM-formatted certificate data. All keys MUST end with a `.crt` extension.",
           "title": "caCerts",
           "type": "object"
+        },
+        "resources": {
+          "additionalProperties": true,
+          "description": "Manually configure resources for the `trusted-ca-init` initContainer that is injected into every Kasm workload while this feature is enabled. Leave empty to use the chart default (the `api` `small` preset).",
+          "title": "resources",
+          "type": "object"
         }
       },
       "required": [
@@ -142,6 +148,20 @@
       "additionalProperties": false,
       "description": "You can create your own certificate and upload it to the `secretName` supplied below, or if you have an existing cert-manager configured and you wish to use that, set the `secretName` and configure the associated cert-manager settings.",
       "properties": {
+        "selfSigned": {
+          "additionalProperties": false,
+          "description": "Last-resort self-signed certificate, generated only when neither certificate.secretName nor certificate.certManager.enabled is set. Not publicly trusted; evaluation only.",
+          "properties": {
+            "enabled": {
+              "default": true,
+              "description": "Generate a self-signed certificate when no other source is configured. Existing Secrets are reused on upgrade.",
+              "title": "enabled",
+              "type": "boolean"
+            }
+          },
+          "title": "selfSigned",
+          "type": "object"
+        },
         "certManager": {
           "additionalProperties": false,
           "description": "For additional cert-manager configuration/deployment information refer to the online documentation [Cert Manager Docs](https://cert-manager.io/v1.1-docs/installation/kubernetes/). NOTE: If you do not enable `cert-manager`, you must generate your own certificates and add them as a Kubernetes secret, or present cloud-managed certificates. Refer to [Kubernetes Secrets](https://kubernetes.io/docs/concepts/configuration/secret/), and [Kubernetes TLS Secret](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_create/kubectl_create_secret_tls/) for more information.",
@@ -1807,10 +1827,10 @@
           "type": "boolean"
         },
         "initJobTTLSecondsAfterFinished": {
-            "default": 300,
-            "description": "The number of seconds to retain the DB backup job pod after it has finished. The default is 300 seconds (5 minutes).",
-            "title": "initJobTTLSecondsAfterFinished",
-            "type": "integer"
+          "default": 300,
+          "description": "The number of seconds to retain the DB backup job pod after it has finished. The default is 300 seconds (5 minutes).",
+          "title": "initJobTTLSecondsAfterFinished",
+          "type": "integer"
         },
         "dbConnectionTimeout": {
           "default": 10,
@@ -2083,7 +2103,10 @@
       "description": "Kasm log format written to console. 'log' emits human-readable text; 'json' emits structured JSON suitable for log aggregation pipelines.",
       "title": "logFormat",
       "type": "string",
-      "enum": ["log", "json"]
+      "enum": [
+        "log",
+        "json"
+      ]
     },
     "kasmSecrets": {
       "additionalProperties": false,
@@ -2154,7 +2177,13 @@
           "type": "object"
         }
       },
-      "required": ["create", "name", "passwords", "annotations", "labels"]
+      "required": [
+        "create",
+        "name",
+        "passwords",
+        "annotations",
+        "labels"
+      ]
     },
     "imagePullSecrets": {
       "additionalProperties": false,
@@ -2480,6 +2509,15 @@
             "LoadBalancer",
             "NodePort"
           ]
+        },
+        "nodePort": {
+          "default": "",
+          "description": "Pin the node port when proxyService.type is NodePort. Empty lets Kubernetes assign one.",
+          "title": "nodePort",
+          "type": [
+            "string",
+            "integer"
+          ]
         }
       },
       "title": "proxyService",
@@ -2573,6 +2611,242 @@
         "annotations",
         "labels"
       ]
+    },
+    "httpRoute": {
+      "additionalProperties": false,
+      "description": "Configure a Gateway API HTTPRoute for your Kasm deployment. Alternative to ingress, route and tlsRoute - enable at most one.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Set to `true` to publish the Kasm proxy through a Gateway API HTTPRoute.",
+          "title": "enabled",
+          "type": "boolean"
+        },
+        "parentRefs": {
+          "description": "Gateways to attach the route to. Passed through verbatim, so any field of a Gateway API ParentReference is accepted - name, namespace, sectionName, port, kind, group.",
+          "title": "parentRefs",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": [
+              "name"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "title": "name"
+              },
+              "namespace": {
+                "type": "string",
+                "title": "namespace"
+              },
+              "sectionName": {
+                "type": "string",
+                "title": "sectionName"
+              },
+              "port": {
+                "type": "integer",
+                "title": "port"
+              }
+            }
+          }
+        },
+        "backendProtocol": {
+          "default": "http",
+          "description": "The protocol the Gateway uses to reach the Kasm proxy service. Valid values: http or https",
+          "title": "backendProtocol",
+          "type": "string"
+        },
+        "annotations": {
+          "additionalProperties": true,
+          "title": "annotations",
+          "type": "object"
+        },
+        "labels": {
+          "additionalProperties": true,
+          "title": "labels",
+          "type": "object"
+        }
+      },
+      "title": "httpRoute",
+      "type": "object"
+    },
+    "tlsRoute": {
+      "additionalProperties": false,
+      "description": "Configure a Gateway API TLSRoute (SNI passthrough) for your Kasm deployment. Alternative to ingress, route and httpRoute - enable at most one.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Set to `true` to publish the Kasm proxy by SNI passthrough through a Gateway API TLSRoute.",
+          "title": "enabled",
+          "type": "boolean"
+        },
+        "apiVersion": {
+          "default": "gateway.networking.k8s.io/v1",
+          "description": "API version to render the TLSRoute at. Standard-channel v1 since Gateway API 1.5; use v1alpha2 for older experimental-channel bundles.",
+          "title": "apiVersion",
+          "type": "string"
+        },
+        "parentRefs": {
+          "description": "Gateways to attach the route to. Passed through verbatim, so any field of a Gateway API ParentReference is accepted - name, namespace, sectionName, port, kind, group.",
+          "title": "parentRefs",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": [
+              "name"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "title": "name"
+              },
+              "namespace": {
+                "type": "string",
+                "title": "namespace"
+              },
+              "sectionName": {
+                "type": "string",
+                "title": "sectionName"
+              },
+              "port": {
+                "type": "integer",
+                "title": "port"
+              }
+            }
+          }
+        },
+        "annotations": {
+          "additionalProperties": true,
+          "title": "annotations",
+          "type": "object"
+        },
+        "labels": {
+          "additionalProperties": true,
+          "title": "labels",
+          "type": "object"
+        }
+      },
+      "title": "tlsRoute",
+      "type": "object"
+    },
+    "tcpRoute": {
+      "additionalProperties": false,
+      "description": "Configure a Gateway API TCPRoute for the Kasm RDP Gateway. Requires Gateway API 1.6 or newer, where TCPRoute is standard-channel v1.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Set to `true` to publish the RDP Gateway through a Gateway API TCPRoute.",
+          "title": "enabled",
+          "type": "boolean"
+        },
+        "apiVersion": {
+          "default": "gateway.networking.k8s.io/v1",
+          "description": "API version to render the TCPRoute at. Standard-channel v1 since Gateway API 1.6; v1alpha2 for older experimental-channel bundles.",
+          "title": "apiVersion",
+          "type": "string"
+        },
+        "rdpAccessURL": {
+          "default": "",
+          "description": "The hostname Kasm advertises to RDP clients. Required when tcpRoute.enabled is true.",
+          "title": "rdpAccessURL",
+          "type": "string"
+        },
+        "parentRefs": {
+          "description": "Gateways to attach the route to. Passed through verbatim, so any field of a Gateway API ParentReference is accepted - name, namespace, sectionName, port, kind, group.",
+          "title": "parentRefs",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": [
+              "name"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "title": "name"
+              },
+              "namespace": {
+                "type": "string",
+                "title": "namespace"
+              },
+              "sectionName": {
+                "type": "string",
+                "title": "sectionName"
+              },
+              "port": {
+                "type": "integer",
+                "title": "port"
+              }
+            }
+          }
+        },
+        "zones": {
+          "description": "Per-zone Gateway attachment, required when more than one zone sits in the primary region: a TCPRoute matches on neither hostname nor SNI, so each zone needs its own listener.",
+          "title": "zones",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "parentRefs"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "title": "name",
+                "description": "Zone name, matching an entry in kasmZones."
+              },
+              "parentRefs": {
+                "description": "Gateways to attach the route to. Passed through verbatim, so any field of a Gateway API ParentReference is accepted - name, namespace, sectionName, port, kind, group.",
+                "title": "parentRefs",
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "required": [
+                    "name"
+                  ],
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "title": "name"
+                    },
+                    "namespace": {
+                      "type": "string",
+                      "title": "namespace"
+                    },
+                    "sectionName": {
+                      "type": "string",
+                      "title": "sectionName"
+                    },
+                    "port": {
+                      "type": "integer",
+                      "title": "port"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "annotations": {
+          "additionalProperties": true,
+          "title": "annotations",
+          "type": "object"
+        },
+        "labels": {
+          "additionalProperties": true,
+          "title": "labels",
+          "type": "object"
+        }
+      },
+      "title": "tcpRoute",
+      "type": "object"
     }
   }
 }

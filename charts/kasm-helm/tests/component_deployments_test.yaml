@@ -2,6 +2,7 @@ suite: per-component deployment specifics (api/manager/guac/rdp)
 
 templates:
   - templates/api-deployment.yaml
+  - templates/validation.yaml
   - templates/manager-deployment.yaml
   - templates/guac-statefulset.yaml
   - templates/rdp-gateway-deployment.yaml
@@ -280,7 +281,7 @@ tests:
             value: rdp.kasm.example.test
 
   - it: rdp gateway fails when directRdpService.enabled is true but rdpAccessURL is unset
-    template: templates/rdp-gateway-deployment.yaml
+    template: templates/validation.yaml
     set:
       directRdpService:
         enabled: true

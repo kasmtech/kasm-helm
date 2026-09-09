@@ -361,6 +361,24 @@ Where:
   {{- end -}}
 {{- end -}}
 
+{{- if eq $resource "httpRoute" -}}
+  {{- with $ctx.Values.httpRoute.labels -}}
+    {{- $labels = merge $labels . -}}
+  {{- end -}}
+{{- end -}}
+
+{{- if eq $resource "tlsRoute" -}}
+  {{- with $ctx.Values.tlsRoute.labels -}}
+    {{- $labels = merge $labels . -}}
+  {{- end -}}
+{{- end -}}
+
+{{- if eq $resource "tcpRoute" -}}
+  {{- with $ctx.Values.tcpRoute.labels -}}
+    {{- $labels = merge $labels . -}}
+  {{- end -}}
+{{- end -}}
+
 {{- if eq $component "cert-manager" -}}
   {{- with $ctx.Values.certificate.certManager.labels -}}
     {{- $labels = merge $labels . -}}
@@ -442,6 +460,24 @@ Where:
 
 {{- if eq $resource "route" -}}
   {{- with $ctx.Values.route.annotations -}}
+    {{- $annotations = merge $annotations . -}}
+  {{- end -}}
+{{- end -}}
+
+{{- if eq $resource "httpRoute" -}}
+  {{- with $ctx.Values.httpRoute.annotations -}}
+    {{- $annotations = merge $annotations . -}}
+  {{- end -}}
+{{- end -}}
+
+{{- if eq $resource "tlsRoute" -}}
+  {{- with $ctx.Values.tlsRoute.annotations -}}
+    {{- $annotations = merge $annotations . -}}
+  {{- end -}}
+{{- end -}}
+
+{{- if eq $resource "tcpRoute" -}}
+  {{- with $ctx.Values.tcpRoute.annotations -}}
     {{- $annotations = merge $annotations . -}}
   {{- end -}}
 {{- end -}}
@@ -823,7 +859,6 @@ successThreshold: {{ $successThreshold }}
 {{- end -}}
 
 {{- $needsDbCredentials := or $isReady $isVersion -}}
-{{- $needsResources := or $isReady $isVersion -}}
 {{- $needsTmpDir := or $isInit $isReady $isBackup $isVersion -}}
 {{- $hasTrustedCaBundle := and (not $isBackup) $context.Values.trustedCaBundle.enabled -}}
 {{- $initMounts := get $merged "initMounts" -}}
@@ -834,9 +869,10 @@ successThreshold: {{ $successThreshold }}
 - name: {{ $containerName }}
   image: {{ $constants.api.image }}
   imagePullPolicy: {{ $context.Values.imagePullPolicy }}
-  {{- if $needsResources }}
+  {{/* Emitted for every function, not just "ready"/"version": the "init" and "backup" variants run the
+       same api image and were the only containers in the chart with no requests/limits at all, which
+       is what tests/kyverno/resources.required.enforce.yaml exists to prevent. */}}
   resources: {{- include "resources.preset" (dict "node" "api" "size" "small" "context" $context.Values) | nindent 4 }}
-  {{- end }}
   {{- include "kasm.securityContext" (list $context 1000 "container") | nindent 2 }}
   env:
     - name: POSTGRES_HOST
@@ -1292,6 +1328,11 @@ Dedup rules:
 - name: trusted-ca-init
   image: {{ $constants.api.image }}
   imagePullPolicy: {{ $context.Values.imagePullPolicy }}
+  {{- if $context.Values.trustedCaBundle.resources }}
+  resources: {{- toYaml $context.Values.trustedCaBundle.resources | nindent 4 }}
+  {{- else }}
+  resources: {{- include "resources.preset" (dict "node" "api" "size" "small" "context" $context.Values) | nindent 4 }}
+  {{- end }}
   {{- include "kasm.securityContext" (list $context $uidGid "container") | nindent 2 }}
   command:
     - /bin/bash
@@ -1352,3 +1393,61 @@ Dedup rules:
   value: /etc/ssl/certs/ca-certificates.crt
 {{- end }}
 {{- end }}
+
+{{/*
+  Whether this release has to generate its own certificate: true only when neither
+  real source is configured, and the escape hatch has not been turned off. See
+  templates/self-signed-cert.yaml.
+*/}}
+{{- define "kasm.selfSignedCertNeeded" -}}
+{{- if and .Values.certificate.selfSigned.enabled (not .Values.certificate.certManager.enabled) (not .Values.certificate.secretName) -}}
+true
+{{- end -}}
+{{- end -}}
+
+{{/*
+  The address the Kasm proxy can be reached at from outside the cluster, as far as a render
+  can tell. In order of preference:
+
+    1. publicAddr, when set - the DNS name the operator chose.
+    2. proxyService.type=LoadBalancer: the address the cloud (or MetalLB, or k3s ServiceLB)
+       assigned to the external proxy Service, read back with `lookup`. Empty on the first
+       install, because Helm renders every template - NOTES.txt included - before it creates
+       anything; from the next `helm upgrade` on the assigned address is visible.
+    3. proxyService.type=NodePort: "<node address>:<port>", from the first node's ExternalIP
+       (else InternalIP) and the node port - proxyService.nodePort when pinned, which is known
+       even on the first install, else the assigned one read back from the Service.
+
+  Returns "" when nothing is known yet. `lookup` is a no-op in `helm template`, so an offline
+  render only ever returns publicAddr.
+
+  Call with a context carrying .Values and .Release: (include "kasm.proxyExternalAddress" .)
+*/}}
+{{- define "kasm.proxyExternalAddress" -}}
+{{- $v := .Values -}}
+{{- if $v.publicAddr -}}
+{{- $v.publicAddr -}}
+{{- else if or (eq $v.proxyService.type "LoadBalancer") (eq $v.proxyService.type "NodePort") -}}
+{{- $svc := lookup "v1" "Service" .Release.Namespace (printf "%s-proxy-ext-default" .Release.Name) -}}
+{{- if eq $v.proxyService.type "LoadBalancer" -}}
+{{- with (first (dig "status" "loadBalancer" "ingress" (list) $svc)) -}}
+{{- .hostname | default .ip -}}
+{{- end -}}
+{{- else -}}
+{{- $port := $v.proxyService.nodePort -}}
+{{- if not $port -}}
+{{- with (first (dig "spec" "ports" (list) $svc)) -}}{{- $port = .nodePort -}}{{- end -}}
+{{- end -}}
+{{- $address := "" -}}
+{{- with (first (dig "items" (list) (lookup "v1" "Node" "" ""))) -}}
+{{- range (dig "status" "addresses" (list) .) -}}
+{{- if and (eq .type "ExternalIP") (not $address) -}}{{- $address = .address -}}{{- end -}}
+{{- end -}}
+{{- range (dig "status" "addresses" (list) .) -}}
+{{- if and (eq .type "InternalIP") (not $address) -}}{{- $address = .address -}}{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- if and $address $port -}}{{- printf "%s:%v" $address $port -}}{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}

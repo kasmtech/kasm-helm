@@ -2,6 +2,7 @@ suite: proxy service type behavior
 templates:
   - templates/proxy-service.yaml
   - templates/proxy-service-external.yaml
+  - templates/validation.yaml
 tests:
   - it: renders external service when type=LoadBalancer and ingress/route disabled
     template: templates/proxy-service-external.yaml
@@ -20,7 +21,7 @@ tests:
           value: LoadBalancer
 
   - it: fails when ingress enabled and proxyService.type=LoadBalancer
-    template: templates/proxy-service-external.yaml
+    template: templates/validation.yaml
     set:
       proxyService:
         type: LoadBalancer
@@ -31,7 +32,7 @@ tests:
           errorMessage: "The service.type must not be LoadBalancer when using an ingress or a route - any load balancer or Route should be provisioned using the Ingress/Route settings. Set service.type=ClusterIP or mark ingress.enabled or route.enabled to disabled."
 
   - it: fails when route enabled and proxyService.type=LoadBalancer
-    template: templates/proxy-service-external.yaml
+    template: templates/validation.yaml
     set:
       proxyService:
         type: LoadBalancer
@@ -44,7 +45,7 @@ tests:
           errorMessage: "The service.type must not be LoadBalancer when using an ingress or a route - any load balancer or Route should be provisioned using the Ingress/Route settings. Set service.type=ClusterIP or mark ingress.enabled or route.enabled to disabled."
 
   - it: fails when kasmZones configured and proxyService.type=LoadBalancer
-    template: templates/proxy-service-external.yaml
+    template: templates/validation.yaml
     set:
       proxyService:
         type: LoadBalancer

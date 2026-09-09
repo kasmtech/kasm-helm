@@ -76,6 +76,14 @@ nginxResolver: ""
 #
 proxyService:
   type: LoadBalancer
+  # proxyService.nodePort -- Pin the node port when `proxyService.type` is NodePort. Leave empty to
+  # let Kubernetes assign one from the cluster's service-node-port-range (30000-32767 by default).
+  #
+  # Kasm builds session URLs from the zone's `proxy_port`, not from this Service, so when users reach
+  # the deployment on a non-standard port set `kasmZones[].proxy_port` to match - otherwise the
+  # browser is sent to a port nothing is listening on. Ignored for any other service type.
+  #
+  nodePort: ""
   annotations: {}
   labels: {}
 
@@ -99,6 +107,8 @@ directRdpService:
   type: LoadBalancer
   # directRdpService.loadBalancerPort -- The external port exposed by the directRdpService Service when
   # `directRdpService.type` is LoadBalancer. Defaults to 3389. Has no effect when `directRdpService.type` is NodePort.
+  # It is also the port on the RDP Gateway Service that `tcpRoute` forwards to, so it applies even when
+  # `directRdpService.enabled` is false.
   #
   loadBalancerPort: 3389
   # directRdpService.annotations -- Custom annotations to add to the RDP Gateway Service. This only applies if `directRdpService.enabled`
@@ -168,12 +178,137 @@ route:
   annotations: {}
   labels: {}
 
+# Configure a Gateway API HTTPRoute for your Kasm deployment, for clusters fronted by a Gateway
+# rather than by an ingress controller.
+#
+# `ingress`, `route`, `httpRoute` and `tlsRoute` are alternatives - enable at most one of the four,
+# since all of them publish the same Kasm proxy Service.
+#
+# Unlike an Ingress, a Gateway API route carries no certificate: the Gateway's listener does. This
+# chart still mints the Secret (see `certificate` below), but you have to reference it from that
+# listener's `certificateRefs` yourself, and add a ReferenceGrant when the Gateway is in another
+# namespace.
+#
+# With `kasmZones` set, one HTTPRoute is rendered per zone plus one for `publicAddr`, because an
+# HTTPRoute's hostnames belong to the object while its rules match only on path, header and method.
+#
+httpRoute:
+  # httpRoute.enabled -- Set to `true` to publish the Kasm proxy through a Gateway API HTTPRoute.
+  # Requires the Gateway API CRDs and a Gateway in the cluster.
+  #
+  enabled: false
+  # httpRoute.parentRefs -- Gateways to attach the route to, passed through verbatim, so any field of
+  # a Gateway API `ParentReference` is accepted - `name`, `namespace`, `sectionName`, `port`, `kind`.
+  # The route attaches to nothing, and the proxy stays unreachable, if this is left empty. The
+  # Gateway's listener must also admit routes from this namespace (its `allowedRoutes`).
+  # Example:
+  #   parentRefs:
+  #     - name: kasm-gateway
+  #       namespace: kube-system
+  #
+  parentRefs: []
+  # httpRoute.backendProtocol -- The protocol the Gateway uses to reach the Kasm proxy Service.
+  # Valid values: http or https
+  #
+  backendProtocol: http
+  annotations: {}
+  labels: {}
+
+# Configure a Gateway API TLSRoute for your Kasm deployment - SNI passthrough, where the Gateway
+# forwards the connection untouched and the Kasm proxy terminates TLS itself. The option to reach for
+# when TLS must not terminate on shared cluster infrastructure; the Gateway API equivalent of the
+# OpenShift Route's `passthrough` termination.
+#
+# The Gateway needs a listener with `protocol: TLS` and `tls.mode: Passthrough` whose `allowedRoutes`
+# admit this namespace. A terminating HTTPS listener will not serve a TLSRoute.
+#
+tlsRoute:
+  # tlsRoute.enabled -- Set to `true` to publish the Kasm proxy by SNI passthrough through a Gateway
+  # API TLSRoute. `ingress`, `route`, `httpRoute` and `tlsRoute` are alternatives - enable at most one.
+  #
+  enabled: false
+  # tlsRoute.apiVersion -- API version to render the TLSRoute at. TLSRoute has been standard-channel
+  # `v1` since Gateway API 1.5; set `gateway.networking.k8s.io/v1alpha2` for older, experimental-channel
+  # CRD bundles.
+  #
+  apiVersion: gateway.networking.k8s.io/v1
+  # tlsRoute.parentRefs -- Gateways to attach the route to, in the same shape as `httpRoute.parentRefs`.
+  #
+  parentRefs: []
+  annotations: {}
+  labels: {}
+
+# Configure a Gateway API TCPRoute for the Kasm RDP Gateway, as an alternative to publishing it
+# through `directRdpService`. Only applicable when `components.rdpGateway.enabled` is set.
+#
+# Requires Gateway API 1.6 or newer, where TCPRoute is standard-channel `v1`, and a Gateway with a
+# `protocol: TCP` listener. Note that shipping in the standard bundle is not the same as the data
+# plane implementing it - confirm your Gateway implementation supports TCPRoute before choosing this
+# over a LoadBalancer Service.
+#
+# Leave `directRdpService.enabled` false: the RDP Gateway Service already publishes the RDP port, and
+# stays ClusterIP while the Gateway fronts it.
+#
+tcpRoute:
+  # tcpRoute.enabled -- Set to `true` to publish the RDP Gateway through a Gateway API TCPRoute.
+  #
+  enabled: false
+  # tcpRoute.apiVersion -- API version to render the TCPRoute at. TCPRoute has been standard-channel
+  # `v1` since Gateway API 1.6; set `gateway.networking.k8s.io/v1alpha2` for older, experimental-channel
+  # CRD bundles, where it is deprecated as of 1.6.
+  #
+  apiVersion: gateway.networking.k8s.io/v1
+  # tcpRoute.rdpAccessURL -- The hostname Kasm advertises to RDP clients, and the name the RDP Gateway
+  # serves under. Required when `tcpRoute.enabled` is true: a TCPRoute carries no hostname, so the
+  # gateway cannot infer it the way an HTTP route's backend can.
+  #
+  rdpAccessURL: ""
+  # tcpRoute.parentRefs -- Gateways to attach the route to, in the same shape as `httpRoute.parentRefs`.
+  # Single-zone shorthand; with multiple zones use `tcpRoute.zones` instead, since each zone needs its
+  # own listener.
+  #
+  parentRefs: []
+  # tcpRoute.zones -- Per-zone Gateway attachment, required when `kasmZones` defines more than one zone
+  # in the primary region. A TCPRoute matches on neither hostname nor SNI, so zones cannot share a
+  # listener the way they share one for `httpRoute`: give each zone its own listener and select it with
+  # `sectionName`.
+  # Example:
+  #   zones:
+  #     - name: zonea
+  #       parentRefs:
+  #         - name: kasm-gateway
+  #           namespace: kube-system
+  #           sectionName: rdp-zonea
+  #     - name: zoneb
+  #       parentRefs:
+  #         - name: kasm-gateway
+  #           namespace: kube-system
+  #           sectionName: rdp-zoneb
+  #
+  zones: []
+  annotations: {}
+  labels: {}
+
 # Configure certificate settings.
 # You can create your own certificate and upload it to the `secretName` supplied below, or if you have
 # an existing cert-manager configured and you wish to use that, set the `secretName` and configure the
 # associated cert-manager settings.
 #
 certificate:
+  # certificate.selfSigned -- Last-resort certificate, so that an install with no certificate
+  # configured at all still starts instead of hanging in ContainerCreating.
+  #
+  selfSigned:
+    # certificate.selfSigned.enabled -- Generate a self-signed certificate when, and only when,
+    # neither `certificate.secretName` nor `certificate.certManager.enabled` is set. A Secret this
+    # release generated is reused on upgrade, so the certificate is stable and does not restart
+    # pods; a Secret of that name created by anyone else is left untouched and used as-is.
+    #
+    # The result is **not publicly trusted**: browsers warn on it, and it is intended for
+    # evaluation only. Supply `certificate.secretName`, or enable `certificate.certManager`, for
+    # anything else. Set this to `false` to go back to requiring a certificate up front.
+    #
+    enabled: true
   # certificate.secretName -- Set the secret name where the certificate is stored.
   # This secret name will store a certificate created by `cert-manager` if you set `cert-manager.enabled` to true
   #
@@ -215,6 +350,11 @@ trustedCaBundle:
   # is the PEM-formatted certificate data. All keys MUST end with a `.crt` extension.
   #
   caCerts: {}
+  # trustedCaBundle.resources -- Manually configure resources for the `trusted-ca-init` initContainer that
+  # is injected into every Kasm workload while this feature is enabled. Leave empty to use the chart default
+  # (the `api` `small` preset); the container only runs `update-ca-certificates` once at startup.
+  #
+  resources: {}
   # Example CA Certs configuration
   # ca-cert-1.crt: |-
   #   -----BEGIN CERTIFICATE-----
@@ -1220,12 +1360,12 @@ kasmConfig:
   #
   generatePreseed: false
   # kasmConfig.defaultUsers -- Creates a series of 4 users and 5 groups with a standard set of
-  # permissions accommodating most standard deployment scenarios. Refer to the [Default Users](./docs/default-users.md)
+  # permissions accommodating most standard deployment scenarios. Refer to the [Default Users](../../docs/reference/default-users.md)
   # for additional information about what this flag creates.
   #
   defaultUsers: false
   # kasmConfig.defaultApiUsers -- Creates two predefined sets of API credentials with permissions
-  # accommodating most standard deployment scenarios. Refer to the [Default API Users](./docs/default-api-users.md)
+  # accommodating most standard deployment scenarios. Refer to the [Default API Users](../../docs/reference/default-api-users.md)
   # for additional information about what this flag creates.
   #
   defaultApiUsers: false
@@ -1270,7 +1410,7 @@ kasmConfig:
     name: ""
     key: "default_properties.yaml"
   # kasmConfig.config -- Kasm DB pre-seed configuration settings in YAML format. Refer to the
-  # [Preseed Documentation](./docs/preseed.md) and to the [Kasm Slip-Stream Install](https://docs.kasm.com/docs/1.19.0/how-to/administration/import-export/slipstream-install)
+  # [Preseed Documentation](../../docs/reference/preseed.md) and to the [Kasm Slip-Stream Install](https://docs.kasm.com/docs/1.19.0/how-to/administration/import-export/slipstream-install)
   # documentation for additional details.
   #
   config: {}

@@ -1,0 +1,29 @@
+suite: forwarded proto/port maps
+
+templates:
+  - templates/nginx-shared-configmap.yaml
+
+tests:
+  # The port Kasm advertises for a session comes from X-Forwarded-Port, which this map
+  # feeds. With no "http" entry every HTTP-fronted deployment advertised :443 - see
+  # the CHANGELOG entry for the symptom.
+  - it: maps every scheme to its own default port, http included
+    asserts:
+      - matchRegex:
+          path: data["orchestrator.conf"]
+          pattern: 'map \$x_forwarded_proto \$default_http_port \{'
+      - matchRegex:
+          path: data["orchestrator.conf"]
+          pattern: '"https" 443;'
+      - matchRegex:
+          path: data["orchestrator.conf"]
+          pattern: '"http"  80;'
+
+  - it: still falls back to the request scheme when no X-Forwarded-Proto arrives
+    asserts:
+      - matchRegex:
+          path: data["orchestrator.conf"]
+          pattern: 'map \$http_x_forwarded_proto \$x_forwarded_proto \{'
+      - matchRegex:
+          path: data["orchestrator.conf"]
+          pattern: '""      \$scheme;'

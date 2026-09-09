@@ -1,0 +1,12 @@
+# Gateway API, SNI passthrough: the Gateway forwards untouched and the Kasm
+# proxy terminates TLS on its own HTTPS listener. Needs a Gateway listener with
+# protocol: TLS and tls.mode: Passthrough.
+publicAddr: kasm.example.com
+proxyService:
+  type: ClusterIP
+tlsRoute:
+  enabled: true
+  parentRefs:
+    - name: kasm-gateway
+      namespace: kube-system
+      sectionName: kasm-passthrough

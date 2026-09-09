@@ -244,3 +244,43 @@ tests:
       - equal:
           path: spec.jobTemplate.spec.template.spec.initContainers[0].name
           value: db-is-ready
+
+  # tests/kyverno/resources.required.enforce.yaml requires cpu+memory requests AND limits on every
+  # container and initContainer. The "init" and "backup" variants used to omit resources entirely,
+  # which is what the gate is there to catch; every variant now carries the api/small preset.
+  - it: db-init job "init" variant carries cpu and memory requests and limits
+    template: templates/db-init-job.yaml
+    documentSelector:
+      path: kind
+      value: Job
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name=="db-is-ready")].resources.requests.cpu
+          value: 500m
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name=="db-is-ready")].resources.requests.memory
+          value: 512Mi
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name=="db-is-ready")].resources.limits.cpu
+          value: 500m
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name=="db-is-ready")].resources.limits.memory
+          value: 1Gi
+
+  - it: db upgrade backup job "backup" variant carries cpu and memory requests and limits
+    template: templates/db-upgrade-backup-job.yaml
+    documentSelector:
+      path: kind
+      value: Job
+    set:
+      dbManagement:
+        initialize: false
+        upgrade:
+          enable: true
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name=="db-is-ready-for-backup")].resources.requests.cpu
+          value: 500m
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name=="db-is-ready-for-backup")].resources.limits.memory
+          value: 1Gi

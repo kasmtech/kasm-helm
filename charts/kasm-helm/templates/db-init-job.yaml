@@ -46,6 +46,7 @@ spec:
         - name: prepare-db-preseed
           image: {{ $constants.api.image }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
+          resources: {{- include "resources.preset" (dict "node" "api" "size" "small") | nindent 12 }}
           {{- if $authDomain }}
           env:
             # Passed through the environment rather than interpolated into the yq program below, so

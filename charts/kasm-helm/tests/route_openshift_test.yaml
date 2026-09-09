@@ -1,6 +1,7 @@
 suite: OpenShift Route and security mode
 templates:
   - templates/route.yaml
+  - templates/validation.yaml
   - templates/api-deployment.yaml
   - templates/proxy-deployment.yaml
   - templates/manager-deployment.yaml
@@ -144,7 +145,7 @@ tests:
           value: preferred-a.example.com
 
   - it: fails if both ingress.enabled and route.enabled are true
-    template: templates/route.yaml
+    template: templates/validation.yaml
     set:
       ingress:
         enabled: true

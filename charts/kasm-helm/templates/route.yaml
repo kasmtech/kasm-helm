@@ -1,9 +1,6 @@
 {{/*
 Deploy the Kasm OpenShift Route if .Values.route.enabled set to true
 */}}
-{{- if and .Values.ingress.enabled .Values.route.enabled -}}
-  {{- fail "The ingress.enabled and route.enabled cannot both be set. Either configure an Ingress or an OpenShift Route, not both." -}}
-{{- end -}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- $primaryZone := (include "kasm.primaryZone" . | fromYaml) -}}
 {{- $primaryZoneName := $primaryZone.name -}}

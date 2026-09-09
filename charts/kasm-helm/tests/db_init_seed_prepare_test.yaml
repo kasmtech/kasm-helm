@@ -299,3 +299,24 @@ tests:
       - matchRegex:
           path: spec.template.spec.initContainers[0].args[0]
           pattern: "' \"\\$\\{DEFAULT_PROPERTIES\\}\""
+
+  # tests/kyverno/resources.required.enforce.yaml requires cpu+memory requests AND limits on every
+  # container and initContainer; prepare-db-preseed had none, so it silently escaped the gate while
+  # the policy was misconfigured. Pinned here so it cannot lose them again.
+  - it: prepare-db-preseed carries cpu and memory requests and limits
+    set:
+      kasmConfig:
+        authDomain: example.test
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name=="prepare-db-preseed")].resources.requests.cpu
+          value: 500m
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name=="prepare-db-preseed")].resources.requests.memory
+          value: 512Mi
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name=="prepare-db-preseed")].resources.limits.cpu
+          value: 500m
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name=="prepare-db-preseed")].resources.limits.memory
+          value: 1Gi

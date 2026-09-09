@@ -35,6 +35,46 @@ tests:
       - exists:
           path: spec.template.spec.initContainers[?(@.name=="trusted-ca-init")].volumeMounts[?(@.name=="etc-ssl-certs")]
 
+  # tests/kyverno/resources.required.enforce.yaml requires cpu+memory requests AND limits on every
+  # container and initContainer. trusted-ca-init is injected into every Kasm workload, so it had to
+  # carry them; pinned here so it cannot lose them again.
+  - it: gives trusted-ca-init cpu and memory requests and limits by default
+    set:
+      trustedCaBundle:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name=="trusted-ca-init")].resources.requests.cpu
+          value: 500m
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name=="trusted-ca-init")].resources.requests.memory
+          value: 512Mi
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name=="trusted-ca-init")].resources.limits.cpu
+          value: 500m
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name=="trusted-ca-init")].resources.limits.memory
+          value: 1Gi
+
+  - it: lets trustedCaBundle.resources override the trusted-ca-init preset
+    set:
+      trustedCaBundle:
+        enabled: true
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            cpu: 20m
+            memory: 64Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name=="trusted-ca-init")].resources.requests.cpu
+          value: 10m
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name=="trusted-ca-init")].resources.limits.memory
+          value: 64Mi
+
   - it: does not create trusted CA volumes when disabled
     set:
       trustedCaBundle:

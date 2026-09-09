@@ -1,0 +1,15 @@
+# Two zones sharing one region_name, so both are primary-region zones and both
+# get an RDP Gateway. multizone-config.yaml leaves region_name unset, which puts
+# only the primary zone in the primary region - fine for the proxy, but it never
+# exercises the multi-gateway paths.
+publicAddr: kasm.example.com
+proxyService:
+  type: ClusterIP
+kasmZones:
+  - name: zonea
+    proxy_hostname: zonea.kasm.example.com
+    region_name: us-east
+    primary: true
+  - name: zoneb
+    proxy_hostname: zoneb.kasm.example.com
+    region_name: us-east

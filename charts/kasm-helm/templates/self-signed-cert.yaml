@@ -1,0 +1,89 @@
+{{/*
+  Development fallback certificate.
+
+  Every Kasm pod that terminates TLS mounts the certificate Secret as a NON-optional
+  volume, so without one the release renders cleanly and then sits in
+  ContainerCreating forever. This template removes that cliff: when no certificate
+  source has been configured at all, it generates a self-signed one so a default
+  install actually starts.
+
+  It is deliberately the LAST resort. It renders only when both real sources are
+  absent - `certificate.secretName` unset (you supplied a Secret) and
+  `certificate.certManager.enabled` false (cert-manager will supply one).
+
+  What happens on a render is decided from a lookup of the Secret, in three cases:
+
+    * No Secret of that name exists: generate one. This is also the `helm template`
+      and `--dry-run` path, where the lookup always comes back empty and a throwaway
+      certificate is rendered instead.
+
+    * The Secret exists and THIS RELEASE owns it (Helm's `meta.helm.sh/release-name`
+      and `meta.helm.sh/release-namespace` annotations name this release): reuse its
+      bytes, so the certificate is stable across `helm upgrade` and pods are not
+      restarted by a rotating cert. It is regenerated only when its `self-signed-for`
+      marker no longer matches the hostname the chart now wants. (Changing publicAddr
+      used to leave a stale certificate behind, and the ingress controller quietly
+      fell back to its own default.) An owned Secret with no marker had its data
+      replaced by hand; that data is kept as-is.
+
+    * The Secret exists and this release does NOT own it: render nothing at all.
+      Helm refuses to adopt a resource that lacks its ownership metadata, so
+      emitting it here would fail both `helm install` and `helm upgrade` with
+      "exists and cannot be imported into the current release" - and every pod
+      mounts the pre-created Secret by name regardless. Pre-creating your own
+      Secret at this name therefore still works; setting `certificate.secretName`
+      remains the clearer way to say so.
+
+  This certificate is NOT publicly trusted. Browsers will warn on it, and on the
+  direct-connect paths an unaccepted certificate on the session hostname fails
+  silently rather than prompting. It is for evaluation only - NOTES.txt says so at
+  the end of every install that uses it.
+*/}}
+{{- if include "kasm.selfSignedCertNeeded" . }}
+{{- $name := include "kasm.name" (list . "cert-manager" "secret") -}}
+{{- $cn := .Values.publicAddr | default "kasm.local" -}}
+{{- $altNames := list $cn (printf "*.%s" $cn) -}}
+{{- range $zone := .Values.kasmZones -}}
+  {{- with (include "kasm.zoneProxyHostname" $zone) -}}
+    {{- $altNames = append $altNames . -}}
+  {{- end -}}
+{{- end -}}
+{{- $existing := lookup "v1" "Secret" .Release.Namespace $name -}}
+{{- $ownerName := dig "metadata" "annotations" "meta.helm.sh/release-name" "" $existing -}}
+{{- $ownerNamespace := dig "metadata" "annotations" "meta.helm.sh/release-namespace" "" $existing -}}
+{{- $foreign := and $existing (not (and (eq $ownerName .Release.Name) (eq $ownerNamespace .Release.Namespace))) -}}
+{{- if not $foreign }}
+{{- $data := default dict (and $existing $existing.data) -}}
+{{- $madeFor := index $data "self-signed-for" -}}
+{{- $reuse := false -}}
+{{- if index $data "tls.crt" -}}
+  {{- /* No marker on an owned Secret means the data was replaced by hand: keep it. */ -}}
+  {{- if or (not $madeFor) (eq (b64dec $madeFor) $cn) -}}
+    {{- $reuse = true -}}
+  {{- end -}}
+{{- end -}}
+{{- $crt := "" -}}
+{{- $key := "" -}}
+{{- if $reuse -}}
+  {{- $crt = index $data "tls.crt" -}}
+  {{- $key = index $data "tls.key" -}}
+{{- else -}}
+  {{- $gen := genSelfSignedCert $cn nil $altNames 3650 -}}
+  {{- $crt = b64enc $gen.Cert -}}
+  {{- $key = b64enc $gen.Key -}}
+{{- end }}
+apiVersion: v1
+kind: Secret
+type: kubernetes.io/tls
+metadata:
+  {{- include "kasm.metadata" (dict "context" . "component" "cert-manager" "resource" "secret" "include" "all") | indent 2 }}
+data:
+  tls.crt: {{ $crt }}
+  tls.key: {{ $key }}
+  {{- /* Which hostname this was generated for; see the header comment. Not re-added to
+         hand-replaced data, so a later hostname change cannot regenerate over it. */}}
+  {{- if or (not $reuse) $madeFor }}
+  self-signed-for: {{ $cn | b64enc }}
+  {{- end }}
+{{- end }}
+{{- end }}

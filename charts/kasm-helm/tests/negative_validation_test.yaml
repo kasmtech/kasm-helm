@@ -1,13 +1,11 @@
 suite: negative path / explicit fail messages
 
 templates:
-  - templates/proxy-service-external.yaml
-  - templates/route.yaml
-  - templates/rdp-gateway-deployment.yaml
+  - templates/validation.yaml
 
 tests:
-  - it: ingress + route both enabled fails the route template with a clear message
-    template: templates/route.yaml
+  - it: ingress + route both enabled fails with a clear message
+    template: templates/validation.yaml
     set:
       ingress:
         enabled: true
@@ -19,8 +17,8 @@ tests:
       - failedTemplate:
           errorMessage: "The ingress.enabled and route.enabled cannot both be set. Either configure an Ingress or an OpenShift Route, not both."
 
-  - it: LoadBalancer + ingress fails the external proxy service
-    template: templates/proxy-service-external.yaml
+  - it: LoadBalancer + ingress fails
+    template: templates/validation.yaml
     set:
       proxyService:
         type: LoadBalancer
@@ -30,8 +28,8 @@ tests:
       - failedTemplate:
           errorMessage: "The service.type must not be LoadBalancer when using an ingress or a route - any load balancer or Route should be provisioned using the Ingress/Route settings. Set service.type=ClusterIP or mark ingress.enabled or route.enabled to disabled."
 
-  - it: LoadBalancer + multi-zone fails the external proxy service
-    template: templates/proxy-service-external.yaml
+  - it: LoadBalancer + multi-zone fails
+    template: templates/validation.yaml
     values:
       - ../../../tests/values/multizone-config.yaml
     set:
@@ -41,8 +39,8 @@ tests:
       - failedTemplate:
           errorMessage: "The service.type must not be LoadBalancer when using a Multi-Zone Kasm deployment - any load balancer or Route should be provisioned using the Ingress/Route settings. Set service.type=ClusterIP or remove your kasmZones settings."
 
-  - it: directRdpService.enabled=true without rdpAccessURL fails the rdp gateway deployment
-    template: templates/rdp-gateway-deployment.yaml
+  - it: directRdpService.enabled=true without rdpAccessURL fails
+    template: templates/validation.yaml
     set:
       directRdpService:
         enabled: true
@@ -50,3 +48,113 @@ tests:
     asserts:
       - failedTemplate:
           errorMessage: "directRdpService.rdpAccessURL must be set if directRdpService.enabled is true."
+
+  - it: two proxy exposure methods fails, naming both
+    template: templates/validation.yaml
+    set:
+      proxyService:
+        type: ClusterIP
+      ingress:
+        enabled: true
+      httpRoute:
+        enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "Only one proxy exposure method may be enabled, but ingress.enabled and httpRoute.enabled are set. The Ingress, the OpenShift Route, the Gateway API HTTPRoute and the Gateway API TLSRoute all publish the same Kasm proxy Service, so enabling more than one gives the same hostname two owners."
+
+  - it: LoadBalancer proxyService + httpRoute fails
+    template: templates/validation.yaml
+    set:
+      proxyService:
+        type: LoadBalancer
+      httpRoute:
+        enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "The proxyService.type must not be LoadBalancer when the proxy is published through the Gateway API - the Gateway owns the external address. Set proxyService.type=ClusterIP, or disable httpRoute.enabled / tlsRoute.enabled."
+
+  - it: httpRoute with no parentRefs fails rather than rendering an unattached route
+    template: templates/validation.yaml
+    set:
+      proxyService:
+        type: ClusterIP
+      httpRoute:
+        enabled: true
+        parentRefs: []
+    asserts:
+      - failedTemplate:
+          errorMessage: "httpRoute.enabled is set but httpRoute.parentRefs is empty - the route would attach to no Gateway, and the proxy would stay unreachable from outside the cluster."
+
+  - it: tlsRoute with no parentRefs fails
+    template: templates/validation.yaml
+    set:
+      proxyService:
+        type: ClusterIP
+      tlsRoute:
+        enabled: true
+        parentRefs: []
+    asserts:
+      - failedTemplate:
+          errorMessage: "tlsRoute.enabled is set but tlsRoute.parentRefs is empty - the route would attach to no Gateway, and the proxy would stay unreachable from outside the cluster."
+
+  - it: tcpRoute and directRdpService both publishing the RDP Gateway fails
+    template: templates/validation.yaml
+    set:
+      proxyService:
+        type: ClusterIP
+      directRdpService:
+        enabled: true
+        rdpAccessURL: rdp.kasm.example.com
+      tcpRoute:
+        enabled: true
+        rdpAccessURL: rdp.kasm.example.com
+        parentRefs:
+          - name: kasm-gateway
+    asserts:
+      - failedTemplate:
+          errorMessage: "tcpRoute.enabled and directRdpService.enabled both publish the RDP Gateway externally. Set directRdpService.enabled=false: the RDP Gateway Service stays ClusterIP and the Gateway fronts it through the TCPRoute."
+
+  - it: tcpRoute without rdpAccessURL fails
+    template: templates/validation.yaml
+    set:
+      proxyService:
+        type: ClusterIP
+      tcpRoute:
+        enabled: true
+        rdpAccessURL: ""
+        parentRefs:
+          - name: kasm-gateway
+    asserts:
+      - failedTemplate:
+          errorMessage: "tcpRoute.rdpAccessURL must be set if tcpRoute.enabled is true - it is the hostname Kasm advertises to RDP clients, and the RDP Gateway has no way to infer it from the Gateway."
+
+  - it: tcpRoute with two primary-region zones and no per-zone refs fails, naming the zones
+    template: templates/validation.yaml
+    values:
+      - ../../../tests/values/multizone-same-region.yaml
+    set:
+      tcpRoute:
+        enabled: true
+        rdpAccessURL: rdp.kasm.example.com
+        parentRefs:
+          - name: kasm-gateway
+    asserts:
+      - failedTemplate:
+          errorMessage: "tcpRoute.zones has no entry for zone(s) zonea, zoneb. A TCPRoute matches on neither hostname nor SNI, so the zones cannot share one Gateway listener: give every zone its own entry, using parentRefs[].sectionName to select that zone's listener."
+
+  - it: tcpRoute with rdpGateway disabled fails
+    template: templates/validation.yaml
+    set:
+      proxyService:
+        type: ClusterIP
+      components:
+        rdpGateway:
+          enabled: false
+      tcpRoute:
+        enabled: true
+        rdpAccessURL: rdp.kasm.example.com
+        parentRefs:
+          - name: kasm-gateway
+    asserts:
+      - failedTemplate:
+          errorMessage: "tcpRoute.enabled publishes the RDP Gateway, but components.rdpGateway.enabled is false. Enable the component, or disable tcpRoute."
