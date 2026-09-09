@@ -81,14 +81,14 @@ tests:
         hostname: ""
     asserts:
       - failedTemplate:
-          errorMessage: "agent.manager.hostname is required: set it to the hostname of the Kasm manager (or the proxy in front of it) this agent registers with."
+          errorMessage: "agent.manager.hostname is required: set it to the hostname of the Kasm manager (or the proxy in front of it) this agent registers with. (With a kasm-helm control plane in this same release, agent.inClusterControlPlane=true derives it instead.)"
 
   - it: fails with a clear message when publicHostname is empty
     set:
       publicHostname: ""
     asserts:
       - failedTemplate:
-          errorMessage: "agent.publicHostname is required: set it to the externally reachable address browsers use to connect to this agent's session proxy."
+          errorMessage: "agent.publicHostname is required: set it to the externally reachable address browsers use to connect to this agent's session proxy. (With a kasm-helm control plane in this same release, agent.inClusterControlPlane=true derives it instead.)"
 
   - it: fails when neither a token nor an existing token secret is configured
     set:
@@ -97,7 +97,7 @@ tests:
         token: ""
     asserts:
       - failedTemplate:
-          errorMessage: "agent.manager: no manager token configured. Set agent.manager.existingTokenSecret to the name of a Secret already holding the token (preferred), or agent.manager.token to the token itself so this chart creates one."
+          errorMessage: "agent.manager: no manager token configured. Set agent.manager.existingTokenSecret to the name of a Secret already holding the token (preferred), or agent.manager.token to the token itself so this chart creates one. (With a kasm-helm control plane in this same release, agent.inClusterControlPlane=true reads the token the control plane generated.)"
 
   - it: references an existing token secret with its configured key
     set:

@@ -1,0 +1,54 @@
+{{/*
+  The operator's Secret access in this namespace.
+
+  The kasm-agent-operator chart's ClusterRole grants no access to Secrets at all. The operator needs
+  exactly one thing here: to read, create and update the per-workspace storage-mapping Secret by name
+  (it never lists, watches or deletes Secrets; owner references delete them). This Role grants that,
+  and the RoleBinding points it at the operator's ServiceAccount, which may live in another namespace.
+
+  Always rendered: an Agent in a namespace without this Role fails every storage mapping with
+  Forbidden. Helm applies Role and RoleBinding before the Agent custom resource, so the grant exists
+  before the first Secret is written.
+*/}}
+{{- $saName := include "kasmAgentInstance.operatorServiceAccount" . -}}
+{{- $saNamespace := include "kasmAgentInstance.operatorNamespace" . -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "kasmAgentInstance.fullname" . }}-operator
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kasmAgentInstance.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - create
+      - get
+      - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "kasmAgentInstance.fullname" . }}-operator
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kasmAgentInstance.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $saName }}
+    namespace: {{ $saNamespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "kasmAgentInstance.fullname" . }}-operator

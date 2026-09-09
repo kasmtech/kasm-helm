@@ -2,19 +2,69 @@ suite: collector configuration rendering
 templates:
   - templates/configmap.yaml
 tests:
-  - it: names the config key config.yaml and wires the default otlp exporter into every pipeline
+  - it: names the config key config.yaml
     asserts:
       - isKind:
           of: ConfigMap
       - equal:
           path: metadata.name
           value: RELEASE-NAME-kasm-otel-collector-config
+
+  - it: defaults to the debug exporter only, with no otlp exporter configured
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "debug:\\n    verbosity: basic"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "exporters: \\[debug\\]"
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "otlp_grpc/backend:"
+
+  - it: fails with a clear message when otlp is enabled without an endpoint
+    set:
+      exporters:
+        otlp:
+          enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "exporters\\.otlp\\.enabled is true but exporters\\.otlp\\.endpoint is empty"
+
+  - it: fails with a clear message when clickhouse is enabled without an endpoint
+    set:
+      exporters:
+        clickhouse:
+          enabled: true
+          endpoint: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "exporters\\.clickhouse\\.enabled is true but exporters\\.clickhouse\\.endpoint is empty"
+
+  - it: wires an explicitly configured otlp exporter into every pipeline
+    set:
+      exporters:
+        otlp:
+          enabled: true
+          endpoint: tempo.telemetry.svc.cluster.local:4317
+        debug:
+          enabled: false
+    asserts:
       - matchRegex:
           path: data["config.yaml"]
           pattern: "otlp_grpc/backend:"
       - matchRegex:
           path: data["config.yaml"]
-          pattern: "exporters: \\[otlp_grpc/backend\\]"
+          pattern: "endpoint: tempo.telemetry.svc.cluster.local:4317"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "processors: \\[memory_limiter, filter/probes, batch\\]\n      exporters: \\[otlp_grpc/backend\\]"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "processors: \\[memory_limiter, batch\\]\n      exporters: \\[otlp_grpc/backend\\]"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "processors: \\[memory_limiter, transform/k8s_events, resource/k8s_events, batch/logs\\]\n      exporters: \\[otlp_grpc/backend\\]"
 
   - it: always renders the otlp receiver on both protocols
     asserts:
@@ -106,8 +156,13 @@ tests:
   - it: adds the clickhouse exporter to traces and logs but deliberately not to metrics
     set:
       exporters:
+        otlp:
+          enabled: true
+          endpoint: tempo.telemetry.svc.cluster.local:4317
         clickhouse:
           enabled: true
+        debug:
+          enabled: false
     asserts:
       - matchRegex:
           path: data["config.yaml"]
@@ -132,11 +187,15 @@ tests:
           path: data["config.yaml"]
           pattern: "password: \\$\\{env:CLICKHOUSE_PASSWORD\\}"
 
-  - it: adds the debug exporter to every pipeline when enabled
+  - it: adds the debug exporter to every pipeline when enabled alongside otlp
     set:
       exporters:
+        otlp:
+          enabled: true
+          endpoint: tempo.telemetry.svc.cluster.local:4317
         debug:
           enabled: true
+          verbosity: normal
     asserts:
       - matchRegex:
           path: data["config.yaml"]
@@ -152,6 +211,8 @@ tests:
           enabled: false
         clickhouse:
           enabled: true
+        debug:
+          enabled: false
     asserts:
       - notMatchRegex:
           path: data["config.yaml"]
@@ -177,6 +238,7 @@ tests:
     set:
       exporters:
         otlp:
+          enabled: true
           endpoint: tempo.telemetry.svc.cluster.local:4317
           tlsInsecure: false
     asserts:

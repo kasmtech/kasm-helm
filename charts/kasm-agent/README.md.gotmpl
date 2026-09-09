@@ -23,7 +23,7 @@ Each dependency is aliased, so every value below is set as `<alias>.<subchart va
 
 | Alias | Chart | Default | What it is |
 | ----- | ----- | ------- | ---------- |
-| `operator` | `kasm-agent-operator` | enabled | The CRDs, cluster RBAC, and controller-manager that reconcile `Agent`, `KasmWorkspace`, `KasmImagePuller`, `WarmPool`, and `WarmPoolInstance` resources. |
+| `operator` | `kasm-agent-operator` | enabled | The CRDs, cluster RBAC, and controller-manager that reconcile `Agent`, `KasmWorkspace`, and `KasmImagePuller` resources. |
 | `otelCollector` | `kasm-otel-collector` | enabled | An OpenTelemetry collector that receives traces, metrics, and logs from the operator, the agent, and workspace pods on ports 4317/4318, and forwards them to your telemetry backends. |
 | `agent` | `kasm-agent-instance` | enabled | The `Agent` resource that registers this cluster as a Kasm deployment zone, plus the session proxy users' browsers connect to. |
 | `nodePrep` | `kasm-node-prep` | disabled | A privileged DaemonSet that builds and loads host kernel modules (`v4l2loopback`, `wireguard`). |
@@ -52,8 +52,10 @@ A few boundaries worth knowing before you plan an install.
   else.
 * **Telemetry backends are external.** The collector *exports* to an LGTM stack (Loki, Grafana,
   Tempo, Mimir), a ClickHouse instance, or any OTLP endpoint — this chart never installs any of
-  them. Point `otelCollector.exporters.otlp.endpoint` and/or `otelCollector.exporters.clickhouse.*`
-  at backends you already run.
+  them. By default both of those exporters are disabled and the collector just logs telemetry to
+  its own stdout, so a default install never silently ships data to a backend that does not exist.
+  Point `otelCollector.exporters.otlp.endpoint` (and enable it) and/or
+  `otelCollector.exporters.clickhouse.*` at backends you already run to ship telemetry out.
 * **The Kasm manager is external to this chart.** Install it with the `kasm-helm` chart, or point
   `agent.manager.hostname` at an existing deployment.
 * **Uninstall in two steps.** `helm uninstall` deletes the `Agent` resource and the operator that
@@ -135,20 +137,16 @@ Nothing else has to be set. `agent.zone` defaults to `default`, the zone a fresh
 install seeds — name yours only if it differs. `agent.manager.tokenSecretKey` defaults to `token`,
 the key the `kubectl create secret` above writes.
 
-Install from a checkout of this repository. The six Kasm subcharts are `file://` dependencies, so
-they have to be staged into `charts/` first:
+Install from the published chart. The OCI artifact embeds every dependency, so there is no
+checkout and no dependency build:
 
 ```console
-helm dependency build charts/kasm-agent
-
-helm install kasm-agent charts/kasm-agent \
+helm install kasm-agent oci://registry-1.docker.io/kasmweb/kasm-agent \
   --namespace kasm-agent \
   --values values.yaml
 ```
 
-This chart is also published as an OCI artifact with every dependency embedded, which removes the
-checkout and the dependency build. Publishing a developer preview is a manual decision (see
-[Publishing](#publishing)), so check that the version you want is there before relying on it:
+Pin the version with `--version`, and check what is published before relying on a particular one:
 
 ```console
 helm install kasm-agent oci://registry-1.docker.io/kasmweb/kasm-agent \
@@ -204,7 +202,7 @@ as [`dev-cluster-values.yaml`](../../examples/kasm-agent/dev-cluster-values.yaml
 
 The control plane (the `kasm-helm` chart) and this chart can share one cluster. The control plane
 creates no cluster-scoped objects at all — no CRDs, no ClusterRoles, no ClusterRoleBindings — so
-nothing it installs can collide with the `agent.kasm.com` / `pools.kasm.ai` CRDs and the cluster RBAC
+nothing it installs can collide with the `agent.kasm.com` CRDs and the cluster RBAC
 this chart's operator owns. Two namespaces (one per release) is the recommended layout, but even a
 **single shared namespace** works — the two charts' resource names and label selectors are fully
 disjoint, and it lets the agent reference the control plane's token Secret directly
@@ -322,7 +320,7 @@ combination outright whenever an ingress or route is configured.
 
 Most Kasm features need something from the cluster before they will work. Here is the short list —
 the features people turn on most often, and the values that turn them on.
-[**What works on Kubernetes**](../../docs/feature-matrix.md) is the full one: every feature, its
+[**What works on Kubernetes**](../../docs/reference/feature-matrix.md) is the full one: every feature, its
 status, what the cluster has to supply first, and the limits worth knowing.
 
 | Kasm feature | Value that turns it on |
@@ -640,7 +638,7 @@ the top of the CI package job. The fix moves the chart and every pin naming it i
 ```console
 python3 scripts/agent_versions.py --bump kasm-agent-instance 0.2.0            # dry run
 python3 scripts/agent_versions.py --bump kasm-agent-instance 0.2.0 --write
-helm dependency update charts/kasm-agent charts/kasm-platform                 # refresh Chart.lock
+helm dependency update charts/kasm-agent oci://registry-1.docker.io/kasmweb/kasm-platform                 # refresh Chart.lock
 ```
 
 At `{{ .Version }}` / appVersion `{{ .AppVersion }}` these are previews rather than a moving release line, so

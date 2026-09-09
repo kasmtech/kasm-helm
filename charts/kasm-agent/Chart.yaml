@@ -17,7 +17,7 @@ version: 0.1.0
 appVersion: "develop"
 dependencies:
   # The Kasm agent operator. Installs the CRDs, cluster RBAC, and controller-manager that
-  # reconcile Agent, KasmWorkspace, KasmImagePuller, WarmPool, and WarmPoolInstance resources.
+  # reconcile Agent, KasmWorkspace, and KasmImagePuller resources.
   - name: kasm-agent-operator
     version: 0.1.0
     repository: file://../kasm-agent-operator

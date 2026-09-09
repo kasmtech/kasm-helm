@@ -17,6 +17,25 @@ commonLabels: {}
 #
 commonAnnotations: {}
 
+# inClusterControlPlane -- Derive the control-plane connection from a `kasm-helm` release installed
+# under the **same release name and namespace** - which is what the `kasm-platform` umbrella does.
+#
+# When true, three values that otherwise have no default and fail the render are derived instead:
+#
+# * `manager.hostname` becomes `<release>-proxy-default.<namespace>.svc.cluster.local`
+# * the manager token is read from the `<release>-secrets` Secret the control plane generates,
+#   under its `manager-token` key
+# * `publicHostname` becomes `<name>-session-proxy.<namespace>.svc.cluster.local`
+#
+# Anything you set explicitly still wins. The derived `manager.hostname` assumes the default zone;
+# set it yourself when `kasm-helm.kasmZones` names something else.
+#
+# The derived `publicHostname` is an in-cluster address, so it only works while the control plane
+# relays session traffic (`proxy_connections: true`, Kasm's default). Publishing sessions directly
+# to browsers needs a real external hostname here - see the networking documentation.
+#
+inClusterControlPlane: false
+
 # name -- Name of the Agent custom resource. The operator derives the names of the objects it creates from this,
 # most visibly the session-proxy Service, which it names `<name>-session-proxy`.
 #
@@ -98,6 +117,21 @@ sessionProxy:
   probeTimeoutSeconds: 120
   # sessionProxy.reconcileIntervalSeconds -- The sidecar's session reconcile interval.
   reconcileIntervalSeconds: 30
+  # sessionProxy.selfSigned -- Last-resort certificate for the session proxy, so that an install
+  # with no certificate configured still starts instead of the proxy never coming up.
+  #
+  selfSigned:
+    # sessionProxy.selfSigned.enabled -- Generate a self-signed certificate at `certSecretName`
+    # when `sessionProxy.certificate.enabled` is false and no Secret of that name exists yet. A
+    # Secret this release generated is reused across upgrades (and regenerated when
+    # `publicHostname` changes); a Secret created by anyone else is left untouched and mounted
+    # as-is, so pre-creating your own before the first install still works.
+    #
+    # On the default proxied topology this certificate is never shown to a browser. On the
+    # direct-connect paths browsers do see it, and it **must** be replaced with a publicly trusted
+    # one - set `sessionProxy.certificate.enabled`, or pre-create the Secret.
+    #
+    enabled: true
   # sessionProxy.certSecretName -- Name of the TLS Secret (keys `tls.crt`/`tls.key`) served on the proxy's HTTPS
   # listener. The proxy will not start without it, so either enable `sessionProxy.certificate` below or create
   # this Secret out of band.
@@ -211,6 +245,25 @@ logLevel: INFO
 # references. Omitted from the Agent resource entirely when empty.
 #
 imagePullSecrets: []
+
+# Grant the Kasm agent operator the one permission it needs in THIS namespace but does not hold cluster-wide:
+# reading, creating and updating the per-workspace storage-mapping Secrets. The operator's ClusterRole (from
+# the `kasm-agent-operator` chart) carries no `secrets` rule at all, so every namespace that holds an Agent
+# needs this Role, and this chart always renders it together with a RoleBinding to the operator's
+# ServiceAccount, which may live in another namespace (the two-namespace layout).
+#
+operatorRBAC:
+  serviceAccount:
+    # operatorRBAC.serviceAccount.name -- Name of the operator's ServiceAccount, the `kasm-agent-operator`
+    # chart's `serviceAccount.name`.
+    #
+    name: controller-manager
+    # operatorRBAC.serviceAccount.namespace -- Namespace the operator runs in. Leave empty when the operator is
+    # installed in this release's namespace (the `kasm-agent` umbrella with `operator.enabled=true`). Set it
+    # whenever this agent lives in a different namespace from the operator; otherwise the RoleBinding points
+    # at a ServiceAccount that does not exist and every session with a storage mapping fails with Forbidden.
+    #
+    namespace: ""
 
 # nodeSelector -- Node selector pinning the agent and session-proxy pods. Omitted from the Agent resource
 # entirely when empty.

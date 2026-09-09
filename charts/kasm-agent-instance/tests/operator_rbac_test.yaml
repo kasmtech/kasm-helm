@@ -1,0 +1,101 @@
+suite: operator access to this namespace
+
+templates:
+  - templates/rbac/operator-role.yaml
+
+tests:
+  - it: always stamps a Role granting the operator secrets get, create and update in this namespace
+    asserts:
+      - hasDocuments:
+          count: 2
+      - documentIndex: 0
+        isKind:
+          of: Role
+      - documentIndex: 0
+        equal:
+          path: metadata.name
+          value: RELEASE-NAME-kasm-agent-instance-operator
+      - documentIndex: 0
+        equal:
+          path: metadata.namespace
+          value: NAMESPACE
+      - documentIndex: 0
+        equal:
+          path: rules
+          value:
+            - apiGroups:
+                - ""
+              resources:
+                - secrets
+              verbs:
+                - create
+                - get
+                - update
+      - documentIndex: 0
+        lengthEqual:
+          path: rules
+          count: 1
+
+  - it: binds the operator service account in this release namespace by default
+    asserts:
+      - documentIndex: 1
+        isKind:
+          of: RoleBinding
+      - documentIndex: 1
+        equal:
+          path: subjects
+          value:
+            - kind: ServiceAccount
+              name: controller-manager
+              namespace: NAMESPACE
+      - documentIndex: 1
+        equal:
+          path: roleRef
+          value:
+            apiGroup: rbac.authorization.k8s.io
+            kind: Role
+            name: RELEASE-NAME-kasm-agent-instance-operator
+
+  - it: binds the operator service account in another namespace when told where it runs
+    set:
+      operatorRBAC:
+        serviceAccount:
+          name: kasm-operator-sa
+          namespace: kasm-agent
+    asserts:
+      - documentIndex: 1
+        equal:
+          path: subjects[0].namespace
+          value: kasm-agent
+      - documentIndex: 1
+        equal:
+          path: subjects[0].name
+          value: kasm-operator-sa
+
+  - it: fails when the operator service account name is emptied
+    set:
+      operatorRBAC:
+        serviceAccount:
+          name: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: 'agent.operatorRBAC.serviceAccount.name is required'
+
+  - it: follows fullnameOverride and carries the standard labels and common annotations
+    set:
+      fullnameOverride: agent-b
+      commonAnnotations:
+        team: platform
+    asserts:
+      - documentIndex: 0
+        equal:
+          path: metadata.name
+          value: agent-b-operator
+      - documentIndex: 1
+        equal:
+          path: metadata.annotations.team
+          value: platform
+      - documentIndex: 0
+        equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: kasm-agent-instance

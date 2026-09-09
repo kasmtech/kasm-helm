@@ -1,0 +1,177 @@
+suite: self-signed session-proxy certificate vs. an existing Secret
+
+# helm-unittest's kubernetesProvider feeds the objects below to `lookup`, which is how
+# the template decides between generating, reusing and standing aside. The three cases
+# match the header comment in templates/self-signed-cert.yaml.
+
+templates:
+  - templates/self-signed-cert.yaml
+
+tests:
+  - it: stands aside when a Secret of that name exists that this release does not own
+    # A pre-created (bring-your-own) Secret carries no Helm ownership annotations. Emitting
+    # it would make `helm install` fail with "exists and cannot be imported into the current
+    # release", so the chart must render nothing and let the proxy mount it by name.
+    template: templates/self-signed-cert.yaml
+    set:
+      publicHostname: sessions.example.com
+    kubernetesProvider:
+      scheme:
+        "v1/Secret":
+          gvr:
+            group: ""
+            version: v1
+            resource: secrets
+          namespaced: true
+      objects:
+        - kind: Secret
+          apiVersion: v1
+          type: kubernetes.io/tls
+          metadata:
+            name: kasm-session-proxy-tls
+            namespace: NAMESPACE
+          data:
+            tls.crt: dXNlci1jZXJ0
+            tls.key: dXNlci1rZXk=
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: also stands aside when another release owns the Secret
+    template: templates/self-signed-cert.yaml
+    set:
+      publicHostname: sessions.example.com
+    kubernetesProvider:
+      scheme:
+        "v1/Secret":
+          gvr:
+            group: ""
+            version: v1
+            resource: secrets
+          namespaced: true
+      objects:
+        - kind: Secret
+          apiVersion: v1
+          type: kubernetes.io/tls
+          metadata:
+            name: kasm-session-proxy-tls
+            namespace: NAMESPACE
+            annotations:
+              meta.helm.sh/release-name: some-other-release
+              meta.helm.sh/release-namespace: NAMESPACE
+          data:
+            tls.crt: dXNlci1jZXJ0
+            tls.key: dXNlci1rZXk=
+            self-signed-for: c2Vzc2lvbnMuZXhhbXBsZS5jb20=
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: reuses the bytes of a Secret this release generated for the same hostname
+    template: templates/self-signed-cert.yaml
+    set:
+      publicHostname: sessions.example.com
+    kubernetesProvider:
+      scheme:
+        "v1/Secret":
+          gvr:
+            group: ""
+            version: v1
+            resource: secrets
+          namespaced: true
+      objects:
+        - kind: Secret
+          apiVersion: v1
+          type: kubernetes.io/tls
+          metadata:
+            name: kasm-session-proxy-tls
+            namespace: NAMESPACE
+            annotations:
+              meta.helm.sh/release-name: RELEASE-NAME
+              meta.helm.sh/release-namespace: NAMESPACE
+          data:
+            tls.crt: b2xkLWNlcnQ=
+            tls.key: b2xkLWtleQ==
+            self-signed-for: c2Vzc2lvbnMuZXhhbXBsZS5jb20=    # b64 "sessions.example.com"
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: data["tls.crt"]
+          value: b2xkLWNlcnQ=
+      - equal:
+          path: data["tls.key"]
+          value: b2xkLWtleQ==
+      - equal:
+          path: data["self-signed-for"]
+          value: c2Vzc2lvbnMuZXhhbXBsZS5jb20=
+
+  - it: regenerates a Secret this release generated for a different hostname
+    template: templates/self-signed-cert.yaml
+    set:
+      publicHostname: sessions.example.com
+    kubernetesProvider:
+      scheme:
+        "v1/Secret":
+          gvr:
+            group: ""
+            version: v1
+            resource: secrets
+          namespaced: true
+      objects:
+        - kind: Secret
+          apiVersion: v1
+          type: kubernetes.io/tls
+          metadata:
+            name: kasm-session-proxy-tls
+            namespace: NAMESPACE
+            annotations:
+              meta.helm.sh/release-name: RELEASE-NAME
+              meta.helm.sh/release-namespace: NAMESPACE
+          data:
+            tls.crt: b2xkLWNlcnQ=
+            tls.key: b2xkLWtleQ==
+            self-signed-for: b2xkLmV4YW1wbGUuY29t    # b64 "old.example.com"
+    asserts:
+      - hasDocuments:
+          count: 1
+      - notEqual:
+          path: data["tls.crt"]
+          value: b2xkLWNlcnQ=
+      - equal:
+          path: data["self-signed-for"]
+          value: c2Vzc2lvbnMuZXhhbXBsZS5jb20=
+
+  - it: keeps hand-replaced data on an owned Secret and does not re-add the marker
+    template: templates/self-signed-cert.yaml
+    set:
+      publicHostname: sessions.example.com
+    kubernetesProvider:
+      scheme:
+        "v1/Secret":
+          gvr:
+            group: ""
+            version: v1
+            resource: secrets
+          namespaced: true
+      objects:
+        - kind: Secret
+          apiVersion: v1
+          type: kubernetes.io/tls
+          metadata:
+            name: kasm-session-proxy-tls
+            namespace: NAMESPACE
+            annotations:
+              meta.helm.sh/release-name: RELEASE-NAME
+              meta.helm.sh/release-namespace: NAMESPACE
+          data:
+            tls.crt: dXNlci1jZXJ0
+            tls.key: dXNlci1rZXk=
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: data["tls.crt"]
+          value: dXNlci1jZXJ0
+      - isNull:
+          path: data["self-signed-for"]

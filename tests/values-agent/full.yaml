@@ -24,11 +24,19 @@ agent:
     enabled: true
   httpRoute:
     enabled: true
+    # A Gateway API route with no parentRefs attaches to nothing; the agent-instance chart now
+    # refuses to render one, so name a (placeholder) Gateway here.
+    parentRefs:
+      - name: placeholder-gateway
+        namespace: gateway-system
 
 otelCollector:
   exporters:
     otlp:
       enabled: true
+      # otlp.enabled with no endpoint now fails templating (see kasm-otel-collector's Changed
+      # entry); this scenario is just exercising every exporter, so any placeholder host works.
+      endpoint: tempo.telemetry.svc.cluster.local:4317
     clickhouse:
       enabled: true
     debug:

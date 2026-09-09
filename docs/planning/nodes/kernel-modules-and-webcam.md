@@ -1,6 +1,6 @@
 # Kernel modules and webcam passthrough
 
-> **Applies to:** [Webcam passthrough](../feature-matrix.md#devices-gpu-webcam-audio) and [WireGuard on kernels older than 5.6](../feature-matrix.md#security--isolation) — loadable modules, kernel headers, the KMM operator and a reachable registry · **Charts/values:** `nodePrep.modules.v4l2loopback.enabled`, `nodePrep.modules.v4l2loopback.method`, `nodePrep.modules.v4l2loopback.videoDevices`, `nodePrep.modules.v4l2loopback.kmm.image.registry`, `nodePrep.modules.v4l2loopback.kmm.imageRepoSecret`, `nodePrep.modules.v4l2loopback.kmm.build.enabled`, `nodePrep.modules.wireguard.enabled`, `videoDevicePlugin.enabled`
+> **Applies to:** [Webcam passthrough](../../reference/feature-matrix.md#devices-gpu-webcam-audio) and [WireGuard on kernels older than 5.6](../../reference/feature-matrix.md#security-and-isolation) — loadable modules, kernel headers, the KMM operator and a reachable registry · **Charts/values:** `nodePrep.modules.v4l2loopback.enabled`, `nodePrep.modules.v4l2loopback.method`, `nodePrep.modules.v4l2loopback.videoDevices`, `nodePrep.modules.v4l2loopback.kmm.image.registry`, `nodePrep.modules.v4l2loopback.kmm.imageRepoSecret`, `nodePrep.modules.v4l2loopback.kmm.build.enabled`, `nodePrep.modules.wireguard.enabled`, `videoDevicePlugin.enabled`
 
 ## Why this is needed
 
@@ -24,7 +24,7 @@ Enable one without the other and the feature fails quietly.
 
   On Ubuntu generic, also install `linux-modules-extra-$(uname -r)`.
 - **Loadable modules permitted.** A node with `kernel.modules_disabled=1` or an immutable/hardened image cannot be prepared this way.
-- **The namespace must permit the `privileged` PSS** — do [privileged workloads and cluster policy](privileged-workloads-and-policies.md) first.
+- **The namespace must permit the `privileged` PSS** — do [privileged workloads and cluster policy](privileged-workloads.md) first.
 - **Pick a mode:**
 
   | | `method: build` (default) | `method: kmm` |
@@ -34,7 +34,7 @@ Enable one without the other and the feature fails quietly.
   | Also needs | — | the KMM operator, cluster-wide, and a container **registry** |
   | Failures show up in | the node-prep pod log, with a diagnosis | the `Module` status and KMM build pod logs |
 
-  Full comparison: [kasm-node-prep § Which one to choose](../../charts/kasm-node-prep/README.md#which-one-to-choose).
+  Full comparison: [kasm-node-prep § Which one to choose](../../../charts/kasm-node-prep/README.md#which-one-to-choose).
 - Distro variants: **k3s / kubeadm / managed (EKS, AKS, GKE)** behave identically for this chart — what differs is the node image (headers availability, kernel flavor), not the distribution. **OpenShift**: RHCOS ships no `apt`, so `method: build` needs a pre-baked builder image or `method: kmm`; KMM is also the RHEL-native answer there.
 
 ## Steps
@@ -47,12 +47,12 @@ Enable one without the other and the feature fails quietly.
    apt-get -s install "linux-headers-$(uname -r)" >/dev/null && echo "headers available"
    ```
 
-   If it does not, either pre-install headers in the node image or use the airgap builder-image path in [kasm-node-prep § Airgapped / offline nodes](../../charts/kasm-node-prep/README.md#airgapped--offline-nodes) with `nodePrep.modules.v4l2loopback.sourcePath`.
+   If it does not, either pre-install headers in the node image or use the airgap builder-image path in [kasm-node-prep § Airgapped / offline nodes](../../../charts/kasm-node-prep/README.md#airgapped-and-offline-nodes) with `nodePrep.modules.v4l2loopback.sourcePath`.
 
 2. Enable both halves and install:
 
    ```console
-   helm upgrade --install kasm-agent charts/kasm-agent \
+   helm upgrade --install kasm-agent oci://registry-1.docker.io/kasmweb/kasm-agent \
      --namespace kasm-agent \
      --set nodePrep.enabled=true \
      --set nodePrep.modules.v4l2loopback.enabled=true \
@@ -91,7 +91,7 @@ Enable one without the other and the feature fails quietly.
 3. **Install with the module delegated.** Leave `nodePrep.modules.v4l2loopback.kmm.image.tag` empty so the rendered `containerImage` ends in the literal `${KERNEL_FULL_VERSION}` and one entry covers a multi-kernel fleet:
 
    ```console
-   helm upgrade --install kasm-agent charts/kasm-agent \
+   helm upgrade --install kasm-agent oci://registry-1.docker.io/kasmweb/kasm-agent \
      --namespace kasm-agent \
      --set nodePrep.enabled=true \
      --set nodePrep.modules.v4l2loopback.enabled=true \
@@ -115,12 +115,12 @@ Enable one without the other and the feature fails quietly.
 
    Confirm from a pod before rebuilding: `kubectl run dns-probe --rm -it --image=busybox --restart=Never -- nslookup registry.example.internal`.
 
-5. **Airgap (Mode A):** set `nodePrep.modules.v4l2loopback.kmm.build.enabled=false` and pre-build one `<registry>/<repository>:<kernel release>` image per fleet kernel on a connected machine. Runbook: [kasm-node-prep § Airgapped KMM (prebuilt modules)](../../charts/kasm-node-prep/README.md#airgapped-kmm-prebuilt-modules).
+5. **Airgap (Mode A):** set `nodePrep.modules.v4l2loopback.kmm.build.enabled=false` and pre-build one `<registry>/<repository>:<kernel release>` image per fleet kernel on a connected machine. Runbook: [kasm-node-prep § Airgapped KMM (prebuilt modules)](../../../charts/kasm-node-prep/README.md#airgapped-kmm-prebuilt-modules).
 
 ### C. WireGuard (kernels < 5.6 only)
 
 ```console
-helm upgrade --install kasm-agent charts/kasm-agent -n kasm-agent \
+helm upgrade --install kasm-agent oci://registry-1.docker.io/kasmweb/kasm-agent -n kasm-agent \
   --set nodePrep.enabled=true --set nodePrep.modules.wireguard.enabled=true
 ```
 
@@ -203,7 +203,7 @@ videoDevicePlugin:
     kasm.com/workspaces: "true"   # must match nodePrep.nodeSelector
 ```
 
-Under [kasm-platform](../../charts/kasm-platform/README.md) the same block nests one level down, under `kasm-agent:` (`kasm-agent.nodePrep.modules.v4l2loopback.method`). Installing `charts/kasm-node-prep` standalone drops the alias: the keys are `modules.v4l2loopback.*` at the top level.
+Under [kasm-platform](../../../charts/kasm-platform/README.md) the same block nests one level down, under `kasm-agent:` (`kasm-agent.nodePrep.modules.v4l2loopback.method`). Installing `charts/kasm-node-prep` standalone drops the alias: the keys are `modules.v4l2loopback.*` at the top level.
 
 ## Troubleshooting
 

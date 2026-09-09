@@ -1,0 +1,89 @@
+{{/*
+  Development fallback certificate for the session proxy.
+
+  The session proxy will not start without the Secret named by
+  `sessionProxy.certSecretName`, and nothing in this chart creates it unless
+  `sessionProxy.certificate.enabled` asks cert-manager for one. Without either, the
+  release renders cleanly and the proxy never comes up.
+
+  So when cert-manager is not being used, this generates a self-signed certificate
+  at exactly the name the proxy mounts. What happens on a render is decided from a
+  lookup of that Secret, in three cases:
+
+    * No Secret of that name exists: generate one. This is also the `helm template`
+      and `--dry-run` path, where the lookup always comes back empty and a throwaway
+      certificate is rendered instead.
+
+    * The Secret exists and THIS RELEASE owns it (Helm's `meta.helm.sh/release-name`
+      and `meta.helm.sh/release-namespace` annotations name this release): reuse its
+      bytes, so the certificate is stable across `helm upgrade` and pods are not
+      restarted by a rotating cert. It is regenerated only when its `self-signed-for`
+      marker no longer matches the hostname the chart now wants - changing
+      publicHostname used to leave a stale certificate behind. An owned Secret with
+      no marker had its data replaced by hand; that data is kept as-is.
+
+    * The Secret exists and this release does NOT own it: render nothing at all.
+      Helm refuses to adopt a resource that lacks its ownership metadata, so
+      emitting it here would fail both `helm install` and `helm upgrade` with
+      "exists and cannot be imported into the current release" - and the proxy
+      mounts the pre-created Secret by name regardless. This is how
+      bring-your-own-certificate works with the default values: create the Secret
+      before the first install.
+
+  On the default proxied topology this certificate is never shown to a browser -
+  the control-plane proxy reaches the session proxy directly and does not verify it -
+  so self-signing here is invisible. On the direct-connect paths (passthrough, or a
+  published Service) browsers DO see it, and it must be replaced with a publicly
+  trusted certificate: set `sessionProxy.certificate.enabled`, or pre-create the
+  Secret. NOTES.txt says so on every install that falls back to this.
+*/}}
+{{- if and .Values.sessionProxy.selfSigned.enabled (not .Values.sessionProxy.certificate.enabled) }}
+{{- $name := .Values.sessionProxy.certSecretName -}}
+{{- $cn := include "kasmAgentInstance.publicHostname" . | default "kasm-session-proxy.local" -}}
+{{- $altNames := list $cn (printf "*.%s" $cn) -}}
+{{- $existing := lookup "v1" "Secret" .Release.Namespace $name -}}
+{{- $ownerName := dig "metadata" "annotations" "meta.helm.sh/release-name" "" $existing -}}
+{{- $ownerNamespace := dig "metadata" "annotations" "meta.helm.sh/release-namespace" "" $existing -}}
+{{- $foreign := and $existing (not (and (eq $ownerName .Release.Name) (eq $ownerNamespace .Release.Namespace))) -}}
+{{- if not $foreign }}
+{{- $data := default dict (and $existing $existing.data) -}}
+{{- $madeFor := index $data "self-signed-for" -}}
+{{- $reuse := false -}}
+{{- if index $data "tls.crt" -}}
+  {{- /* No marker on an owned Secret means the data was replaced by hand: keep it. */ -}}
+  {{- if or (not $madeFor) (eq (b64dec $madeFor) $cn) -}}
+    {{- $reuse = true -}}
+  {{- end -}}
+{{- end -}}
+{{- $crt := "" -}}
+{{- $key := "" -}}
+{{- if $reuse -}}
+  {{- $crt = index $data "tls.crt" -}}
+  {{- $key = index $data "tls.key" -}}
+{{- else -}}
+  {{- $gen := genSelfSignedCert $cn nil $altNames 3650 -}}
+  {{- $crt = b64enc $gen.Cert -}}
+  {{- $key = b64enc $gen.Key -}}
+{{- end }}
+apiVersion: v1
+kind: Secret
+type: kubernetes.io/tls
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kasmAgentInstance.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  tls.crt: {{ $crt }}
+  tls.key: {{ $key }}
+  {{- /* Which hostname this was generated for; see the header comment. Not re-added to
+         hand-replaced data, so a later hostname change cannot regenerate over it. */}}
+  {{- if or (not $reuse) $madeFor }}
+  self-signed-for: {{ $cn | b64enc }}
+  {{- end }}
+{{- end }}
+{{- end }}

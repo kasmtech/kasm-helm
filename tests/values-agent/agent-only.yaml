@@ -1,0 +1,15 @@
+# Second-agent layout: the operator (and its CRDs) already run in namespace kasm-agent; this release adds
+# one more agent in its own namespace and only points the operator's Secret-access Role at that namespace.
+# Renders through kubeconform and kyverno like the other scenarios.
+operator:
+  enabled: false
+otelCollector:
+  enabled: false
+agent:
+  manager:
+    hostname: kasm.example.com
+    existingTokenSecret: kasm-manager-token
+  publicHostname: sessions-b.example.com
+  operatorRBAC:
+    serviceAccount:
+      namespace: kasm-agent

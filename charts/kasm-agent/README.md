@@ -21,7 +21,7 @@ Each dependency is aliased, so every value below is set as `<alias>.<subchart va
 
 | Alias | Chart | Default | What it is |
 | ----- | ----- | ------- | ---------- |
-| `operator` | `kasm-agent-operator` | enabled | The CRDs, cluster RBAC, and controller-manager that reconcile `Agent`, `KasmWorkspace`, `KasmImagePuller`, `WarmPool`, and `WarmPoolInstance` resources. |
+| `operator` | `kasm-agent-operator` | enabled | The CRDs, cluster RBAC, and controller-manager that reconcile `Agent`, `KasmWorkspace`, and `KasmImagePuller` resources. |
 | `otelCollector` | `kasm-otel-collector` | enabled | An OpenTelemetry collector that receives traces, metrics, and logs from the operator, the agent, and workspace pods on ports 4317/4318, and forwards them to your telemetry backends. |
 | `agent` | `kasm-agent-instance` | enabled | The `Agent` resource that registers this cluster as a Kasm deployment zone, plus the session proxy users' browsers connect to. |
 | `nodePrep` | `kasm-node-prep` | disabled | A privileged DaemonSet that builds and loads host kernel modules (`v4l2loopback`, `wireguard`). |
@@ -50,8 +50,10 @@ A few boundaries worth knowing before you plan an install.
   else.
 * **Telemetry backends are external.** The collector *exports* to an LGTM stack (Loki, Grafana,
   Tempo, Mimir), a ClickHouse instance, or any OTLP endpoint — this chart never installs any of
-  them. Point `otelCollector.exporters.otlp.endpoint` and/or `otelCollector.exporters.clickhouse.*`
-  at backends you already run.
+  them. By default both of those exporters are disabled and the collector just logs telemetry to
+  its own stdout, so a default install never silently ships data to a backend that does not exist.
+  Point `otelCollector.exporters.otlp.endpoint` (and enable it) and/or
+  `otelCollector.exporters.clickhouse.*` at backends you already run to ship telemetry out.
 * **The Kasm manager is external to this chart.** Install it with the `kasm-helm` chart, or point
   `agent.manager.hostname` at an existing deployment.
 * **Uninstall in two steps.** `helm uninstall` deletes the `Agent` resource and the operator that
@@ -133,20 +135,16 @@ Nothing else has to be set. `agent.zone` defaults to `default`, the zone a fresh
 install seeds — name yours only if it differs. `agent.manager.tokenSecretKey` defaults to `token`,
 the key the `kubectl create secret` above writes.
 
-Install from a checkout of this repository. The six Kasm subcharts are `file://` dependencies, so
-they have to be staged into `charts/` first:
+Install from the published chart. The OCI artifact embeds every dependency, so there is no
+checkout and no dependency build:
 
 ```console
-helm dependency build charts/kasm-agent
-
-helm install kasm-agent charts/kasm-agent \
+helm install kasm-agent oci://registry-1.docker.io/kasmweb/kasm-agent \
   --namespace kasm-agent \
   --values values.yaml
 ```
 
-This chart is also published as an OCI artifact with every dependency embedded, which removes the
-checkout and the dependency build. Publishing a developer preview is a manual decision (see
-[Publishing](#publishing)), so check that the version you want is there before relying on it:
+Pin the version with `--version`, and check what is published before relying on a particular one:
 
 ```console
 helm install kasm-agent oci://registry-1.docker.io/kasmweb/kasm-agent \
@@ -202,7 +200,7 @@ as [`dev-cluster-values.yaml`](../../examples/kasm-agent/dev-cluster-values.yaml
 
 The control plane (the `kasm-helm` chart) and this chart can share one cluster. The control plane
 creates no cluster-scoped objects at all — no CRDs, no ClusterRoles, no ClusterRoleBindings — so
-nothing it installs can collide with the `agent.kasm.com` / `pools.kasm.ai` CRDs and the cluster RBAC
+nothing it installs can collide with the `agent.kasm.com` CRDs and the cluster RBAC
 this chart's operator owns. Two namespaces (one per release) is the recommended layout, but even a
 **single shared namespace** works — the two charts' resource names and label selectors are fully
 disjoint, and it lets the agent reference the control plane's token Secret directly
@@ -320,7 +318,7 @@ combination outright whenever an ingress or route is configured.
 
 Most Kasm features need something from the cluster before they will work. Here is the short list —
 the features people turn on most often, and the values that turn them on.
-[**What works on Kubernetes**](../../docs/feature-matrix.md) is the full one: every feature, its
+[**What works on Kubernetes**](../../docs/reference/feature-matrix.md) is the full one: every feature, its
 status, what the cluster has to supply first, and the limits worth knowing.
 
 | Kasm feature | Value that turns it on |
@@ -638,7 +636,7 @@ the top of the CI package job. The fix moves the chart and every pin naming it i
 ```console
 python3 scripts/agent_versions.py --bump kasm-agent-instance 0.2.0            # dry run
 python3 scripts/agent_versions.py --bump kasm-agent-instance 0.2.0 --write
-helm dependency update charts/kasm-agent charts/kasm-platform                 # refresh Chart.lock
+helm dependency update charts/kasm-agent oci://registry-1.docker.io/kasmweb/kasm-platform                 # refresh Chart.lock
 ```
 
 At `0.1.0` / appVersion `develop` these are previews rather than a moving release line, so
@@ -664,9 +662,10 @@ makes replacing a published preview a deliberate act.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| agent | object | `{"enabled":true,"nameOverride":"kasm-agent-instance"}` | The Kasm agent instance (`kasm-agent-instance` subchart, alias `agent`). Creates the Agent custom resource that registers this cluster as a Kasm deployment zone, plus the session proxy that terminates workspace connections.  This is the only subchart with required values. At a minimum set `agent.manager.hostname`, a manager token (`agent.manager.token` or `agent.manager.existingTokenSecret`), and `agent.publicHostname`, and either supply a session proxy TLS Secret through `agent.sessionProxy.certSecretName` or let cert-manager issue one with `agent.sessionProxy.certificate.enabled`.  See the `kasm-agent-instance` chart for its values (`name`, `image.*`, `manager.*`, `publicHostname`, `publicPort`, `zone`, `sessionProxy.*`, `otel.*`, `gpu.enabled`, `storageMappings.*`, `imagePuller.*`, `httpRoute.*`, `env`, ...).  |
+| agent | object | `{"enabled":true,"nameOverride":"kasm-agent-instance","operatorRBAC":{"serviceAccount":{"namespace":""}}}` | The Kasm agent instance (`kasm-agent-instance` subchart, alias `agent`). Creates the Agent custom resource that registers this cluster as a Kasm deployment zone, plus the session proxy that terminates workspace connections.  This is the only subchart with required values. At a minimum set `agent.manager.hostname`, a manager token (`agent.manager.token` or `agent.manager.existingTokenSecret`), and `agent.publicHostname`, and either supply a session proxy TLS Secret through `agent.sessionProxy.certSecretName` or let cert-manager issue one with `agent.sessionProxy.certificate.enabled`.  See the `kasm-agent-instance` chart for its values (`name`, `image.*`, `manager.*`, `publicHostname`, `publicPort`, `zone`, `sessionProxy.*`, `otel.*`, `gpu.enabled`, `storageMappings.*`, `imagePuller.*`, `httpRoute.*`, `env`, ...).  |
 | agent.enabled | bool | `true` | Install the Kasm agent instance with this release. Disable it to install only the operator and cluster infrastructure, and create Agent resources separately.  |
 | agent.nameOverride | string | `"kasm-agent-instance"` | Pins the subchart's resource names to its own chart name. Helm sets `.Chart.Name` inside an aliased dependency to the *alias*, so without this the agent's satellite objects would be named after `agent` rather than after `kasm-agent-instance`.  |
+| agent.operatorRBAC.serviceAccount.namespace | string | `""` | Namespace of the operator's ServiceAccount for the Secret-access Role the agent subchart stamps in this namespace. Leave empty here when `operator.enabled=true` (same namespace); set it to the operator's namespace when this release adds a second agent with `operator.enabled=false`.  |
 | csiRclone | object | `{"enabled":false}` | The Veloxpack rclone CSI driver (`csi-driver-rclone`, pulled from `oci://ghcr.io/veloxpack/charts`, alias `csiRclone`). Third-party chart, not maintained by Kasm.  The driver provisions StorageClasses for the CSI driver `rclone.csi.veloxpack.io`, which mounts object storage and other rclone remotes (S3, GCS, Azure Blob, WebDAV, SFTP, ...) into workspace pods. It is what backs Kasm cloud storage mappings, so enable it alongside `agent.storageMappings.enabled` — the StorageClass names created here are the ones referenced by the storage mappings configured in the Kasm manager UI.  Nodes must have the FUSE kernel module available for rclone mounts to work.  Everything nested under `csiRclone` other than `enabled` is passed straight through to the upstream chart; run `helm show values oci://ghcr.io/veloxpack/charts/csi-driver-rclone --version 0.5.0` for the full reference.  |
 | csiRclone.enabled | bool | `false` | Install the rclone CSI driver with this release. Leave disabled when the driver is already installed in the cluster, or when cloud storage mappings are not used.  |
 | egressInstaller | object | `{"enabled":false,"nameOverride":"kasm-egress-installer"}` | The Kasm egress installer (`kasm-egress-installer` subchart, alias `egressInstaller`). A privileged DaemonSet that chains a CNI shim into every node's CNI conflist and, on request, brings up an OpenVPN/WireGuard/Ziti tunnel inside a session's network namespace.  Requires hostNetwork, hostPID, and a privileged container -- see the subchart's README for why each is load-bearing. This trips the `kasm-disallow-host-namespaces` Kyverno policy by design, the same way `nodePrep` trips the PSS baseline: both are rendered via the `infra` test scenario, which is excluded from the Kyverno gate rather than exempted through it (this repo has no PolicyException mechanism). See docs/egress-installer-port-notes.md in kasm-monorepo for the reviewed risk profile.  Lifecycle (verified live on k3s): a graceful shutdown -- disabling this in a `helm upgrade`, or `helm uninstall` -- restores every patched conflist from its backup and removes the shim, leaving the node's CNI chain as it was found. A hard crash leaves the chain patched; the replacement pod re-installs and re-verifies it on start. The residual risk is the window with no daemon running: the chained shim fails CNI ADD on that node until the DaemonSet restarts it, so a sustained crash-loop still blocks new pod scheduling there.  See the `kasm-egress-installer` chart for its values (`distro`, `cniBinDir`, `cniConfDirs`, `socketDir`, ...).  |
@@ -695,10 +694,10 @@ makes replacing a published preview a deliberate act.
 | nodePrep | object | `{"enabled":false,"nameOverride":"kasm-node-prep"}` | Node preparation (`kasm-node-prep` subchart, alias `nodePrep`). Runs a privileged DaemonSet that builds and loads host kernel modules: `v4l2loopback` for webcam passthrough and `wireguard` for VPN egress on kernels older than 5.6.  The same DaemonSet also carries the optional node tuning under `nodePrep.tuning.*` — a disk swapfile (`tuning.swap`) and kernel tunables (`tuning.sysctls`) — which are off by default and are a reason to enable this subchart even on nodes whose image already ships every kernel module. See "Workspace node best practices" in this chart's README; `tuning.swap` additionally requires the node's kubelet to be configured for swap first.  This subchart needs privileged pods with host access, so the namespace must permit the `privileged` Pod Security Standard. Leave it disabled unless webcam, WireGuard egress or node tuning is used.  See the `kasm-node-prep` chart for its values (`modules.v4l2loopback.enabled`, `modules.v4l2loopback.videoDevices`, `modules.v4l2loopback.exclusiveCaps`, `modules.wireguard.enabled`, `tuning.swap.enabled`, `tuning.sysctls.enabled`, `secureBoot.existingMokSecret`, `nodeSelector`, ...).  |
 | nodePrep.enabled | bool | `false` | Install the privileged node preparation DaemonSet with this release.  |
 | nodePrep.nameOverride | string | `"kasm-node-prep"` | Pins the subchart's resource names to its own chart name. Helm sets `.Chart.Name` inside an aliased dependency to the *alias*, and `nodePrep` is not a valid RFC 1123 name, so without this the chart would render resource names Kubernetes rejects.  |
-| operator | object | `{"enabled":true,"nameOverride":"kasm-agent-operator"}` | The Kasm agent operator (`kasm-agent-operator` subchart, alias `operator`). Installs the Kasm CustomResourceDefinitions, the cluster RBAC, and the controller-manager that reconciles Agent, KasmWorkspace, KasmImagePuller, WarmPool, and WarmPoolInstance resources.  The operator is a cluster singleton: it owns fixed-name ClusterRoles and cluster-scoped CRDs, so only one release per cluster may enable it. Disable it here when the operator is already installed by another release and this release only adds an agent instance.  See the `kasm-agent-operator` chart for its values (`crds.install`, `crds.keep`, `serviceAccount.name`, `rbac.aggregateRoles`, `leaderElect`, `otel.enabled`, `otel.endpoint`, `image.*`, `resources`, ...).  |
+| operator | object | `{"enabled":true,"nameOverride":"kasm-agent-operator"}` | The Kasm agent operator (`kasm-agent-operator` subchart, alias `operator`). Installs the Kasm CustomResourceDefinitions, the cluster RBAC, and the controller-manager that reconciles Agent, KasmWorkspace, and KasmImagePuller resources.  The operator is a cluster singleton: it owns fixed-name ClusterRoles and cluster-scoped CRDs, so only one release per cluster may enable it. Disable it here when the operator is already installed by another release and this release only adds an agent instance.  The CRDs themselves come from the operator chart's `crds/` directory, a Helm `crds/` special directory: Helm installs them on first install and never upgrades or removes them again, and there is no values toggle for this. To have Helm own CRD upgrades instead, install the `kasm-agent-crds` chart as its own release before this one, and upgrade it before this one thereafter -- see `charts/kasm-agent-crds/README.md`.  See the `kasm-agent-operator` chart for its values (`serviceAccount.name`, `rbac.aggregateRoles`, `leaderElect`, `otel.enabled`, `otel.endpoint`, `image.*`, `resources`, ...).  |
 | operator.enabled | bool | `true` | Install the Kasm agent operator with this release.  |
 | operator.nameOverride | string | `"kasm-agent-operator"` | Pins the subchart's resource names to its own chart name. Helm sets `.Chart.Name` inside an aliased dependency to the *alias*, so without this the operator's resources would be named after `operator` rather than after `kasm-agent-operator`. Leave it alone unless you know why you are changing it.  |
-| otelCollector | object | `{"enabled":true,"nameOverride":"kasm-otel-collector"}` | The Kasm OpenTelemetry collector (`kasm-otel-collector` subchart, alias `otelCollector`). Receives OTLP traces, metrics, and logs from the operator, the agent, and workspace pods on ports 4317 (gRPC) and 4318 (HTTP), optionally watches Kubernetes events, and forwards everything to the telemetry backends you point it at.  The backends themselves (an LGTM stack, ClickHouse, a vendor OTLP endpoint) are external to this chart — the collector's exporters reference them, this chart never installs them.  See the `kasm-otel-collector` chart for its values (`receivers.k8sEvents.enabled`, `exporters.otlp.*`, `exporters.clickhouse.*`, `exporters.debug.enabled`, `configOverride`, `image.*`, `resources`, ...).  |
+| otelCollector | object | `{"enabled":true,"nameOverride":"kasm-otel-collector"}` | The Kasm OpenTelemetry collector (`kasm-otel-collector` subchart, alias `otelCollector`). Receives OTLP traces, metrics, and logs from the operator, the agent, and workspace pods on ports 4317 (gRPC) and 4318 (HTTP), optionally watches Kubernetes events, and forwards everything to the telemetry backends you point it at.  The backends themselves (an LGTM stack, ClickHouse, a vendor OTLP endpoint) are external to this chart — the collector's exporters reference them, this chart never installs them. By default no backend is configured: `exporters.otlp` and `exporters.clickhouse` are disabled and `exporters.debug` is enabled, so a fresh install logs telemetry to the collector's own stdout instead of guessing at a backend that may not exist. Set `otelCollector.exporters.otlp.endpoint` (and enable it) and/or `otelCollector.exporters.clickhouse.*` to ship telemetry somewhere real.  See the `kasm-otel-collector` chart for its values (`receivers.k8sEvents.enabled`, `exporters.otlp.*`, `exporters.clickhouse.*`, `exporters.debug.enabled`, `configOverride`, `image.*`, `resources`, ...).  |
 | otelCollector.enabled | bool | `true` | Install the Kasm OpenTelemetry collector with this release. Disable it when workspace telemetry is not wanted, or when the agent and operator should point at a collector that already exists in the cluster.  |
 | otelCollector.nameOverride | string | `"kasm-otel-collector"` | Pins the subchart's resource names to its own chart name. Helm sets `.Chart.Name` inside an aliased dependency to the *alias*, and both the operator and the agent default their OTLP endpoint to `http://<release>-kasm-otel-collector:4318` — so without this the collector Service would be named after `otelCollector` and nothing would find it.  |
 | videoDevicePlugin | object | `{"enabled":false,"nameOverride":"kasm-video-device-plugin"}` | The Kasm video device plugin (`kasm-video-device-plugin` subchart, alias `videoDevicePlugin`). Advertises the `/dev/video*` devices on each node as a scheduleable extended resource (`kasm.com/video` by default) so workspace pods can request a webcam.  The plugin only advertises devices that already exist. Pair it with `nodePrep.enabled` and `nodePrep.modules.v4l2loopback.enabled` unless the nodes provide real capture devices.  See the `kasm-video-device-plugin` chart for its values (`devicePrefix`, `maxDevices`, `resourceName`, `nodeSelector`, ...).  |

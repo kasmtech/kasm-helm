@@ -436,3 +436,53 @@ tests:
       - lengthEqual:
           path: spec.template.spec.volumes
           count: 4
+
+  - it: renders no image pull secrets by default
+    template: templates/daemonset.yaml
+    asserts:
+      - isNull:
+          path: spec.template.spec.imagePullSecrets
+
+  - it: passes image pull secrets through to the pod spec
+    template: templates/daemonset.yaml
+    set:
+      imagePullSecrets:
+        - name: internal-registry
+    asserts:
+      - equal:
+          path: spec.template.spec.imagePullSecrets[0].name
+          value: internal-registry
+
+  - it: injects the source repository login from the named secret
+    template: templates/daemonset.yaml
+    set:
+      modules:
+        v4l2loopback:
+          sourceRepoSecret: v4l2loopback-git
+        wireguard:
+          enabled: true
+          sourceRepoSecret: wireguard-git
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: V4L2_GIT_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: v4l2loopback-git
+                key: password
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: WIREGUARD_GIT_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: wireguard-git
+                key: username
+
+  - it: sets no environment at all when no source repository secret is named
+    template: templates/daemonset.yaml
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].env
+

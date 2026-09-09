@@ -1,5 +1,6 @@
 {{- include "kasmNodePrep.validateEnabled" . }}
 {{- include "kasmNodePrep.validateMethods" . }}
+{{- include "kasmNodePrep.validateInputs" . }}
 {{/*
   The Kernel Module Management custom resource that replaces this chart's own build of
   v4l2loopback when modules.v4l2loopback.method is "kmm".

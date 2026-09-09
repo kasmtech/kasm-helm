@@ -2,7 +2,7 @@
 
 ![Version: 0.1.0](https://img.shields.io/badge/Version-0.1.0-informational?style=flat-square) ![AppVersion: develop](https://img.shields.io/badge/AppVersion-develop-informational?style=flat-square)
 
-The five CustomResourceDefinitions the Kasm Agent operator owns — agents, kasmworkspaces, and kasmimagepullers in the agent.kasm.com group, warmpools and warmpoolinstances in pools.kasm.ai — and nothing else. It ships them as ordinary Helm templates so that a release of this chart owns their lifecycle and `helm upgrade` applies schema changes, for fleets that would rather upgrade CRDs through Helm than through the documented kubectl side channel. The kasm-agent-operator chart keeps its own copy in crds/ for one-command installs; install and upgrade this release before the kasm-agent or kasm-platform releases.
+The CustomResourceDefinitions the Kasm Agent operator owns — agents, kasmworkspaces, and kasmimagepullers in the agent.kasm.com group — and nothing else. It ships them as ordinary Helm templates so that a release of this chart owns their lifecycle and `helm upgrade` applies schema changes, for fleets that would rather upgrade CRDs through Helm than through the documented kubectl side channel. The kasm-agent-operator chart keeps its own copy in crds/ for one-command installs; install and upgrade this release before the kasm-agent or kasm-platform releases.
 
 ## Maintainers
 
@@ -14,15 +14,13 @@ The five CustomResourceDefinitions the Kasm Agent operator owns — agents, kasm
      re-run `./bin/helm-docs --chart-search-root charts/kasm-agent-crds` from the repository root. -->
 ## What this chart installs
 
-The five CustomResourceDefinitions the Kasm Agent operator owns, and nothing else:
+The CustomResourceDefinitions the Kasm Agent operator owns, and nothing else:
 
 | Name | Group | Kind |
 | ---- | ----- | ---- |
 | `agents.agent.kasm.com` | `agent.kasm.com` | `Agent` |
 | `kasmworkspaces.agent.kasm.com` | `agent.kasm.com` | `KasmWorkspace` |
 | `kasmimagepullers.agent.kasm.com` | `agent.kasm.com` | `KasmImagePuller` |
-| `warmpools.pools.kasm.ai` | `pools.kasm.ai` | `WarmPool` |
-| `warmpoolinstances.pools.kasm.ai` | `pools.kasm.ai` | `WarmPoolInstance` |
 
 No ServiceAccount, no RBAC, no operator Deployment — those belong to
 [`kasm-agent-operator`](../kasm-agent-operator). This chart has **no values**: the templates are
@@ -68,9 +66,9 @@ fails the build if the copies ever disagree, so re-copying into only one of them
 On a fresh fleet, **this release goes in first** — before `kasm-agent` or `kasm-platform`:
 
 ```console
-helm install kasm-agent-crds charts/kasm-agent-crds
+helm install kasm-agent-crds oci://registry-1.docker.io/kasmweb/kasm-agent-crds
 
-helm install kasm-agent charts/kasm-agent -n kasm-agent --create-namespace -f values.yaml
+helm install kasm-agent oci://registry-1.docker.io/kasmweb/kasm-agent -n kasm-agent --create-namespace -f values.yaml
 ```
 
 The CRDs are cluster-scoped, so this release's namespace is immaterial; put it wherever your fleet
@@ -86,9 +84,9 @@ reason about CRDs at all, add `--skip-crds` to it.
 app release that carries it must land on a cluster whose CRDs already accept the fields it writes.
 
 ```console
-helm upgrade kasm-agent-crds charts/kasm-agent-crds
+helm upgrade kasm-agent-crds oci://registry-1.docker.io/kasmweb/kasm-agent-crds
 
-helm upgrade kasm-agent charts/kasm-agent -n kasm-agent -f values.yaml
+helm upgrade kasm-agent oci://registry-1.docker.io/kasmweb/kasm-agent -n kasm-agent -f values.yaml
 ```
 
 The reverse order leaves a window in which the new operator writes fields the stored schema prunes.
@@ -129,7 +127,7 @@ the current release: invalid ownership metadata; label validation error: missing
 "app.kubernetes.io/managed-by": must be set to "Helm"
 ```
 
-Label and annotate the five existing CRDs so Helm recognises them as belonging to this release, then
+Label and annotate the existing CRDs so Helm recognises them as belonging to this release, then
 install as normal. Substitute your release name and namespace:
 
 ```console
@@ -142,7 +140,7 @@ done
 ```
 
 ```console
-helm install <release> charts/kasm-agent-crds -n <namespace>
+helm install <release> oci://registry-1.docker.io/kasmweb/kasm-agent-crds -n <namespace>
 ```
 
 This is metadata only: no schema is rewritten, no stored object is touched, and no custom resource is
@@ -152,6 +150,6 @@ ownership check fails again on the namespace instead of the label.
 
 ## Chart value settings
 
-This chart deliberately has none. See [`values.yaml`](./values.yaml) for why, and
+This chart deliberately has none. See [`values.yaml`](values.yaml) for why, and
 [`charts/kasm-agent-operator`](../kasm-agent-operator) for everything about the operator that *is*
 configurable.

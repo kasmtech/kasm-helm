@@ -1,10 +1,12 @@
 {{- $agent := .Values.agent | default dict -}}
 {{- $nodePrep := .Values.nodePrep | default dict -}}
+{{- $operator := .Values.operator | default dict -}}
+{{- $otelCollector := .Values.otelCollector | default dict -}}
 {{- $sessionProxy := dig "sessionProxy" dict $agent -}}
 {{- $agentEnabled := dig "enabled" false $agent -}}
 {{- $nodePrepEnabled := dig "enabled" false $nodePrep -}}
-{{- $operatorEnabled := dig "enabled" false (.Values.operator | default dict) -}}
-{{- $otelEnabled := dig "enabled" false (.Values.otelCollector | default dict) -}}
+{{- $operatorEnabled := dig "enabled" false $operator -}}
+{{- $otelEnabled := dig "enabled" false $otelCollector -}}
 {{- $videoEnabled := dig "enabled" false (.Values.videoDevicePlugin | default dict) -}}
 {{- $csiRcloneEnabled := dig "enabled" false (.Values.csiRclone | default dict) -}}
 {{- $gpuOperatorEnabled := dig "enabled" false (.Values.gpuOperator | default dict) -}}
@@ -14,6 +16,12 @@
 {{- $v4l2 := dig "modules" "v4l2loopback" "enabled" false $nodePrep -}}
 {{- $certEnabled := dig "certificate" "enabled" false $sessionProxy -}}
 {{- $certSecret := dig "certSecretName" "" $sessionProxy -}}
+{{- $selfSigned := dig "selfSigned" "enabled" true $sessionProxy -}}
+{{- /* Telemetry export defaults to on in both the agent and the operator, aimed at the collector
+       this umbrella installs. With the collector switched off and no explicit endpoint, every
+       export goes to a Service that does not exist. */ -}}
+{{- $agentOtelDangling := and $agentEnabled (not $otelEnabled) (dig "otel" "enabled" true $agent) (not (dig "otel" "endpoint" "" $agent)) -}}
+{{- $operatorOtelDangling := and $operatorEnabled (not $otelEnabled) (dig "otel" "enabled" true $operator) (not (dig "otel" "endpoint" "" $operator)) -}}
 CHART NAME: {{ .Chart.Name }}
 CHART VERSION: {{ .Chart.Version }}
 APP VERSION: {{ .Chart.AppVersion }}
@@ -34,18 +42,49 @@ Watch the rollout:
 
   kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }} -w
 
-{{ if $operatorEnabled }}Check that the agent registered with its Kasm manager:
+{{ if $agentEnabled }}Check that the agent registered with its Kasm manager:
 
   kubectl get agents.agent.kasm.com -n {{ .Release.Namespace }}
 
+A freshly registered agent shows up DISABLED in the Kasm admin UI (Infrastructure -> Agents).
+Enable it there, allow one heartbeat interval before launching a session, and make sure the
+workspaces you want are authorized for the users' group. Re-registering after a gap sets the
+agent back to disabled.
 {{ end }}
 {{- if $agentEnabled }}
 {{- if not $certEnabled }}
 SESSION PROXY TLS
+{{- if $selfSigned }}
 
-  agent.sessionProxy.certificate.enabled is false, so this chart does not issue a certificate for
-  the session proxy. The TLS Secret must already exist in namespace "{{ .Release.Namespace }}", of type
-  kubernetes.io/tls, {{ if $certSecret }}named "{{ $certSecret }}"{{ else }}with its name set in agent.sessionProxy.certSecretName{{ end }}.
+  agent.sessionProxy.certificate.enabled is false, so cert-manager was not asked for a certificate.
+  The session proxy mounts the kubernetes.io/tls Secret {{ if $certSecret }}"{{ $certSecret }}"{{ else }}named by agent.sessionProxy.certSecretName{{ end }}
+  in namespace "{{ .Release.Namespace }}":
+
+    * if that Secret already existed before this release, it is used as-is and never overwritten;
+    * otherwise this release generated a SELF-SIGNED certificate there, which browsers do not
+      trust. On the relayed topology no browser ever sees it; on any direct-connect path (an
+      Ingress, a passthrough Route, a TLSRoute, a published Service) replace it before real use.
+
+  To use a real certificate, either let cert-manager issue it:
+
+    agent.sessionProxy.certificate.enabled=true plus agent.sessionProxy.certificate.issuerRef
+
+  or supply your own. On a NEW install, create the Secret first and the chart leaves it alone:
+
+    kubectl create secret tls {{ $certSecret | default "<agent.sessionProxy.certSecretName>" }} \
+      --namespace {{ .Release.Namespace }} \
+      --cert=path/to/tls.crt --key=path/to/tls.key
+
+  On an EXISTING release the generated Secret belongs to Helm: set
+  agent.sessionProxy.selfSigned.enabled=false and upgrade (Helm removes the generated Secret),
+  then create yours with the command above. Browsers connect to the session proxy directly, so
+  the certificate must be trusted by the client, not just by the cluster.
+{{- else }}
+
+  agent.sessionProxy.certificate.enabled and agent.sessionProxy.selfSigned.enabled are both false,
+  so this chart neither issues nor generates a certificate for the session proxy. The TLS Secret
+  must already exist in namespace "{{ .Release.Namespace }}", of type kubernetes.io/tls,
+  {{ if $certSecret }}named "{{ $certSecret }}"{{ else }}with its name set in agent.sessionProxy.certSecretName{{ end }}, or the proxy never starts.
 
   Create it from an existing certificate:
 
@@ -57,9 +96,24 @@ SESSION PROXY TLS
   agent.sessionProxy.certificate.issuerRef and agent.sessionProxy.certificate.dnsNames, to have
   cert-manager issue and renew it. Browsers connect to the session proxy directly, so the
   certificate must be trusted by the client, not just by the cluster.
-
+{{- end }}
 {{ end }}
 {{- end }}
+{{- if or $agentOtelDangling $operatorOtelDangling }}
+WARNING: telemetry export is on, but otelCollector.enabled is false.
+{{ if $agentOtelDangling }}
+  * agent.otel.enabled is true and agent.otel.endpoint is empty
+{{- end }}
+{{- if $operatorOtelDangling }}
+  * operator.otel.enabled is true and operator.otel.endpoint is empty
+{{- end }}
+
+  An empty endpoint means the collector this release did NOT install
+  (http://{{ .Release.Name }}-kasm-otel-collector:4318), so every export fails until you either point
+  at a real collector (agent.otel.endpoint / operator.otel.endpoint) or switch the export off
+  (agent.otel.enabled=false / operator.otel.enabled=false).
+
+{{ end }}
 {{- if and $storageMappings (not $csiRcloneEnabled) }}
 WARNING: agent.storageMappings.enabled is true but csiRclone.enabled is false.
 
@@ -119,3 +173,10 @@ NOTE: networkPolicies.enabled is true.
 
 {{ end }}
 Documentation: https://docs.kasm.com
+{{- if and $agentEnabled (not $operatorEnabled) (not (dig "operatorRBAC" "serviceAccount" "namespace" "" $agent)) }}
+
+WARNING: operator.enabled=false and agent.operatorRBAC.serviceAccount.namespace is empty, so the Role that lets
+  the operator write this namespace's storage-mapping Secrets binds a ServiceAccount in {{ .Release.Namespace }}.
+  If the operator runs in another namespace, set agent.operatorRBAC.serviceAccount.namespace to it, or every
+  session with a storage mapping fails with Forbidden.
+{{- end }}

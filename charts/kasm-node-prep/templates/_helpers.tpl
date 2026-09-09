@@ -230,3 +230,42 @@ app.kubernetes.io/part-of: kasm-ai
 {{- end -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+  Shell-quote one value for the reconcile script: single-quoted, with any embedded single quote closed,
+  escaped and reopened ('\''). Nothing expands inside single quotes, so a value such as
+  https://example.com/x$(id).git or a sysctl key carrying ";" is a literal string in the script, never code.
+  Every chart value that lands in shell text goes through this.
+*/}}
+{{- define "kasmNodePrep.shq" -}}'{{ . | toString | replace "'" "'\\''" }}'{{- end -}}
+
+{{/*
+  Reject values that must never reach the reconcile script or the pod log as written:
+  - credentials embedded in modules.*.sourceRepo (they would be stored in the ConfigMap and printed by the
+    clone log line): use modules.*.sourceRepoSecret instead;
+  - modules.*.sourceRepoSecret together with method: kmm (a KMM build clones inside its Dockerfile, where
+    no Secret is injected);
+  - tuning.sysctls.values keys and values outside the character set sysctl itself accepts. The script
+    single-quotes them anyway; this just turns a typo into a render error instead of a runtime one.
+  Included by every template so a kmm-only install (no DaemonSet) still surfaces the error.
+*/}}
+{{- define "kasmNodePrep.validateInputs" -}}
+{{- range $name, $m := (dict "v4l2loopback" .Values.modules.v4l2loopback "wireguard" .Values.modules.wireguard) -}}
+{{- if and $m.enabled (regexMatch "^[A-Za-z][A-Za-z0-9+.-]*://[^/]*@" ($m.sourceRepo | toString)) -}}
+{{- fail (printf "kasm-node-prep: modules.%s.sourceRepo carries credentials in the URL. They would be written into the ConfigMap and printed in the pod log; put them in a Secret with keys username and password and set modules.%s.sourceRepoSecret instead." $name $name) -}}
+{{- end -}}
+{{- if and $m.enabled $m.sourceRepoSecret (eq $m.method "kmm") -}}
+{{- fail (printf "kasm-node-prep: modules.%s.sourceRepoSecret applies to method=build only; a KMM in-cluster build clones inside its Dockerfile and cannot use a Secret. Use an internal mirror that needs no login, or method: build." $name) -}}
+{{- end -}}
+{{- end -}}
+{{- if .Values.tuning.sysctls.enabled -}}
+{{- range $key, $value := .Values.tuning.sysctls.values -}}
+{{- if not (regexMatch "^[A-Za-z0-9._/-]+$" $key) -}}
+{{- fail (printf "kasm-node-prep: tuning.sysctls.values key %q is not a valid sysctl name (allowed: letters, digits, . _ / -)." $key) -}}
+{{- end -}}
+{{- if not (regexMatch "^[A-Za-z0-9._:/ -]*$" (include "kasmNodePrep.sysctlValue" $value)) -}}
+{{- fail (printf "kasm-node-prep: tuning.sysctls.values[%q] has an unexpected value %q (allowed: letters, digits, . _ : / space -)." $key (include "kasmNodePrep.sysctlValue" $value)) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}

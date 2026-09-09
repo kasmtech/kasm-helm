@@ -296,7 +296,7 @@ docs-check:
     - apt-get install -y --no-install-recommends bash curl make git ca-certificates
   parallel:
     matrix:
-      - CHECK: [readme, changelog, readme-all, changelog-all]
+      - CHECK: [readme, changelog, readme-all, changelog-all, linkcheck, images]
   script:
     - |
       if [ "$CHECK" = "readme" ]; then
@@ -307,6 +307,10 @@ docs-check:
         make readme-check-all
       elif [ "$CHECK" = "changelog-all" ]; then
         BASE_BRANCH="${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-develop}" make changelog-check-all
+      elif [ "$CHECK" = "linkcheck" ]; then
+        make linkcheck
+      elif [ "$CHECK" = "images" ]; then
+        make images-check
       fi
   rules:
     - if: $CI_COMMIT_BRANCH

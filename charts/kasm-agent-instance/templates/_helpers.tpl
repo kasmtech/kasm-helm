@@ -92,10 +92,13 @@ app.kubernetes.io/part-of: kasm-ai
   The manager hostname, which has no default.
 */}}
 {{- define "kasmAgentInstance.managerHostname" -}}
-{{- if not .Values.manager.hostname -}}
-{{- fail "agent.manager.hostname is required: set it to the hostname of the Kasm manager (or the proxy in front of it) this agent registers with." -}}
-{{- end -}}
+{{- if .Values.manager.hostname -}}
 {{- .Values.manager.hostname -}}
+{{- else if .Values.inClusterControlPlane -}}
+{{- printf "%s-proxy-default.%s.svc.cluster.local" .Release.Name .Release.Namespace -}}
+{{- else -}}
+{{- fail "agent.manager.hostname is required: set it to the hostname of the Kasm manager (or the proxy in front of it) this agent registers with. (With a kasm-helm control plane in this same release, agent.inClusterControlPlane=true derives it instead.)" -}}
+{{- end -}}
 {{- end }}
 
 {{/*
@@ -103,10 +106,13 @@ app.kubernetes.io/part-of: kasm-ai
   for the session-proxy certificate's names and the HTTPRoute's hostnames.
 */}}
 {{- define "kasmAgentInstance.publicHostname" -}}
-{{- if not .Values.publicHostname -}}
-{{- fail "agent.publicHostname is required: set it to the externally reachable address browsers use to connect to this agent's session proxy." -}}
-{{- end -}}
+{{- if .Values.publicHostname -}}
 {{- .Values.publicHostname -}}
+{{- else if .Values.inClusterControlPlane -}}
+{{- printf "%s-session-proxy.%s.svc.cluster.local" .Values.name .Release.Namespace -}}
+{{- else -}}
+{{- fail "agent.publicHostname is required: set it to the externally reachable address browsers use to connect to this agent's session proxy. (With a kasm-helm control plane in this same release, agent.inClusterControlPlane=true derives it instead.)" -}}
+{{- end -}}
 {{- end }}
 
 {{/*
@@ -130,8 +136,10 @@ app.kubernetes.io/part-of: kasm-ai
 {{- .Values.manager.existingTokenSecret -}}
 {{- else if .Values.manager.token -}}
 {{- printf "%s-manager-token" (include "kasmAgentInstance.fullname" .) -}}
+{{- else if .Values.inClusterControlPlane -}}
+{{- printf "%s-secrets" .Release.Name -}}
 {{- else -}}
-{{- fail "agent.manager: no manager token configured. Set agent.manager.existingTokenSecret to the name of a Secret already holding the token (preferred), or agent.manager.token to the token itself so this chart creates one." -}}
+{{- fail "agent.manager: no manager token configured. Set agent.manager.existingTokenSecret to the name of a Secret already holding the token (preferred), or agent.manager.token to the token itself so this chart creates one. (With a kasm-helm control plane in this same release, agent.inClusterControlPlane=true reads the token the control plane generated.)" -}}
 {{- end -}}
 {{- end }}
 
@@ -142,6 +150,11 @@ app.kubernetes.io/part-of: kasm-ai
 {{- define "kasmAgentInstance.managerTokenSecretKey" -}}
 {{- if .Values.manager.existingTokenSecret -}}
 {{- .Values.manager.tokenSecretKey | default "token" -}}
+{{- else if and .Values.inClusterControlPlane (not .Values.manager.token) -}}
+{{- /* kasm-helm stores the registration token under "manager-token" in its secrets Secret.
+       Not tokenSecretKey, which already defaults to "token" and so cannot express this;
+       point at a different key by setting manager.existingTokenSecret explicitly. */ -}}
+manager-token
 {{- else -}}
 token
 {{- end -}}
@@ -173,3 +186,25 @@ token
 {{- toYaml $env -}}
 {{- end -}}
 {{- end }}
+
+{{/*
+  Namespace of the operator's ServiceAccount for the namespaced Role this chart stamps: an explicit
+  operatorRBAC.serviceAccount.namespace, else this release's namespace (the umbrella layout, where the
+  operator and the agent share one namespace).
+*/}}
+{{- define "kasmAgentInstance.operatorNamespace" -}}
+{{- .Values.operatorRBAC.serviceAccount.namespace | default .Release.Namespace -}}
+{{- end -}}
+
+{{/*
+  The operator's ServiceAccount name, required: without it the Role binds nothing and every storage
+  mapping fails with Forbidden.
+*/}}
+{{- define "kasmAgentInstance.operatorServiceAccount" -}}
+{{- $n := .Values.operatorRBAC.serviceAccount.name -}}
+{{- if not $n -}}
+{{- fail "agent.operatorRBAC.serviceAccount.name is required: the operator's ServiceAccount that gets Secret access in this namespace (the kasm-agent-operator chart's serviceAccount.name, controller-manager by default)" -}}
+{{- end -}}
+{{- $n -}}
+{{- end -}}
+

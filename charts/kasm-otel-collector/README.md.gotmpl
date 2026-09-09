@@ -27,7 +27,7 @@ Please see our [official documentation site](https://docs.kasm.com) for more inf
 
 * Kubernetes 1.26 or newer — the shared floor for the whole `kasm-agent` family (older versions of Kubernetes may work, however, we try to keep this chart updated to [supported versions of Kubernetes](https://kubernetes.io/releases/))
 * Helm 3.18.x or newer ([installation](https://helm.sh/docs/helm/helm_install/))
-* An OTLP-capable backend to export to, reachable from the cluster. The default endpoint targets a Grafana LGTM stack at `lgtm.observability.svc.cluster.local:4317`.
+* By default, `exporters.otlp` and `exporters.clickhouse` are both disabled and `exporters.debug` is enabled, so a default install logs telemetry to the collector's own stdout instead of guessing at a backend that may not exist. To ship telemetry somewhere real, set `exporters.otlp.endpoint` (and `exporters.otlp.enabled: true`) and/or `exporters.clickhouse.endpoint` (and `exporters.clickhouse.enabled: true`) to a backend reachable from the cluster.
 * When `exporters.clickhouse.enabled` is set, a Secret holding the ClickHouse password must already exist in the release namespace - see `exporters.clickhouse.existingSecret`. The collector refuses to start when that password is unresolvable.
 
 ## What this chart deploys
@@ -49,7 +49,7 @@ Three pipelines are assembled from whichever exporters are enabled:
 
 Metrics deliberately do not go to ClickHouse: Prometheus already keeps them cumulative and cheap, and ClickHouse adds nothing for that shape. The `metrics` pipeline is dropped entirely if ClickHouse is the only exporter enabled.
 
-Templating fails if no exporter is enabled at all, rather than deploying a collector that silently drops every signal it receives.
+Templating fails if no exporter is enabled at all, and it fails if `exporters.otlp.enabled` or `exporters.clickhouse.enabled` is true with an empty `endpoint` - both would otherwise deploy a collector that silently drops every signal it receives.
 
 {{ define "chart.valueDefaultColumnRender" }}
 {{- $defaultValue := (default .Default .AutoDefault)  -}}

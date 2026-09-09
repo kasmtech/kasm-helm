@@ -37,6 +37,36 @@ tests:
           path: spec.template.metadata.annotations["kubectl.kubernetes.io/default-container"]
           value: manager
 
+  # tests/kyverno/pod-security.baseline.yaml and tests/kyverno/probes.required.yaml only inspect a pod
+  # template that carries these two markers -- a template without them is skipped by both policies and
+  # silently leaves the gate. Pinned here (and unconditionally, with no `set:`) so dropping either
+  # annotation fails CI instead of quietly disabling the hardening and probe gates for the operator.
+  - it: always marks the pod template as hardened and health-checked for the Kyverno gates
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["kasm.com/security"]
+          value: "true"
+      - equal:
+          path: spec.template.metadata.annotations["kasm.com/healthcheck"]
+          value: "true"
+
+  - it: does not let podAnnotations overwrite the Kyverno gate markers
+    set:
+      podAnnotations:
+        example.com/scrape: "true"
+        kasm.com/security: "false"
+        kasm.com/healthcheck: "false"
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["example.com/scrape"]
+          value: "true"
+      - equal:
+          path: spec.template.metadata.annotations["kasm.com/security"]
+          value: "true"
+      - equal:
+          path: spec.template.metadata.annotations["kasm.com/healthcheck"]
+          value: "true"
+
   - it: merges podAnnotations and podLabels without dropping the chart's own
     set:
       podAnnotations:
@@ -252,10 +282,14 @@ tests:
             runAsNonRoot: true
             seccompProfile:
               type: RuntimeDefault
+            fsGroupChangePolicy: OnRootMismatch
       - equal:
           path: spec.template.spec.containers[0].securityContext
           value:
             allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
             capabilities:
               drop:
                 - ALL

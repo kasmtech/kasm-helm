@@ -1,0 +1,70 @@
+suite: inClusterControlPlane derivation
+
+templates:
+  - templates/agent.yaml
+  - templates/self-signed-cert.yaml
+
+tests:
+  - it: derives manager, token and public hostname from the release's control plane
+    template: templates/agent.yaml
+    set:
+      inClusterControlPlane: true
+    asserts:
+      - equal:
+          path: spec.manager.hostname
+          value: RELEASE-NAME-proxy-default.NAMESPACE.svc.cluster.local
+      - equal:
+          path: spec.manager.tokenSecretRef.name
+          value: RELEASE-NAME-secrets
+      - equal:
+          path: spec.manager.tokenSecretRef.key
+          value: manager-token          # not "token" - kasm-helm stores it under this key
+      - equal:
+          path: spec.publicHostname
+          value: k8s-agent-session-proxy.NAMESPACE.svc.cluster.local
+
+  - it: explicit values still win over the derived ones
+    template: templates/agent.yaml
+    set:
+      inClusterControlPlane: true
+      manager:
+        hostname: kasm.example.com
+        existingTokenSecret: my-token
+      publicHostname: sessions.example.com
+    asserts:
+      - equal:
+          path: spec.manager.hostname
+          value: kasm.example.com
+      - equal:
+          path: spec.manager.tokenSecretRef.name
+          value: my-token
+      - equal:
+          path: spec.publicHostname
+          value: sessions.example.com
+
+  - it: generates a session-proxy certificate when cert-manager is not issuing one
+    template: templates/self-signed-cert.yaml
+    set:
+      inClusterControlPlane: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.name
+          value: kasm-session-proxy-tls
+      - equal:
+          path: type
+          value: kubernetes.io/tls
+
+  - it: defers to cert-manager when that is enabled
+    template: templates/self-signed-cert.yaml
+    set:
+      inClusterControlPlane: true
+      sessionProxy:
+        certificate:
+          enabled: true
+          issuerRef:
+            name: letsencrypt-prod
+    asserts:
+      - hasDocuments:
+          count: 0

@@ -1,6 +1,6 @@
 # GPU nodes (CUDA and EGL/DRI)
 
-> **Applies to:** [GPU workspaces (CUDA) and GPU graphics acceleration (EGL/DRI)](../feature-matrix.md#devices-gpu-webcam-audio), and [node targeting](../feature-matrix.md#observability--operations) · **Charts/values:** `gpuOperator.enabled`, `agent.gpu.enabled`, `gpuOperator.driver.enabled`, `gpuOperator.toolkit.enabled`, `gpuOperator.devicePlugin.enabled`, `gpuOperator.nfd.enabled`, `agent.workspacesNodeSelector`, `agent.nodeSelector`
+> **Applies to:** [GPU workspaces (CUDA) and GPU graphics acceleration (EGL/DRI)](../../reference/feature-matrix.md#devices-gpu-webcam-audio), and [node targeting](../../reference/feature-matrix.md#observability-and-operations) · **Charts/values:** `gpuOperator.enabled`, `agent.gpu.enabled`, `gpuOperator.driver.enabled`, `gpuOperator.toolkit.enabled`, `gpuOperator.devicePlugin.enabled`, `gpuOperator.nfd.enabled`, `agent.workspacesNodeSelector`, `agent.nodeSelector`
 
 > **Honest scope note.** This repository's lab clusters have **no GPU nodes**. The chart path below
 > is render-validated (it is exercised by the `infra` test scenario) but has not been run against
@@ -27,7 +27,7 @@ acceleration, so it is required on the EGL path too — even when no CUDA device
   * *Pre-installed host drivers* — most cloud GPU images already have them; set
     `gpuOperator.driver.enabled=false` or the operator will fight the host driver.
 * The GPU Operator is **cluster-scoped**: install it once per cluster, from at most one release
-  ([Scope](../../charts/kasm-agent/README.md#scope)). If NVIDIA's device plugin is already running,
+  ([Scope](../../../charts/kasm-agent/README.md#scope)). If NVIDIA's device plugin is already running,
   leave `gpuOperator.enabled=false` and set only `agent.gpu.enabled=true`.
 * Node Feature Discovery does the GPU labelling. Set `gpuOperator.nfd.enabled=false` if NFD already
   runs in the cluster.
@@ -77,7 +77,7 @@ EGL/DRI graphics acceleration is a **node-image** concern: drivers pre-installed
 3. **Upgrade the release**, allowing time for the operator's operands to roll out.
 
    ```console
-   helm upgrade --install kasm-agent charts/kasm-agent \
+   helm upgrade --install kasm-agent oci://registry-1.docker.io/kasmweb/kasm-agent \
      -n kasm-agent -f values.yaml --timeout 20m
    ```
 
@@ -88,7 +88,7 @@ EGL/DRI graphics acceleration is a **node-image** concern: drivers pre-installed
 5. **Airgapped?** Do **not** mirror the GPU Operator from `make images-agent`; it pulls a much larger
    operand set at runtime. Follow NVIDIA's air-gapped procedure and pass its values through with the
    `gpuOperator.` prefix — see
-   [Airgapped installation → Third-party subcharts](../../charts/kasm-agent/README.md#4-third-party-subcharts).
+   [Airgapped installation → Third-party subcharts](../../../charts/kasm-agent/README.md#4-third-party-subcharts).
 
 ## Verify
 

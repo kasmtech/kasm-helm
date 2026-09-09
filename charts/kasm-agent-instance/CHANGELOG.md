@@ -6,6 +6,20 @@ All notable changes to the kasm-agent-instance chart are documented here.
 
 ### Fixed
 
+- `make images-agent` also missed every `KasmImagePuller.spec.images[].image` entry: its extractor did not match a key that opens a YAML list item (`- image: ...`), so the workspace images a release pre-pulls were absent from the airgap mirror list. Found by `make images-check`, which now extracts references with an independent structural yq walk instead of re-running the same awk (an earlier version could not fail).
+- `sessionProxy.selfSigned` emitted its Secret even when one of that name already existed that the release did not own — the pre-created, bring-your-own case the value's own comment promised would work, and the exact flow `tests/values-agent/dev-parity.yaml` and `examples/kasm-agent/dev-cluster-values.yaml` document. Helm refuses to adopt a resource without its ownership metadata, so `helm install` failed with `exists and cannot be imported into the current release`. The template now reads the existing Secret's `meta.helm.sh/release-name`/`release-namespace` annotations: a Secret this release owns is reused (or regenerated when its `self-signed-for` marker no longer matches `publicHostname`), and a Secret anyone else created renders nothing at all, leaving the proxy to mount it by name.
+- The five session-proxy exposure options (`ingress`, `httpRoute`, `route`, `tlsRoute`, `gatewayRoute`) could all be enabled at once, and `httpRoute`/`tlsRoute` rendered a route with no `parentRefs` — attached to no Gateway — without complaint. A new `templates/validation.yaml` (mirroring kasm-helm's) fails the render when more than one is enabled, or when either Gateway API route has empty `parentRefs`, naming the values involved.
+- `make images-agent` omitted the session proxy's nginx sidecar. It matched only lines whose key was literally `image:`, and the sidecar is referenced at `Agent.spec.sessionProxy.sidecarImage` — so `docker.io/kasmweb/kasm-nginx-sidecar` never appeared in the generated list, and an airgap mirror built from it produced a session proxy that could not start (the proxy is a two-container pod). The extractor now matches any key ending in `image`, and a new `make images-check` target fails when the rendered manifests reference an image the list does not carry. Wired into the `docs-check` CI matrix.
+
+### Added
+
+- Adds `inClusterControlPlane` (default `false`), which derives `manager.hostname`, the manager token Secret and `publicHostname` from a `kasm-helm` release installed under the same release name and namespace. Those three values otherwise have no default and fail the render, which is what made a Kubernetes agent impossible to install without a values file. Anything set explicitly still wins.
+- Adds `sessionProxy.selfSigned.enabled` (default `true`), generating the Secret named by `sessionProxy.certSecretName` when cert-manager is not issuing one — the session proxy will not start without it. An existing Secret of that name is reused. On the default relayed topology this certificate is never shown to a browser; on direct-connect paths it must be replaced with a publicly trusted one.
+
+- A namespaced `Role` + `RoleBinding` (`<fullname>-operator`), always rendered, granting the Kasm agent operator's ServiceAccount `secrets` get/create/update in this namespace: the operator's ClusterRole no longer carries any Secret access. `operatorRBAC.serviceAccount.name` names the ServiceAccount (default `controller-manager`) and `operatorRBAC.serviceAccount.namespace` where it runs (empty = this release's namespace; set it in the two-namespace layout).
+
+### Fixed
+
 - `tlsRoute` rendered `gateway.networking.k8s.io/v1alpha2`, which the Gateway API 1.5+ standard-channel CRDs no longer serve (`TLSRoute` graduated to `v1` in 1.5), so the chart-managed route was rejected by the API server on current clusters. The apiVersion is now chosen at render time: `v1` when the cluster serves it, `v1alpha2` when only the older experimental-channel CRD is served, `v1` when rendering offline, and the new `tlsRoute.apiVersion` value overrides all three.
 
 ### Added

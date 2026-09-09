@@ -23,15 +23,20 @@
 
 # operator -- The Kasm agent operator (`kasm-agent-operator` subchart, alias `operator`). Installs
 # the Kasm CustomResourceDefinitions, the cluster RBAC, and the controller-manager that reconciles
-# Agent, KasmWorkspace, KasmImagePuller, WarmPool, and WarmPoolInstance resources.
+# Agent, KasmWorkspace, and KasmImagePuller resources.
 #
 # The operator is a cluster singleton: it owns fixed-name ClusterRoles and cluster-scoped CRDs, so
 # only one release per cluster may enable it. Disable it here when the operator is already installed
 # by another release and this release only adds an agent instance.
 #
-# See the `kasm-agent-operator` chart for its values (`crds.install`, `crds.keep`,
-# `serviceAccount.name`, `rbac.aggregateRoles`, `leaderElect`, `otel.enabled`, `otel.endpoint`,
-# `image.*`, `resources`, ...).
+# The CRDs themselves come from the operator chart's `crds/` directory, a Helm `crds/` special
+# directory: Helm installs them on first install and never upgrades or removes them again, and there
+# is no values toggle for this. To have Helm own CRD upgrades instead, install the `kasm-agent-crds`
+# chart as its own release before this one, and upgrade it before this one thereafter -- see
+# `charts/kasm-agent-crds/README.md`.
+#
+# See the `kasm-agent-operator` chart for its values (`serviceAccount.name`, `rbac.aggregateRoles`,
+# `leaderElect`, `otel.enabled`, `otel.endpoint`, `image.*`, `resources`, ...).
 #
 operator:
   # operator.enabled -- Install the Kasm agent operator with this release.
@@ -50,7 +55,11 @@ operator:
 # forwards everything to the telemetry backends you point it at.
 #
 # The backends themselves (an LGTM stack, ClickHouse, a vendor OTLP endpoint) are external to this
-# chart — the collector's exporters reference them, this chart never installs them.
+# chart — the collector's exporters reference them, this chart never installs them. By default no
+# backend is configured: `exporters.otlp` and `exporters.clickhouse` are disabled and `exporters.debug`
+# is enabled, so a fresh install logs telemetry to the collector's own stdout instead of guessing at a
+# backend that may not exist. Set `otelCollector.exporters.otlp.endpoint` (and enable it) and/or
+# `otelCollector.exporters.clickhouse.*` to ship telemetry somewhere real.
 #
 # See the `kasm-otel-collector` chart for its values (`receivers.k8sEvents.enabled`,
 # `exporters.otlp.*`, `exporters.clickhouse.*`, `exporters.debug.enabled`, `configOverride`,
@@ -88,6 +97,14 @@ agent:
   # the operator and cluster infrastructure, and create Agent resources separately.
   #
   enabled: true
+  # agent.operatorRBAC.serviceAccount.namespace -- Namespace of the operator's ServiceAccount for the Secret-access
+  # Role the agent subchart stamps in this namespace. Leave empty here when `operator.enabled=true` (same
+  # namespace); set it to the operator's namespace when this release adds a second agent with
+  # `operator.enabled=false`.
+  #
+  operatorRBAC:
+    serviceAccount:
+      namespace: ""
   # agent.nameOverride -- Pins the subchart's resource names to its own chart name. Helm sets
   # `.Chart.Name` inside an aliased dependency to the *alias*, so without this the agent's satellite
   # objects would be named after `agent` rather than after `kasm-agent-instance`.

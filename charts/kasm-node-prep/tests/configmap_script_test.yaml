@@ -17,22 +17,22 @@ tests:
           path: data["ensure-modules.sh"]
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'V4L2_DEVICES="4"'
+          pattern: 'V4L2_DEVICES=''4'''
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'V4L2_EXCLUSIVE_CAPS="1"'
+          pattern: 'V4L2_EXCLUSIVE_CAPS=''1'''
       - matchRegex:
           path: data["ensure-modules.sh"]
           pattern: 'modprobe v4l2loopback "devices=\$\{V4L2_DEVICES\}" "exclusive_caps=\$\{V4L2_EXCLUSIVE_CAPS\}"'
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'V4L2_SOURCE_REPO="https://github.com/umlaeute/v4l2loopback.git"'
+          pattern: 'V4L2_SOURCE_REPO=''https://github.com/umlaeute/v4l2loopback.git'''
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'V4L2_SOURCE_REF="v0\.13\.2"'
+          pattern: 'V4L2_SOURCE_REF=''v0\.13\.2'''
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'RECONCILE_INTERVAL="300"'
+          pattern: 'RECONCILE_INTERVAL=''300'''
       - matchRegex:
           path: data["ensure-modules.sh"]
           pattern: 'set -euo pipefail'
@@ -49,19 +49,19 @@ tests:
     asserts:
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'V4L2_DEVICES="12"'
+          pattern: 'V4L2_DEVICES=''12'''
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'V4L2_EXCLUSIVE_CAPS="0"'
+          pattern: 'V4L2_EXCLUSIVE_CAPS=''0'''
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'V4L2_SOURCE_REF="v0\.13\.1"'
+          pattern: 'V4L2_SOURCE_REF=''v0\.13\.1'''
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'V4L2_SOURCE_REPO="https://git\.contoso\.com/mirrors/v4l2loopback\.git"'
+          pattern: 'V4L2_SOURCE_REPO=''https://git\.contoso\.com/mirrors/v4l2loopback\.git'''
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'RECONCILE_INTERVAL="60"'
+          pattern: 'RECONCILE_INTERVAL=''60'''
 
   - it: omits the wireguard section entirely when wireguard is disabled by default
     asserts:
@@ -83,7 +83,7 @@ tests:
     asserts:
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'WIREGUARD_SOURCE_REPO="https://git\.zx2c4\.com/wireguard-linux-compat"'
+          pattern: 'WIREGUARD_SOURCE_REPO=''https://git\.zx2c4\.com/wireguard-linux-compat'''
       - matchRegex:
           path: data["ensure-modules.sh"]
           pattern: 'grep -q wg_ /proc/kallsyms'
@@ -116,7 +116,7 @@ tests:
     asserts:
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'MOK_DIR="/etc/kasm-mok"'
+          pattern: 'MOK_DIR=\"/etc/kasm-mok\"'
       - matchRegex:
           path: data["ensure-modules.sh"]
           pattern: 'scripts/sign-file'
@@ -139,10 +139,10 @@ tests:
     asserts:
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'V4L2_SOURCE_PATH=""'
+          pattern: 'V4L2_SOURCE_PATH='''''
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'git clone --quiet --depth 1 --branch "\$ref" "\$repo" "\$dest"'
+          pattern: 'clone --quiet --depth 1 --branch "\$ref" "\$repo" "\$dest"'
       - matchRegex:
           path: data["ensure-modules.sh"]
           pattern: 'apt-get install -y --no-install-recommends build-essential git kmod ca-certificates'
@@ -187,16 +187,16 @@ tests:
     asserts:
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'V4L2_SOURCE_PATH="/opt/kasm-modules/v4l2loopback"'
+          pattern: 'V4L2_SOURCE_PATH=''/opt/kasm-modules/v4l2loopback'''
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'WIREGUARD_SOURCE_PATH="/opt/kasm-modules/wireguard-linux-compat"'
+          pattern: 'WIREGUARD_SOURCE_PATH=''/opt/kasm-modules/wireguard-linux-compat'''
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'stage_source "\$V4L2_SOURCE_REPO" "\$V4L2_SOURCE_REF" "\$src" "\$V4L2_SOURCE_PATH"'
+          pattern: 'stage_source "\$V4L2_SOURCE_REPO" "\$V4L2_SOURCE_REF" "\$src" "\$V4L2_SOURCE_PATH" "\$\{V4L2_GIT_USERNAME:-\}" "\$\{V4L2_GIT_PASSWORD:-\}"'
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'stage_source "\$WIREGUARD_SOURCE_REPO" "" "\$src" "\$WIREGUARD_SOURCE_PATH"'
+          pattern: 'stage_source "\$WIREGUARD_SOURCE_REPO" "" "\$src" "\$WIREGUARD_SOURCE_PATH" "\$\{WIREGUARD_GIT_USERNAME:-\}" "\$\{WIREGUARD_GIT_PASSWORD:-\}"'
       - matchRegex:
           path: data["ensure-modules.sh"]
           pattern: 'cp -a "\$source_path" "\$dest"'
@@ -218,13 +218,13 @@ tests:
     asserts:
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'V4L2_SOURCE_PATH="/opt/kasm-modules/v4l2loopback"'
+          pattern: 'V4L2_SOURCE_PATH=''/opt/kasm-modules/v4l2loopback'''
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'WIREGUARD_SOURCE_PATH=""'
+          pattern: 'WIREGUARD_SOURCE_PATH='''''
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'git clone --quiet --depth 1 "\$repo" "\$dest"'
+          pattern: 'clone --quiet --depth 1 "\$repo" "\$dest"'
       - matchRegex:
           path: data["ensure-modules.sh"]
           pattern: 'command -v git >/dev/null 2>&1'
@@ -260,10 +260,10 @@ tests:
     asserts:
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'apply_sysctl "fs\.inotify\.max_user_instances" "1024"'
+          pattern: 'apply_sysctl ''fs\.inotify\.max_user_instances'' ''1024'''
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'apply_sysctl "fs\.inotify\.max_user_watches" "524288"'
+          pattern: 'apply_sysctl ''fs\.inotify\.max_user_watches'' ''524288'''
       - matchRegex:
           path: data["ensure-modules.sh"]
           pattern: 'sysctl -w "\$\{key\}=\$\{value\}"'
@@ -289,13 +289,13 @@ tests:
     asserts:
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'apply_sysctl "kernel\.pid_max" "4194304"'
+          pattern: 'apply_sysctl ''kernel\.pid_max'' ''4194304'''
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'apply_sysctl "net\.core\.somaxconn" "4096"'
+          pattern: 'apply_sysctl ''net\.core\.somaxconn'' ''4096'''
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'apply_sysctl "fs\.inotify\.max_user_instances" "1024"'
+          pattern: 'apply_sysctl ''fs\.inotify\.max_user_instances'' ''1024'''
       - notMatchRegex:
           path: data["ensure-modules.sh"]
           pattern: 'e\+0'
@@ -311,7 +311,7 @@ tests:
     asserts:
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'apply_sysctl "net\.ipv4\.tcp_rmem" "4096 87380 6291456"'
+          pattern: 'apply_sysctl ''net\.ipv4\.tcp_rmem'' ''4096 87380 6291456'''
 
   - it: renders the swap block, the kubelet safety check and the auto-size clamp when swap is enabled
     set:
@@ -321,23 +321,23 @@ tests:
     asserts:
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'SWAP_DIR="/var/lib/kasm-node-prep"'
+          pattern: 'SWAP_DIR=''/var/lib/kasm-node-prep'''
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'SWAP_FILE="/var/lib/kasm-node-prep/kasm\.swap"'
+          pattern: 'SWAP_FILE=''/var/lib/kasm-node-prep/kasm\.swap'''
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'SWAP_SIZE_MIB="0"'
+          pattern: 'SWAP_SIZE_MIB=''0'''
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'SWAP_SWAPPINESS="80"'
+          pattern: 'SWAP_SWAPPINESS=''80'''
       # The safety check reads the kubelet configuration from the two read-only host mounts.
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'K3S_CONFIG_DIR="/host/etc/rancher/k3s"'
+          pattern: 'K3S_CONFIG_DIR=\"/host/etc/rancher/k3s\"'
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'KUBELET_CONFIG="/host/var/lib/kubelet/config\.yaml"'
+          pattern: 'KUBELET_CONFIG=\"/host/var/lib/kubelet/config\.yaml\"'
       - matchRegex:
           path: data["ensure-modules.sh"]
           pattern: 'kubelet_allows_swap\(\) \{'
@@ -405,16 +405,16 @@ tests:
     asserts:
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'SWAP_DIR="/mnt/kasm"'
+          pattern: 'SWAP_DIR=''/mnt/kasm'''
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'SWAP_FILE="/mnt/kasm/kasm\.swap"'
+          pattern: 'SWAP_FILE=''/mnt/kasm/kasm\.swap'''
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'SWAP_SIZE_MIB="8192"'
+          pattern: 'SWAP_SIZE_MIB=''8192'''
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'SWAP_SWAPPINESS="60"'
+          pattern: 'SWAP_SWAPPINESS=''60'''
 
   - it: drops the kubelet safety check entirely when tuning.swap.force is set
     set:
@@ -540,7 +540,7 @@ tests:
           pattern: 'ensure_sysctls \|\| pass_status=1'
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'apply_sysctl "fs\.inotify\.max_user_instances" "1024"'
+          pattern: 'apply_sysctl ''fs\.inotify\.max_user_instances'' ''1024'''
       - matchRegex:
           path: data["ensure-modules.sh"]
           pattern: 'while true; do'
@@ -604,3 +604,88 @@ tests:
       - equal:
           path: metadata.labels["helm.sh/chart"]
           value: kasm-node-prep-0.1.0
+
+  - it: single-quotes every value that lands in the script so shell metacharacters stay literal
+    set:
+      modules:
+        v4l2loopback:
+          sourceRepo: https://example.com/x$(id > /tmp/pwn).git
+          sourceRef: "v1; touch /tmp/pwn"
+      tuning:
+        swap:
+          enabled: true
+          hostPath: /mnt/kasm`id`
+    asserts:
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'V4L2_SOURCE_REPO=''https://example\.com/x\$\(id > /tmp/pwn\)\.git'''
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'V4L2_SOURCE_REF=''v1; touch /tmp/pwn'''
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'SWAP_DIR=''/mnt/kasm`id`'''
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'V4L2_SOURCE_REPO="'
+
+  - it: escapes a single quote inside a value instead of letting it close the quoting
+    set:
+      modules:
+        v4l2loopback:
+          sourceRef: "v0.13'; id; echo '"
+    asserts:
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: "V4L2_SOURCE_REF='v0\\.13'\\\\''; id; echo '\\\\'''"
+
+  - it: rejects a sysctl key that is not a valid sysctl name
+    set:
+      tuning:
+        sysctls:
+          enabled: true
+          values:
+            "net.ipv4.ip_forward; curl http://evil/": "1"
+    asserts:
+      - failedTemplate:
+          errorPattern: 'tuning.sysctls.values key .* is not a valid sysctl name'
+
+  - it: rejects a sysctl value with shell metacharacters
+    set:
+      tuning:
+        sysctls:
+          enabled: true
+          values:
+            net.ipv4.ip_forward: "1$(id)"
+    asserts:
+      - failedTemplate:
+          errorPattern: 'has an unexpected value'
+
+  - it: rejects credentials embedded in the source repository url
+    set:
+      modules:
+        v4l2loopback:
+          sourceRepo: https://deploy:glpat-secret@git.example.com/mirrors/v4l2loopback.git
+    asserts:
+      - failedTemplate:
+          errorPattern: 'sourceRepo carries credentials in the URL.*sourceRepoSecret'
+
+  - it: hands a source repository login to git through a credential helper, never the url
+    set:
+      modules:
+        v4l2loopback:
+          sourceRepoSecret: v4l2loopback-git
+    asserts:
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'credential.helper='
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'stage_source "\$V4L2_SOURCE_REPO" "\$V4L2_SOURCE_REF" "\$src" "\$V4L2_SOURCE_PATH" "\$\{V4L2_GIT_USERNAME:-\}" "\$\{V4L2_GIT_PASSWORD:-\}"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'log "Cloning \$\(scrub_url "\$repo"\)'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'v4l2loopback-git'
+

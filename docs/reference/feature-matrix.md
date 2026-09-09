@@ -8,24 +8,24 @@ that come with a limit worth knowing before you promise them to users.
 ✅ Works out of the box · 🔧 Needs cluster setup · ⚠️ Works with limits · ❌ Not on Kubernetes yet
 
 Values are written as you set them on the **`kasm-agent`** umbrella; under
-[kasm-platform](../charts/kasm-platform/README.md) prefix them with `kasm-agent.`. Values shown
+[kasm-platform](../../charts/kasm-platform/README.md) prefix them with `kasm-agent.`. Values shown
 with a `kasm-helm.` prefix belong to the control plane — drop the prefix when you install
-[kasm-helm](../charts/kasm-helm/README.md) on its own. On a managed service, read
-[Managed Kubernetes providers: what changes](howto/managed-kubernetes-providers.md) alongside this
+[kasm-helm](../../charts/kasm-helm/README.md) on its own. On a managed service, read
+[Managed Kubernetes providers: what changes](../planning/managed-providers.md) alongside this
 page: EKS, AKS, GKE and OpenShift decide some of the rows below for you.
 
-[Sessions & workspaces](#sessions--workspaces) ·
-[Storage & profiles](#storage--profiles) ·
-[Networking & access](#networking--access) ·
+[Sessions & workspaces](#sessions-and-workspaces) ·
+[Storage & profiles](#storage-and-profiles) ·
+[Networking & access](#networking-and-access) ·
 [Devices](#devices-gpu-webcam-audio) ·
-[Security & isolation](#security--isolation) ·
-[Observability & operations](#observability--operations) ·
+[Security & isolation](#security-and-isolation) ·
+[Observability & operations](#observability-and-operations) ·
 [Everything else](#everything-else-works-unchanged) ·
 [Not on Kubernetes yet](#not-on-kubernetes-yet)
 
 ---
 
-## Sessions & workspaces
+## Sessions and workspaces
 
 | Feature | Status | What you need | Turn it on |
 | ------- | ------ | ------------- | ---------- |
@@ -66,13 +66,13 @@ the control plane; several zones means several agent releases, each with its own
 cluster — the gateway brokers to them, nothing here schedules a pod for them.
 `kasm-helm.directRdpService.enabled=true` adds native-client access.
 
-## Storage & profiles
+## Storage and profiles
 
 | Feature | Status | What you need | Turn it on |
 | ------- | ------ | ------------- | ---------- |
-| **Persistent profiles** | 🔧 | A StorageClass with dynamic provisioning. **Shared** profiles need `ReadWriteMany` — NFS, EFS, Azure Files, CephFS | Point Kasm at an RWX StorageClass you already have<br>or<br>`nfs-server-provisioner.enabled=true`<br>`nfs-server-provisioner.persistence.enabled=true`<br>· [how-to](howto/rwx-storage-for-profiles.md) |
-| **Cloud storage mappings (rclone, S3, Drive)** | 🔧 | FUSE on every node that runs sessions, and outbound access to the remote | `csiRclone.enabled=true`<br>`agent.storageMappings.enabled=true`<br>· [how-to](howto/cloud-storage-rclone-csi.md) |
-| **Volume mappings (host paths)** | ⚠️ | A namespace whose Pod Security Standard permits `hostPath` | `agent.workspacesNodeSelector`<br>· [how-to](howto/privileged-workloads-and-policies.md) |
+| **Persistent profiles** | 🔧 | A StorageClass with dynamic provisioning. **Shared** profiles need `ReadWriteMany` — NFS, EFS, Azure Files, CephFS | Point Kasm at an RWX StorageClass you already have<br>or<br>`nfs-server-provisioner.enabled=true`<br>`nfs-server-provisioner.persistence.enabled=true`<br>· [how-to](../planning/storage/rwx-profiles.md) |
+| **Cloud storage mappings (rclone, S3, Drive)** | 🔧 | FUSE on every node that runs sessions, and outbound access to the remote | `csiRclone.enabled=true`<br>`agent.storageMappings.enabled=true`<br>· [how-to](../planning/storage/cloud-mappings.md) |
+| **Volume mappings (host paths)** | ⚠️ | A namespace whose Pod Security Standard permits `hostPath` | `agent.workspacesNodeSelector`<br>· [how-to](../planning/nodes/privileged-workloads.md) |
 | **File mappings** | ✅ | Nothing | Nothing |
 | **SSH key injection** | ✅ | Nothing | Nothing |
 | **Uploads and downloads** | ✅ | Nothing | Nothing |
@@ -96,17 +96,17 @@ fail to start. Pin sessions to the nodes that actually have the path.
 **Uploads and downloads** need no setup, but without a persistent profile or a storage mapping the
 files live on the session's own disk and go when the session does.
 
-## Networking & access
+## Networking and access
 
 | Feature | Status | What you need | Turn it on |
 | ------- | ------ | ------------- | ---------- |
-| **External access to sessions** | 🔧 | A Gateway API implementation, an ingress controller, or a cloud load balancer / MetalLB — with a WebSocket idle timeout of at least 3600s. DNS pointing at it | Exactly one of<br>`agent.gatewayRoute.enabled=true`<br>`agent.tlsRoute.enabled=true`<br>`agent.httpRoute.enabled=true`<br>`agent.ingress.enabled=true`<br>`agent.route.enabled=true`<br>`agent.sessionProxy.service.type=NodePort`<br>`agent.sessionProxy.service.type=LoadBalancer`<br>Control plane: `kasm-helm.ingress.enabled=true` or `kasm-helm.route.enabled=true`<br>· [how-to](howto/external-access-and-tls.md) |
-| **TLS** | 🔧 | cert-manager, or a TLS Secret you create | Control plane: `kasm-helm.certificate.secretName`<br>Agent: `agent.sessionProxy.certificate.enabled=true`<br>or `agent.sessionProxy.certSecretName`<br>· [how-to](howto/external-access-and-tls.md) |
+| **External access to sessions** | 🔧 | A Gateway API implementation, an ingress controller, or a cloud load balancer / MetalLB — with a WebSocket idle timeout of at least 3600s. DNS pointing at it | Exactly one of<br>`agent.gatewayRoute.enabled=true`<br>`agent.tlsRoute.enabled=true`<br>`agent.httpRoute.enabled=true`<br>`agent.ingress.enabled=true`<br>`agent.route.enabled=true`<br>`agent.sessionProxy.service.type=NodePort`<br>`agent.sessionProxy.service.type=LoadBalancer`<br>Control plane: `kasm-helm.ingress.enabled=true` or `kasm-helm.route.enabled=true`<br>· [how-to](../planning/networking/README.md) |
+| **TLS** | 🔧 | cert-manager, or a TLS Secret you create | Control plane: `kasm-helm.certificate.secretName`<br>Agent: `agent.sessionProxy.certificate.enabled=true`<br>or `agent.sessionProxy.certSecretName`<br>· [how-to](../planning/networking/README.md) |
 | **The login cookie reaching sessions** | ✅ | A domain that covers both hostnames | `kasm-helm.kasmConfig.generatePreseed=true`<br>`kasm-helm.kasmConfig.authDomain` |
 | **Real client IP addresses** | 🔧 | A load balancer that preserves the source address, or one that sends PROXY protocol | `agent.sessionProxy.service.externalTrafficPolicy=Local`<br>or<br>`agent.sessionProxy.proxyProtocol.enabled=true`<br>`agent.sessionProxy.proxyProtocol.trustedCIDRs` |
 | **Web filtering** | ✅ | Session pods able to reach the session proxy | Nothing |
-| **Network isolation (restrict to network)** | 🔧 | A CNI that **enforces** NetworkPolicy — Calico, Cilium, Antrea, Weave, Kube-router, GKE Dataplane V2, or AWS VPC CNI with Calico policy | Nothing for per-session isolation.<br>`networkPolicies.enabled=true` adds the agent's own namespace baseline<br>· [how-to](howto/network-policy-enforcement.md) |
-| **Egress gateways (per-session VPN)** | 🔧 | A namespace that permits `privileged` **and** host namespaces, and a runtime that honours chained CNI plugins | `egressInstaller.enabled=true`<br>`egressInstaller.distro`<br>or<br>`egressInstaller.cniBinDir`<br>· [how-to](howto/egress-installer-node-prerequisites.md) |
+| **Network isolation (restrict to network)** | 🔧 | A CNI that **enforces** NetworkPolicy — Calico, Cilium, Antrea, Weave, Kube-router, GKE Dataplane V2, or AWS VPC CNI with Calico policy | Nothing for per-session isolation.<br>`networkPolicies.enabled=true` adds the agent's own namespace baseline<br>· [how-to](../planning/networking/network-policies.md) |
+| **Egress gateways (per-session VPN)** | 🔧 | A namespace that permits `privileged` **and** host namespaces, and a runtime that honours chained CNI plugins | `egressInstaller.enabled=true`<br>`egressInstaller.distro`<br>or<br>`egressInstaller.cniBinDir`<br>· [how-to](../planning/networking/egress.md) |
 
 **External access.** The two halves are exposed independently: the control plane is what users log
 in to, the session proxy is what their browser streams from. `agent.gatewayRoute` is the preferred
@@ -144,9 +144,9 @@ per-session VPN sidecar remains available on the workspace resource and needs no
 
 | Feature | Status | What you need | Turn it on |
 | ------- | ------ | ------------- | ---------- |
-| **GPU workspaces (CUDA / compute)** | 🔧 | GPU hardware, and nodes labelled — usually tainted — for GPU workloads | `gpuOperator.enabled=true`<br>`agent.gpu.enabled=true`<br>· [how-to](howto/gpu-nodes.md) |
-| **GPU graphics acceleration (EGL / DRI)** | 🔧 | GPU drivers in the node image, with `/dev/dri/card0` and `/dev/dri/renderD128` present | `agent.gpu.enabled=true`<br>`agent.workspacesNodeSelector`<br>· [how-to](howto/gpu-nodes.md) |
-| **Webcam passthrough** | 🔧 | Loadable kernel modules on nodes, a `privileged` namespace, and either kernel headers and a toolchain or the KMM operator and a registry | `nodePrep.enabled=true`<br>`nodePrep.modules.v4l2loopback.enabled=true`<br>`videoDevicePlugin.enabled=true`<br>· [how-to](howto/kernel-modules-and-webcam.md) |
+| **GPU workspaces (CUDA / compute)** | 🔧 | GPU hardware, and nodes labelled — usually tainted — for GPU workloads | `gpuOperator.enabled=true`<br>`agent.gpu.enabled=true`<br>· [how-to](../planning/nodes/gpu.md) |
+| **GPU graphics acceleration (EGL / DRI)** | 🔧 | GPU drivers in the node image, with `/dev/dri/card0` and `/dev/dri/renderD128` present | `agent.gpu.enabled=true`<br>`agent.workspacesNodeSelector`<br>· [how-to](../planning/nodes/gpu.md) |
+| **Webcam passthrough** | 🔧 | Loadable kernel modules on nodes, a `privileged` namespace, and either kernel headers and a toolchain or the KMM operator and a registry | `nodePrep.enabled=true`<br>`nodePrep.modules.v4l2loopback.enabled=true`<br>`videoDevicePlugin.enabled=true`<br>· [how-to](../planning/nodes/kernel-modules-and-webcam.md) |
 | **Microphone** | ✅ | A workspace image with PulseAudio — the stock Kasm images have it | Nothing |
 | **Audio playback** | ✅ | Nothing | Nothing |
 | **Gamepad** | ✅ | Nothing | Nothing |
@@ -168,16 +168,16 @@ build the module once per kernel into an image instead. Devices per node:
 **Audio and gamepad** ride the session connection, so no node needs a sound device or a controller
 attached.
 
-## Security & isolation
+## Security and isolation
 
 | Feature | Status | What you need | Turn it on |
 | ------- | ------ | ------------- | ---------- |
-| **Private image registries** | 🔧 | A `kubernetes.io/dockerconfigjson` Secret in the namespace | `agent.workspaceImagePullSecrets` (workspace images)<br>`agent.imagePullSecrets` (the agent's own images)<br>`kasm-helm.imagePullSecrets.enabled=true`<br>· [how-to](howto/private-registries-and-image-pulling.md) |
+| **Private image registries** | 🔧 | A `kubernetes.io/dockerconfigjson` Secret in the namespace | `agent.workspaceImagePullSecrets` (workspace images)<br>`agent.imagePullSecrets` (the agent's own images)<br>`kasm-helm.imagePullSecrets.enabled=true`<br>· [how-to](../planning/registries.md) |
 | **Per-workspace registry credentials** | ⚠️ | Nothing | Set on the workspace in the Kasm UI |
 | **Trusted CA certificates** | ✅ | Your CA certificates in PEM | `kasm-helm.trustedCaBundle.enabled=true`<br>`kasm-helm.trustedCaBundle.caCerts` |
-| **Secure Boot nodes** | 🔧 | MOK signing keys enrolled in each node's UEFI, and the key pair in a Secret | `nodePrep.secureBoot.existingMokSecret`<br>or<br>`nodePrep.modules.v4l2loopback.kmm.sign.enabled=true`<br>· [how-to](howto/secure-boot.md) |
-| **WireGuard on kernels older than 5.6** | 🔧 | Kernel headers, `/lib/modules` and `/usr/src` on the node, and a `privileged` namespace | `nodePrep.enabled=true`<br>`nodePrep.modules.wireguard.enabled=true`<br>· [how-to](howto/kernel-modules-and-webcam.md) |
-| **Multi-tenancy / namespace isolation** | ⚠️ | NetworkPolicy enforcement, Pod Security Standards, ResourceQuota and LimitRange | `networkPolicies.enabled=true`, one agent release per tenant<br>· [how-to](howto/network-policy-enforcement.md) |
+| **Secure Boot nodes** | 🔧 | MOK signing keys enrolled in each node's UEFI, and the key pair in a Secret | `nodePrep.secureBoot.existingMokSecret`<br>or<br>`nodePrep.modules.v4l2loopback.kmm.sign.enabled=true`<br>· [how-to](../planning/nodes/secure-boot.md) |
+| **WireGuard on kernels older than 5.6** | 🔧 | Kernel headers, `/lib/modules` and `/usr/src` on the node, and a `privileged` namespace | `nodePrep.enabled=true`<br>`nodePrep.modules.wireguard.enabled=true`<br>· [how-to](../planning/nodes/kernel-modules-and-webcam.md) |
+| **Multi-tenancy / namespace isolation** | ⚠️ | NetworkPolicy enforcement, Pod Security Standards, ResourceQuota and LimitRange | `networkPolicies.enabled=true`, one agent release per tenant<br>· [how-to](../planning/networking/network-policies.md) |
 
 **Anything that touches a node needs a privileged namespace.** Webcam, WireGuard, Secure Boot and
 egress gateways all run privileged pods:
@@ -211,16 +211,16 @@ its namespace, sessions get no Kubernetes API access, and file ownership is norm
 per user or per group needs provisioning automation on top, and the same namespace that permits
 `privileged` for node prep or egress weakens the baseline for everything else in it. Separate
 releases per tenant, and the two-namespace layout in
-[architecture](architecture.md#deployment-topologies), are the recommended starting point.
+[architecture](../overview/architecture.md#deployment-topologies), are the recommended starting point.
 
-## Observability & operations
+## Observability and operations
 
 | Feature | Status | What you need | Turn it on |
 | ------- | ------ | ------------- | ---------- |
 | **Telemetry (traces, metrics, logs, events)** | 🔧 | An OTLP-speaking backend and/or a ClickHouse instance | `otelCollector.enabled=true`<br>`otelCollector.exporters.otlp.enabled=true`<br>`otelCollector.exporters.otlp.endpoint`<br>and/or<br>`otelCollector.exporters.clickhouse.enabled=true`<br>`otelCollector.exporters.clickhouse.endpoint`<br>`otelCollector.receivers.k8sEvents.enabled=true` |
-| **Image pre-pulling** | 🔧 | The container runtime socket reachable from DaemonSet pods, and registry access or a mirror from every node | `agent.imagePuller.enabled=true`<br>`agent.imagePuller.images`<br>`agent.imageAvailabilityPolicy`<br>· [how-to](howto/private-registries-and-image-pulling.md) |
-| **Node targeting and pools** | ✅ | A consistent node-labelling strategy | Nothing per workspace.<br>`agent.workspacesNodeSelector` sets a fleet-wide default<br>· [how-to](howto/gpu-nodes.md) |
-| **Node tuning and swap** | 🔧 | The node's kubelet configured for swap **first** | `nodePrep.tuning.swap.enabled=true`<br>`nodePrep.tuning.sysctls.enabled=true`<br>· [how-to](howto/node-tuning-and-swap.md) |
+| **Image pre-pulling** | 🔧 | The container runtime socket reachable from DaemonSet pods, and registry access or a mirror from every node | `agent.imagePuller.enabled=true`<br>`agent.imagePuller.images`<br>`agent.imageAvailabilityPolicy`<br>· [how-to](../planning/registries.md) |
+| **Node targeting and pools** | ✅ | A consistent node-labelling strategy | Nothing per workspace.<br>`agent.workspacesNodeSelector` sets a fleet-wide default<br>· [how-to](../planning/nodes/gpu.md) |
+| **Node tuning and swap** | 🔧 | The node's kubelet configured for swap **first** | `nodePrep.tuning.swap.enabled=true`<br>`nodePrep.tuning.sysctls.enabled=true`<br>· [how-to](../planning/nodes/tuning-and-swap.md) |
 | **Autoscaling** | ⚠️ | Cluster Autoscaler or Karpenter, against node groups that match workspace pod requests | `operator.enabled=true` |
 | **Airgapped installation** | ✅ | A registry you mirror the images into | Nothing |
 
@@ -245,7 +245,7 @@ one.
 mirror and `make package-agent` builds the self-contained archive. The one thing that needs
 planning is building kernel modules on nodes that cannot reach the internet: use
 `nodePrep.modules.v4l2loopback.method=kmm` with an image you built into your own registry. Details
-in the [kasm-agent README](../charts/kasm-agent/README.md).
+in the [kasm-agent README](../../charts/kasm-agent/README.md).
 
 ## Everything else works unchanged
 
@@ -268,7 +268,7 @@ becomes a pod, and none of it needs anything from the cluster:
 
 On a fresh install most of these can be seeded from Helm values at database initialisation with
 `kasm-helm.kasmConfig.generatePreseed=true` and `kasm-helm.kasmConfig.config` — see the
-[preseed reference](../charts/kasm-helm/docs/preseed.md).
+[preseed reference](preseed.md).
 
 ## Not on Kubernetes yet
 
@@ -291,4 +291,4 @@ On a fresh install most of these can be seeded from Helm values at database init
 ---
 
 Looking for which Kasm setting maps to which custom-resource field? See
-[**Reference: Kasm settings → agent custom resource fields**](reference/settings-to-crd.md).
+[**Reference: Kasm settings → agent custom resource fields**](settings-to-crd.md).

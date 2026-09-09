@@ -1,7 +1,8 @@
 {{/*
   ClusterRole for the kasm-nginx-sidecar container that runs alongside the session proxy. It watches
   session ConfigMaps and KasmWorkspace CRs to know which sessions are active and which nginx configs to
-  write.
+  write, and watches Services directly to confirm a session's workspace Service exists before trusting
+  it live (previously done by polling DNS, which raced the Service record's own propagation).
 
   Translated from config/rbac/nginx_sidecar_clusterrole.yaml in the kasm-agent-operator repo.
 
@@ -22,6 +23,9 @@ metadata:
 rules:
   - apiGroups: [""]
     resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["services"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["agent.kasm.com"]
     resources: ["kasmworkspaces"]

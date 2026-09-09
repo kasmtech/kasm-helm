@@ -1,5 +1,6 @@
 {{- include "kasmNodePrep.validateEnabled" . }}
 {{- include "kasmNodePrep.validateMethods" . }}
+{{- include "kasmNodePrep.validateInputs" . }}
 {{/*
   The DaemonSet renders only when it has work: a module this chart builds on the node, or host
   tuning to re-assert. An install whose only module is delegated to the Kernel Module Management
@@ -46,6 +47,10 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: node-prep
           image: {{ include "kasmNodePrep.image" . }}
@@ -57,6 +62,37 @@ spec:
           # ability to do its job.
           securityContext:
             privileged: true
+          {{- $v4l2Secret := .Values.modules.v4l2loopback.sourceRepoSecret }}
+          {{- $wgSecret := .Values.modules.wireguard.sourceRepoSecret }}
+          {{- if or $v4l2Secret $wgSecret }}
+          # HTTPS login for the module source clone (modules.*.sourceRepoSecret). The script hands these
+          # to git through a credential helper; they never appear in the URL, the ConfigMap or the log.
+          env:
+            {{- with $v4l2Secret }}
+            - name: V4L2_GIT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ . | quote }}
+                  key: username
+            - name: V4L2_GIT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ . | quote }}
+                  key: password
+            {{- end }}
+            {{- with $wgSecret }}
+            - name: WIREGUARD_GIT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ . | quote }}
+                  key: username
+            - name: WIREGUARD_GIT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ . | quote }}
+                  key: password
+            {{- end }}
+          {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:

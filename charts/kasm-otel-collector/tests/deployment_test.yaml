@@ -111,11 +111,33 @@ tests:
           path: spec.template.spec.securityContext.seccompProfile.type
           value: RuntimeDefault
       - equal:
+          path: spec.template.spec.securityContext.fsGroupChangePolicy
+          value: OnRootMismatch
+      - equal:
           path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
           value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.seccompProfile.type
+          value: RuntimeDefault
       - contains:
           path: spec.template.spec.containers[0].securityContext.capabilities.drop
           content: ALL
+
+  # tests/kyverno/pod-security.baseline.yaml and tests/kyverno/probes.required.yaml only inspect a pod
+  # template that carries these two markers -- a template without them is skipped by both policies and
+  # silently leaves the gate. Pinned here (and unconditionally, with no `set:`) so dropping either
+  # annotation fails CI instead of quietly disabling the hardening and probe gates for the collector.
+  - it: always marks the pod template as hardened and health-checked for the Kyverno gates
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["kasm.com/security"]
+          value: "true"
+      - equal:
+          path: spec.template.metadata.annotations["kasm.com/healthcheck"]
+          value: "true"
 
   - it: annotates the pod with a checksum over the rendered config
     asserts:
@@ -124,17 +146,18 @@ tests:
           pattern: "^[0-9a-f]{64}$"
       - equal:
           path: spec.template.metadata.annotations["checksum/config"]
-          value: 2c16bbb87628d264214d138380f1297dbc89cea9271faf3336670cba5477f685
+          value: 326651f723d3d9cc6f7921fc87bbfeed5906e424cd1222f605017e17bd2a223b
 
   - it: changes the config checksum when an exporter toggle changes, so the pods roll
     set:
       exporters:
-        debug:
+        otlp:
           enabled: true
+          endpoint: tempo.telemetry.svc.cluster.local:4317
     asserts:
       - notEqual:
           path: spec.template.metadata.annotations["checksum/config"]
-          value: 2c16bbb87628d264214d138380f1297dbc89cea9271faf3336670cba5477f685
+          value: 326651f723d3d9cc6f7921fc87bbfeed5906e424cd1222f605017e17bd2a223b
 
   - it: keeps custom pod annotations alongside the config checksum
     set:
@@ -147,6 +170,30 @@ tests:
       - matchRegex:
           path: spec.template.metadata.annotations["checksum/config"]
           pattern: "^[0-9a-f]{64}$"
+      - equal:
+          path: spec.template.metadata.annotations["kasm.com/security"]
+          value: "true"
+      - equal:
+          path: spec.template.metadata.annotations["kasm.com/healthcheck"]
+          value: "true"
+
+  - it: does not let podAnnotations or commonAnnotations overwrite the Kyverno gate markers
+    set:
+      podAnnotations:
+        kasm.com/security: "false"
+      commonAnnotations:
+        kasm.com/healthcheck: "false"
+        example.com/team: platform
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["kasm.com/security"]
+          value: "true"
+      - equal:
+          path: spec.template.metadata.annotations["kasm.com/healthcheck"]
+          value: "true"
+      - equal:
+          path: spec.template.metadata.annotations["example.com/team"]
+          value: platform
 
   - it: omits the CLICKHOUSE_PASSWORD env when the clickhouse exporter is disabled
     asserts:

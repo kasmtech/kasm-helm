@@ -1,5 +1,6 @@
 {{- include "kasmNodePrep.validateEnabled" . }}
 {{- include "kasmNodePrep.validateMethods" . }}
+{{- include "kasmNodePrep.validateInputs" . }}
 {{/*
   The reconcile script executed by the node prep DaemonSet.
 
@@ -45,7 +46,7 @@
 
 set -euo pipefail
 
-RECONCILE_INTERVAL="{{ .Values.reconcileIntervalSeconds }}"
+RECONCILE_INTERVAL={{ include "kasmNodePrep.shq" (int .Values.reconcileIntervalSeconds) }}
 KERNEL_RELEASE="$(uname -r)"
 {{- if $anyModule }}
 KERNEL_BUILD="/lib/modules/${KERNEL_RELEASE}/build"
@@ -54,10 +55,10 @@ MOK_DIR="/etc/kasm-mok"
 DEPS_READY=""
 {{- end }}
 {{- if $swap.enabled }}
-SWAP_DIR="{{ $swap.hostPath }}"
-SWAP_FILE="{{ $swap.hostPath }}/kasm.swap"
-SWAP_SIZE_MIB="{{ $swap.sizeMib | int }}"
-SWAP_SWAPPINESS="{{ $swap.swappiness | int }}"
+SWAP_DIR={{ include "kasmNodePrep.shq" ($swap.hostPath) }}
+SWAP_FILE={{ include "kasmNodePrep.shq" (printf "%s/kasm.swap" $swap.hostPath) }}
+SWAP_SIZE_MIB={{ include "kasmNodePrep.shq" (int $swap.sizeMib) }}
+SWAP_SWAPPINESS={{ include "kasmNodePrep.shq" (int $swap.swappiness) }}
 {{- if not $swap.force }}
 # Read-only mounts of the node's kubelet configuration, used only to confirm that swap is safe to
 # enable here. See kubelet_allows_swap().
@@ -66,15 +67,15 @@ KUBELET_CONFIG="/host/var/lib/kubelet/config.yaml"
 {{- end }}
 {{- end }}
 {{- if $v4l2Build }}
-V4L2_DEVICES="{{ .Values.modules.v4l2loopback.videoDevices }}"
-V4L2_EXCLUSIVE_CAPS="{{ ternary 1 0 .Values.modules.v4l2loopback.exclusiveCaps }}"
-V4L2_SOURCE_REPO="{{ .Values.modules.v4l2loopback.sourceRepo }}"
-V4L2_SOURCE_REF="{{ .Values.modules.v4l2loopback.sourceRef }}"
-V4L2_SOURCE_PATH="{{ .Values.modules.v4l2loopback.sourcePath }}"
+V4L2_DEVICES={{ include "kasmNodePrep.shq" (int .Values.modules.v4l2loopback.videoDevices) }}
+V4L2_EXCLUSIVE_CAPS={{ include "kasmNodePrep.shq" (ternary 1 0 .Values.modules.v4l2loopback.exclusiveCaps) }}
+V4L2_SOURCE_REPO={{ include "kasmNodePrep.shq" (.Values.modules.v4l2loopback.sourceRepo) }}
+V4L2_SOURCE_REF={{ include "kasmNodePrep.shq" (.Values.modules.v4l2loopback.sourceRef) }}
+V4L2_SOURCE_PATH={{ include "kasmNodePrep.shq" (.Values.modules.v4l2loopback.sourcePath) }}
 {{- end }}
 {{- if $wireguardBuild }}
-WIREGUARD_SOURCE_REPO="{{ .Values.modules.wireguard.sourceRepo }}"
-WIREGUARD_SOURCE_PATH="{{ .Values.modules.wireguard.sourcePath }}"
+WIREGUARD_SOURCE_REPO={{ include "kasmNodePrep.shq" (.Values.modules.wireguard.sourceRepo) }}
+WIREGUARD_SOURCE_PATH={{ include "kasmNodePrep.shq" (.Values.modules.wireguard.sourcePath) }}
 {{- end }}
 
 log() {
@@ -83,6 +84,12 @@ log() {
 
 err() {
   log "ERROR: $*" >&2
+}
+
+# Print a repository URL with any user:password@ part removed, for log lines. Credentials never
+# belong in the URL (the render rejects them); this keeps a mis-set one out of the log regardless.
+scrub_url() {
+  printf '%s' "$1" | sed -E 's#(://)[^/@]*@#\1#'
 }
 {{- if $anyModule }}
 
@@ -233,6 +240,8 @@ stage_source() {
   local ref="$2"
   local dest="$3"
   local source_path="$4"
+  local git_user="${5:-}"
+  local git_pass="${6:-}"
 
   rm -rf "$dest"
   mkdir -p "$BUILD_ROOT"
@@ -248,12 +257,20 @@ stage_source() {
   fi
 {{- if $needsClone }}
 
+  # Optional HTTPS login from modules.*.sourceRepoSecret, handed to git through a credential helper so
+  # it never appears in the URL, the process list, or this log.
+  local -a git_auth=()
+  if [ -n "$git_user" ] && [ -n "$git_pass" ]; then
+    git_auth=(-c 'credential.helper=!f() { printf "username=%s\npassword=%s\n" "$KASM_GIT_USER" "$KASM_GIT_PASS"; }; f')
+  fi
   if [ -n "$ref" ]; then
-    log "Cloning ${repo} at ${ref} into ${dest}"
-    git clone --quiet --depth 1 --branch "$ref" "$repo" "$dest"
+    log "Cloning $(scrub_url "$repo") at ${ref} into ${dest}"
+    GIT_TERMINAL_PROMPT=0 KASM_GIT_USER="$git_user" KASM_GIT_PASS="$git_pass" \
+      git ${git_auth[@]+"${git_auth[@]}"} clone --quiet --depth 1 --branch "$ref" "$repo" "$dest"
   else
-    log "Cloning ${repo} into ${dest}"
-    git clone --quiet --depth 1 "$repo" "$dest"
+    log "Cloning $(scrub_url "$repo") into ${dest}"
+    GIT_TERMINAL_PROMPT=0 KASM_GIT_USER="$git_user" KASM_GIT_PASS="$git_pass" \
+      git ${git_auth[@]+"${git_auth[@]}"} clone --quiet --depth 1 "$repo" "$dest"
   fi
 {{- else }}
 
@@ -302,11 +319,11 @@ ensure_v4l2loopback() {
   # at insertion time.
   modprobe videodev 2>/dev/null || true
 
-  if ! stage_source "$V4L2_SOURCE_REPO" "$V4L2_SOURCE_REF" "$src" "$V4L2_SOURCE_PATH"; then
+  if ! stage_source "$V4L2_SOURCE_REPO" "$V4L2_SOURCE_REF" "$src" "$V4L2_SOURCE_PATH" "${V4L2_GIT_USERNAME:-}" "${V4L2_GIT_PASSWORD:-}"; then
 {{- if $v4l2.sourcePath }}
     err "Failed to stage v4l2loopback from ${V4L2_SOURCE_PATH}. modules.v4l2loopback.sourcePath must point at a source tree baked into the builder image. Skipping this pass."
 {{- else }}
-    err "Failed to clone v4l2loopback from ${V4L2_SOURCE_REPO} at ${V4L2_SOURCE_REF}. The node needs access to that repository (or an internal mirror), or set modules.v4l2loopback.sourcePath to a source tree baked into the builder image. Skipping this pass."
+    err "Failed to clone v4l2loopback from $(scrub_url "$V4L2_SOURCE_REPO") at ${V4L2_SOURCE_REF}. The node needs access to that repository (or an internal mirror), or set modules.v4l2loopback.sourcePath to a source tree baked into the builder image. Skipping this pass."
 {{- end }}
     return 1
   fi
@@ -370,11 +387,11 @@ ensure_wireguard() {
     return 1
   fi
 
-  if ! stage_source "$WIREGUARD_SOURCE_REPO" "" "$src" "$WIREGUARD_SOURCE_PATH"; then
+  if ! stage_source "$WIREGUARD_SOURCE_REPO" "" "$src" "$WIREGUARD_SOURCE_PATH" "${WIREGUARD_GIT_USERNAME:-}" "${WIREGUARD_GIT_PASSWORD:-}"; then
 {{- if $wireguard.sourcePath }}
     err "Failed to stage WireGuard from ${WIREGUARD_SOURCE_PATH}. modules.wireguard.sourcePath must point at a source tree baked into the builder image. Skipping this pass."
 {{- else }}
-    err "Failed to clone WireGuard from ${WIREGUARD_SOURCE_REPO}. The node needs access to that repository (or an internal mirror), or set modules.wireguard.sourcePath to a source tree baked into the builder image. Skipping this pass."
+    err "Failed to clone WireGuard from $(scrub_url "$WIREGUARD_SOURCE_REPO"). The node needs access to that repository (or an internal mirror), or set modules.wireguard.sourcePath to a source tree baked into the builder image. Skipping this pass."
 {{- end }}
     return 1
   fi
@@ -443,7 +460,7 @@ apply_sysctl() {
 ensure_sysctls() {
   local status=0
 {{- range $key, $value := $sysctls.values }}
-  apply_sysctl "{{ $key }}" "{{ include "kasmNodePrep.sysctlValue" $value }}" || status=1
+  apply_sysctl {{ include "kasmNodePrep.shq" $key }} {{ include "kasmNodePrep.shq" (include "kasmNodePrep.sysctlValue" $value) }} || status=1
 {{- end }}
 
   return "$status"

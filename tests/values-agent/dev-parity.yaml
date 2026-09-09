@@ -5,7 +5,7 @@
 #   - A Traefik HelmChartConfig enabling the Gateway API provider (k3s ships Traefik without it),
 #     so the `traefik-gateway` Gateway that httpRoute.parentRefs below attaches to actually exists.
 #   - The otel-backend repo's LGTM stack + ClickHouse, which is what
-#     otelCollector.exporters.clickhouse (and the default otlp exporter) point at.
+#     otelCollector.exporters.otlp and otelCollector.exporters.clickhouse below point at.
 #   - The `kasm-manager-token` and `kasm-session-proxy-tls` Secrets, created out of band before
 #     install (this scenario intentionally has no manager.token or certificate.enabled, so the
 #     chart creates neither).
@@ -32,6 +32,11 @@ agent:
 
 otelCollector:
   exporters:
+    # otlp.enabled defaults to false now (an unset default endpoint used to silently drop every
+    # signal); this scenario's LGTM stack is real, so point at it explicitly.
+    otlp:
+      enabled: true
+      endpoint: lgtm.observability.svc.cluster.local:4317
     clickhouse:
       enabled: true
       existingSecret: clickhouse-otel

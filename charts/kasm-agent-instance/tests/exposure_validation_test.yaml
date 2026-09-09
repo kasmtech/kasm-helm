@@ -1,0 +1,78 @@
+suite: session-proxy exposure validation
+
+templates:
+  - templates/validation.yaml
+
+tests:
+  - it: renders nothing and passes with a single exposure method
+    template: templates/validation.yaml
+    set:
+      publicHostname: sessions.example.com
+      httpRoute:
+        enabled: true
+        parentRefs:
+          - name: kasm-gateway
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: fails when the ingress and the http route are both enabled
+    template: templates/validation.yaml
+    set:
+      ingress:
+        enabled: true
+      httpRoute:
+        enabled: true
+        parentRefs:
+          - name: kasm-gateway
+    asserts:
+      - failedTemplate:
+          errorPattern: "Only one session-proxy exposure method may be enabled, but agent.ingress.enabled and agent.httpRoute.enabled are set"
+
+  - it: fails when the chart-managed and the operator-managed tls routes are both enabled
+    template: templates/validation.yaml
+    set:
+      tlsRoute:
+        enabled: true
+        parentRefs:
+          - name: kasm-gateway
+      gatewayRoute:
+        enabled: true
+        parentRef:
+          name: kasm-gateway
+    asserts:
+      - failedTemplate:
+          errorPattern: "agent.tlsRoute.enabled and agent.gatewayRoute.enabled are set"
+
+  - it: names every enabled method when three collide
+    template: templates/validation.yaml
+    set:
+      ingress:
+        enabled: true
+      route:
+        enabled: true
+      gatewayRoute:
+        enabled: true
+        parentRef:
+          name: kasm-gateway
+    asserts:
+      - failedTemplate:
+          errorPattern: "agent.ingress.enabled and agent.route.enabled and agent.gatewayRoute.enabled are set"
+
+  - it: fails an http route that would attach to no gateway
+    template: templates/validation.yaml
+    set:
+      httpRoute:
+        enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "agent.httpRoute.enabled is set but agent.httpRoute.parentRefs is empty - the HTTPRoute would attach to no Gateway, and the session proxy would stay unreachable from outside the cluster."
+
+  - it: fails a tls route that would attach to no gateway
+    template: templates/validation.yaml
+    set:
+      tlsRoute:
+        enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "agent.tlsRoute.enabled is set but agent.tlsRoute.parentRefs is empty - the TLSRoute would attach to no Gateway, and the session proxy would stay unreachable from outside the cluster."

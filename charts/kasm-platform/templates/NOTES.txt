@@ -2,16 +2,51 @@
 {{- $kasmAgent := (index .Values "kasm-agent") | default dict -}}
 {{- $cpEnabled := dig "enabled" true $kasmHelm -}}
 {{- $agentEnabled := dig "enabled" true $kasmAgent -}}
+{{- /* Control plane */ -}}
 {{- $publicAddr := dig "publicAddr" "" $kasmHelm -}}
 {{- $authDomain := dig "kasmConfig" "authDomain" "" $kasmHelm -}}
+{{- $adminUser := dig "kasmConfig" "adminUsername" "admin@kasm.local" $kasmHelm -}}
+{{- $secretsCreate := dig "kasmSecrets" "create" true $kasmHelm -}}
+{{- $secretsName := dig "kasmSecrets" "name" "" $kasmHelm | default (printf "%s-secrets" .Release.Name) -}}
+{{- $proxyType := dig "proxyService" "type" "LoadBalancer" $kasmHelm -}}
+{{- $cpFronted := or (dig "ingress" "enabled" false $kasmHelm) (dig "route" "enabled" false $kasmHelm) (dig "httpRoute" "enabled" false $kasmHelm) (dig "tlsRoute" "enabled" false $kasmHelm) -}}
+{{- $zones := dig "kasmZones" (list) $kasmHelm | default (list) -}}
+{{- /* What the control plane is reachable at, as far as a render can tell (kasm-helm's helper: publicAddr,
+       else the LoadBalancer address or node:port read back with lookup - empty on the very first install). */ -}}
+{{- $externalAddress := "" -}}
+{{- if $cpEnabled -}}{{- $externalAddress = include "kasm.proxyExternalAddress" (dict "Values" $kasmHelm "Release" .Release) -}}{{- end -}}
+{{- $zoneNames := list -}}
+{{- range $zones -}}{{- $zoneNames = append $zoneNames (dig "name" "" .) -}}{{- end -}}
+{{- /* Agent */ -}}
 {{- $agentInstance := dig "agent" dict $kasmAgent -}}
 {{- $agentInstanceEnabled := dig "enabled" true $agentInstance -}}
+{{- $inCluster := dig "inClusterControlPlane" false $agentInstance -}}
+{{- $agentName := dig "name" "k8s-agent" $agentInstance -}}
+{{- $agentZone := dig "zone" "default" $agentInstance -}}
 {{- $managerHostname := dig "manager" "hostname" "" $agentInstance -}}
 {{- $managerToken := dig "manager" "token" "" $agentInstance -}}
 {{- $managerTokenSecret := dig "manager" "existingTokenSecret" "" $agentInstance -}}
 {{- $publicHostname := dig "publicHostname" "" $agentInstance -}}
+{{- $publicPort := dig "publicPort" 443 $agentInstance -}}
+{{- $sessionProxy := dig "sessionProxy" dict $agentInstance -}}
+{{- $certSecret := dig "certSecretName" "kasm-session-proxy-tls" $sessionProxy -}}
+{{- $certEnabled := dig "certificate" "enabled" false $sessionProxy -}}
+{{- $selfSigned := dig "selfSigned" "enabled" true $sessionProxy -}}
+{{- /* What inClusterControlPlane derives, mirroring the kasm-agent-instance helpers. */ -}}
+{{- $derivedManager := printf "%s-proxy-default.%s.svc.cluster.local" .Release.Name .Release.Namespace -}}
+{{- $derivedPublic := printf "%s-session-proxy.%s.svc.cluster.local" $agentName .Release.Namespace -}}
+{{- $derivedTokenSecret := printf "%s-secrets" .Release.Name -}}
+{{- $managerDerived := and $inCluster (not $managerHostname) -}}
+{{- $tokenDerived := and $inCluster (not $managerToken) (not $managerTokenSecret) -}}
+{{- $publicDerived := and $inCluster (not $publicHostname) -}}
+{{- $effectiveManager := $managerHostname | default (ternary $derivedManager "" $inCluster) -}}
+{{- $effectivePublic := $publicHostname | default (ternary $derivedPublic "" $inCluster) -}}
+{{- /* Relayed: browsers talk to the control plane only, whose proxy reaches the session proxy in-cluster.
+       That is the topology the derived session hostname can only ever serve. */ -}}
+{{- $relayed := $publicDerived -}}
 {{- $nodePrepEnabled := dig "nodePrep" "enabled" false $kasmAgent -}}
 {{- $videoEnabled := dig "videoDevicePlugin" "enabled" false $kasmAgent -}}
+{{- $egressEnabled := dig "egressInstaller" "enabled" false $kasmAgent -}}
 {{- $netPolEnabled := dig "networkPolicies" "enabled" false $kasmAgent -}}
 CHART NAME: {{ .Chart.Name }}
 CHART VERSION: {{ .Chart.Version }}
@@ -21,142 +56,310 @@ The Kasm platform has been installed as release "{{ .Release.Name }}" in namespa
 
 Installed with this release:
 {{ if $cpEnabled }}  * kasm-helm    the control plane: web UI, manager/API, session proxy, Guacamole, RDP gateways, database
-{{ else }}  * kasm-helm    DISABLED — this release installs the agent only, against a control plane elsewhere
+{{ else }}  * kasm-helm    DISABLED - this release installs the agent only, against a control plane elsewhere
 {{ end }}{{ if $agentEnabled }}  * kasm-agent   the Kubernetes agent: operator, telemetry collector, Agent resource, session proxy
-{{ else }}  * kasm-agent   DISABLED — this release installs the control plane only
+{{ else }}  * kasm-agent   DISABLED - this release installs the control plane only
 {{ end }}
-{{ if $cpEnabled }}Reach the control plane at: {{ if $publicAddr }}https://{{ $publicAddr }}{{ else }}(kasm-helm.publicAddr is unset — set it before this deployment is usable){{ end }}
-Sign in as admin@kasm.local; the seeded passwords are in the "{{ .Release.Name }}-secrets" Secret:
+** Please be patient: on a first install the database initializes and both halves pull their
+   images, which takes several minutes on a cold cluster. **
 
-  kubectl get secret {{ .Release.Name }}-secrets -n {{ .Release.Namespace }} \
-    -o jsonpath='{.data.admin-password}' | base64 -d; echo
-{{ end }}
-{{- if and $cpEnabled $agentEnabled }}
+Watch the rollout (every pod should reach Running, the db-init job Completed):
+
+  kubectl get pods -n {{ .Release.Namespace }} -w
+{{- if $cpEnabled }}
+
 ================================================================================
-BOTH HALVES ARE IN ONE RELEASE AND ONE NAMESPACE — four things to check
+CONTROL PLANE: URL AND CREDENTIALS
 ================================================================================
+{{- if $publicAddr }}
 
-{{- if $authDomain }}
-1. THE AUTH DOMAIN — seeded at database initialization. Nothing to do on a fresh install.
-   `kasm-helm.kasmConfig.authDomain` is set to {{ $authDomain }}, so the Kasm Authorization Domain
-   was written into the seed before the database came up. The session cookie is scoped to
-   {{ $authDomain }} and reaches the agent's session proxy on
-   {{ $publicHostname | default "sessions.example.com" }} as well as the control plane on
-   {{ $publicAddr | default "kasm.example.com" }}.
+  Kasm URL:   https://{{ $publicAddr }}
+{{- if and (not $cpFronted) (eq $proxyType "ClusterIP") }}
 
-   Confirm both hostnames really are under {{ $authDomain }} — a mismatch still 401s.
+  NOTE: kasm-helm.publicAddr is set, but nothing publishes the proxy: proxyService.type is
+  ClusterIP and no Ingress, Route or Gateway API route is enabled. Until one is, reach it with:
 
-   This only applies to a database this release initialized. If you pointed the release at an
-   EXISTING Kasm database, the seed never ran and the value is still whatever that database holds:
-   change it in the admin UI under Settings -> Auth, or through the admin API:
-
-     POST /api/authenticate            {"username":"admin@kasm.local","password":"..."}   -> token
-     POST /api/admin/get_settings      {"username":"...","token":"..."}                   -> setting_id of kasm_auth_domain
-     POST /api/admin/update_setting    {"username":"...","token":"...","setting_id":"...","value":"{{ $authDomain }}"}
+    kubectl port-forward -n {{ .Release.Namespace }} svc/{{ .Release.Name }}-proxy-default 8443:8443    ->  https://localhost:8443
+{{- end }}
 {{- else }}
-1. THE AUTH DOMAIN — MANUAL STEP REQUIRED after the first install.
-   The Kasm Authorization Domain starts at its `$request_host$` default. That scopes the session
-   cookie to the control plane's hostname, the browser never sends it to the agent's session
-   proxy, and every session connection fails with a 401. Set it to a parent domain covering BOTH
-   hostnames — for {{ $publicAddr | default "kasm.example.com" }} and
-   {{ $publicHostname | default "sessions.example.com" }}, that is their shared parent.
 
-   Do it in the admin UI under Settings, or through the admin API:
+  kasm-helm.publicAddr is unset, so Kasm has no hostname of its own yet.
+{{- if $externalAddress }}
 
-     POST /api/authenticate            {"username":"admin@kasm.local","password":"..."}   -> token
-     POST /api/admin/get_settings      {"username":"...","token":"..."}                   -> setting_id of kasm_auth_domain
-     POST /api/admin/update_setting    {"username":"...","token":"...","setting_id":"...","value":"<domain>"}
+  Kasm URL:   https://{{ $externalAddress }}
 
-   On a FRESH install you can skip all of that: set `kasm-helm.kasmConfig.authDomain` to the shared
-   parent domain and it is seeded at database initialization.
+  That is the address the cluster assigned to the {{ $proxyType }} Service, read back at render
+  time. It is reachable from wherever that address routes - on a local kind or k3d cluster that
+  is the container network, not your workstation.
+{{- else if eq $proxyType "LoadBalancer" }}
+  The proxy is published by a LoadBalancer Service; browse to https://<address> once the cloud
+  provider (or MetalLB, or k3s ServiceLB) has assigned one:
+
+    kubectl get svc -n {{ .Release.Namespace }} {{ .Release.Name }}-proxy-ext-default \
+      -o jsonpath='{.status.loadBalancer.ingress[0].ip}{.status.loadBalancer.ingress[0].hostname}'; echo
+
+  Helm renders these notes before it creates anything, so the first install cannot show the
+  address. From the next helm upgrade on (same values) it is read back and printed here.
+{{- else if eq $proxyType "NodePort" }}
+  The proxy is published on a NodePort; browse to https://<any node address>:<port>, where port is:
+
+    kubectl get svc -n {{ .Release.Namespace }} {{ .Release.Name }}-proxy-ext-default -o jsonpath='{.spec.ports[0].nodePort}'; echo
+
+  Pin the port with kasm-helm.proxyService.nodePort and the URL is printed here from the first install.
+{{- else }}
+  Nothing publishes the proxy outside the cluster. Reach it with a port-forward:
+
+    kubectl port-forward -n {{ .Release.Namespace }} svc/{{ .Release.Name }}-proxy-default 8443:8443    ->  https://localhost:8443
 {{- end }}
 
-2. THE ZONE MUST USE DIRECT CONNECTIONS.
-   The seeded zone defaults route session traffic through the control-plane proxy, which 404s
-   behind host-routing ingress. On a fresh install, preseed the zone instead:
-
-     kasm-helm:
-       kasmConfig:
-         generatePreseed: true
-       kasmZones:
-         - name: default
-           proxy_hostname: {{ $publicAddr | default "kasm.example.com" }}
-           proxy_connections: false
-           upstream_auth_address: {{ $publicAddr | default "kasm.example.com" }}
-
-   On an existing control plane the preseed no longer runs — change Proxy Connections and Upstream
-   Auth Address in the admin UI under Infrastructure -> Zones.
-
-3. NAMESPACE LABELS (usually none needed).
-   Sessions work without labels: the operator's per-workspace NetworkPolicy admits the session
-   proxy by podSelector, and all traffic to workspaces flows through it. Label this namespace
-   `kasm.com/role=manager` only if something here needs DIRECT ingress to workspace pods.
-{{- if or $nodePrepEnabled $videoEnabled }}
-
-   {{ if $nodePrepEnabled }}nodePrep{{ else }}videoDevicePlugin{{ end }} is enabled, so this namespace must also permit the `privileged` Pod
-   Security Standard — which then covers the control-plane pods sharing it too:
-
-     kubectl label namespace {{ .Release.Namespace }} \
-       pod-security.kubernetes.io/enforce=privileged --overwrite
-{{- end }}
-{{- if $netPolEnabled }}
-
-   WARNING: `kasm-agent.networkPolicies.enabled` is true. That baseline models only the agent
-   stack's traffic and will cut off the control plane sharing this namespace. Disable it, or extend
-   it through `kasm-agent.networkPolicies.extraPolicies`.
+  Before anyone else uses it, set kasm-helm.publicAddr to the DNS name users will type - it becomes
+  the certificate name, the Ingress/Route/Gateway host, and the address Kasm advertises to agents -
+  and helm upgrade.
 {{- end }}
 
-4. HOSTNAMES, AND THE MANAGER THE AGENT REGISTERS WITH.
-   The `kasm-agent` chart refuses to render without `agent.manager.hostname`, a token
-   (`agent.manager.token` or `agent.manager.existingTokenSecret`), and `agent.publicHostname`, so
-   all three are set. What it cannot check is whether they point at THIS release. In use here:
-{{ if $agentInstanceEnabled }}
-     kasm-helm.publicAddr                 {{ $publicAddr | default "unset" }}
-     kasm-agent.agent.manager.hostname    {{ $managerHostname | default "unset" }}
-     kasm-agent.agent.publicHostname      {{ $publicHostname | default "unset" }}
-     manager token from                   {{ if $managerTokenSecret }}Secret "{{ $managerTokenSecret }}"{{ else if $managerToken }}agent.manager.token (in the release history — prefer agent.manager.existingTokenSecret: {{ .Release.Name }}-secrets, tokenSecretKey: manager-token){{ else }}unset{{ end }}
+  Admin user:           {{ $adminUser }}
+  Unprivileged user:    user@kasm.local
+
+{{- if $secretsCreate }}
+
+  Passwords were generated on first install into Secret "{{ $secretsName }}" and are reused on
+  every upgrade (delete the Secret to have new ones generated):
+{{- else }}
+
+  Passwords come from the Secret you supplied, "{{ $secretsName }}" (kasm-helm.kasmSecrets.create=false):
+{{- end }}
+
+    kubectl get secret -n {{ .Release.Namespace }} {{ $secretsName }} -o jsonpath='{.data.admin-password}' | base64 -d; echo
+    kubectl get secret -n {{ .Release.Namespace }} {{ $secretsName }} -o jsonpath='{.data.user-password}'  | base64 -d; echo
+
+  The same Secret holds db-password, service-token and manager-token - the token every agent
+  registers with{{ if and $agentEnabled $agentInstanceEnabled $tokenDerived }}; the agent in this release reads it from there directly{{ end }}.
+{{- end }}
+{{- if and $agentEnabled $agentInstanceEnabled }}
+
+================================================================================
+KUBERNETES AGENT
+================================================================================
+
+  Agent resource:        {{ $agentName }}   (zone "{{ $agentZone }}")
+  Registers with:        {{ $effectiveManager | default "UNSET" }}{{ if $managerDerived }}   <- this release's own proxy Service (derived){{ end }}
+  Manager token from:    {{ if $managerTokenSecret }}Secret "{{ $managerTokenSecret }}"{{ else if $managerToken }}kasm-agent.agent.manager.token, stored in the release values (prefer existingTokenSecret){{ else if $inCluster }}Secret "{{ $derivedTokenSecret }}", key manager-token (derived){{ else }}UNSET{{ end }}
+  Session hostname:      {{ $effectivePublic | default "UNSET" }}{{ if $publicDerived }}   <- in-cluster Service (derived){{ end }}
+  Session proxy TLS:     Secret "{{ $certSecret }}"{{ if $certEnabled }}, issued by cert-manager{{ else if $selfSigned }}, self-signed by this release unless it already existed{{ else }} - must already exist{{ end }}
+
+  Check that it registered (Phase turns Ready once the manager has accepted it):
+
+    kubectl get agents.agent.kasm.com -n {{ .Release.Namespace }}
+
+  Then two clicks in the admin UI, which no chart can do for you:
+
+    1. Infrastructure -> the registered agent -> Enable. New agents register DISABLED, and a
+       session requested before that fails with "No resources are available". Allow one
+       heartbeat interval (~15s) after enabling; re-registering after a gap disables it again.
+    2. Workspaces -> the image -> assign it to the users' group, or launches fail with
+       "Image Not Authorized".
+{{- if and (not $cpEnabled) (or $managerDerived $tokenDerived $publicDerived) }}
+
+  WARNING: kasm-helm.enabled is false, but kasm-agent.agent.inClusterControlPlane is still true
+  (this chart's default), so the derived values above point at a control plane this release does
+  not install. Set kasm-agent.agent.inClusterControlPlane=false and give
+  kasm-agent.agent.manager.hostname, a manager token and kasm-agent.agent.publicHostname explicitly.
+{{- end }}
+{{- if and $cpEnabled $tokenDerived (ne $secretsName $derivedTokenSecret) }}
+
+  WARNING: the agent reads its manager token from Secret "{{ $derivedTokenSecret }}", but the control
+  plane keeps its credentials in "{{ $secretsName }}" (kasm-helm.kasmSecrets.name). Registration will
+  fail. Set kasm-agent.agent.manager.existingTokenSecret={{ $secretsName }} and
+  kasm-agent.agent.manager.tokenSecretKey=manager-token.
+{{- end }}
+{{- if and $cpEnabled $managerDerived $zones (not (has "default" $zoneNames)) }}
+
+  WARNING: the derived manager hostname assumes a control-plane zone named "default", but
+  kasm-helm.kasmZones defines {{ join ", " $zoneNames }}. Set kasm-agent.agent.manager.hostname to
+  {{ .Release.Name }}-proxy-<zone>.{{ .Release.Namespace }}.svc.cluster.local for the zone this agent belongs to.
+{{- end }}
+{{- if and $cpEnabled $zones (not (has $agentZone $zoneNames)) }}
+
+  WARNING: the agent registers into zone "{{ $agentZone }}" (kasm-agent.agent.zone), which
+  kasm-helm.kasmZones does not define ({{ join ", " $zoneNames }}). The manager rejects an agent for
+  an unknown zone; align the two.
+{{- end }}
+{{- if $cpEnabled }}
+{{- if $relayed }}
+
+--------------------------------------------------------------------------------
+SESSION TRAFFIC IS RELAYED THROUGH THE CONTROL PLANE. Nothing more to configure.
+--------------------------------------------------------------------------------
+
+  Browsers only ever talk to the control plane; its proxy connects to the session proxy inside
+  the cluster, at
+
+    {{ $effectivePublic }}:{{ $publicPort }}
+
+  The zone keeps its seeded default of proxied connections, the Kasm Authorization Domain stays
+  at its default, and the session proxy's self-signed certificate is never shown to a browser.
+
+  To have browsers connect to the session proxy DIRECTLY instead (no relay hop), do all three:
+
+    1. Publish the session proxy at a public hostname under the SAME parent domain as the control
+       plane, and set kasm-agent.agent.publicHostname to it - together with one of
+       kasm-agent.agent.ingress / httpRoute / route / tlsRoute, and a certificate browsers trust.
+    2. Scope the session cookie to that shared parent domain: kasm-helm.kasmConfig.authDomain on
+       a fresh install, or Settings -> Auth -> Kasm Authorization Domain in the admin UI on an
+       existing database. Otherwise every session connection fails with a 401.
+    3. Switch the zone to direct connections. On a fresh install, preseed it:
+
+         kasm-helm:
+           kasmConfig:
+             generatePreseed: true
+           kasmZones:
+             - name: {{ $agentZone }}
+               proxy_hostname: <control-plane hostname>
+               proxy_connections: false
+               upstream_auth_address: <control-plane hostname>
+
+       On an existing control plane the preseed no longer runs - change Proxy Connections and
+       Upstream Auth Address under Infrastructure -> Zones.
+{{- else }}
+
+================================================================================
+DIRECT SESSION CONNECTIONS - three things to check
+================================================================================
+
+  Browsers will connect to the session proxy at {{ $effectivePublic }} directly, so the control plane
+  and the agent have to agree on more than the manager address.
+{{- if $authDomain }}
+
+  1. THE AUTH DOMAIN - seeded at database initialization. Nothing to do on a fresh install.
+     kasm-helm.kasmConfig.authDomain is set to {{ $authDomain }}, so the Kasm Authorization Domain was
+     written into the seed before the database came up. The session cookie is scoped to
+     {{ $authDomain }} and reaches both {{ $publicAddr | default "<publicAddr>" }} and {{ $effectivePublic }}.
+
+     Confirm both hostnames really are under {{ $authDomain }} - a mismatch still 401s. This only
+     applies to a database this release initialized; on an EXISTING database the seed never ran,
+     so change it under Settings -> Auth in the admin UI, or through the admin API:
+
+       POST /api/authenticate            {"username":"{{ $adminUser }}","password":"..."}   -> token
+       POST /api/admin/get_settings      {"username":"...","token":"..."}                   -> setting_id of kasm_auth_domain
+       POST /api/admin/update_setting    {"username":"...","token":"...","setting_id":"...","value":"{{ $authDomain }}"}
+{{- else }}
+
+  1. THE AUTH DOMAIN - MANUAL STEP REQUIRED after the first install.
+     The Kasm Authorization Domain starts at its $request_host$ default. That scopes the session
+     cookie to the control plane's hostname, the browser never sends it to the session proxy, and
+     every session connection fails with a 401. Set it to the parent domain covering BOTH
+     {{ $publicAddr | default "<publicAddr>" }} and {{ $effectivePublic }}: under Settings -> Auth in the admin UI, or
+     through the admin API:
+
+       POST /api/authenticate            {"username":"{{ $adminUser }}","password":"..."}   -> token
+       POST /api/admin/get_settings      {"username":"...","token":"..."}                   -> setting_id of kasm_auth_domain
+       POST /api/admin/update_setting    {"username":"...","token":"...","setting_id":"...","value":"<parent domain>"}
+
+     On a FRESH install, set kasm-helm.kasmConfig.authDomain instead and it is seeded at database
+     initialization.
+{{- end }}
+
+  2. THE ZONE MUST USE DIRECT CONNECTIONS.
+     The seeded zone defaults route session traffic through the control-plane proxy, which 404s
+     behind host-routing ingress. On a fresh install, preseed the zone:
+
+       kasm-helm:
+         kasmConfig:
+           generatePreseed: true
+         kasmZones:
+           - name: {{ $agentZone }}
+             proxy_hostname: {{ $publicAddr | default "<publicAddr>" }}
+             proxy_connections: false
+             upstream_auth_address: {{ $publicAddr | default "<publicAddr>" }}
+
+     On an existing control plane the preseed no longer runs - change Proxy Connections and
+     Upstream Auth Address under Infrastructure -> Zones.
+
+  3. HOSTNAMES. The session proxy needs a certificate browsers trust for {{ $effectivePublic }}
+     (kasm-agent.agent.sessionProxy.certificate, or a pre-created Secret), and a route to it
+     (kasm-agent.agent.ingress / httpRoute / route / tlsRoute).
 {{- if and $managerHostname $publicAddr (ne $managerHostname $publicAddr) }}
 
-   WARNING: the agent's manager hostname is not this release's control plane. Deliberate for a
-   split deployment; a typo otherwise.
+     WARNING: kasm-agent.agent.manager.hostname ({{ $managerHostname }}) is not this release's control
+     plane ({{ $publicAddr }}). Deliberate for a split deployment; a typo otherwise.
 {{- end }}
 {{- if and $publicHostname $publicAddr (eq $publicHostname $publicAddr) }}
 
-   WARNING: the control plane and the agent's session proxy are configured on the SAME hostname.
-   They front different services and need separate names under a shared parent domain.
+     WARNING: the control plane and the session proxy are configured on the SAME hostname
+     ({{ $publicAddr }}). They front different services and need separate names under a shared
+     parent domain.
 {{- end }}
-{{ else }}
-     kasm-agent.agent.enabled is false — no Agent resource in this release. The control plane's
-     publicAddr is {{ $publicAddr | default "unset" }}; whatever agent registers with it needs a
-     session-proxy hostname that is different from that but shares its parent domain.
-{{ end }}
 {{- end }}
 
-{{ if $agentEnabled -}}
-================================================================================
-UNINSTALL IN TWO STEPS
-================================================================================
-`helm uninstall` deletes the Agent custom resources and the operator that clears their finalizers
-at the same time. If the operator dies first, the deletions hang — and a later operator install
-processes the stale deletion and tears things down. Always:
+  NAMESPACE. Sessions need no namespace label: the operator's per-workspace NetworkPolicy admits
+  the session proxy by podSelector. Label this namespace kasm.com/role=manager only if something
+  here needs DIRECT ingress to workspace pods.
+{{- if or $nodePrepEnabled $videoEnabled $egressEnabled }}
 
-  kubectl delete kasmworkspaces.agent.kasm.com --all -n {{ .Release.Namespace }} --wait
-  kubectl delete agents.agent.kasm.com --all -n {{ .Release.Namespace }} --wait
-  helm uninstall {{ .Release.Name }} -n {{ .Release.Namespace }}
-{{ else -}}
-================================================================================
-UNINSTALL
-================================================================================
-  helm uninstall {{ .Release.Name }} -n {{ .Release.Namespace }}
+  {{ if $nodePrepEnabled }}nodePrep{{ else if $videoEnabled }}videoDevicePlugin{{ else }}egressInstaller{{ end }} is enabled, so this namespace must also permit the "privileged" Pod
+  Security Standard - which then covers the control-plane pods sharing it too:
 
-The control plane's PersistentVolumeClaims (the database, and any backup volume) survive an
-uninstall. Delete them deliberately, once you are sure.
-{{ end }}
+    kubectl label namespace {{ .Release.Namespace }} pod-security.kubernetes.io/enforce=privileged --overwrite
+{{- end }}
+{{- if $netPolEnabled }}
+
+  WARNING: kasm-agent.networkPolicies.enabled is true. That baseline models only the agent stack's
+  traffic and will cut off the control plane sharing this namespace. Disable it, or extend it
+  through kasm-agent.networkPolicies.extraPolicies.
+{{- end }}
+{{- end }}
+{{- else if $agentEnabled }}
+
+  kasm-agent.agent.enabled is false - no Agent resource in this release. The control plane's
+  publicAddr is {{ $publicAddr | default "unset" }}; whatever agent registers with it needs a session-proxy
+  hostname that is different from that but shares its parent domain, or the relayed topology.
+{{- end }}
+
+================================================================================
+UNINSTALL{{ if $agentEnabled }} IN TWO STEPS{{ end }}
+================================================================================
+{{- if $agentEnabled }}
+  helm uninstall deletes the Agent custom resources and the operator that clears their finalizers
+  at the same time. If the operator dies first the deletions hang, and a later operator install
+  processes the stale deletion and tears things down. Always:
+
+    kubectl delete kasmworkspaces.agent.kasm.com --all -n {{ .Release.Namespace }} --wait
+    kubectl delete agents.agent.kasm.com --all -n {{ .Release.Namespace }} --wait
+    helm uninstall {{ .Release.Name }} -n {{ .Release.Namespace }}
+{{- else }}
+    helm uninstall {{ .Release.Name }} -n {{ .Release.Namespace }}
+{{- end }}
+{{- if $cpEnabled }}
+
+  The control plane's PersistentVolumeClaims (the database, and any backup volume) and its
+  credentials Secret survive an uninstall. Delete them deliberately, once you are sure.
+{{- end }}
+
 --------------------------------------------------------------------------------
-Helm shows only this chart's notes. For the two dependencies' own post-install notes:
+Helm shows only this chart's notes; add --render-subchart-notes to helm install/upgrade for the
+two dependencies' own. Value references: charts/kasm-helm/README.md (everything under kasm-helm:)
+and charts/kasm-agent/README.md (everything under kasm-agent:).
+{{- if $cpEnabled }}
+{{- if include "kasm.selfSignedCertNeeded" (dict "Values" $kasmHelm "Release" .Release "Chart" .Chart) }}
 
-  helm install ... --render-subchart-notes
+================================================================================
+  WARNING: this release generated SELF-SIGNED TLS certificates.
 
-Value references: charts/kasm-helm/README.md (everything under `kasm-helm:`) and
-charts/kasm-agent/README.md (everything under `kasm-agent:`, and its "Running alongside the
-kasm-helm control plane" section for the pairing in depth).
+  No certificate was configured, so the charts created their own rather than leave the pods
+  waiting on Secrets that do not exist. They are NOT publicly trusted: browsers will warn on
+  the control plane's certificate, and this is for evaluation only.
+
+  Before anyone real uses this, set one of:
+    kasm-helm.certificate.secretName            - a kubernetes.io/tls Secret you supply
+    kasm-helm.certificate.certManager.enabled   - issue it with cert-manager
+{{- if and $agentEnabled $agentInstanceEnabled (not $certEnabled) $selfSigned (not $relayed) }}
+
+  and, because browsers reach the session proxy directly, one of:
+    kasm-agent.agent.sessionProxy.certificate.enabled   - issue it with cert-manager
+    a pre-created Secret "{{ $certSecret }}"              - created before the first install
+{{- end }}
+
+  The generated certificates are reused across upgrades and follow their hostnames.
+================================================================================
+{{- end }}
+{{- end }}

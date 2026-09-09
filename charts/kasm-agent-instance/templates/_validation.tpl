@@ -1,0 +1,38 @@
+{{/*
+  Cross-value validation for the ways this chart publishes the session proxy.
+
+  Held here rather than in the templates it constrains because the rule is n-way:
+  the operator-created session-proxy Service can be published five ways (an
+  Ingress, a Gateway API HTTPRoute, an OpenShift Route, the chart-managed
+  TLSRoute, and the operator-managed gatewayRoute), every one of them at the
+  same hostname. Spread across the five templates, the rule would have to be
+  repeated in each.
+
+  Invoked once from validation.yaml, which renders no manifest of its own, so it
+  runs on `helm install`, `helm upgrade`, `helm template` and `--dry-run` alike.
+  This mirrors the `kasm.validateExposure` helper in the kasm-helm chart.
+
+  Messages are prefixed `agent.` because that is the values path under the
+  kasm-agent umbrella, where this chart is almost always installed from.
+*/}}
+{{- define "kasmAgentInstance.validateExposure" -}}
+{{- $v := .Values -}}
+
+{{- $exposure := list -}}
+{{- if $v.ingress.enabled -}}{{- $exposure = append $exposure "ingress.enabled" -}}{{- end -}}
+{{- if $v.httpRoute.enabled -}}{{- $exposure = append $exposure "httpRoute.enabled" -}}{{- end -}}
+{{- if $v.route.enabled -}}{{- $exposure = append $exposure "route.enabled" -}}{{- end -}}
+{{- if $v.tlsRoute.enabled -}}{{- $exposure = append $exposure "tlsRoute.enabled" -}}{{- end -}}
+{{- if $v.gatewayRoute.enabled -}}{{- $exposure = append $exposure "gatewayRoute.enabled" -}}{{- end -}}
+{{- if gt (len $exposure) 1 -}}
+  {{- fail (printf "Only one session-proxy exposure method may be enabled, but agent.%s are set. The Ingress, the Gateway API HTTPRoute, the OpenShift Route, the chart-managed TLSRoute and the operator-managed gatewayRoute all publish the same session-proxy Service at the same hostname, so enabling more than one gives that hostname two owners." (join " and agent." $exposure)) -}}
+{{- end -}}
+
+{{/* gatewayRoute.parentRef.name has its own guard in kasmAgentInstance.gatewayRouteParentRefName. */}}
+{{- if and $v.httpRoute.enabled (not $v.httpRoute.parentRefs) -}}
+  {{- fail "agent.httpRoute.enabled is set but agent.httpRoute.parentRefs is empty - the HTTPRoute would attach to no Gateway, and the session proxy would stay unreachable from outside the cluster." -}}
+{{- end -}}
+{{- if and $v.tlsRoute.enabled (not $v.tlsRoute.parentRefs) -}}
+  {{- fail "agent.tlsRoute.enabled is set but agent.tlsRoute.parentRefs is empty - the TLSRoute would attach to no Gateway, and the session proxy would stay unreachable from outside the cluster." -}}
+{{- end -}}
+{{- end -}}

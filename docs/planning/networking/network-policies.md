@@ -1,6 +1,6 @@
 # NetworkPolicy enforcement
 
-> **Applies to:** [Network isolation and web filtering](../feature-matrix.md#networking--access), [multi-tenancy](../feature-matrix.md#security--isolation) and [telemetry](../feature-matrix.md#observability--operations) · **Charts/values:** `networkPolicies.enabled`, `networkPolicies.apiServer.cidr`, `networkPolicies.apiServer.ports`, `networkPolicies.manager.cidr`, `networkPolicies.manager.ports`, `networkPolicies.sessionProxy.ports`, `networkPolicies.sessionProxy.from`, `networkPolicies.otelBackend.cidr`, `networkPolicies.otelBackend.ports`, `networkPolicies.extraPolicies`
+> **Applies to:** [Network isolation and web filtering](../../reference/feature-matrix.md#networking-and-access), [multi-tenancy](../../reference/feature-matrix.md#security-and-isolation) and [telemetry](../../reference/feature-matrix.md#observability-and-operations) · **Charts/values:** `networkPolicies.enabled`, `networkPolicies.apiServer.cidr`, `networkPolicies.apiServer.ports`, `networkPolicies.manager.cidr`, `networkPolicies.manager.ports`, `networkPolicies.sessionProxy.ports`, `networkPolicies.sessionProxy.from`, `networkPolicies.otelBackend.cidr`, `networkPolicies.otelBackend.ports`, `networkPolicies.extraPolicies`
 
 ## Why this is needed
 
@@ -34,7 +34,7 @@ Two separate mechanisms exist here, and they are often confused:
 * **The baseline models the two-namespace layout only.** In a namespace shared with the `kasm-helm`
   control plane, leave `networkPolicies.enabled=false` — the baseline does not model the control
   plane's flows and will cut it off. See
-  [Running alongside the kasm-helm control plane](../../charts/kasm-agent/README.md#running-alongside-the-kasm-helm-control-plane).
+  [Running alongside the kasm-helm control plane](../../../charts/kasm-agent/README.md#running-alongside-the-kasm-helm-control-plane).
 * Know how the agent reaches the manager, including **which port the connection actually lands on**
   after DNAT. This is the one non-obvious prerequisite; see step 3.
 

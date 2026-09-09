@@ -1,5 +1,6 @@
 {{- include "kasmNodePrep.validateEnabled" . }}
 {{- include "kasmNodePrep.validateMethods" . }}
+{{- include "kasmNodePrep.validateInputs" . }}
 {{/*
   The Dockerfile KMM builds the v4l2loopback kmod image from, in the ConfigMap shape
   spec.moduleLoader.container.kernelMappings[].build.dockerfileConfigMap expects: a single key
@@ -39,9 +40,9 @@ RUN apt-get update \
 
 WORKDIR /usr/src
 {{- if $v4l2.sourceRef }}
-RUN git clone --depth 1 --branch {{ $v4l2.sourceRef | quote }} {{ $v4l2.sourceRepo | quote }} v4l2loopback
+RUN git clone --depth 1 --branch {{ include "kasmNodePrep.shq" $v4l2.sourceRef }} {{ include "kasmNodePrep.shq" $v4l2.sourceRepo }} v4l2loopback
 {{- else }}
-RUN git clone --depth 1 {{ $v4l2.sourceRepo | quote }} v4l2loopback
+RUN git clone --depth 1 {{ include "kasmNodePrep.shq" $v4l2.sourceRepo }} v4l2loopback
 {{- end }}
 
 # KERNELRELEASE rather than the default `uname -r`: this build runs in a pod on some cluster node

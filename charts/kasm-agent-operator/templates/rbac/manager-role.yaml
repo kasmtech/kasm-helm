@@ -4,6 +4,11 @@
   so a cluster converting from the kustomize deployment to this chart keeps the same objects.
 
   These are cluster-scoped, so only one release of this chart can own them per cluster.
+
+  Synced 2026-09-08 with the operator build that stops caching Secrets, and one deliberate difference
+  from the generated role: no secrets rule at all (see the comment on that rule below). Requires that
+  operator build or newer; an older operator's Secret informer needs cluster-wide list/watch and will
+  fail its cache sync under this role. Rule order is otherwise the generator's.
 */}}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -17,9 +22,7 @@ rules:
   resources:
   - configmaps
   - persistentvolumeclaims
-  - persistentvolumes
   - pods
-  - secrets
   - serviceaccounts
   - services
   verbs:
@@ -30,6 +33,23 @@ rules:
   - patch
   - update
   - watch
+# PersistentVolumes are created and deleted by name and never watched, so the operator carries no
+# list/watch on them. Cluster-scoped by nature, so this rule cannot move to a namespaced Role.
+- apiGroups:
+  - ""
+  resources:
+  - persistentvolumes
+  verbs:
+  - create
+  - delete
+  - get
+  - update
+# No secrets rule, deliberately. The operator needs Secret access only inside the namespaces that hold
+# an Agent (it gets, creates and updates the per-workspace storage-mapping Secret by name, never lists
+# or watches Secrets, and never deletes them: owner references do). That grant comes from the
+# kasm-agent-instance chart, which stamps a namespaced Role + RoleBinding for this ServiceAccount
+# wherever it installs an Agent. The operator's generated config/rbac/role.yaml keeps a cluster-wide
+# secrets get/create/update for its kustomize deployment; this chart is the one place that drops it.
 - apiGroups:
   - agent.kasm.com
   resources:
@@ -128,19 +148,18 @@ rules:
   - get
   - patch
   - update
+# The per-Agent ClusterRoleBinding is created, updated and deleted by a name the operator computes
+# itself; it never lists or patches bindings. The per-Agent RoleBinding is owned by the Agent and
+# garbage-collected, so no delete verb is needed on rolebindings.
 - apiGroups:
   - rbac.authorization.k8s.io
   resources:
   - clusterrolebindings
-  - rolebindings
   verbs:
   - create
   - delete
   - get
-  - list
-  - patch
   - update
-  - watch
 # The operator holds only `bind` on these two ClusterRoles, not the permissions they grant. It creates
 # the per-Agent bindings that reference them by name, so the names below must match the ClusterRoles in
 # kasm-agent-clusterrole.yaml and kasm-nginx-sidecar-clusterrole.yaml exactly.
@@ -153,6 +172,17 @@ rules:
   - clusterroles
   verbs:
   - bind
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - rolebindings
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

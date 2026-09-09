@@ -20,9 +20,17 @@ spec:
   template:
     metadata:
       {{- /* Merged rather than concatenated so a podAnnotations/podLabels key that collides with one
-             of the chart's own cannot emit a duplicate YAML key. The chart's own keys win. */}}
+             of the chart's own cannot emit a duplicate YAML key. The chart's own keys win.
+
+             kasm.com/security and kasm.com/healthcheck are the opt-in markers the repository's
+             Kyverno gates (tests/kyverno/pod-security.baseline.yaml, tests/kyverno/probes.required.yaml)
+             key off: a pod template without them is skipped by those policies entirely. This pod
+             template is unconditionally hardened (restricted-compatible pod and container
+             securityContext below) and unconditionally probed (liveness + readiness on :8081), so
+             the markers are emitted unconditionally too - there is no unhardened variant of this
+             Deployment to exempt. Removing them silently drops this workload out of both gates. */}}
       annotations:
-        {{- $annotations := merge (dict "kubectl.kubernetes.io/default-container" "manager") (deepCopy (.Values.podAnnotations | default dict)) }}
+        {{- $annotations := merge (dict "kubectl.kubernetes.io/default-container" "manager" "kasm.com/security" "true" "kasm.com/healthcheck" "true") (deepCopy (.Values.podAnnotations | default dict)) }}
         {{- toYaml $annotations | nindent 8 }}
       labels:
         {{- $labels := merge (include "kasmAgentOperator.labels" . | fromYaml) (deepCopy (.Values.podLabels | default dict)) }}
@@ -38,6 +46,9 @@ spec:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
+        # No fsGroup is set, so this only ever costs a no-op on startup; it is stated explicitly
+        # because the restricted-PSS Kyverno gate requires it on every pod template it covers.
+        fsGroupChangePolicy: OnRootMismatch
       containers:
         - name: manager
           image: {{ include "kasmAgentOperator.image" . }}
@@ -79,6 +90,12 @@ spec:
             {{- toYaml .Values.resources | nindent 12 }}
           securityContext:
             allowPrivilegeEscalation: false
+            # Restated at container scope (the pod securityContext above already sets both) so the
+            # container is restricted-compatible when read on its own, which is what both the
+            # Pod Security admission controller and the repository's Kyverno gate check.
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
             capabilities:
               drop:
                 - ALL

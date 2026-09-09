@@ -84,8 +84,8 @@ the node's `/proc/sys` and calling `swapon` cannot be done from an unprivileged 
   `baseline` or `restricted` standards and will be rejected outright by an enforcing namespace.
 * By default the reconcile script installs packages from the node OS repositories and clones module sources
   over the network at runtime. Pin `modules.*.sourceRef` and point `modules.*.sourceRepo` at an internal
-  mirror if you need builds to be reproducible and supply-chain reviewed — or remove the runtime fetches
-  altogether with a pre-baked builder image (see [Airgapped / offline nodes](#airgapped--offline-nodes)),
+  mirror if you need builds to be reproducible and supply-chain reviewed (a mirror that needs a login takes its credentials from a Secret named in `modules.*.sourceRepoSecret`; a `user:password@` in the URL itself is rejected at render time) — or remove the runtime fetches
+  altogether with a pre-baked builder image (see [Airgapped / offline nodes](#airgapped-and-offline-nodes)),
   which is the only configuration where what gets inserted into the node kernel is fixed at image build time.
 
 Treat installing this chart as granting node-root to whoever controls its values.
@@ -108,7 +108,7 @@ Treat installing this chart as granting node-root to whoever controls its values
 * **Package repository and source access.** Each node needs to reach its OS package repositories and the git
   repositories in `modules.*.sourceRepo`, either directly or through a proxy or internal mirror — unless you
   use a pre-baked builder image, which removes both fetches. See
-  [Airgapped / offline nodes](#airgapped--offline-nodes).
+  [Airgapped / offline nodes](#airgapped-and-offline-nodes).
 * **A Debian/Ubuntu builder image**, *when packages have to be installed at runtime.* The default
   `docker.io/library/ubuntu:22.04` builder uses `apt-get`. RHEL and Oracle Linux nodes need their headers
   pre-installed, or a builder image and script adapted to `dnf`. A pre-baked builder image that already
@@ -237,7 +237,7 @@ two-stage Dockerfile KMM would build in-cluster; extract it from a connected ren
 once per kernel release:
 
 ```console
-helm template kasm-node-prep charts/kasm-node-prep \
+helm template kasm-node-prep oci://registry-1.docker.io/kasmweb/kasm-node-prep \
   --set modules.v4l2loopback.method=kmm \
   --set modules.v4l2loopback.kmm.image.registry=registry.example.internal \
   --set modules.v4l2loopback.kmm.image.repository=kasm/v4l2loopback \
@@ -313,7 +313,7 @@ the airgap that build pod additionally needs the kaniko image (mirror it with th
 mirror serving `linux-headers-<kernel>`, and the module source reachable (an internal mirror of
 `modules.v4l2loopback.sourceRepo`). That is the fallback for churning kernels: it trades Mode A's static
 image list for standing build infrastructure behind the airgap. The equivalent with no KMM at all — a
-pre-baked builder image on the node — is [Airgapped / offline nodes](#airgapped--offline-nodes).
+pre-baked builder image on the node — is [Airgapped / offline nodes](#airgapped-and-offline-nodes).
 
 ### Secure Boot
 
@@ -499,7 +499,7 @@ tuning:
 Values are only ever applied with `sysctl -w`, never written to `/etc/sysctl.d`, so a node reboot resets them
 and the next pass reapplies them — and uninstalling the chart leaves nothing behind on the node.
 
-## Airgapped / offline nodes
+## Airgapped and offline nodes
 
 Out of the box this chart reaches the network twice per build: `apt-get` for the toolchain and the kernel
 headers, and `git clone` for the module sources. Both are avoidable. With a **pre-baked builder image** the

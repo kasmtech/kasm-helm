@@ -225,7 +225,7 @@ CRANE_ARCH := $(subst amd64,x86_64,$(ARCH))
 CLOUD_PROVIDER_KIND_PID_FILE ?= $(CURDIR)/.kind/cloud-provider-kind.pid
 CLOUD_PROVIDER_KIND_LOG ?= $(CURDIR)/.kind/cloud-provider-kind.log
 
-.PHONY: tools lint render kubeconform kyverno unittest readme readme-check readme-all readme-check-all changelog changelog-llm changelog-console changelog-console-llm changelog-check changelog-check-all docs test build-pytest kind-up kind-down kind-recreate kind-ensure kind-load-images kind-load-old-images kind-clean-namespace kind-prep pytest-docker e2e e2e-basic e2e-trustedca e2e-multizone e2e-externaldb e2e-backup e2e-backup-pss e2e-pss e2e-json-logging e2e-upgrade e2e-upgrade-included e2e-upgrade-standalone e2e-settle e2e-preseed validate-preseed extract-old-chart clean deps-agent lint-agent unittest-agent crds-sync-check version-check-agent render-agent package-agent package-agent-all images-agent kmm-install kmm-install-mirrored kmm-uninstall
+.PHONY: tools lint render kubeconform kyverno unittest readme readme-check readme-all readme-check-all changelog changelog-llm changelog-console changelog-console-llm changelog-check changelog-check-all docs linkcheck images-check test build-pytest kind-up kind-down kind-recreate kind-ensure kind-load-images kind-load-old-images kind-clean-namespace kind-prep pytest-docker e2e e2e-basic e2e-trustedca e2e-multizone e2e-externaldb e2e-backup e2e-backup-pss e2e-pss e2e-json-logging e2e-upgrade e2e-upgrade-included e2e-upgrade-standalone e2e-settle e2e-preseed validate-preseed extract-old-chart clean deps-agent lint-agent unittest-agent crds-sync-check version-check-agent render-agent package-agent package-agent-all images-agent kmm-install kmm-install-mirrored kmm-uninstall
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*## "; printf "\nUsage: make \033[36m<target>\033[0m\n"} \
@@ -586,10 +586,43 @@ package-agent-all: package-agent ## Package every publishable agent-family chart
 # own values, so mirroring this list alone is not enough when gpuOperator.enabled=true. Follow
 # NVIDIA's air-gapped procedure for those:
 # https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/install-gpu-operator-air-gapped.html
+# Deliberately NOT the same extractor as images-agent. That target finds references with a
+# line-oriented awk over `<anything>image:` keys; this one walks every YAML map structurally
+# with yq and takes every string value whose key ends in "image" (image, sidecarImage,
+# containerImage, each entry of KasmImagePuller.spec.images, ...). Two independent extractors
+# have to agree on the same rendered manifests, so a key shape the awk misses -- the
+# sidecarImage case that motivated this target -- fails here instead of in an airgapped
+# install. (An earlier version re-ran the identical awk on the identical files and could not
+# fail.) The `[/:]` filter matches images-agent's: bare component names in the gpu-operator
+# ClusterPolicy are not pull references.
+images-check: images-agent $(YQ) ## Verify the image list covers every image the manifests reference (independent yq extractor, cross-checked against images-agent's awk)
+	@set -euo pipefail; \
+	  missing=0; \
+	  for ref in $$($(YQ) eval '.. | select(tag == "!!map") | to_entries[] | select(.key | test("[Ii]mage$$")) | .value | select(tag == "!!str")' \
+	      .rendered/agent-*.yaml .rendered-infra/agent-infra.yaml | grep -E '[/:]' | sort -u); do \
+	    if ! grep -qxF "$$ref" dist/kasm-agent-images.txt; then \
+	      echo "images-check: MISSING from dist/kasm-agent-images.txt: $$ref"; \
+	      missing=1; \
+	    fi; \
+	  done; \
+	  if [ "$$missing" = "1" ]; then \
+	    echo "images-check: an airgap mirror built from that list would be incomplete."; \
+	    exit 1; \
+	  fi; \
+	  echo "images-check: every image referenced by the rendered manifests is listed ($$(grep -cvE '^#|^$$' dist/kasm-agent-images.txt) refs)."
+
+# The awk below matches any key ENDING in "image" -- image:, sidecarImage:, runtimeImage: --
+# not just "image:", and matches it whether the key opens a list item (`- image: ...`, the
+# shape of every KasmImagePuller.spec.images entry) or not.  The session proxy's sidecar is
+# referenced at Agent.spec.sessionProxy.sidecarImage, so an "image:"-only match silently omitted
+# it, and an airgap mirror built from this list produced a session proxy that could not start;
+# the list-item form was the second such omission, and `make images-check` is what caught it.
+# CRD schema property lines are excluded by the value requirement: they have nothing after the
+# colon.
 images-agent: render-agent ## List every container image the kasm-agent manifests reference (mirror these for airgap)
 	@mkdir -p dist
 	@set -euo pipefail; \
-	  awk '/^[[:space:]]*image:[[:space:]]/ { ref = $$2; gsub(/"/, "", ref); if (ref ~ /[\/:]/) print ref }' \
+	  awk '/^[[:space:]]*(-[[:space:]]+)?[A-Za-z]*[Ii]mage:[[:space:]]/ { ref = $$0; sub(/^[[:space:]]*(-[[:space:]]+)?[A-Za-z]*[Ii]mage:[[:space:]]*/, "", ref); gsub(/["[:space:]]/, "", ref); if (ref ~ /[\/:]/) print ref }' \
 	    .rendered/agent-*.yaml .rendered-infra/agent-infra.yaml \
 	    | sort -u > dist/kasm-agent-images.txt; \
 	  image_count=$$(wc -l < dist/kasm-agent-images.txt | tr -d ' '); \
@@ -808,6 +841,9 @@ changelog-check-all: ## Verify every touched chart's CHANGELOG.md has been updat
 	  echo ""; \
 	  exit 1; \
 	fi
+
+linkcheck: ## Check every relative markdown link and anchor across docs/ and the chart READMEs
+	python3 scripts/linkcheck.py
 
 docs: readme changelog ## Regenerate README.md and refresh the CHANGELOG.md scaffold
 

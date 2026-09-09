@@ -105,8 +105,10 @@ kasm-helm:
   certificate:
     secretName: kasm-tls
 
-  # ClusterIP plus the chart's own Ingress. Never LoadBalancer next to an ingress controller that
-  # already binds the node's :443 — the chart rejects that combination outright.
+  # ClusterIP plus the chart's own Ingress. Never LoadBalancer alongside an ingress controller: it
+  # is a second door onto the same Service carrying none of the Ingress's TLS, timeouts or host
+  # routing, and on host-networked load balancers (k3s ServiceLB) it collides with the controller's
+  # :443 outright. The chart rejects the combination.
   proxyService:
     type: ClusterIP
   ingress:
@@ -168,21 +170,15 @@ checked in as `examples/kasm-agent/platform-values.yaml`.
 
 ### Install
 
-Install from a checkout of this repository, staging the dependencies first — inside-out, because
-`kasm-agent`'s own vendored dependencies must exist before `kasm-platform` archives it (on a fresh
-clone neither is populated; `make deps-agent` does both):
+Install from the published chart. Its package embeds all of its dependencies — both halves and
+every subchart under them — so there is no checkout and no dependency build:
 
 ```console
-helm dependency build charts/kasm-agent
-helm dependency build charts/kasm-platform
-helm install kasm charts/kasm-platform -n kasm --create-namespace \
+helm install kasm oci://registry-1.docker.io/kasmweb/kasm-platform -n kasm --create-namespace \
   -f my-values.yaml --timeout 20m
 ```
 
-The chart is also published as an OCI artifact whose package embeds all of its dependencies — both
-halves and every subchart under them — which removes the checkout and the dependency build
-entirely. Publishing a developer preview is a manual decision (see [Publishing](#publishing)), so
-check that the version you want is there before relying on it:
+Pin the version with `--version`, and check what is published before relying on a particular one:
 
 ```console
 helm install kasm oci://registry-1.docker.io/kasmweb/kasm-platform \
@@ -327,7 +323,7 @@ the chart and every pin naming it together:
 
 ```console
 python3 scripts/agent_versions.py --bump kasm-agent 0.2.0 --write   # dry run without --write
-helm dependency update charts/kasm-agent charts/kasm-platform       # refresh Chart.lock
+helm dependency update charts/kasm-agent oci://registry-1.docker.io/kasmweb/kasm-platform       # refresh Chart.lock
 ```
 
 `kasm-helm`'s own version stays owned by `scripts/set_versions.py`; after a control plane bump,
@@ -349,7 +345,7 @@ the registry unless the pipeline sets `FORCE_REPUBLISH=true`.
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | extraObjects | list | `[]` | Deploy additional Kubernetes manifests alongside this release. This field is expected to be either a list of strings or a list of objects. Each entry is rendered through `tpl`, so Helm templating may be used inside it.  |
-| kasm-agent | object | `{"enabled":true}` | The Kasm Kubernetes agent (the `kasm-agent` umbrella chart). The agent operator, the OpenTelemetry collector, the `Agent` custom resource and its session proxy, and the optional per-feature cluster infrastructure.  ALL of that chart's values nest under this key, its own aliased subcharts included, so its subchart conditions stay reachable from here (`kasm-agent.operator.enabled`, `kasm-agent.nodePrep.enabled`, `kasm-agent.gpuOperator.enabled`, ...). This chart adds only `enabled` and restates nothing else. For example, the three values the agent cannot be installed without are set from here as:    kasm-agent:     agent:       manager:         hostname: kasm.example.com         token: "<the control plane's manager-token>"       publicHostname: sessions.example.com  See `charts/kasm-agent/README.md` for the full value reference, and its "Running alongside the kasm-helm control plane" section for what has to line up between the two halves.  |
+| kasm-agent | object | `{"agent":{"inClusterControlPlane":true,"manager":{"port":8080,"scheme":"http"},"publicPort":4444},"enabled":true}` | The Kasm Kubernetes agent (the `kasm-agent` umbrella chart). The agent operator, the OpenTelemetry collector, the `Agent` custom resource and its session proxy, and the optional per-feature cluster infrastructure.  ALL of that chart's values nest under this key, its own aliased subcharts included, so its subchart conditions stay reachable from here (`kasm-agent.operator.enabled`, `kasm-agent.nodePrep.enabled`, `kasm-agent.gpuOperator.enabled`, ...). This chart adds only `enabled` and restates nothing else. For example, the three values the agent cannot be installed without are set from here as:    kasm-agent:     agent:       manager:         hostname: kasm.example.com         token: "<the control plane's manager-token>"       publicHostname: sessions.example.com  See `charts/kasm-agent/README.md` for the full value reference, and its "Running alongside the kasm-helm control plane" section for what has to line up between the two halves.  |
 | kasm-agent.enabled | bool | `true` | Install the Kasm Kubernetes agent with this release. Set to false to install only the control plane, and add agents (Kubernetes or otherwise) separately.  |
 | kasm-helm | object | `{"enabled":true}` | The Kasm Workspaces control plane (the `kasm-helm` chart). The web UI, the manager/API services, the session proxy, Guacamole, the RDP gateways, and the PostgreSQL database.  ALL of that chart's values nest under this key — this chart adds only `enabled` and restates nothing else, so every default in `charts/kasm-helm/values.yaml` still applies. For example, the chart's own `publicAddr` and `ingress.enabled` are set from here as:    kasm-helm:     publicAddr: kasm.example.com     ingress:       enabled: true       ingressClassName: traefik  See `charts/kasm-helm/README.md` for the full value reference.  |
 | kasm-helm.enabled | bool | `true` | Install the Kasm control plane with this release. Set to false to install only the Kubernetes agent, registering it with a Kasm manager that already exists elsewhere (another cluster, a VM deployment, or a Kasm-hosted one).  |

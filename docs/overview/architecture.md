@@ -11,11 +11,11 @@ A Kasm Workspaces deployment has two halves:
 
 - **The control plane** — what users log in to: the web UI, the manager and API
   services, the session proxy, Guacamole, the RDP gateways, and a database. In this
-  repository that is the **[kasm-helm](../charts/kasm-helm/README.md)** chart.
+  repository that is the **[kasm-helm](../../charts/kasm-helm/README.md)** chart.
   **Sessions do not run here.**
 - **The agent** — what actually runs sessions: an operator, an `Agent` custom
   resource, and a session proxy that users' browsers connect to directly. In this
-  repository that is the **[kasm-agent](../charts/kasm-agent/README.md)** umbrella
+  repository that is the **[kasm-agent](../../charts/kasm-agent/README.md)** umbrella
   and the subcharts it composes.
 
 An agent registers with a manager, and from then on the manager schedules workspaces
@@ -26,7 +26,7 @@ installs perfectly well alone.
 
 ## The chart dependency tree
 
-![Kasm Helm chart dependency tree](images/chart-architecture.svg)
+![Kasm Helm chart dependency tree](../images/chart-architecture.svg)
 
 <details>
 <summary>Diagram source (Mermaid)</summary>
@@ -97,6 +97,11 @@ in that order).
   `operator.enabled=true`. To run a second agent in another namespace of the same
   cluster, install it with `operator.enabled=false` and let it share the operator
   already there.
+- **The operator's Secret access is per namespace, not cluster-wide.** Its ClusterRole carries no
+  `secrets` rule; each `kasm-agent-instance` release stamps a Role in its own namespace granting the
+  operator's ServiceAccount get/create/update on the storage-mapping Secrets there. In the
+  two-namespace layout, tell the agent where the operator runs
+  (`agent.operatorRBAC.serviceAccount.namespace`).
 - **The third-party GPU Operator and rclone CSI driver are cluster-scoped too.**
   Enable each in at most one release per cluster, and leave it off if something else
   already installs it.
@@ -106,9 +111,8 @@ in that order).
 
 ## Why the CRDs are split from the operator
 
-The operator's five CustomResourceDefinitions — `agents`, `kasmworkspaces`, and
-`kasmimagepullers` in group `agent.kasm.com`; `warmpools` and `warmpoolinstances` in
-group `pools.kasm.ai` — exist in the tree twice, on purpose, because Helm's two ways
+The operator's CustomResourceDefinitions — `agents`, `kasmworkspaces`, and
+`kasmimagepullers` in group `agent.kasm.com` — exist in the tree twice, on purpose, because Helm's two ways
 of installing a CRD each give up something the other has:
 
 - **kasm-agent-operator's `crds/` directory** is applied *before* the release
@@ -127,8 +131,8 @@ review, promotion, and rollout machinery as everything else you deploy with Helm
 Skip it — and let the operator chart's `crds/` directory do the work — for a single
 cluster installed once and upgraded by hand. The two copies are kept byte-identical
 by `make crds-sync-check`, which fails the build the moment they diverge. Full
-detail: [kasm-agent-crds](../charts/kasm-agent-crds/README.md) and the CRD-lifecycle
-section of [kasm-agent-operator](../charts/kasm-agent-operator/README.md).
+detail: [kasm-agent-crds](../../charts/kasm-agent-crds/README.md) and the CRD-lifecycle
+section of [kasm-agent-operator](../../charts/kasm-agent-operator/README.md).
 
 ## Deployment topologies
 
@@ -138,12 +142,12 @@ Four common layouts:
    in one namespace — the simplest install. The agent can read the control plane's
    manager-token Secret directly, with nothing to copy. Use `kasm-platform` with
    both halves enabled; see its
-   [worked example](../charts/kasm-platform/README.md).
+   [worked example](../../charts/kasm-platform/README.md).
 2. **Two namespaces, one cluster (recommended).** Control plane (kasm-helm) in one
    namespace, agent (kasm-agent) in another, on the same cluster — the recommended
    layout when the two halves should stay isolated. Copy the registration token
    across namespaces. See "Running alongside the kasm-helm control plane" in the
-   [kasm-agent README](../charts/kasm-agent/README.md).
+   [kasm-agent README](../../charts/kasm-agent/README.md).
 3. **Agent only.** Install kasm-agent (or kasm-platform with
    `kasm-helm.enabled=false`) against a manager that already exists elsewhere —
    another cluster, a VM/Docker deployment, or a Kasm-hosted manager. Point
@@ -163,50 +167,10 @@ spell this out.
 
 ## Which chart do I use?
 
-Just want the shortest working install? The [**Quickstart**](../README.md#quickstart) walks two
-paths — the whole stack on one cluster, or an agent added to a Kasm you already run — end to end.
+See [The charts](charts.md) — what each one installs, and which to
+start from.
 
-- **kasm-platform** — the whole stack, or either half via its toggles, in one
-  release. Start here for a single-cluster install.
-- **kasm-helm** — the control plane on its own (GA). Sessions run on external
-  agents (Kubernetes, VM/Docker, or hosted).
-- **kasm-agent** — a Kubernetes agent on its own: operator, collector, and `Agent`
-  instance, plus optional cluster infrastructure. Registers with any Kasm manager.
-- **kasm-agent-operator, kasm-agent-instance, kasm-otel-collector, kasm-node-prep,
-  kasm-video-device-plugin, kasm-egress-installer** — subcharts of kasm-agent. You
-  rarely install these directly; configure them through the umbrella (`operator.*`,
-  `agent.*`, `otelCollector.*`, `nodePrep.*`, `videoDevicePlugin.*`,
-  `egressInstaller.*`). Install one alone only for advanced splits, such as a second
-  agent that shares an existing operator.
-- **kasm-agent-crds** — install as its own release, before kasm-agent or
-  kasm-platform, only when you want Helm to own the CRD lifecycle.
 
-Working from a feature rather than a chart? [**What works on Kubernetes**](feature-matrix.md) says
-whether each Kasm feature works here, what it needs from the cluster, and the values that turn it
-on.
-
-Sizing a deployment before installing anything? [**Planning a Kasm agent deployment**](planning.md)
-is the decision sequence — topology, capacity, network, storage, security, install and day 2.
-
-Ready to prepare the cluster? [**Cluster configuration how-tos**](howto/README.md) are the
-step-by-step procedures, with the commands that prove each one worked. On a managed service,
-[**Managed Kubernetes providers: what changes**](howto/managed-kubernetes-providers.md) is the
-cross-provider view for EKS, AKS, GKE and OpenShift.
-
-## Per-chart reference
-
-| Chart | Role | README |
-| ----- | ---- | ------ |
-| kasm-helm | Control plane (GA) | [charts/kasm-helm/README.md](../charts/kasm-helm/README.md) |
-| kasm-agent | Agent umbrella | [charts/kasm-agent/README.md](../charts/kasm-agent/README.md) |
-| kasm-agent-operator | CRDs + RBAC + controller (singleton) | [charts/kasm-agent-operator/README.md](../charts/kasm-agent-operator/README.md) |
-| kasm-agent-instance | `Agent` CR + session proxy | [charts/kasm-agent-instance/README.md](../charts/kasm-agent-instance/README.md) |
-| kasm-otel-collector | Telemetry collector | [charts/kasm-otel-collector/README.md](../charts/kasm-otel-collector/README.md) |
-| kasm-node-prep | Kernel modules + node tuning | [charts/kasm-node-prep/README.md](../charts/kasm-node-prep/README.md) |
-| kasm-video-device-plugin | Advertises `kasm.com/video` | [charts/kasm-video-device-plugin/README.md](../charts/kasm-video-device-plugin/README.md) |
-| kasm-egress-installer | Per-session VPN egress via a chained CNI shim (privileged, off by default) | [charts/kasm-egress-installer/README.md](../charts/kasm-egress-installer/README.md) |
-| kasm-agent-crds | CRDs as Helm templates (standalone) | [charts/kasm-agent-crds/README.md](../charts/kasm-agent-crds/README.md) |
-| kasm-platform | Top-level umbrella (whole stack) | [charts/kasm-platform/README.md](../charts/kasm-platform/README.md) |
 
 ## Versions and history
 
@@ -214,5 +178,5 @@ kasm-helm is versioned on the Kasm Workspaces release cadence — currently char
 `1.1190.6` / app `1.19.0`, GA. The agent-family and umbrella charts are versioned
 independently and are currently `0.1.0` (app `develop`), a developer preview. For
 release history, see each chart's `CHANGELOG.md` — for example,
-[charts/kasm-helm/CHANGELOG.md](../charts/kasm-helm/CHANGELOG.md). There is no
+[charts/kasm-helm/CHANGELOG.md](../../charts/kasm-helm/CHANGELOG.md). There is no
 repository-wide changelog.

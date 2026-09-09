@@ -1,6 +1,6 @@
 # Node tuning and swap
 
-> **Applies to:** [Node tuning and swap](../feature-matrix.md#observability--operations) — the node-side half of [kasm-agent § Workspace node best practices](../../charts/kasm-agent/README.md#workspace-node-best-practices), the tuning Kasm's Docker-agent installer performs on a host and a Kubernetes node never gets. It underpins session stability and node targeting · **Charts/values:** `nodePrep.tuning.swap.enabled`, `nodePrep.tuning.swap.sizeMib`, `nodePrep.tuning.swap.hostPath`, `nodePrep.tuning.swap.swappiness`, `nodePrep.tuning.swap.force`, `nodePrep.tuning.sysctls.enabled`, `nodePrep.tuning.sysctls.values`
+> **Applies to:** [Node tuning and swap](../../reference/feature-matrix.md#observability-and-operations) — the node-side half of [kasm-agent § Workspace node best practices](../../../charts/kasm-agent/README.md#workspace-node-best-practices), the tuning Kasm's Docker-agent installer performs on a host and a Kubernetes node never gets. It underpins session stability and node targeting · **Charts/values:** `nodePrep.tuning.swap.enabled`, `nodePrep.tuning.swap.sizeMib`, `nodePrep.tuning.swap.hostPath`, `nodePrep.tuning.swap.swappiness`, `nodePrep.tuning.swap.force`, `nodePrep.tuning.sysctls.enabled`, `nodePrep.tuning.sysctls.values`
 
 ## Why this is needed
 
@@ -17,7 +17,7 @@ Nothing is written to `/etc/fstab` or `/etc/sysctl.d`. The reconcile loop re-ass
 
 ## Before you start
 
-- Read [kasm-node-prep § Node tuning](../../charts/kasm-node-prep/README.md#node-tuning) and the fully commented [`examples/kasm-agent/k3s-node-swap-config.yaml`](../../examples/kasm-agent/k3s-node-swap-config.yaml). Nothing in that example file is applied by any chart — they are node files.
+- Read [kasm-node-prep § Node tuning](../../../charts/kasm-node-prep/README.md#node-tuning) and the fully commented [`examples/kasm-agent/k3s-node-swap-config.yaml`](../../../examples/kasm-agent/k3s-node-swap-config.yaml). Nothing in that example file is applied by any chart — they are node files.
 - Requirements: **cgroup v2** (every current distribution), and Kubernetes ≥ 1.30 for `LimitedSwap` in beta (`NodeSwap` is stable as of 1.36).
 - A node disk with room for the swapfile at `tuning.swap.hostPath` (default `/var/lib/kasm-node-prep`). **ext4 and xfs work**; btrfs needs a `nodatacow` file; overlayfs and tmpfs never will.
 - **The order is not negotiable:** kubelet first, `swap.enabled` second. Rolling back reverses it.
@@ -26,14 +26,14 @@ Nothing is written to `/etc/fstab` or `/etc/sysctl.d`. The reconcile loop re-ass
   - **kubeadm / vanilla** — set `failSwapOn: false` and `memorySwap.swapBehavior: LimitedSwap` in `/var/lib/kubelet/config.yaml`, then `systemctl restart kubelet`.
   - **Managed (EKS / AKS / GKE)** — you may not be able to set `failSwapOn` at all. Each provider exposes only a subset of kubelet configuration through its own node-pool mechanism, and the node-prep check reads only `/etc/rancher/k3s/…` and `/var/lib/kubelet/config.yaml`. Prove the setting is live with `configz` (below) before enabling swap; if you cannot make it, **do not enable swap** — leave `tuning.sysctls` on and stop there.
   - **OpenShift** — kubelet configuration is a `KubeletConfig` MachineConfig object; the node reboots to apply it. Same ordering rule.
-- The namespace must permit the `privileged` PSS: [privileged workloads and cluster policy](privileged-workloads-and-policies.md).
+- The namespace must permit the `privileged` PSS: [privileged workloads and cluster policy](privileged-workloads.md).
 
 ## Steps
 
 1. **Sysctls first — they have no prerequisite.** Safe to turn on immediately:
 
    ```console
-   helm upgrade --install kasm-agent charts/kasm-agent -n kasm-agent \
+   helm upgrade --install kasm-agent oci://registry-1.docker.io/kasmweb/kasm-agent -n kasm-agent \
      --set nodePrep.enabled=true \
      --set nodePrep.tuning.sysctls.enabled=true
    ```
@@ -60,7 +60,7 @@ Nothing is written to `/etc/fstab` or `/etc/sysctl.d`. The reconcile loop re-ass
      swapBehavior: LimitedSwap
    ```
 
-   Both keys matter: `failSwapOn: false` lets the kubelet start, `LimitedSwap` is what actually hands pods any of it. The example file also carries the four kubelet settings worth changing on a workspace node (`imageGCHighThresholdPercent: 90` / `imageGCLowThresholdPercent: 80`, `containerLogMaxSize`/`containerLogMaxFiles`, `podPidsLimit: 8192`) — see [kasm-agent § Settings this chart cannot make for you](../../charts/kasm-agent/README.md#settings-this-chart-cannot-make-for-you).
+   Both keys matter: `failSwapOn: false` lets the kubelet start, `LimitedSwap` is what actually hands pods any of it. The example file also carries the four kubelet settings worth changing on a workspace node (`imageGCHighThresholdPercent: 90` / `imageGCLowThresholdPercent: 80`, `containerLogMaxSize`/`containerLogMaxFiles`, `podPidsLimit: 8192`) — see [kasm-agent § Settings this chart cannot make for you](../../../charts/kasm-agent/README.md#settings-this-chart-cannot-make-for-you).
 
    *kubeadm:* put `failSwapOn: false` and the same `memorySwap` block in `/var/lib/kubelet/config.yaml`.
 
@@ -77,7 +77,7 @@ Nothing is written to `/etc/fstab` or `/etc/sysctl.d`. The reconcile loop re-ass
 4. **Only now enable swap in the chart:**
 
    ```console
-   helm upgrade --install kasm-agent charts/kasm-agent -n kasm-agent \
+   helm upgrade --install kasm-agent oci://registry-1.docker.io/kasmweb/kasm-agent -n kasm-agent \
      --set nodePrep.enabled=true \
      --set nodePrep.tuning.sysctls.enabled=true \
      --set nodePrep.tuning.swap.enabled=true
@@ -174,7 +174,7 @@ nodePrep:
       force: false           # skips the kubelet safety check — dangerous
 ```
 
-Under [kasm-platform](../../charts/kasm-platform/README.md), nest the block under `kasm-agent:` (`kasm-agent.nodePrep.tuning.swap.enabled`). Installing `charts/kasm-node-prep` standalone drops the alias: `tuning.swap.*` and `tuning.sysctls.*` at the top level.
+Under [kasm-platform](../../../charts/kasm-platform/README.md), nest the block under `kasm-agent:` (`kasm-agent.nodePrep.tuning.swap.enabled`). Installing `charts/kasm-node-prep` standalone drops the alias: `tuning.swap.*` and `tuning.sysctls.*` at the top level.
 
 ## Troubleshooting
 

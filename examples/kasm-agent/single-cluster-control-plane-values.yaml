@@ -16,8 +16,9 @@
 deploymentSize: small
 publicAddr: kasm.example.com
 
-# ClusterIP + the chart's own Ingress. Never LoadBalancer next to an ingress
-# controller that already binds the node's :443.
+# ClusterIP + the chart's own Ingress: the Ingress owns the external address.
+# A LoadBalancer here is a second, differently-configured door onto the same
+# Service, and on k3s ServiceLB it collides with the controller's :443.
 proxyService:
   type: ClusterIP
 ingress:

@@ -64,6 +64,19 @@ kasm-agent:
   #
   enabled: true
 
+  # Wire the agent to the control plane in this same release, so a default install of this chart
+  # needs no values at all. Everything here is an ordinary default and an explicit setting wins.
+  agent:
+    # Derives manager.hostname, the manager token Secret and publicHostname from the kasm-helm
+    # release alongside it - see the kasm-agent-instance chart's `inClusterControlPlane`.
+    inClusterControlPlane: true
+    manager:
+      # The in-cluster proxy Service, so the agent reaches the manager without leaving the cluster.
+      port: 8080
+      scheme: http
+    # The session proxy's own HTTPS listener, which is what the control-plane proxy relays to.
+    publicPort: 4444
+
 # extraObjects -- Deploy additional Kubernetes manifests alongside this release.
 # This field is expected to be either a list of strings or a list of objects. Each entry is
 # rendered through `tpl`, so Helm templating may be used inside it.

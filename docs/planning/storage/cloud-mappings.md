@@ -1,6 +1,6 @@
 # Cloud storage mappings (rclone CSI)
 
-> **Applies to:** [Cloud storage mappings](../feature-matrix.md#storage--profiles) · **Charts/values:** `csiRclone.enabled`, `agent.storageMappings.enabled`, `agent.storageMappings.installationID`, `csiRclone.driver.name`, `csiRclone.storageClasses`, `csiRclone.node.nodeSelector`
+> **Applies to:** [Cloud storage mappings](../../reference/feature-matrix.md#storage-and-profiles) · **Charts/values:** `csiRclone.enabled`, `agent.storageMappings.enabled`, `agent.storageMappings.installationID`, `csiRclone.driver.name`, `csiRclone.storageClasses`, `csiRclone.node.nodeSelector`
 
 ## Why this is needed
 
@@ -18,7 +18,7 @@ is not there.
   `/dev/fuse` present and the module loaded.
 * The rclone CSI driver is **cluster-scoped** — enable `csiRclone` in at most one release per
   cluster, and leave it off if the driver is already installed by something else
-  ([Scope](../../charts/kasm-agent/README.md#scope)).
+  ([Scope](../../../charts/kasm-agent/README.md#scope)).
 * The remote's credentials, as an rclone INI stanza. The operator keeps them in a Secret; they never
   appear in the `KasmWorkspace` CR or the StorageClass.
 
@@ -67,7 +67,7 @@ FUSE as a node-image prerequisite.
 3. **Upgrade the release.**
 
    ```console
-   helm upgrade --install kasm-agent charts/kasm-agent \
+   helm upgrade --install kasm-agent oci://registry-1.docker.io/kasmweb/kasm-agent \
      -n kasm-agent -f values.yaml
    ```
 

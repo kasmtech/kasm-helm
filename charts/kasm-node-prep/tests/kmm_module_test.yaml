@@ -276,7 +276,7 @@ tests:
           pattern: 'libelf1'
       - matchRegex:
           path: data.dockerfile
-          pattern: 'git clone --depth 1 --branch "v0\.13\.2" "https://github\.com/umlaeute/v4l2loopback\.git" v4l2loopback'
+          pattern: 'git clone --depth 1 --branch ''v0\.13\.2'' ''https://github\.com/umlaeute/v4l2loopback\.git'' v4l2loopback'
       - matchRegex:
           path: data.dockerfile
           pattern: 'make -C /usr/src/v4l2loopback KERNELRELEASE="\$\{KERNEL_FULL_VERSION\}"'
@@ -310,7 +310,7 @@ tests:
           pattern: 'FROM registry\.contoso\.com/kasm/builder:24\.04 AS builder'
       - matchRegex:
           path: data.dockerfile
-          pattern: 'git clone --depth 1 --branch "v0\.13\.1" "https://git\.contoso\.com/mirrors/v4l2loopback\.git" v4l2loopback'
+          pattern: 'git clone --depth 1 --branch ''v0\.13\.1'' ''https://git\.contoso\.com/mirrors/v4l2loopback\.git'' v4l2loopback'
 
   - it: clones the default branch when no sourceRef is pinned
     template: templates/kmm-dockerfile-configmap.yaml
@@ -326,7 +326,7 @@ tests:
     asserts:
       - matchRegex:
           path: data.dockerfile
-          pattern: 'git clone --depth 1 "https://github\.com/umlaeute/v4l2loopback\.git" v4l2loopback'
+          pattern: 'git clone --depth 1 ''https://github\.com/umlaeute/v4l2loopback\.git'' v4l2loopback'
       - notMatchRegex:
           path: data.dockerfile
           pattern: '--branch'
@@ -460,3 +460,35 @@ tests:
     asserts:
       - failedTemplate:
           errorMessage: "kasm-node-prep: wireguard via KMM is not supported: kernels >= 5.6 ship WireGuard in-tree; use method: build for older kernels."
+
+  - it: single-quotes the clone url and ref inside the Dockerfile so shell metacharacters stay literal
+    template: templates/kmm-dockerfile-configmap.yaml
+    set:
+      modules:
+        v4l2loopback:
+          method: kmm
+          sourceRepo: https://example.com/x$(id).git
+          kmm:
+            image:
+              registry: registry.contoso.com
+              repository: kasm/v4l2loopback
+    asserts:
+      - matchRegex:
+          path: data.dockerfile
+          pattern: "git clone --depth 1 --branch 'v0\\.13\\.2' 'https://example\\.com/x\\$\\(id\\)\\.git' v4l2loopback"
+
+  - it: refuses a source repository secret together with a kmm build
+    template: templates/kmm-module.yaml
+    set:
+      modules:
+        v4l2loopback:
+          method: kmm
+          sourceRepoSecret: v4l2loopback-git
+          kmm:
+            image:
+              registry: registry.contoso.com
+              repository: kasm/v4l2loopback
+    asserts:
+      - failedTemplate:
+          errorPattern: 'sourceRepoSecret applies to method=build only'
+

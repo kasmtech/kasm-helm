@@ -2,7 +2,7 @@
 
 ![Version: 0.1.0](https://img.shields.io/badge/Version-0.1.0-informational?style=flat-square) ![AppVersion: develop](https://img.shields.io/badge/AppVersion-develop-informational?style=flat-square)
 
-The Kasm Agent Kubernetes operator. Installs the agent.kasm.com and pools.kasm.ai CustomResourceDefinitions, the cluster RBAC the operator and the workloads it reconciles require, and the controller-manager Deployment that reconciles Agent, KasmWorkspace, KasmImagePuller, WarmPool, and WarmPoolInstance resources.
+The Kasm Agent Kubernetes operator. Installs the agent.kasm.com CustomResourceDefinitions, the cluster RBAC the operator and the workloads it reconciles require, and the controller-manager Deployment that reconciles Agent, KasmWorkspace, and KasmImagePuller resources.
 
 ## Maintainers
 
@@ -14,12 +14,15 @@ The Kasm Agent Kubernetes operator. Installs the agent.kasm.com and pools.kasm.a
      re-run `./bin/helm-docs --chart-search-root charts/kasm-agent-operator` from the repository root. -->
 ## What this chart installs
 
-* The five CustomResourceDefinitions the operator owns: `agents`, `kasmworkspaces`, and
-  `kasmimagepullers` in the `agent.kasm.com` group, and `warmpools` and `warmpoolinstances` in the
-  `pools.kasm.ai` group.
+* The CustomResourceDefinitions the operator owns: `agents`, `kasmworkspaces`, and
+  `kasmimagepullers` in the `agent.kasm.com` group.
 * The cluster RBAC the operator needs (`manager-role` and its binding, the namespaced
   `leader-election-role`, and the metrics authn/authz roles), plus the `kasm-agent` and
   `kasm-nginx-sidecar` ClusterRoles that the operator binds to at runtime.
+  The ClusterRole grants no access to Secrets: the per-workspace storage-mapping Secret is read, created and
+  updated by name inside the namespace that holds the Agent, and that permission is a namespaced Role the
+  [kasm-agent-instance](../kasm-agent-instance/README.md) chart stamps wherever it installs an Agent
+  (`operatorRBAC.*`). This needs an operator build that no longer caches Secrets (2026-09-08 or later).
 * The `controller-manager` ServiceAccount and the operator Deployment that reconciles the custom
   resources above.
 

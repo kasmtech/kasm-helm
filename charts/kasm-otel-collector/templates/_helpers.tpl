@@ -104,6 +104,12 @@ app.kubernetes.io/part-of: kasm-ai
 {{- $otlp := .Values.exporters.otlp.enabled -}}
 {{- $clickhouse := .Values.exporters.clickhouse.enabled -}}
 {{- $debug := .Values.exporters.debug.enabled -}}
+{{- if and $otlp (not .Values.exporters.otlp.endpoint) -}}
+{{- fail "kasm-otel-collector: exporters.otlp.enabled is true but exporters.otlp.endpoint is empty. Set exporters.otlp.endpoint to the host:port of your OTLP/gRPC backend (otelCollector.exporters.otlp.endpoint under the kasm-agent umbrella chart)." -}}
+{{- end -}}
+{{- if and $clickhouse (not .Values.exporters.clickhouse.endpoint) -}}
+{{- fail "kasm-otel-collector: exporters.clickhouse.enabled is true but exporters.clickhouse.endpoint is empty. Set exporters.clickhouse.endpoint to the ClickHouse native-protocol DSN (otelCollector.exporters.clickhouse.endpoint under the kasm-agent umbrella chart)." -}}
+{{- end -}}
 {{/* Traces and logs go to every enabled exporter; metrics deliberately skip ClickHouse. */}}
 {{- $allExporters := list -}}
 {{- $metricsExporters := list -}}

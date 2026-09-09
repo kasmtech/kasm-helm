@@ -1,6 +1,6 @@
 # RWX storage for persistent profiles
 
-> **Applies to:** [Persistent profiles](../feature-matrix.md#storage--profiles) · **Charts/values:** `nfs-server-provisioner.enabled`, `nfs-server-provisioner.persistence.enabled`, `nfs-server-provisioner.persistence.storageClass`, `nfs-server-provisioner.persistence.size`, `nfs-server-provisioner.storageClass.create`, `nfs-server-provisioner.storageClass.name`, `nfs-server-provisioner.storageClass.reclaimPolicy`, `nfs-server-provisioner.storageClass.mountOptions`
+> **Applies to:** [Persistent profiles](../../reference/feature-matrix.md#storage-and-profiles) · **Charts/values:** `nfs-server-provisioner.enabled`, `nfs-server-provisioner.persistence.enabled`, `nfs-server-provisioner.persistence.storageClass`, `nfs-server-provisioner.persistence.size`, `nfs-server-provisioner.storageClass.create`, `nfs-server-provisioner.storageClass.name`, `nfs-server-provisioner.storageClass.reclaimPolicy`, `nfs-server-provisioner.storageClass.mountOptions`
 
 ## Why this is needed
 
@@ -13,7 +13,7 @@ charts' only job here is making an RWX class exist.
 
 ## Before you start
 
-* You have a working agent install ([kasm-agent quickstart](../../charts/kasm-agent/README.md#quickstart)).
+* You have a working agent install ([kasm-agent quickstart](../../../charts/kasm-agent/README.md#quickstart)).
 * You can create a PVC in the agent namespace.
 * Decide which of the two paths you are on: an RWX class the cluster already has, or the bundled
   in-cluster NFS server.
@@ -69,11 +69,11 @@ storage recommendation. It is also **un-aliased** in `values.yaml` (the upstream
 4. **Apply it.**
 
    ```console
-   helm upgrade --install kasm-agent charts/kasm-agent \
+   helm upgrade --install kasm-agent oci://registry-1.docker.io/kasmweb/kasm-agent \
      -n kasm-agent -f values.yaml
    ```
 
-   Under [kasm-platform](../../charts/kasm-platform/README.md) the same block nests under
+   Under [kasm-platform](../../../charts/kasm-platform/README.md) the same block nests under
    `kasm-agent:` — see [Chart values](#chart-values).
 
 5. **Point Kasm at the class.** The profile path and its StorageClass are Kasm manager settings

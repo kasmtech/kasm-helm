@@ -28,6 +28,13 @@ image:
   #
   tag: "22.04"
 
+# imagePullSecrets -- Names of image pull Secrets in the release namespace, for pulling the builder image from a
+# private registry (the air-gapped path described under `image.*`). Applies to the DaemonSet; a KMM in-cluster
+# build pulls the builder for its own build pod and pushes the module image with
+# `modules.v4l2loopback.kmm.imageRepoSecret`.
+#
+imagePullSecrets: []
+
 # Configure which kernel modules the DaemonSet ensures are present on every matching node. At least one
 # module must be enabled; installing this chart with every module disabled fails the render with an error.
 #
@@ -68,6 +75,14 @@ modules:
     # builds reproducible across nodes.
     #
     sourceRef: v0.13.2
+    # modules.v4l2loopback.sourceRepoSecret -- Name of an existing Secret in the release namespace holding the
+    # HTTPS login for `modules.v4l2loopback.sourceRepo`, with keys `username` and `password` (a read-only
+    # deploy token works). The reconcile script hands them to git through a credential helper, so they never
+    # appear in the clone URL, the ConfigMap or the pod log. Credentials embedded in `sourceRepo` itself are
+    # rejected at render time for exactly that reason. **Applies to `method: build` only** — a KMM in-cluster
+    # build clones inside its Dockerfile and cannot use it; use a mirror that needs no login there.
+    #
+    sourceRepoSecret: ""
     # modules.v4l2loopback.sourcePath -- Absolute path *inside the builder image* holding an already-vendored
     # v4l2loopback source tree (for example `/opt/kasm-modules/v4l2loopback`). When set, the reconcile script
     # copies that tree into its work directory and builds from it instead of running `git clone`, so the node
@@ -174,6 +189,10 @@ modules:
     # Point this at an internal mirror when nodes cannot reach the upstream host.
     #
     sourceRepo: https://git.zx2c4.com/wireguard-linux-compat
+    # modules.wireguard.sourceRepoSecret -- Name of an existing Secret (keys `username` and `password`) holding
+    # the HTTPS login for `modules.wireguard.sourceRepo`; see `modules.v4l2loopback.sourceRepoSecret`.
+    #
+    sourceRepoSecret: ""
     # modules.wireguard.sourcePath -- Absolute path *inside the builder image* holding an already-vendored
     # `wireguard-linux-compat` source tree (for example `/opt/kasm-modules/wireguard-linux-compat`). When set,
     # the reconcile script copies that tree into its work directory and builds from it instead of running

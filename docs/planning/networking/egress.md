@@ -1,6 +1,6 @@
 # Egress installer: node prerequisites
 
-> **Applies to:** [Egress gateways (per-session VPN)](../feature-matrix.md#networking--access) — the namespace that has to permit `privileged` **and** host namespaces, and the runtime that has to honour chained CNI plugins — and the host-namespace half of [multi-tenancy](../feature-matrix.md#security--isolation) · **Charts/values:** `egressInstaller.enabled`, `egressInstaller.distro`, `egressInstaller.cniBinDir`, `egressInstaller.cniConfDirs`, `egressInstaller.socketDir`, `egressInstaller.excludedCIDRs`, `egressInstaller.priorityClassName`, `egressInstaller.updateStrategy`
+> **Applies to:** [Egress gateways (per-session VPN)](../../reference/feature-matrix.md#networking-and-access) — the namespace that has to permit `privileged` **and** host namespaces, and the runtime that has to honour chained CNI plugins — and the host-namespace half of [multi-tenancy](../../reference/feature-matrix.md#security-and-isolation) · **Charts/values:** `egressInstaller.enabled`, `egressInstaller.distro`, `egressInstaller.cniBinDir`, `egressInstaller.cniConfDirs`, `egressInstaller.socketDir`, `egressInstaller.excludedCIDRs`, `egressInstaller.priorityClassName`, `egressInstaller.updateStrategy`
 
 ## Why this is needed
 
@@ -15,11 +15,11 @@ Two node facts decide whether that works, and neither is a chart concern:
 - **The bin dir must be the one your runtime actually loads plugins from.** Install it anywhere else and the runtime never invokes the shim — nothing errors, the DaemonSet stays `Running`, the conflists still look patched, and sessions simply get no egress tunnel. This is the chart's one silent-failure knob.
 - **The runtime must honour chained CNI plugins.** Verified live on k3s; RKE2's containerd is the other known-good runtime.
 
-Read [kasm-egress-installer § Read this before installing](../../charts/kasm-egress-installer/README.md#read-this-before-installing) before going further — the no-daemon failure window described there is a real operational decision, not boilerplate.
+Read [kasm-egress-installer § Read this before installing](../../../charts/kasm-egress-installer/README.md#read-this-before-installing) before going further — the no-daemon failure window described there is a real operational decision, not boilerplate.
 
 ## Before you start
 
-- **The namespace must permit `privileged` *and* host namespaces.** This DaemonSet runs `hostPID: true` and `hostNetwork: true`, so a blanket `disallow-host-namespaces` Kyverno/OPA rule rejects it even in a `privileged` namespace. Settle that first: [privileged workloads and cluster policy](privileged-workloads-and-policies.md).
+- **The namespace must permit `privileged` *and* host namespaces.** This DaemonSet runs `hostPID: true` and `hostNetwork: true`, so a blanket `disallow-host-namespaces` Kyverno/OPA rule rejects it even in a `privileged` namespace. Settle that first: [privileged workloads and cluster policy](../nodes/privileged-workloads.md).
 - **Accept the no-daemon window.** The shim hard-fails CNI `ADD` when it cannot reach the daemon's socket, and a failing chained plugin fails **every** pod sandbox on that node — not just Kasm's. Normally that window is a DaemonSet restart; a sustained crash-loop blocks all new scheduling on that node. Keep `egressInstaller.priorityClassName: system-node-critical` (the default).
 - **Know your CNI bin dir:**
 
@@ -63,7 +63,7 @@ Read [kasm-egress-installer § Read this before installing](../../charts/kasm-eg
 2. **Set `distro` (or `cniBinDir`) to match** and install:
 
    ```console
-   helm upgrade --install kasm-agent charts/kasm-agent -n kasm-agent \
+   helm upgrade --install kasm-agent oci://registry-1.docker.io/kasmweb/kasm-agent -n kasm-agent \
      --set egressInstaller.enabled=true \
      --set egressInstaller.distro=vanilla
    ```
@@ -71,7 +71,7 @@ Read [kasm-egress-installer § Read this before installing](../../charts/kasm-eg
    For anything not `k3s` or `vanilla`, override outright:
 
    ```console
-   helm upgrade --install kasm-agent charts/kasm-agent -n kasm-agent \
+   helm upgrade --install kasm-agent oci://registry-1.docker.io/kasmweb/kasm-agent -n kasm-agent \
      --set egressInstaller.enabled=true \
      --set egressInstaller.distro=rke2 \
      --set egressInstaller.cniBinDir=/var/lib/rancher/rke2/bin
@@ -151,7 +151,7 @@ egressInstaller:
     kasm.com/workspaces: "true"
 ```
 
-Under [kasm-platform](../../charts/kasm-platform/README.md), nest the block under `kasm-agent:` (`kasm-agent.egressInstaller.distro`). Installing `charts/kasm-egress-installer` standalone drops the alias: `distro`, `cniBinDir`, `cniConfDirs` at the top level.
+Under [kasm-platform](../../../charts/kasm-platform/README.md), nest the block under `kasm-agent:` (`kasm-agent.egressInstaller.distro`). Installing `charts/kasm-egress-installer` standalone drops the alias: `distro`, `cniBinDir`, `cniConfDirs` at the top level.
 
 ## Troubleshooting
 
@@ -162,8 +162,8 @@ Under [kasm-platform](../../charts/kasm-platform/README.md), nest the block unde
 | `helm install`/`template` fails: unrecognized `distro` with no `cniBinDir` | Deliberate — the chart refuses to guess a path whose wrongness would be silent | Set `egressInstaller.cniBinDir` explicitly |
 | Pods on the node are stuck `ContainerCreating` with a CNI plugin error; **all** pods, not just Kasm's | No daemon is running, and the chained shim hard-fails CNI `ADD` when it cannot reach its socket. Normally just a restart window; a crash-loop makes it permanent | Fix or scale the DaemonSet back up. Manual recovery: restore each `.conflist` from its sibling `.kasm-egress.bak` on the affected node |
 | After a node reboot mid-uninstall (or an evicted, unrescheduled pod), the conflists are still patched | A hard crash skips the graceful cleanup path by design | The replacement pod re-installs and re-verifies on start; if no daemon is coming back, restore from `.kasm-egress.bak` by hand |
-| Egress installer pods are rejected at admission while `nodePrep` pods are admitted | `hostPID` + `hostNetwork` are beyond the `privileged` PSS label and are gated by a separate policy engine | Scope a `PolicyException` for this namespace/ServiceAccount, or accept the workload outside the baseline set — see [privileged workloads and cluster policy](privileged-workloads-and-policies.md) |
-| Ziti tunnels fail with `no installed ziti binary matches controller major.minor version` | The image bundles three pinned Ziti CLI versions; the controller runs a newer minor | Align the controller version with a bundled one, or track [kasm-egress-installer § Ziti version support](../../charts/kasm-egress-installer/README.md#ziti-version-support) |
+| Egress installer pods are rejected at admission while `nodePrep` pods are admitted | `hostPID` + `hostNetwork` are beyond the `privileged` PSS label and are gated by a separate policy engine | Scope a `PolicyException` for this namespace/ServiceAccount, or accept the workload outside the baseline set — see [privileged workloads and cluster policy](../nodes/privileged-workloads.md) |
+| Ziti tunnels fail with `no installed ziti binary matches controller major.minor version` | The image bundles three pinned Ziti CLI versions; the controller runs a newer minor | Align the controller version with a bundled one, or track [kasm-egress-installer § Ziti version support](../../../charts/kasm-egress-installer/README.md#ziti-version-support) |
 | Every tunnel on a node drops at once, and pod scheduling on that node briefly stops | The daemon was OOMKilled — all tunnel processes live in its cgroup, and the restart reopens the no-daemon window | Raise `egressInstaller.resources.limits.memory` on nodes hosting many egress sessions |
 | A `helm upgrade` unrelated to egress briefly disturbs node scheduling | `updateStrategy: RollingUpdate` restarts the daemon, which is the no-daemon window | Expected. Use `updateStrategy: OnDelete` to control exactly when that happens |
 

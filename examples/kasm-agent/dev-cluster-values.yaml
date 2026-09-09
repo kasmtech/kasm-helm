@@ -29,9 +29,11 @@
 #        cd ~/projects/otel-backend && tilt up --port 10360
 #        tilt trigger wire-kasm-collector   # mirrors the clickhouse-otel Secret into kasm-agent
 #                                            # and points the collector's OTLP exporter at lgtm
-#      The default otlp exporter endpoint (lgtm.observability.svc.cluster.local:4317, set in the
-#      kasm-otel-collector subchart's own values.yaml) matches where that Tiltfile deploys LGTM;
-#      no override needed here unless the backend moves.
+#      otelCollector.exporters.otlp is disabled and its endpoint empty by default -- a default
+#      install logs telemetry to the collector's own stdout instead of guessing at a backend that
+#      may not exist. The otelCollector block below points it explicitly at
+#      lgtm.observability.svc.cluster.local:4317, which is where that Tiltfile deploys LGTM; update
+#      the endpoint if the backend moves.
 #
 agent:
   manager:
@@ -87,6 +89,9 @@ agent:
 
 otelCollector:
   exporters:
+    otlp:
+      enabled: true
+      endpoint: lgtm.observability.svc.cluster.local:4317
     clickhouse:
       # Requires the clickhouse-otel Secret (key "password") to exist in this release's namespace
       # before install -- see prerequisite #3 above; `tilt trigger wire-kasm-collector` creates it.

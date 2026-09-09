@@ -246,6 +246,33 @@ tests:
               - list
               - watch
 
+  - it: lets the sidecar watch Services, and grants it nothing but reads
+    template: templates/rbac/kasm-nginx-sidecar-clusterrole.yaml
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups:
+              - ""
+            resources:
+              - services
+            verbs:
+              - get
+              - list
+              - watch
+      - lengthEqual:
+          path: rules
+          count: 3
+      - notContains:
+          path: rules[*].verbs
+          content: create
+      - notContains:
+          path: rules[*].verbs
+          content: update
+      - notContains:
+          path: rules[*].verbs
+          content: delete
+
   - it: leaves the runtime-bound cluster role names untouched by nameOverride
     set:
       nameOverride: something-else
@@ -356,3 +383,87 @@ tests:
       - equal:
           path: metadata.labels["app.kubernetes.io/component"]
           value: operator
+
+  - it: grants the manager no secrets access at all; that comes per namespace from the instance chart
+    template: templates/rbac/manager-role.yaml
+    documentIndex: 0
+    asserts:
+      - notContains:
+          path: rules
+          content:
+            apiGroups:
+              - ""
+            resources:
+              - secrets
+            verbs:
+              - create
+              - get
+              - update
+      - notContains:
+          path: rules
+          content:
+            apiGroups:
+              - ""
+            resources:
+              - configmaps
+              - persistentvolumeclaims
+              - persistentvolumes
+              - pods
+              - secrets
+              - serviceaccounts
+              - services
+            verbs:
+              - create
+              - delete
+              - get
+              - list
+              - patch
+              - update
+              - watch
+
+  - it: keeps persistentvolumes and clusterrolebindings to get, create, update and delete by name
+    template: templates/rbac/manager-role.yaml
+    documentIndex: 0
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups:
+              - ""
+            resources:
+              - persistentvolumes
+            verbs:
+              - create
+              - delete
+              - get
+              - update
+      - contains:
+          path: rules
+          content:
+            apiGroups:
+              - rbac.authorization.k8s.io
+            resources:
+              - clusterrolebindings
+            verbs:
+              - create
+              - delete
+              - get
+              - update
+      - contains:
+          path: rules
+          content:
+            apiGroups:
+              - rbac.authorization.k8s.io
+            resources:
+              - rolebindings
+            verbs:
+              - create
+              - get
+              - list
+              - patch
+              - update
+              - watch
+      - lengthEqual:
+          path: rules
+          count: 14
+

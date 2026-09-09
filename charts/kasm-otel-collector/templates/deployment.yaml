@@ -24,14 +24,27 @@ spec:
       {{- include "kasmOtelCollector.selectorLabels" . | nindent 6 }}
   template:
     metadata:
+      {{- /* Merged rather than concatenated so a podAnnotations/commonAnnotations key that collides
+             with one of the chart's own cannot emit a duplicate YAML key. The chart's own keys win,
+             then podAnnotations, then commonAnnotations.
+
+             kasm.com/security and kasm.com/healthcheck are the opt-in markers the repository's
+             Kyverno gates (tests/kyverno/pod-security.baseline.yaml, tests/kyverno/probes.required.yaml)
+             key off: a pod template without them is skipped by those policies entirely. This pod
+             template is unconditionally hardened (podSecurityContext/securityContext defaults are
+             restricted-compatible) and unconditionally probed (liveness + readiness on the
+             health-check port), so the markers are emitted unconditionally too - there is no
+             unhardened variant of this Deployment to exempt. Removing them, or letting a values
+             key overwrite them, silently drops this workload out of both gates. */}}
       annotations:
-        checksum/config: {{ include "kasmOtelCollector.config" . | sha256sum }}
-        {{- with .Values.podAnnotations }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
-        {{- with .Values.commonAnnotations }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
+        {{- $annotations := merge
+              (dict
+                "kasm.com/security" "true"
+                "kasm.com/healthcheck" "true"
+                "checksum/config" (include "kasmOtelCollector.config" . | sha256sum))
+              (deepCopy (.Values.podAnnotations | default dict))
+              (deepCopy (.Values.commonAnnotations | default dict)) }}
+        {{- toYaml $annotations | nindent 8 }}
       labels:
         {{- include "kasmOtelCollector.labels" . | nindent 8 }}
         {{- with .Values.podLabels }}

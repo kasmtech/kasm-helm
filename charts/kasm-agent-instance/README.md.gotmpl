@@ -29,7 +29,7 @@ Please see our [official documentation site](https://docs.kasm.com) for more inf
 
 * Kubernetes 1.26 or newer — the shared floor for the whole `kasm-agent` family (older versions of Kubernetes may work, however, we try to keep this chart updated to [supported versions of Kubernetes](https://kubernetes.io/releases/))
 * Helm 3.18.x or newer ([installation](https://helm.sh/docs/helm/helm_install/))
-* The Kasm agent operator, and its `agent.kasm.com` CRDs, installed in the cluster. This chart creates custom resources; it does not install the controller that reconciles them.
+* The Kasm agent operator (a build from 2026-09-08 or later, which no longer caches Secrets), and its `agent.kasm.com` CRDs, installed in the cluster. This chart creates custom resources; it does not install the controller that reconciles them. It does stamp the one namespaced permission the operator needs here, a Role letting it read, create and update the per-workspace storage-mapping Secrets (`operatorRBAC.*`); when the operator runs in a different namespace from this agent, set `operatorRBAC.serviceAccount.namespace` to that namespace.
 * A reachable Kasm control plane, and the shared manager token for it.
 * [cert-manager](https://cert-manager.io/) when `sessionProxy.certificate.enabled` is set, the [Gateway API](https://gateway-api.sigs.k8s.io/) CRDs plus a Gateway when `httpRoute.enabled` is set, the Gateway API CRDs at 1.5 or newer (`TLSRoute` is standard-channel `v1` there; older experimental-channel bundles also work) plus a Gateway with a `Passthrough` TLS listener when either `gatewayRoute.enabled` or `tlsRoute.enabled` is set, an ingress controller when `ingress.enabled` is set, and OpenShift (the `route.openshift.io` API) when `route.enabled` is set.
 

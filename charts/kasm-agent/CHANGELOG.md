@@ -4,6 +4,16 @@ All notable changes to the kasm-agent chart are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- The operator's ClusterRole no longer grants Secret access; the `agent` subchart always stamps a namespaced Role for it instead. In the two-namespace layout (`operator.enabled=false`) set `agent.operatorRBAC.serviceAccount.namespace` to the operator's namespace; NOTES warns when it is left empty.
+- **Behaviour change for existing installs:** the `kasm-otel-collector` subchart this umbrella pulls in now defaults `otelCollector.exporters.otlp.enabled` to `false` (endpoint `""`) and `otelCollector.exporters.debug.enabled` to `true`, so a default `kasm-agent` install logs telemetry to the collector's own stdout instead of silently exporting to a lab-only placeholder endpoint that never existed for anyone else. Installs that relied on the old OTLP default must now set `otelCollector.exporters.otlp.enabled: true` and `otelCollector.exporters.otlp.endpoint` explicitly. README and values comments updated to say so plainly.
+
+### Fixed
+
+- NOTES.txt told every install without cert-manager to pre-create the session-proxy TLS Secret, which the `agent` subchart now generates by default — and pre-creating it after the fact collides with the generated one. The TLS section now describes the self-signed default, when a pre-created Secret is honoured, and how to replace the generated one on an existing release. Also: a warning when `agent.otel`/`operator.otel` export is left on with `otelCollector.enabled=false` and no explicit endpoint (the default endpoint names a Service this release did not install); the registration check appears whenever the agent is enabled rather than only when the operator is; and the two manual admin steps after registration (enable the agent, authorize workspaces for a group) are spelled out.
+- The comment above the `operator:` value pointed readers at `crds.install`/`crds.keep` values that do not exist on the `kasm-agent-operator` chart. It now describes the real mechanism: the operator's `crds/` directory (installed once by Helm, never upgraded or removed) and the separate `kasm-agent-crds` chart for fleets that want Helm to own CRD upgrades.
+
 ### Added
 
 - Initial release: umbrella chart for the Kasm Workspaces Kubernetes agent stack, composing the operator, telemetry collector, agent instance, node prep, and video device plugin subcharts, plus optional third-party cluster infrastructure (`csi-driver-rclone`, `gpu-operator`, `nfs-server-provisioner`).

@@ -33,7 +33,7 @@ as a promise. The chart values are the half that *is* verified: every value in b
 exists in one of this repo's `values.yaml` files.
 
 Values are written as they are set on the **`kasm-agent`** umbrella, the same convention
-[What works on Kubernetes](../feature-matrix.md) uses: `agent.*` is the `kasm-agent-instance` subchart,
+[What works on Kubernetes](../reference/feature-matrix.md) uses: `agent.*` is the `kasm-agent-instance` subchart,
 `nodePrep.*` is `kasm-node-prep`, `egressInstaller.*` is `kasm-egress-installer`, and so on. Under
 [kasm-platform](../../charts/kasm-platform/README.md), prefix them with `kasm-agent.`.
 
@@ -44,17 +44,17 @@ says whether the chart's default path works there.
 
 | Topic | Amazon EKS | Azure AKS | Google GKE | OpenShift (ROSA / ARO / self-managed) | Notes |
 | ----- | ---------- | --------- | ---------- | ------------------------------------- | ----- |
-| [RWX storage for profiles](rwx-storage-for-profiles.md) | EFS CSI (`efs.csi.aws.com`). EBS is RWO. | Azure Files (`azurefile-csi`), or Azure NetApp Files. Disk is RWO. | Filestore CSI (`filestore.csi.storage.gke.io`). PD is RWO. | ODF/CephFS, or an external NFS export. | Prefer the provider class. `nfs-server-provisioner.enabled=true` works anywhere but is a single point of failure — and needs an SCC on OpenShift. |
-| [Cloud storage mappings (rclone CSI)](cloud-storage-rclone-csi.md) | AL2023 has FUSE. **Bottlerocket: verify.** | Ubuntu node images have `/dev/fuse`. | COS and Ubuntu have `/dev/fuse`. **Autopilot: no.** | RHCOS has `fuse`; the CSI node plugin needs a privileged SCC. | `csiRclone.enabled=true` + `agent.storageMappings.enabled=true`. The node plugin is a privileged DaemonSet — same gate as the rest. |
-| [NetworkPolicy enforcement](network-policy-enforcement.md) | VPC CNI enforces **only** with its network-policy feature enabled; else Calico or Cilium. | Choose Azure NPM, Calico or Cilium **at cluster creation**. | Dataplane V2 (or the legacy network-policy add-on). | OVN-Kubernetes enforces. Works out of the box. | `networkPolicies.enabled=true` renders objects that are inert without an enforcing CNI — the worst failure mode, because it looks like it worked. |
-| [Privileged workloads and policies](privileged-workloads-and-policies.md) | PSA available, `restricted` not enforced by default. Label the namespace. | Same, plus the Azure Policy add-on if enabled. | Same, plus Policy Controller. **Autopilot forbids privileged pods.** | **SCCs, not PSA.** Default `restricted-v2` blocks every privileged chart until a role binding grants `privileged`. | `pod-security.kubernetes.io/enforce=privileged` is necessary everywhere and *not sufficient* on OpenShift. |
-| [GPU nodes (CUDA and EGL/DRI)](gpu-nodes.md) | Accelerated AMIs ship drivers → `gpuOperator.driver.enabled=false`. | GPU node pools ship drivers by default → `gpuOperator.driver.enabled=false`. | GKE installs drivers with its **own** DaemonSet → prefer `gpuOperator.enabled=false`. | Use Red Hat's certified NVIDIA GPU Operator from OperatorHub, not the `gpuOperator` subchart. | Never install drivers twice. `agent.gpu.enabled=true` is required on every path, including EGL/DRI. |
-| [External access and TLS](external-access-and-tls.md) | AWS Load Balancer Controller: ALB → `agent.ingress`, NLB → `agent.sessionProxy.service.type=LoadBalancer`. | App Gateway for Containers, ingress-nginx, or Azure LB straight onto the Service. | GKE Gateway controller is Gateway API native → `agent.httpRoute`. | `agent.route.enabled=true`, `passthrough` termination. | Every path needs a **≥ 3600s** websocket/idle timeout, and every provider's default is far below it. |
-| [Private registries and image pulling](private-registries-and-image-pulling.md) | ECR via the node role or IRSA; a static Secret expires every 12h. | ACR attached with `az aks update --attach-acr`. | Artifact Registry via Workload Identity or the node service account. | A `dockerconfigjson` Secret linked to the ServiceAccount. | `agent.imagePuller.enabled=true` needs the CRI socket from a DaemonSet — impossible on serverless node pools. |
-| [Kernel modules and webcam](kernel-modules-and-webcam.md) | AL2023 needs the matching `kernel-devel`. **Bottlerocket cannot build.** | Ubuntu node images ship headers. **Azure Linux: verify.** | Ubuntu node images work. **COS cannot build**; auto-upgrade churns kernels. | RHCOS ships no `apt` and no toolchain — KMM is the native answer. | Where `method: build` cannot work, use `nodePrep.modules.v4l2loopback.method=kmm` with `nodePrep.modules.v4l2loopback.kmm.build.enabled=false` and prebuilt per-kernel images. |
-| [Secure Boot](secure-boot.md) | Off on the default AMIs. | Off unless a Trusted Launch node pool enables it — **verify.** | Off unless Shielded VM Secure Boot is on — **verify.** | Bare-metal and private-cloud concern; KMM signing is the native path. | MOK enrolment is a **firmware** step. On a managed node image you generally cannot reach the firmware — bake a signed module into a custom image, or leave Secure Boot off. |
-| [Node tuning and swap](node-tuning-and-swap.md) | kubelet config via the node-pool bootstrap / launch template — **verify** what is exposed. | `kubeletConfig` on the node pool exposes a subset — **verify.** | Node system config exposes a subset. **Autopilot: none.** | `KubeletConfig` MachineConfig; the node reboots to apply it. | `nodePrep.tuning.sysctls.enabled=true` is safe everywhere. Leave `nodePrep.tuning.swap.enabled=false` unless you can prove `failSwapOn: false` is live. |
-| [Egress installer node prerequisites](egress-installer-node-prerequisites.md) | `distro: vanilla`. Chaining onto VPC CNI **unverified**; impossible on Fargate. | `distro: vanilla`. Chaining onto Azure CNI **unverified**. | `distro: vanilla`. Chaining onto Dataplane V2 **unverified**; impossible on Autopilot. | Multus/OVN-Kubernetes layout — set `egressInstaller.cniBinDir` explicitly. | The chained-CNI shim fails *every* pod sandbox on a node when it misbehaves. Prove it with the test pod in [Verify](egress-installer-node-prerequisites.md#verify) before relying on it anywhere. |
+| [RWX storage for profiles](storage/rwx-profiles.md) | EFS CSI (`efs.csi.aws.com`). EBS is RWO. | Azure Files (`azurefile-csi`), or Azure NetApp Files. Disk is RWO. | Filestore CSI (`filestore.csi.storage.gke.io`). PD is RWO. | ODF/CephFS, or an external NFS export. | Prefer the provider class. `nfs-server-provisioner.enabled=true` works anywhere but is a single point of failure — and needs an SCC on OpenShift. |
+| [Cloud storage mappings (rclone CSI)](storage/cloud-mappings.md) | AL2023 has FUSE. **Bottlerocket: verify.** | Ubuntu node images have `/dev/fuse`. | COS and Ubuntu have `/dev/fuse`. **Autopilot: no.** | RHCOS has `fuse`; the CSI node plugin needs a privileged SCC. | `csiRclone.enabled=true` + `agent.storageMappings.enabled=true`. The node plugin is a privileged DaemonSet — same gate as the rest. |
+| [NetworkPolicy enforcement](networking/network-policies.md) | VPC CNI enforces **only** with its network-policy feature enabled; else Calico or Cilium. | Choose Azure NPM, Calico or Cilium **at cluster creation**. | Dataplane V2 (or the legacy network-policy add-on). | OVN-Kubernetes enforces. Works out of the box. | `networkPolicies.enabled=true` renders objects that are inert without an enforcing CNI — the worst failure mode, because it looks like it worked. |
+| [Privileged workloads and policies](nodes/privileged-workloads.md) | PSA available, `restricted` not enforced by default. Label the namespace. | Same, plus the Azure Policy add-on if enabled. | Same, plus Policy Controller. **Autopilot forbids privileged pods.** | **SCCs, not PSA.** Default `restricted-v2` blocks every privileged chart until a role binding grants `privileged`. | `pod-security.kubernetes.io/enforce=privileged` is necessary everywhere and *not sufficient* on OpenShift. |
+| [GPU nodes (CUDA and EGL/DRI)](nodes/gpu.md) | Accelerated AMIs ship drivers → `gpuOperator.driver.enabled=false`. | GPU node pools ship drivers by default → `gpuOperator.driver.enabled=false`. | GKE installs drivers with its **own** DaemonSet → prefer `gpuOperator.enabled=false`. | Use Red Hat's certified NVIDIA GPU Operator from OperatorHub, not the `gpuOperator` subchart. | Never install drivers twice. `agent.gpu.enabled=true` is required on every path, including EGL/DRI. |
+| [External access and TLS](networking/README.md) | AWS Load Balancer Controller: ALB → `agent.ingress`, NLB → `agent.sessionProxy.service.type=LoadBalancer`. | App Gateway for Containers, ingress-nginx, or Azure LB straight onto the Service. | GKE Gateway controller is Gateway API native → `agent.httpRoute`. | `agent.route.enabled=true`, `passthrough` termination. | Every path needs a **≥ 3600s** websocket/idle timeout, and every provider's default is far below it. |
+| [Private registries and image pulling](registries.md) | ECR via the node role or IRSA; a static Secret expires every 12h. | ACR attached with `az aks update --attach-acr`. | Artifact Registry via Workload Identity or the node service account. | A `dockerconfigjson` Secret linked to the ServiceAccount. | `agent.imagePuller.enabled=true` needs the CRI socket from a DaemonSet — impossible on serverless node pools. |
+| [Kernel modules and webcam](nodes/kernel-modules-and-webcam.md) | AL2023 needs the matching `kernel-devel`. **Bottlerocket cannot build.** | Ubuntu node images ship headers. **Azure Linux: verify.** | Ubuntu node images work. **COS cannot build**; auto-upgrade churns kernels. | RHCOS ships no `apt` and no toolchain — KMM is the native answer. | Where `method: build` cannot work, use `nodePrep.modules.v4l2loopback.method=kmm` with `nodePrep.modules.v4l2loopback.kmm.build.enabled=false` and prebuilt per-kernel images. |
+| [Secure Boot](nodes/secure-boot.md) | Off on the default AMIs. | Off unless a Trusted Launch node pool enables it — **verify.** | Off unless Shielded VM Secure Boot is on — **verify.** | Bare-metal and private-cloud concern; KMM signing is the native path. | MOK enrolment is a **firmware** step. On a managed node image you generally cannot reach the firmware — bake a signed module into a custom image, or leave Secure Boot off. |
+| [Node tuning and swap](nodes/tuning-and-swap.md) | kubelet config via the node-pool bootstrap / launch template — **verify** what is exposed. | `kubeletConfig` on the node pool exposes a subset — **verify.** | Node system config exposes a subset. **Autopilot: none.** | `KubeletConfig` MachineConfig; the node reboots to apply it. | `nodePrep.tuning.sysctls.enabled=true` is safe everywhere. Leave `nodePrep.tuning.swap.enabled=false` unless you can prove `failSwapOn: false` is live. |
+| [Egress installer node prerequisites](networking/egress.md) | `distro: vanilla`. Chaining onto VPC CNI **unverified**; impossible on Fargate. | `distro: vanilla`. Chaining onto Azure CNI **unverified**. | `distro: vanilla`. Chaining onto Dataplane V2 **unverified**; impossible on Autopilot. | Multus/OVN-Kubernetes layout — set `egressInstaller.cniBinDir` explicitly. | The chained-CNI shim fails *every* pod sandbox on a node when it misbehaves. Prove it with the test pod in [Verify](networking/egress.md#verify) before relying on it anywhere. |
 
 ---
 
@@ -63,7 +63,7 @@ says whether the chart's default path works there.
 ### Node OS and kernel modules
 
 EKS gives you three node-image families and they behave completely differently for
-[kernel modules and webcam](kernel-modules-and-webcam.md):
+[kernel modules and webcam](nodes/kernel-modules-and-webcam.md):
 
 * **Amazon Linux 2023.** Has a toolchain available, but `method: build` compiles against
   `linux-headers-$(uname -r)` from **Debian/Ubuntu** package names — AL2023 wants the matching
@@ -103,8 +103,8 @@ One image tag per kernel release, built on a connected machine — the runbook i
 The alternative is a custom AMI with `v4l2loopback` already baked in, which takes `nodePrep` out of
 the picture for that module entirely.
 
-Two features ride on this: [webcam passthrough](../feature-matrix.md#devices-gpu-webcam-audio)
-and [WireGuard](../feature-matrix.md#security--isolation) — the latter only on kernels older
+Two features ride on this: [webcam passthrough](../reference/feature-matrix.md#devices-gpu-webcam-audio)
+and [WireGuard](../reference/feature-matrix.md#security-and-isolation) — the latter only on kernels older
 than 5.6; from 5.6 it is in-tree and `nodePrep.modules.wireguard.enabled` should stay `false`.
 
 ### RWX storage for profiles
@@ -120,7 +120,7 @@ The in-cluster alternative, `nfs-server-provisioner.enabled=true` with
 `nfs-server-provisioner.persistence.enabled=true` and a name in
 `nfs-server-provisioner.storageClass.name`, works on EKS and is a legitimate starting point — but
 it is one pod, backed by one EBS volume, in front of every user's profile. See
-[RWX storage for profiles](rwx-storage-for-profiles.md#before-you-start).
+[RWX storage for profiles](storage/rwx-profiles.md#before-you-start).
 
 ### GPU
 
@@ -146,7 +146,7 @@ the operator advertises GPUs that Kasm never requests, and sessions simply do no
 
 EGL/DRI graphics acceleration is a **node-image** property regardless of which path you take:
 `/dev/dri/card0` and `/dev/dri/renderD128` have to exist on the node before anything can mount
-them. No chart prepares the node image. Details in [GPU nodes](gpu-nodes.md#before-you-start).
+them. No chart prepares the node image. Details in [GPU nodes](nodes/gpu.md#before-you-start).
 
 ### External access and client IP
 
@@ -204,7 +204,7 @@ kubectl label namespace kasm-agent pod-security.kubernetes.io/enforce=privileged
 
 `egressInstaller` needs more than that label: `hostPID` **and** `hostNetwork`, which a blanket
 `disallow-host-namespaces` rule rejects even in a `privileged` namespace. Settle it in
-[privileged workloads and cluster policy](privileged-workloads-and-policies.md#steps) before
+[privileged workloads and cluster policy](nodes/privileged-workloads.md#steps) before
 installing.
 
 ### Networking specifics
@@ -212,10 +212,10 @@ installing.
 The Amazon VPC CNI enforces `NetworkPolicy` **only when its network-policy feature is enabled**;
 without it, policy objects are accepted and ignored. The alternatives are Calico for policy on top
 of VPC CNI, or replacing the CNI with Cilium. Whichever you choose, prove it with the default-deny
-probe in [NetworkPolicy enforcement](network-policy-enforcement.md#before-you-start) before
+probe in [NetworkPolicy enforcement](networking/network-policies.md#before-you-start) before
 `networkPolicies.enabled=true` means anything.
 
-For [the egress installer](egress-installer-node-prerequisites.md), EKS is a `vanilla` distro —
+For [the egress installer](networking/egress.md), EKS is a `vanilla` distro —
 `/opt/cni/bin`:
 
 ```yaml
@@ -227,7 +227,7 @@ egressInstaller:
 That is the *path*, not a guarantee. Whether the VPC CNI honours a chained plugin appended to its
 `.conflist` is a per-cluster fact this repo has not tested. Confirm the bin dir from containerd's
 own config, then run the test pod from
-[Verify](egress-installer-node-prerequisites.md#verify) — a broken chain fails every pod on the
+[Verify](networking/egress.md#verify) — a broken chain fails every pod on the
 node, not just Kasm's. Treat this as verify-first.
 
 ### Serverless and restricted modes
@@ -254,7 +254,7 @@ for the control plane and real EC2 nodes for sessions.
 ### Node OS and kernel modules
 
 AKS node pools are Ubuntu-based by default, which is the good case for
-[kernel modules](kernel-modules-and-webcam.md): headers resolve, the toolchain installs, and
+[kernel modules](nodes/kernel-modules-and-webcam.md): headers resolve, the toolchain installs, and
 `nodePrep.modules.v4l2loopback.method` can stay at its default `build`. Confirm the kernel flavor
 ships the V4L2 core before you commit — `modinfo videodev` on a node is the whole check.
 
@@ -274,7 +274,7 @@ where the profile workload needs real IOPS. Azure Files' standard tier is fine f
 and noticeably slow for a browser cache; the premium (SSD) tier is the usual fix, and ANF is the
 step above that. Pick the tier deliberately — **verify against current provider docs** for the
 current tier names and their limits. Background:
-[RWX storage for profiles](rwx-storage-for-profiles.md#before-you-start).
+[RWX storage for profiles](storage/rwx-profiles.md#before-you-start).
 
 ### GPU
 
@@ -336,7 +336,7 @@ AKS ships PSA and does not enforce `restricted` by default; the namespace label 
 that matters, and the **Azure Policy add-on** — if enabled on the cluster — enforces independently
 of PSA. Satisfying one does not satisfy the other. Inventory both before installing `nodePrep`,
 `videoDevicePlugin` or `egressInstaller`, and remember `egressInstaller` additionally needs host
-namespaces. See [privileged workloads and cluster policy](privileged-workloads-and-policies.md#steps).
+namespaces. See [privileged workloads and cluster policy](nodes/privileged-workloads.md#steps).
 
 ### Networking specifics
 
@@ -349,10 +349,10 @@ in place. Without an engine, `networkPolicies.enabled=true` renders objects noth
 For the egress installer, AKS is `distro: vanilla` (`/opt/cni/bin`). Whether Azure CNI — in any of
 its overlay, node-subnet or Cilium-powered variants — honours a chained plugin appended to its
 `.conflist` is unverified here. Confirm the bin dir from containerd's config on a node, then run the
-test pod from [Verify](egress-installer-node-prerequisites.md#verify). On any Cilium-based dataplane,
+test pod from [Verify](networking/egress.md#verify). On any Cilium-based dataplane,
 the Cilium agent also rewrites its own conflist whenever `/etc/cni/net.d` changes and undoes the
 shim within a second — it needs `cni.customConf=true` and `cni.exclusive=false`, plus an agent
-restart, before chaining holds ([egress installer prerequisites](egress-installer-node-prerequisites.md#before-you-start)).
+restart, before chaining holds ([egress installer prerequisites](networking/egress.md#before-you-start)).
 
 ### Serverless and restricted modes
 
@@ -395,7 +395,7 @@ allows.
 
 The choice between the two modes is laid out in
 [kasm-node-prep § Which one to choose](../../charts/kasm-node-prep/README.md#which-one-to-choose);
-the procedure for both is [Kernel modules and webcam](kernel-modules-and-webcam.md#b-kmm-mode).
+the procedure for both is [Kernel modules and webcam](nodes/kernel-modules-and-webcam.md#b-kmm-mode).
 
 ### RWX storage for profiles
 
@@ -406,7 +406,7 @@ tier's minimum instance is far more storage than a profile share usually needs, 
 tier choice a cost decision as much as a performance one. **Verify against current provider docs**
 for current tier names and minimums. The in-cluster
 `nfs-server-provisioner.enabled=true` path also works, with the caveats in
-[RWX storage for profiles](rwx-storage-for-profiles.md#before-you-start).
+[RWX storage for profiles](storage/rwx-profiles.md#before-you-start).
 
 ### GPU
 
@@ -476,13 +476,13 @@ GKE **Autopilot** is a different story entirely — see below.
 `NetworkPolicy` enforcement on GKE needs **Dataplane V2** (Cilium-based, and the default on newer
 clusters) or the legacy network-policy add-on. Without one, `networkPolicies.enabled=true` is
 inert. Prove it with the probe in
-[NetworkPolicy enforcement](network-policy-enforcement.md#before-you-start).
+[NetworkPolicy enforcement](networking/network-policies.md#before-you-start).
 
 For the egress installer, GKE Standard nodes are `distro: vanilla` (`/opt/cni/bin`). Whether
 Dataplane V2 honours a chained plugin appended to its `.conflist` is unverified here and is exactly
 the kind of thing a dataplane rewrite changes — confirm the bin dir from the node's containerd
 config and run the test pod from
-[Verify](egress-installer-node-prerequisites.md#verify) before relying on it. Verify-first, not a
+[Verify](networking/egress.md#verify) before relying on it. Verify-first, not a
 promise.
 
 ### Serverless and restricted modes
@@ -523,7 +523,7 @@ before assuming the chart's output is accepted.
 **ODF / CephFS** is the native RWX answer on OpenShift, and an external NFS export is the common
 alternative. The bundled `nfs-server-provisioner` runs a pod that needs an SCC it does not have by
 default and will `CrashLoopBackOff` without one — prefer ODF rather than granting an SCC to a
-storage stand-in. See [RWX storage for profiles](rwx-storage-for-profiles.md#before-you-start).
+storage stand-in. See [RWX storage for profiles](storage/rwx-profiles.md#before-you-start).
 
 ### GPU
 
@@ -564,7 +564,7 @@ Client IP behaviour behind the OpenShift router is the router's, not the chart's
 it with `agent.sessionProxy.service.type=LoadBalancer`,
 `agent.sessionProxy.service.externalTrafficPolicy=Local` and
 `agent.sessionProxy.proxyProtocol.*` behave as they do anywhere else. Full comparison of the five
-exposure methods: [External access and TLS](external-access-and-tls.md#step-2--pick-one-exposure-option).
+exposure methods: [External access and TLS](networking/README.md#choosing-a-mechanism).
 
 ### Security baseline
 
@@ -578,7 +578,7 @@ Each privileged DaemonSet's ServiceAccount needs the `privileged` SCC bound to i
 `egressInstaller` additionally needs `hostPID` and `hostNetwork` permitted under that SCC — the
 `privileged` SCC covers host namespaces, but a custom SCC written to be narrower may not. Grant
 these deliberately and record them; they are the same trade-off as
-[privileged workloads and cluster policy](privileged-workloads-and-policies.md#steps) describes,
+[privileged workloads and cluster policy](nodes/privileged-workloads.md#steps) describes,
 expressed in OpenShift's vocabulary.
 
 This repository has **not validated SCC binding on OpenShift** — the existing how-to says so
@@ -606,7 +606,7 @@ An unrecognized `distro` with no `cniBinDir` **fails template rendering on purpo
 would rather not install than install into a directory whose wrongness is silent. Whether chaining
 onto a Multus/OVN-Kubernetes conflist works at all is unverified here; combined with the SCC
 requirement, treat the egress installer on OpenShift as a proof-of-concept before a plan. Method:
-[Egress installer node prerequisites](egress-installer-node-prerequisites.md#steps), and read
+[Egress installer node prerequisites](networking/egress.md#steps), and read
 [kasm-egress-installer § Read this before installing](../../charts/kasm-egress-installer/README.md#read-this-before-installing)
 first.
 
@@ -621,7 +621,7 @@ things drop out because you decided not to grant the SCC, which is a decision yo
 Node tuning is also a policy-shaped problem here: kubelet settings come from a `KubeletConfig`
 MachineConfig object and the node **reboots** to apply it, so `nodePrep.tuning.swap.enabled=true`
 is a change to plan a maintenance window around. `nodePrep.tuning.sysctls.enabled=true` has no such
-prerequisite. See [Node tuning and swap](node-tuning-and-swap.md#verify) for how to prove the
+prerequisite. See [Node tuning and swap](nodes/tuning-and-swap.md#verify) for how to prove the
 kubelet setting is actually live before enabling swap.
 
 ---
@@ -675,9 +675,9 @@ changed afterwards.
 
 * [Cluster configuration how-tos](README.md) — the eleven per-topic procedures this page cuts
   across, each with its own verification commands.
-* [What works on Kubernetes](../feature-matrix.md) — every Kasm feature, whether it works, and
+* [What works on Kubernetes](../reference/feature-matrix.md) — every Kasm feature, whether it works, and
   what it needs from the cluster.
 * [kasm-agent → Cluster preparation checklist](../../charts/kasm-agent/README.md#cluster-preparation-checklist)
   — the short list: the features people turn on most often, and the values that turn them on.
-* [Architecture → Deployment topologies](../architecture.md#deployment-topologies) — namespace
+* [Architecture → Deployment topologies](../overview/architecture.md#deployment-topologies) — namespace
   layouts, and why the two-namespace one keeps the control plane out of a `privileged` namespace.

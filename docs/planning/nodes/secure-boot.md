@@ -1,6 +1,6 @@
 # Secure Boot: signing kernel modules
 
-> **Applies to:** [Secure Boot nodes](../feature-matrix.md#security--isolation), and the Secure Boot half of [webcam passthrough](../feature-matrix.md#devices-gpu-webcam-audio) — the MOK keys that have to be **enrolled in each node's UEFI**, a one-time manual step per node · **Charts/values:** `nodePrep.secureBoot.existingMokSecret`, `nodePrep.modules.v4l2loopback.kmm.sign.enabled`, `nodePrep.modules.v4l2loopback.kmm.sign.keySecret`, `nodePrep.modules.v4l2loopback.kmm.sign.certSecret`
+> **Applies to:** [Secure Boot nodes](../../reference/feature-matrix.md#security-and-isolation), and the Secure Boot half of [webcam passthrough](../../reference/feature-matrix.md#devices-gpu-webcam-audio) — the MOK keys that have to be **enrolled in each node's UEFI**, a one-time manual step per node · **Charts/values:** `nodePrep.secureBoot.existingMokSecret`, `nodePrep.modules.v4l2loopback.kmm.sign.enabled`, `nodePrep.modules.v4l2loopback.kmm.sign.keySecret`, `nodePrep.modules.v4l2loopback.kmm.sign.certSecret`
 
 ## Why this is needed
 
@@ -27,9 +27,9 @@ Both need the **same** thing out of band: the public key enrolled in each node's
 - Distro variants: this is overwhelmingly a **bare-metal and private-cloud** concern. **EKS, GKE and AKS** leave Secure Boot off on their default node images (GCE Shielded VMs can enable it; if you did, you own this page). **k3s / kubeadm** make no difference here — the gate is the node's firmware, not the distribution. **OpenShift**: KMM is the native path; the signing values below are the same.
 - Console or out-of-band access to every node: MOK enrolment is confirmed in the **UEFI MOK Manager at boot**, not from `kubectl` or SSH.
 - `openssl` and `mokutil` available on a workstation and on the nodes respectively.
-- Build mode only: the builder image must carry `openssl` — the kernel's `sign-file` helper needs it. The stock `ubuntu:22.04` builder installs it at runtime; a pre-baked airgap image must include it (see [kasm-node-prep § Build and push the builder image](../../charts/kasm-node-prep/README.md#build-and-push-the-builder-image)).
+- Build mode only: the builder image must carry `openssl` — the kernel's `sign-file` helper needs it. The stock `ubuntu:22.04` builder installs it at runtime; a pre-baked airgap image must include it (see [kasm-node-prep § Build and push the builder image](../../../charts/kasm-node-prep/README.md#build-and-push-the-builder-image)).
 - KMM mode + airgap only: mirror the KMM **sign** image too — `make images-agent` lists it under `# KMM mode`, flagged as Secure Boot only.
-- The namespace must already permit the `privileged` PSS: [privileged workloads and cluster policy](privileged-workloads-and-policies.md).
+- The namespace must already permit the `privileged` PSS: [privileged workloads and cluster policy](privileged-workloads.md).
 
 ## Steps
 
@@ -93,7 +93,7 @@ Both need the **same** thing out of band: the public key enrolled in each node's
    Build mode:
 
    ```console
-   helm upgrade --install kasm-agent charts/kasm-agent -n kasm-agent \
+   helm upgrade --install kasm-agent oci://registry-1.docker.io/kasmweb/kasm-agent -n kasm-agent \
      --set nodePrep.enabled=true \
      --set nodePrep.modules.v4l2loopback.enabled=true \
      --set nodePrep.secureBoot.existingMokSecret=kasm-mok-keys
@@ -104,7 +104,7 @@ Both need the **same** thing out of band: the public key enrolled in each node's
    KMM mode:
 
    ```console
-   helm upgrade --install kasm-agent charts/kasm-agent -n kasm-agent \
+   helm upgrade --install kasm-agent oci://registry-1.docker.io/kasmweb/kasm-agent -n kasm-agent \
      --set nodePrep.enabled=true \
      --set nodePrep.modules.v4l2loopback.enabled=true \
      --set nodePrep.modules.v4l2loopback.method=kmm \
@@ -194,7 +194,7 @@ nodePrep:
           certSecret: kasm-mok-cert    # data key: cert  (DER certificate)
 ```
 
-Under [kasm-platform](../../charts/kasm-platform/README.md), nest either block under `kasm-agent:` (`kasm-agent.nodePrep.secureBoot.existingMokSecret`). Installing `charts/kasm-node-prep` standalone drops the alias: `secureBoot.existingMokSecret` and `modules.v4l2loopback.kmm.sign.*` at the top level.
+Under [kasm-platform](../../../charts/kasm-platform/README.md), nest either block under `kasm-agent:` (`kasm-agent.nodePrep.secureBoot.existingMokSecret`). Installing `charts/kasm-node-prep` standalone drops the alias: `secureBoot.existingMokSecret` and `modules.v4l2loopback.kmm.sign.*` at the top level.
 
 ## Troubleshooting
 

@@ -1,6 +1,6 @@
 # Privileged workloads and cluster policy
 
-> **Applies to:** every feature that needs a `privileged` namespace — [egress gateways](../feature-matrix.md#networking--access), and [webcam passthrough](../feature-matrix.md#devices-gpu-webcam-audio), [WireGuard, Secure Boot and multi-tenancy](../feature-matrix.md#security--isolation) — plus the host namespaces (`hostPID`, `hostNetwork`) that egress gateways need on top · **Charts/values:** `nodePrep.enabled`, `videoDevicePlugin.enabled`, `egressInstaller.enabled`, `networkPolicies.enabled`
+> **Applies to:** every feature that needs a `privileged` namespace — [egress gateways](../../reference/feature-matrix.md#networking-and-access), and [webcam passthrough](../../reference/feature-matrix.md#devices-gpu-webcam-audio), [WireGuard, Secure Boot and multi-tenancy](../../reference/feature-matrix.md#security-and-isolation) — plus the host namespaces (`hostPID`, `hostNetwork`) that egress gateways need on top · **Charts/values:** `nodePrep.enabled`, `videoDevicePlugin.enabled`, `egressInstaller.enabled`, `networkPolicies.enabled`
 
 ## Why this is needed
 
@@ -15,11 +15,11 @@ Three charts in this repo ship DaemonSets that cannot be made unprivileged:
 
 None of them satisfies the `baseline` or `restricted` [Pod Security Standard](https://kubernetes.io/docs/concepts/security/pod-security-admission/). A namespace that enforces either rejects them at admission — the DaemonSet exists, the pods never do. This page is the one-time namespace and policy preparation that has to happen before egress gateways, webcam passthrough, WireGuard or Secure Boot will work.
 
-See [kasm-node-prep § Security posture](../../charts/kasm-node-prep/README.md#security-posture), [kasm-video-device-plugin § Security posture](../../charts/kasm-video-device-plugin/README.md#security-posture) and [kasm-egress-installer § Security posture](../../charts/kasm-egress-installer/README.md#security-posture) for the full mount-by-mount breakdown.
+See [kasm-node-prep § Security posture](../../../charts/kasm-node-prep/README.md#security-posture), [kasm-video-device-plugin § Security posture](../../../charts/kasm-video-device-plugin/README.md#security-posture) and [kasm-egress-installer § Security posture](../../../charts/kasm-egress-installer/README.md#security-posture) for the full mount-by-mount breakdown.
 
 ## Before you start
 
-- Decide the namespace topology **first**. In a single-namespace install the `privileged` label covers the control plane too; the two-namespace layout in [architecture.md § Deployment topologies](../architecture.md#deployment-topologies) is how you keep the control plane under normal enforcement. Changing your mind later means moving a release.
+- Decide the namespace topology **first**. In a single-namespace install the `privileged` label covers the control plane too; the two-namespace layout in [architecture.md § Deployment topologies](../../overview/architecture.md#deployment-topologies) is how you keep the control plane under normal enforcement. Changing your mind later means moving a release.
 - Know which admission controllers the cluster actually runs: built-in PSA, and/or Kyverno / OPA Gatekeeper / a cloud policy add-on. They are enforced independently — satisfying PSA does not satisfy Kyverno.
 - Distro variants:
   - **k3s** — ships **no** `PodSecurity` admission configuration by default, so the label is a no-op here. Apply it anyway: it is free, and it makes the same values file portable to a cluster that does enforce.
@@ -65,9 +65,9 @@ See [kasm-node-prep § Security posture](../../charts/kasm-node-prep/README.md#s
 
    This repo does the second thing for its own CI: the `infra` and `kmm` scenarios in `tests/values-agent/` render to `.rendered-infra/` instead of `.rendered/`, and only `.rendered/` is swept by the Kyverno PSS gate (see `AGENT_SCENARIOS` and `render-agent` in the `Makefile`). The exclusion is by design and documented in `tests/values-agent/infra.yaml`.
 
-4. **Do not label the manager namespace `kasm.com/role=manager`.** It is *not* required for sessions: the operator's per-workspace NetworkPolicy admits the session proxy **by podSelector** (verified against the stamped policy on a live deployment), and all session and manager traffic flows through that proxy. Add it only where something genuinely needs *direct* ingress to workspace pods. See [kasm-agent § Running alongside the kasm-helm control plane](../../charts/kasm-agent/README.md#running-alongside-the-kasm-helm-control-plane).
+4. **Do not label the manager namespace `kasm.com/role=manager`.** It is *not* required for sessions: the operator's per-workspace NetworkPolicy admits the session proxy **by podSelector** (verified against the stamped policy on a live deployment), and all session and manager traffic flows through that proxy. Add it only where something genuinely needs *direct* ingress to workspace pods. See [kasm-agent § Running alongside the kasm-helm control plane](../../../charts/kasm-agent/README.md#running-alongside-the-kasm-helm-control-plane).
 
-5. **Keep `networkPolicies.enabled=false` in any namespace shared with the control plane.** The agent umbrella's baseline models only the agent's own flows and would cut the control plane off. See [kasm-agent § Baseline network policies](../../charts/kasm-agent/README.md#baseline-network-policies).
+5. **Keep `networkPolicies.enabled=false` in any namespace shared with the control plane.** The agent umbrella's baseline models only the agent's own flows and would cut the control plane off. See [kasm-agent § Baseline network policies](../../../charts/kasm-agent/README.md#baseline-network-policies).
 
 6. **Install the release**, then confirm the pods were admitted (next section).
 
@@ -121,7 +121,7 @@ networkPolicies:
   enabled: false
 ```
 
-Installed via [kasm-platform](../../charts/kasm-platform/README.md), nest the same block one level down under `kasm-agent:`:
+Installed via [kasm-platform](../../../charts/kasm-platform/README.md), nest the same block one level down under `kasm-agent:`:
 
 ```yaml
 kasm-agent:
@@ -133,7 +133,7 @@ kasm-agent:
     enabled: true
 ```
 
-Installing a subchart standalone (`helm install ... charts/kasm-node-prep`) drops the alias prefix entirely: the keys are `modules.*`, `tuning.*`, `distro`, and so on at the top level.
+Installing a subchart standalone (`helm install ... oci://registry-1.docker.io/kasmweb/kasm-node-prep`) drops the alias prefix entirely: the keys are `modules.*`, `tuning.*`, `distro`, and so on at the top level.
 
 ## Troubleshooting
 
@@ -142,7 +142,7 @@ Installing a subchart standalone (`helm install ... charts/kasm-node-prep`) drop
 | DaemonSet shows `DESIRED 3 / CURRENT 0`; `describe daemonset` events say `FailedCreate ... violates PodSecurity "baseline:latest"` | The namespace enforces `baseline` (or `restricted`) — kubeadm and most managed clusters | `kubectl label namespace <ns> pod-security.kubernetes.io/enforce=privileged --overwrite` |
 | `nodePrep` and `videoDevicePlugin` pods run, but only `egressInstaller` pods are rejected — with a policy message about host namespaces | A blanket `disallow-host-namespaces` Kyverno/OPA rule. `hostPID` + `hostNetwork` are beyond `privileged` PSS and are enforced by a separate engine | Scope a `PolicyException` to this namespace/ServiceAccount, or accept the workload outside the baseline set. Not a chart bug — decide explicitly |
 | The `privileged` label appears to do nothing on k3s — pods were already running before it was applied | k3s configures no PSA admission plugin by default, so the label is inert there | Expected. Keep the label for portability to clusters that do enforce |
-| Labelling the shared namespace `privileged` also relaxes enforcement on the control-plane pods | Single-namespace topology: PSS is a namespace-level control and cannot be scoped to one workload | Split into the two-namespace layout ([architecture.md § Deployment topologies](../architecture.md#deployment-topologies)) so only the agent namespace is `privileged` |
+| Labelling the shared namespace `privileged` also relaxes enforcement on the control-plane pods | Single-namespace topology: PSS is a namespace-level control and cannot be scoped to one workload | Split into the two-namespace layout ([architecture.md § Deployment topologies](../../overview/architecture.md#deployment-topologies)) so only the agent namespace is `privileged` |
 | The repo's Kyverno gate fails after adding `nodePrep`/`egressInstaller` to a test scenario | The gate sweeps `.rendered/`; privileged cluster-infra scenarios belong in `.rendered-infra/` | Add the scenario to the `infra`/`kmm` filter in `AGENT_SCENARIOS` so it renders to `.rendered-infra/`, as `tests/values-agent/infra.yaml` does |
 | Control plane loses connectivity after enabling `networkPolicies.enabled=true` in a shared namespace | The agent's baseline policy set models only agent flows | Set `networkPolicies.enabled=false` in shared-namespace topologies |
 
