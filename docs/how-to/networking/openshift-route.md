@@ -97,9 +97,12 @@ flowchart LR
    ```
 
    `route.host` defaults to `publicHostname`. `route.backendPort` follows the termination mode when
-   left empty: 4444 for `passthrough` and `reencrypt`, 4445 for `edge`. A `passthrough` Route also
-   serves an agent on a **relayed** zone from another cluster, since it routes on SNI. On
-   direct-connect, finish [Switch sessions to direct-connect](direct-connect.md).
+   left empty: 4444 for `passthrough` and `reencrypt`, 4445 for `edge`. On direct-connect, finish
+   [Switch sessions to direct-connect](direct-connect.md), and read its warning first: a
+   `passthrough` Route routes on SNI, which the session proxy's own hairpin does not send, so
+   expect the known issue there; `edge` and `reencrypt` route on the `Host` header. A relayed
+   agent from another cluster behind a `passthrough` Route is unverified for the same reason. None
+   of this has been exercised on OpenShift itself.
 
 3. **Install or upgrade.**
 

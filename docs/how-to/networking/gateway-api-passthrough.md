@@ -5,10 +5,19 @@
 ## Why this is needed
 
 End-to-end TLS: nothing on shared cluster infrastructure decrypts session traffic, and the browser
-validates the session proxy's own certificate. The Gateway reads only the SNI. Prefer
-`kasm-agent.agent.gatewayRoute` (the operator creates and reconciles the route) and fall back to
-`agent.tlsRoute` (the Helm release owns it) only for operator builds that lack the field. The
+validates the session proxy's own certificate. The Gateway reads only the SNI. Of the two agent
+values, `kasm-agent.agent.gatewayRoute` has the operator create and reconcile the route, and
+`agent.tlsRoute` has the Helm release own it, for operator builds that lack the field. The
 control plane can pass through too, with `kasm-helm.tlsRoute`.
+
+> **Warning.** Known issue: direct-connect sessions do not stream through a passthrough route
+> today. The route, the status conditions and the certificate check on this page all pass while
+> every session connect returns `502`, because the session proxy's own hairpin carries no SNI. The
+> full statement, and what works instead, is in
+> [Switch sessions to direct-connect](direct-connect.md#why-this-is-needed). On a **relayed** zone
+> with the agent in another cluster, the control-plane proxy's upstream connection carries no SNI
+> either; that path has not been verified through a passthrough listener, so use a published
+> Service there ([LoadBalancer and NodePort](loadbalancer-nodeport.md)).
 
 ```mermaid
 %%{init: {"theme":"base","themeVariables":{"primaryColor":"#eef3f8","primaryBorderColor":"#5b7a99","primaryTextColor":"#1d2b3a","secondaryColor":"#fbf3e6","secondaryBorderColor":"#b8863b","tertiaryColor":"#eaf5ec","tertiaryBorderColor":"#4f8a5b","lineColor":"#5b7a99","fontFamily":"Inter, Helvetica, Arial, sans-serif","fontSize":"14px"},"flowchart":{"curve":"basis","htmlLabels":true}}}%%
@@ -126,9 +135,9 @@ apply. On top of them:
 
    `gatewayRoute.hostnames` is defaulted by the operator to `[publicHostname]`, `tlsRoute.hostnames`
    by the chart to the same; the session proxy's certificate must cover whatever is in force. The
-   backend port is 4444 on both. On a **relayed** zone this page works as an agent's exposure toward
-   a control plane in another cluster (SNI routing needs no `Host` header); on direct-connect, finish
-   [Switch sessions to direct-connect](direct-connect.md).
+   backend port is 4444 on both. `tlsRoute.parentRefs` entries are rendered verbatim, so
+   `sectionName`, `port` and `kind` pass through as written. On direct-connect, finish
+   [Switch sessions to direct-connect](direct-connect.md), and read its warning first.
 
 3. **Install or upgrade.**
 
@@ -154,7 +163,10 @@ kubectl -n kasm-agent get tlsroute -o jsonpath='{range .items[*]}{.metadata.name
 ```
 
 Expected: `Accepted=True` and `ResolvedRefs=True`. Then prove it is passthrough: the browser must
-get the session proxy's certificate, not the Gateway's. The two fingerprints must match:
+get the session proxy's certificate, not the Gateway's. The two fingerprints must match. The
+operator does not roll the session-proxy pods when the Secret changes (a hostname change, a
+cert-manager issue or renewal), so restart them first or the served fingerprint is the old one:
+`kubectl -n kasm-agent delete pod -l app.kubernetes.io/component=session-proxy`.
 
 ```console
 kubectl -n kasm-agent get secret kasm-session-proxy-tls -o jsonpath='{.data.tls\.crt}' \
@@ -164,6 +176,12 @@ echo | openssl s_client -servername sessions.example.com -connect sessions.examp
 ```
 
 `curl -kI https://sessions.example.com/` prints a status line, `404` being correct with no session.
+
+None of that proves a session streams. Log in at `kasm.example.com`, launch a session and open the
+browser's network tab: the request to `https://sessions.example.com/desktop/<id>/...` must return
+`200`. While the known issue stands it returns `502`, and
+`kubectl -n kasm-agent logs -l app.kubernetes.io/component=session-proxy -c session-proxy` shows
+`peer closed connection in SSL handshake while SSL handshaking to upstream`.
 
 ## Chart values
 
@@ -210,6 +228,7 @@ Installing the charts directly, drop the `kasm-helm:` and `kasm-agent:` keys.
 - [ ] Gateway API 1.5+; `TLSRoute` served as `v1`.
 - [ ] A `protocol: TLS`, `tls.mode: Passthrough` listener carrying the hostname and admitting the release namespaces.
 - [ ] `gatewayRoute` (operator-managed) chosen; `tlsRoute` only for older operator builds.
+- [ ] The direct-connect known issue read: a session-level check planned, not only the route and certificate checks.
 - [ ] Session-proxy certificate publicly trusted, covering the hostname and `*.<hostname>`.
 - [ ] L4 idle timeout raised on the Gateway and anything in front.
-- [ ] Fingerprint check passed: the browser gets the session proxy's certificate.
+- [ ] Fingerprint check passed after a session-proxy restart: the browser gets the session proxy's certificate.

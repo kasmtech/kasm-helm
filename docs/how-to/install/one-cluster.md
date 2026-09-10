@@ -47,7 +47,10 @@ layout; this page adds a hostname and a certificate so it can be kept.
      -n kasm --create-namespace -f values.yaml --timeout 20m
    ```
 
-   The long timeout covers database initialization and the first image pulls.
+   The long timeout covers database initialization and the first image pulls. Applying these
+   values to an existing release (the tutorial's) works as a `helm upgrade`; expect the database
+   pod to restart once, because the PostgreSQL StatefulSet mounts the control-plane certificate
+   Secret and `certificate.secretName` changed.
 
 3. **Enable the agent and authorize a workspace** in the admin UI, as in
    [Get started](../../tutorials/get-started.md), or seed `auto_agent` first with

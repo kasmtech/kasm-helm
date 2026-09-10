@@ -35,10 +35,11 @@ Nothing is written to `/etc/fstab` or `/etc/sysctl.d`. The reconcile loop re-ass
    ```console
    helm upgrade --install kasm-agent oci://registry-1.docker.io/kasmweb/kasm-agent -n kasm-agent \
      --set nodePrep.enabled=true \
-     --set nodePrep.tuning.sysctls.enabled=true
+     --set nodePrep.tuning.sysctls.enabled=true \
+     --set nodePrep.modules.v4l2loopback.enabled=false
    ```
 
-   The map **merges** with the chart defaults (`fs.inotify.max_user_instances: 1024`, `fs.inotify.max_user_watches: 524288`), so adding a key keeps them; set a key to `null` to drop one.
+   The map **merges** with the chart defaults (`fs.inotify.max_user_instances: 1024`, `fs.inotify.max_user_watches: 524288`), so adding a key keeps them; set a key to `null` to drop one. The last flag matters: `nodePrep.enabled=true` alone also turns on the chart default `modules.v4l2loopback.enabled: true`, which installs a compiler toolchain on every node and builds a kernel module, and on a kernel without V4L2 every reconcile pass then ends in `--- reconcile pass finished with errors; retrying in 300s ---`. Leave the module off here and turn it on from [Webcam and kernel modules](webcam-kernel-modules.md) when you want it.
 
 2. **Configure the node's kubelet for swap.** *k3s* - write both files on every workspace node:
 
@@ -88,7 +89,8 @@ Nothing is written to `/etc/fstab` or `/etc/sysctl.d`. The reconcile loop re-ass
    helm upgrade --install kasm-agent oci://registry-1.docker.io/kasmweb/kasm-agent -n kasm-agent \
      --set nodePrep.enabled=true \
      --set nodePrep.tuning.sysctls.enabled=true \
-     --set nodePrep.tuning.swap.enabled=true
+     --set nodePrep.tuning.swap.enabled=true \
+     --set nodePrep.modules.v4l2loopback.enabled=false
    ```
 
    Leave `nodePrep.tuning.swap.sizeMib` at `0` for the auto rule (half of `MemTotal`, clamped to 4–16 GiB) unless you have a better number. The next reconcile pass - within `nodePrep.reconcileIntervalSeconds` (300s default) - picks it up; no rollout needed after fixing a node.
@@ -128,12 +130,15 @@ Nothing is written to `/etc/fstab` or `/etc/sysctl.d`. The reconcile loop re-ass
    Expected - and the refusal message must be **gone**:
 
    ```text
-   kubelet swap support confirmed: /etc/rancher/k3s/config.yaml carries fail-swap-on=false
+   kubelet swap support confirmed: /host/etc/rancher/k3s/config.yaml.d/10-kasm-workspace-node.yaml carries fail-swap-on=false
    Creating a 8192 MiB swapfile at /var/lib/kasm-node-prep/kasm.swap
    Swap is active: /var/lib/kasm-node-prep/kasm.swap (8192 MiB)
+   sysctl vm.swappiness: 60 -> 80
    ```
 
-   (kubeadm nodes log `kubelet swap support confirmed: /var/lib/kubelet/config.yaml sets failSwapOn: false`.)
+   The daemon prints node paths with its `/host` mount prefix and names the file it matched, the
+   drop-in above or `/host/etc/rancher/k3s/config.yaml`; the size is half of `MemTotal` on that
+   node. kubeadm nodes log `kubelet swap support confirmed: /host/var/lib/kubelet/config.yaml sets failSwapOn: false`.
 
 3. On the node:
 
@@ -188,7 +193,8 @@ Under [kasm-platform](../../../charts/kasm-platform/README.md), nest the block u
 
 | Symptom | Cause | Fix |
 | ------- | ----- | --- |
-| Pod log: `tuning.swap.enabled is set, but this node's kubelet could not be confirmed to tolerate swap: neither /etc/rancher/k3s/config.yaml nor … carries 'fail-swap-on=false', and /var/lib/kubelet/config.yaml does not set 'failSwapOn: false'` - no swapfile is created | The safety check did its job: the kubelet is not (readably) configured for swap | Apply the kubelet config for your distro, restart the kubelet, and wait one reconcile pass. No Helm rollout needed |
+| Pod log: `tuning.swap.enabled is set, but this node's kubelet could not be confirmed to tolerate swap: neither /host/etc/rancher/k3s/config.yaml nor /host/etc/rancher/k3s/config.yaml.d/*.yaml carries 'fail-swap-on=false', and /host/var/lib/kubelet/config.yaml does not set 'failSwapOn: false'` - no swapfile is created | The safety check did its job: the kubelet is not (readably) configured for swap | Apply the kubelet config for your distro, restart the kubelet, and wait one reconcile pass (or delete the node-prep pod to force one). No Helm rollout needed |
+| Every pass ends `--- reconcile pass finished with errors; retrying in 300s ---` after `ERROR: Kernel ... has no V4L2 core`, and Verify 5's line never appears | `nodePrep.enabled=true` also turned on the default `modules.v4l2loopback`, and the node's kernel has no V4L2 | `--set nodePrep.modules.v4l2loopback.enabled=false` as in steps 1 and 4 |
 | Kubelet is configured, but via a systemd drop-in or a cloud-init unit, and the log still refuses | The check reads only `/etc/rancher/k3s/config.yaml{,.d/*.yaml}` and `/var/lib/kubelet/config.yaml` | Verify `failSwapOn: false` via `configz`, then set `nodePrep.tuning.swap.force=true` |
 | Node went `NotReady` at its next reboot, weeks after enabling swap | Swap was activated under a kubelet still defaulting to `failSwapOn: true` - typically via `force` without verifying | On the node: `swapoff -a`, bring the kubelet up, then fix the kubelet config before re-enabling swap |
 | `swapon --show` shows the swapfile, but sessions never use any of it | Either `memorySwap.swapBehavior` is not `LimitedSwap` (the kubelet tolerates swap but grants none), or the workspace pods are Guaranteed/BestEffort | Set `swapBehavior: LimitedSwap` in the kubelet config; keep workspace memory request below its limit so the pod is Burstable |
@@ -199,7 +205,7 @@ Under [kasm-platform](../../../charts/kasm-platform/README.md), nest the block u
 
 ## Decisions
 
-- [ ] `tuning.sysctls.enabled=true` - no prerequisites, do this first.
+- [ ] `tuning.sysctls.enabled=true` - no prerequisites, do this first; `modules.v4l2loopback.enabled=false` unless the webcam page turned it on.
 - [ ] cgroup v2 and Kubernetes ≥ 1.30 confirmed.
 - [ ] Kubelet configured **before** the chart: `failSwapOn: false` **and** `memorySwap.swapBehavior: LimitedSwap`.
 - [ ] Kubelet restarted; node back `Ready`.

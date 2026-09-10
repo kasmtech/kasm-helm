@@ -56,13 +56,17 @@ again by the same rule.
 
    `setting_id` and `value` are top-level keys; a `target_setting` wrapper does not work.
 
-3. Agents already registered stay as they are. Enable them once by hand, or delete and recreate the
-   `Agent` resource so it registers again.
+3. Agents already registered stay as they are. Enable them once by hand. Deleting and recreating
+   the `Agent` resource is not enough on its own: the manager keeps one server record per agent
+   hostname and re-uses it, enabled state included, when the same hostname registers again. To
+   produce a **new** registration, delete the record first under Infrastructure → Agents (API:
+   `delete_server` with `server_type: "host"` in `target_server`), then recreate the `Agent`.
 
 ## Verify
 
-Register a new agent (or `kubectl delete agents.agent.kasm.com k8s-agent -n <ns>` and let the
-chart's resource be recreated by `helm upgrade`), then:
+Register a new agent (or delete its server record under Infrastructure → Agents, then
+`kubectl delete agents.agent.kasm.com k8s-agent -n <ns>` and let the chart's resource be
+recreated by `helm upgrade`), then:
 
 ```console
 kubectl get agents.agent.kasm.com -n <ns>
@@ -102,5 +106,5 @@ group assignment, which this setting does not cover. Otherwise
 
 - [ ] Fresh install: `auto_agent` seeded through `kasmConfig.config.settings` with `generatePreseed: true`.
 - [ ] Existing database: the setting flipped in the UI or with `update_setting`.
-- [ ] Agents that registered before the change enabled once by hand.
+- [ ] Agents that registered before the change enabled once by hand, or their server records deleted before re-registering.
 - [ ] Group assignment for workspace images still owned by someone.

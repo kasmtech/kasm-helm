@@ -13,7 +13,7 @@
 Two node facts decide whether that works, and neither is a chart concern:
 
 - **The bin dir must be the one your runtime actually loads plugins from.** Install it anywhere else and the runtime never invokes the shim - nothing errors, the DaemonSet stays `Running`, the conflists still look patched, and sessions get no egress tunnel. This is the chart's one silent-failure knob.
-- **The runtime must honour chained CNI plugins.** Verified live on k3s; RKE2's containerd is the other known-good runtime.
+- **The runtime must honour chained CNI plugins.** Verified live on k3s, and on containerd 2.2 under kubeadm with Cilium 1.20 (after the Cilium preparation below); RKE2's containerd is the other known-good runtime.
 
 Read [kasm-egress-installer § Read this before installing](../../../charts/kasm-egress-installer/README.md#read-this-before-installing) before going further - the no-daemon failure window described there is a real operational decision, not boilerplate.
 
@@ -25,13 +25,13 @@ Read [kasm-egress-installer § Read this before installing](../../../charts/kasm
 
   | `egressInstaller.distro` | Bin dir it derives | Use for |
   | --- | --- | --- |
-  | `k3s` (default) | `/var/lib/rancher/k3s/data/cni` | k3s |
-  | `vanilla` | `/opt/cni/bin` | kubeadm, and most managed distributions |
+  | `vanilla` (default) | `/opt/cni/bin` | kubeadm, and most managed distributions |
+  | `k3s` | `/var/lib/rancher/k3s/data/cni` | k3s |
   | anything else | none - `cniBinDir` is then **required** | RKE2 (its bin dir varies by version), OpenShift/Multus layouts, everything else |
 
   An unrecognized `distro` with no `cniBinDir` **fails template rendering** on purpose - a wrong directory is silent at runtime, so the chart would rather not install.
-- Distro variants: **k3s** - take the default. **kubeadm / vanilla** - `distro: vanilla`. **Managed (EKS / AKS / GKE)** - normally `/opt/cni/bin`, but whether the managed CNI honours a chained plugin is a per-cluster fact: verify with the test pod in *Verify* before relying on it (GKE Autopilot cannot run this workload at all). **RKE2 / OpenShift** - set `cniBinDir` explicitly from the runtime's own config.
-- `egressInstaller.cniConfDirs` and `egressInstaller.containerdConfigPaths` already cover the k3s / RKE2 / vanilla layouts as a **union**; entries that do not exist on a node are skipped, not errors. There is no matching `distro` choice for those.
+- Distro variants: **kubeadm / vanilla** - take the default. **k3s** - `distro: k3s`. **Managed (EKS / AKS / GKE)** - normally `/opt/cni/bin` (the default), but whether the managed CNI honours a chained plugin is a per-cluster fact: verify with the test pod in *Verify* before relying on it (GKE Autopilot cannot run this workload at all). **RKE2 / OpenShift** - set `cniBinDir` explicitly from the runtime's own config.
+- `egressInstaller.cniConfDirs` and `egressInstaller.containerdConfigPaths` already cover the k3s / RKE2 / vanilla layouts as a **union** (`/etc/containerd/config.toml` and `/etc/containerd` included); entries that do not exist on a node are skipped, not errors. There is no matching `distro` choice for those. The daemon's image tag follows the chart's `appVersion`; `image.tag` overrides it.
 - **On Cilium, prepare the CNI config first.** The Cilium agent rewrites its own `05-cilium.conflist` on any change under `/etc/cni/net.d`, so it undoes the egress shim's patch within about a second. Install Cilium with `cni.customConf=true` and `cni.exclusive=false`, then restart its agents - Cilium does not roll them on a config change by default:
 
   ```console
@@ -60,12 +60,13 @@ Read [kasm-egress-installer § Read this before installing](../../../charts/kasm
    ls /opt/cni/bin                     # kubeadm / most managed
    ```
 
-2. **Set `distro` (or `cniBinDir`) to match** and install:
+2. **Set `distro` (or `cniBinDir`) to match** and install. The default, `vanilla`, is
+   `/opt/cni/bin`; on k3s say so:
 
    ```console
    helm upgrade --install kasm-agent oci://registry-1.docker.io/kasmweb/kasm-agent -n kasm-agent \
      --set egressInstaller.enabled=true \
-     --set egressInstaller.distro=vanilla
+     --set egressInstaller.distro=k3s
    ```
 
    For anything not `k3s` or `vanilla`, override outright:
@@ -101,22 +102,30 @@ Read [kasm-egress-installer § Read this before installing](../../../charts/kasm
      grep -E 'installed CNI shim|CNI conflist file|verified kasm-egress-cni'
    ```
 
-   Expected, in order:
+   Expected, in order (the bin dir is the one `distro` derives; `/var/lib/rancher/k3s/data/cni` for
+   `k3s`):
 
    ```text
-   installed CNI shim at /var/lib/rancher/k3s/data/cni/kasm-egress-cni
-   updated 1 CNI conflist file(s)
-   verified kasm-egress-cni chaining in /var/lib/rancher/k3s/agent/etc/cni/net.d/10-flannel.conflist
+   installed CNI shim at /opt/cni/bin/kasm-egress-cni
+   updated 1 CNI conflist file(s) with kasm-egress-cni plugin
+   verified kasm-egress-cni chaining in 1 conflist file(s) across 3 config dir(s)
    ```
 
-   **The path in the first line is the check that matters.** If it is not the directory step 1 found, the shim will never be invoked.
+   **The path in the first line is the check that matters**, and it is the only path the daemon
+   logs: if it is not the directory step 1 found, the shim will never be invoked. A repeating
+   `[ERROR] initial chained config ensure failed: kasm-egress-cni not present in any active CNI conflist`
+   instead of the third line is the Cilium rewrite from *Before you start*.
 
-2. The daemon's own status view:
+2. The daemon's own status view (the image ships `curl`, not `wget`):
 
    ```console
    kubectl exec -n kasm-agent <pod> -- \
-     wget -qO- --unix-socket /var/run/kasm-egress/daemon.sock http://unix/status
+     curl -sS --unix-socket /var/run/kasm-egress/daemon.sock http://unix/status
    ```
+
+   Expected: JSON with `"configured": true`, a `containerd` block whose `detected` is `true` when
+   one of `containerdConfigPaths` exists on the node, and `detectedCniConfDirs` naming the
+   directory the conflist lives in.
 
 3. On the node - the shim binary, the patched conflist, and the backup beside it:
 
@@ -164,7 +173,7 @@ Umbrella (`kasm-agent`) form:
 ```yaml
 egressInstaller:
   enabled: true
-  distro: vanilla                 # k3s (default) | vanilla | anything else => set cniBinDir
+  distro: vanilla                 # vanilla (default) | k3s | anything else => set cniBinDir
   # cniBinDir: /var/lib/rancher/rke2/bin   # required when distro is not k3s/vanilla
   socketDir: /var/run/kasm-egress          # must stay a host path
   excludedCIDRs: []
@@ -202,7 +211,7 @@ Under [kasm-platform](../../../charts/kasm-platform/README.md), nest the block u
 - [ ] `egressInstaller.distro` set (`k3s` / `vanilla`) or `egressInstaller.cniBinDir` overridden.
 - [ ] `egressInstaller.socketDir` left as a host path.
 - [ ] `nodeSelector` scoped to session nodes, matching the other node-level DaemonSets.
-- [ ] Log shows `installed CNI shim at …`, `updated N CNI conflist file(s)`, `verified kasm-egress-cni chaining …`, and the shim path matches the runtime's bin dir.
+- [ ] Log shows `installed CNI shim at …`, `updated N CNI conflist file(s) with kasm-egress-cni plugin`, `verified kasm-egress-cni chaining in N conflist file(s) …`, and the shim path matches the runtime's bin dir.
 - [ ] A `.kasm-egress.bak` exists beside each patched conflist.
 - [ ] A throwaway test pod still gets an IP.
 - [ ] Uninstall path rehearsed: graceful shutdown restores the conflists and removes the shim.

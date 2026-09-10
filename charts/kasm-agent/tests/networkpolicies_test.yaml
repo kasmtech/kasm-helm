@@ -154,7 +154,7 @@ tests:
             - protocol: TCP
               port: 6443
 
-  - it: allows egress to the Kasm manager on 443 and 80 anywhere by default
+  - it: allows egress to the Kasm manager on 443, 80 and the in-cluster proxy port anywhere by default
     set:
       networkPolicies:
         enabled: true
@@ -172,6 +172,8 @@ tests:
               port: 443
             - protocol: TCP
               port: 80
+            - protocol: TCP
+              port: 8080
 
   - it: honours a tightened manager CIDR
     set:
@@ -331,3 +333,63 @@ tests:
     asserts:
       - failedTemplate:
           errorMessage: "networkPolicies.extraPolicies must be an array (YAML list). Each item may be a string or an object."
+
+  - it: allows the in-cluster proxy Service port to the manager by default
+    set:
+      networkPolicies:
+        enabled: true
+    asserts:
+      - contains:
+          path: spec.egress[0].ports
+          content:
+            protocol: TCP
+            port: 8080
+        documentIndex: 4
+
+  - it: adds a selector-based manager peer when the control plane namespace is named
+    set:
+      networkPolicies:
+        enabled: true
+        manager:
+          inCluster:
+            namespace: kasm
+    asserts:
+      - equal:
+          path: spec.egress[1].to[0].namespaceSelector.matchLabels["kubernetes.io/metadata.name"]
+          value: kasm
+        documentIndex: 4
+      - equal:
+          path: spec.egress[1].to[0].podSelector.matchLabels["app.kubernetes.io/component"]
+          value: proxy
+        documentIndex: 4
+
+  - it: renders no selector-based manager peer by default
+    set:
+      networkPolicies:
+        enabled: true
+    asserts:
+      - lengthEqual:
+          path: spec.egress
+          count: 1
+        documentIndex: 4
+
+  - it: renders the Cilium API-server policy only on request
+    set:
+      networkPolicies:
+        enabled: true
+        cilium:
+          enabled: true
+    asserts:
+      - hasDocuments:
+          count: 8
+      - isKind:
+          of: CiliumNetworkPolicy
+        documentIndex: 7
+      - equal:
+          path: spec.egress[0].toEntities[0]
+          value: kube-apiserver
+        documentIndex: 7
+      - equal:
+          path: spec.egress[0].toPorts[0].ports[0].port
+          value: "6443"
+        documentIndex: 7

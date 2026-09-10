@@ -29,9 +29,14 @@ flowchart TB
 | --------- | ------------- | ----- | ----------------- | ---- |
 | Ingress | `kasm-helm.ingress.enabled` | `kasm-agent.agent.ingress.enabled` | the ingress controller | [Ingress](ingress.md) |
 | Gateway API, terminating | `kasm-helm.httpRoute.enabled` | `kasm-agent.agent.httpRoute.enabled` | the Gateway | [Gateway API: HTTPRoute](gateway-api-httproute.md) |
-| Gateway API, passthrough | `kasm-helm.tlsRoute.enabled` | `kasm-agent.agent.gatewayRoute.enabled` (preferred) or `agent.tlsRoute.enabled` | the workload | [Gateway API: TLS passthrough](gateway-api-passthrough.md) |
+| Gateway API, passthrough | `kasm-helm.tlsRoute.enabled` | `kasm-agent.agent.gatewayRoute.enabled` (operator-managed) or `agent.tlsRoute.enabled` | the workload | [Gateway API: TLS passthrough](gateway-api-passthrough.md) |
 | OpenShift Route | `kasm-helm.route.enabled` | `kasm-agent.agent.route.enabled` | the router, or the workload with `passthrough` | [OpenShift Route](openshift-route.md) |
 | Service, published directly | `kasm-helm.proxyService.type` | `kasm-agent.agent.sessionProxy.service.type` | the workload | [LoadBalancer and NodePort](loadbalancer-nodeport.md) |
+
+> **Warning.** Known issue on direct-connect: sessions cannot stream through a Gateway listener
+> that selects the backend by SNI (TLS passthrough on either agent value, and an `HTTPRoute` on
+> Envoy Gateway). An Ingress, a `Host`-routing `HTTPRoute` (Traefik) and a published Service work.
+> The statement is in [Switch sessions to direct-connect](direct-connect.md#why-this-is-needed).
 
 **Exactly one per half.** All of a half's options publish the same Service, so enabling two gives
 one hostname two owners. `kasm-agent-instance` refuses to render more than one of `ingress`,
@@ -46,9 +51,10 @@ on port 443. [LoadBalancer and NodePort](loadbalancer-nodeport.md) has the detai
 
 **On the relayed default the agent needs no mechanism at all** on one cluster: the control plane's
 proxy reaches `<agent>-session-proxy.<ns>.svc.cluster.local:4444` directly. An agent in another
-cluster on a relayed zone needs a mechanism that does no `Host` routing, so a published Service or
-TLS passthrough, not an Ingress or HTTPRoute. [Deployment topologies](../../explanation/topologies.md)
-explains the constraint; [Switch sessions to direct-connect](direct-connect.md) is the other topology.
+cluster on a relayed zone needs a mechanism that does no `Host` routing, so a published Service,
+not an Ingress or HTTPRoute; TLS passthrough is unverified there, because the relay sends no SNI.
+[Deployment topologies](../../explanation/topologies.md) explains the constraint;
+[Switch sessions to direct-connect](direct-connect.md) is the other topology.
 
 ## The rest of networking
 

@@ -121,6 +121,22 @@ spec:
         - protocol: TCP
           port: {{ . }}
         {{- end }}
+    {{- /* A control plane in this cluster is reached by identity, not by address: Cilium never
+           matches a pod through an ipBlock, and the selector is the narrower rule everywhere. */}}
+    {{- with (dig "inCluster" "namespace" "" $np.manager) }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ . }}
+          podSelector:
+            matchLabels:
+              {{- toYaml (dig "inCluster" "podSelector" (dict "app.kubernetes.io/component" "proxy") $np.manager) | nindent 14 }}
+      ports:
+        {{- range $np.manager.ports }}
+        - protocol: TCP
+          port: {{ . }}
+        {{- end }}
+    {{- end }}
 ---
 {{/* Inbound session traffic to the session proxy, which is what a user's browser connects to.
      `networkPolicies.sessionProxy.from` is empty by default, which allows connections from
@@ -172,6 +188,30 @@ spec:
         - protocol: TCP
           port: {{ . }}
         {{- end }}
+{{- if dig "cilium" "enabled" false $np }}
+---
+{{/* Cilium matches the API server by identity. A CiliumNetworkPolicy is the only way a policy can
+     name that identity; the ipBlock rule above never does on Cilium (unless the cluster runs
+     policyCIDRMatchMode: nodes). Rendered only on request, since it needs the cilium.io CRDs. */}}
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: {{ printf "%s-allow-apiserver-egress-cilium" $fullname }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kasmAgent.labels" . | nindent 4 }}
+spec:
+  endpointSelector: {}
+  egress:
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            {{- range $np.apiServer.ports }}
+            - port: {{ . | quote }}
+              protocol: TCP
+            {{- end }}
+{{- end }}
 {{/* Additional policies supplied by the operator of this release. Each entry is a complete
      manifest, string or object, rendered through `tpl`. */}}
 {{- if and (hasKey $np "extraPolicies") (not (kindIs "slice" $np.extraPolicies)) -}}

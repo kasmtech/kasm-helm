@@ -74,6 +74,13 @@ hostnames; getting one right does not get the other right.
    whatever `agent.sessionProxy.certSecretName` says) in the release namespace **before the first
    install**; the chart leaves it untouched.
 
+   > **Note.** The session proxy picks a new certificate up on its next restart, and the operator
+   > does not restart it when the Secret changes: after a `publicHostname` change (which
+   > regenerates the self-signed Secret), a cert-manager issue, or a renewal, the old certificate
+   > is served until the pod is replaced. Run
+   > `kubectl -n <ns> delete pod -l app.kubernetes.io/component=session-proxy` after each change, and plan
+   > the same for cert-manager renewals until the operator handles it.
+
    > **Warning.** A parent wildcard is not enough. A TLS wildcard matches exactly one label, so
    > `*.example.com` covers `sessions.example.com` but **not** `*.sessions.example.com`. One
    > `*.example.com` certificate cannot serve both halves on those paths; list the names explicitly,
@@ -82,9 +89,11 @@ hostnames; getting one right does not get the other right.
 
 3. **Multi-zone: cover every zone hostname.** With `kasm-helm.kasmZones` set, the control plane
    answers on `publicAddr` **and** on every zone's `proxy_hostname`; one certificate has to cover
-   all of them, or the zones users are routed to fail while the primary works. A wildcard on the
-   shared parent (`*.example.com`) covers `kasm.example.com`, `zonea.kasm.example.com` and
-   `zoneb.kasm.example.com` at once; without one, list every name in `dnsNames`.
+   all of them, or the zones users are routed to fail while the primary works.
+   `certManager.addWildCard: true` adds `*.<publicAddr>`, so `*.kasm.example.com`, which covers
+   `zonea.kasm.example.com` and `zoneb.kasm.example.com` because those sit one label beneath
+   `publicAddr`. Zone hostnames shaped any other way (`zonea.example.com` beside
+   `kasm.example.com`) are not covered by that wildcard; list every name in `dnsNames` then.
 
 4. **Internal CAs inside the cluster** go in with `kasm-helm.trustedCaBundle.enabled=true` and
    `kasm-helm.trustedCaBundle.caCerts`. CA certificates *inside sessions* are a different mechanism:
@@ -112,7 +121,19 @@ notAfter=<expiry date> GMT
 
 A SAN list that does not contain the name the browser will use is the failure. On direct-connect,
 run the same check against `kasm-session-proxy-tls` in the agent namespace and expect both
-`sessions.example.com` and `*.sessions.example.com`.
+`sessions.example.com` and `*.sessions.example.com`. Then compare what is **served** with what is
+in the Secret, because the session proxy keeps the old one until restarted:
+
+```console
+kubectl -n kasm-agent get secret kasm-session-proxy-tls -o jsonpath='{.data.tls\.crt}' \
+    | base64 -d | openssl x509 -noout -fingerprint -sha256
+echo | openssl s_client -servername sessions.example.com -connect sessions.example.com:443 2>/dev/null \
+    | openssl x509 -noout -fingerprint -sha256
+```
+
+Expected: the same fingerprint twice on a passthrough or published-Service path (behind an
+Ingress or HTTPRoute the second one is the front end's certificate). Different fingerprints mean
+the pod predates the Secret: restart it.
 
 ## Chart values
 
@@ -154,6 +175,7 @@ cert-manager Certificate stuck at `READY False` is almost always the ACME challe
 
 - [ ] Control-plane certificate: cert-manager, a Secret you created, or the self-signed default accepted for evaluation.
 - [ ] Direct-connect only: session-proxy certificate publicly trusted, covering the hostname and its wildcard where browsers reach the proxy directly.
+- [ ] Session-proxy pods restarted after every certificate change; renewals planned the same way.
 - [ ] Multi-zone: one certificate covering `publicAddr` and every `proxy_hostname`.
 - [ ] Gateway API: the Secret referenced from the listener, with a `ReferenceGrant` if namespaces differ.
 - [ ] Internal CAs added through `trustedCaBundle`, and inside sessions through a file mapping.

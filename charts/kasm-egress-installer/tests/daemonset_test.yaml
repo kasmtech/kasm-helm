@@ -34,11 +34,11 @@ tests:
             - name: EGRESS_SOCKET_DIR
               value: /var/run/kasm-egress
             - name: CNI_BIN_DIR
-              value: /var/lib/rancher/k3s/data/cni
+              value: /opt/cni/bin
             - name: CNI_CONF_DIRS
               value: /etc/cni/net.d,/var/lib/rancher/k3s/agent/etc/cni/net.d,/var/lib/rancher/rke2/agent/etc/cni/net.d
             - name: CONTAINERD_CONFIG_PATHS
-              value: /var/lib/rancher/k3s/agent/etc/containerd/config.toml,/var/lib/rancher/k3s/agent/etc/containerd/config-v3.toml.tmpl,/var/lib/rancher/k3s/agent/etc/containerd/config.toml.tmpl,/var/lib/rancher/rke2/agent/etc/containerd/config.toml,/var/lib/rancher/rke2/agent/etc/containerd/config-v3.toml.tmpl,/var/lib/rancher/rke2/agent/etc/containerd/config.toml.tmpl
+              value: /var/lib/rancher/k3s/agent/etc/containerd/config.toml,/var/lib/rancher/k3s/agent/etc/containerd/config-v3.toml.tmpl,/var/lib/rancher/k3s/agent/etc/containerd/config.toml.tmpl,/var/lib/rancher/rke2/agent/etc/containerd/config.toml,/var/lib/rancher/rke2/agent/etc/containerd/config-v3.toml.tmpl,/var/lib/rancher/rke2/agent/etc/containerd/config.toml.tmpl,/etc/containerd/config.toml
             - name: OPENVPN_BINARY
               value: /usr/sbin/openvpn
 
@@ -65,7 +65,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: docker.io/kasmweb/kasm-egress-daemon:latest
+          value: docker.io/kasmweb/kasm-egress-daemon:develop
       - equal:
           path: spec.template.spec.containers[0].imagePullPolicy
           value: IfNotPresent
@@ -95,7 +95,7 @@ tests:
           value:
             name: cni-bin
             hostPath:
-              path: /var/lib/rancher/k3s/data/cni
+              path: /opt/cni/bin
               type: DirectoryOrCreate
       - equal:
           path: spec.template.spec.volumes[2].hostPath.path
@@ -167,6 +167,19 @@ tests:
           content:
             name: CNI_BIN_DIR
             value: /opt/cni/bin
+
+  - it: derives the k3s CNI bin dir from the distro preset
+    set:
+      distro: k3s
+    asserts:
+      - equal:
+          path: spec.template.spec.volumes[1].hostPath.path
+          value: /var/lib/rancher/k3s/data/cni
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CNI_BIN_DIR
+            value: /var/lib/rancher/k3s/data/cni
 
   - it: lets an explicit cniBinDir override the distro preset
     set:

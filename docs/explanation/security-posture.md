@@ -50,8 +50,9 @@ logs do not appear in the Kasm UI on Kubernetes. Sessions themselves get no API 
 The operator writes a NetworkPolicy for every session on its own: default-deny, ingress only from
 the session proxy (by `podSelector`, so no namespace label is needed), egress limited to DNS, the
 manager and the internet minus the cloud metadata addresses. It works in every layout, including a
-manager in another cluster. A policy is inert unless the CNI enforces it; under Flannel or canal
-alone every policy in the cluster succeeds silently and isolates nothing. Prove enforcement before
+manager in another cluster. A policy is inert unless the CNI enforces it; under standalone Flannel
+or canal alone every policy in the cluster succeeds silently and isolates nothing (k3s's bundled
+flannel enforces through its embedded policy controller). Prove enforcement before
 treating default-deny as isolation: [NetworkPolicy enforcement](../how-to/networking/network-policies.md).
 
 `networkPolicies.*` is a different thing: the agent's own namespace baseline, off by default, and

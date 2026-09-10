@@ -68,8 +68,12 @@ for this address.
 > load-balancer provider. Forward the proxy to your machine instead, on port 443 so that session
 > URLs, which Kasm builds on the zone's proxy port (443 by default), resolve:
 > `sudo kubectl -n kasm port-forward --address 127.0.0.1 svc/kasm-proxy-ext-default 443:443`, then
-> browse to `https://127.0.0.1`. [Troubleshooting](../reference/troubleshooting.md) covers the k3s
-> case where Traefik already holds port 443.
+> browse to `https://127.0.0.1`. The port-forward works precisely because it keeps port 443; the
+> Service's node port (`kubectl get svc -n kasm kasm-proxy-ext-default` shows it as `443:3xxxx`)
+> logs you in too, but the first session is sent to `https://<node>:443/...` where nothing answers,
+> until the zone's Proxy Port is changed to the node port under Infrastructure → Zones.
+> [Troubleshooting](../reference/troubleshooting.md) covers the k3s case where Traefik already
+> holds port 443.
 
 ## 4. Get the password
 
@@ -100,15 +104,18 @@ NAME        PHASE   MANAGER                                     AGE
 k8s-agent   Ready   kasm-proxy-default.kasm.svc.cluster.local   6m
 ```
 
-`Ready` means the manager accepted the registration. The agent reached the control plane at its
-in-cluster proxy Service and read the registration token from the `kasm-secrets` Secret; both were
-derived, nothing was typed. In the admin UI, **Infrastructure → Agents** now lists `k8s-agent`.
+The agent reached the control plane at its in-cluster proxy Service and read the registration
+token from the `kasm-secrets` Secret; both were derived, nothing was typed. In the admin UI,
+**Infrastructure → Agents** now lists the agent under its session-proxy hostname,
+`k8s-agent-session-proxy.kasm.svc.cluster.local`, with a last-reported time that advances. That
+listing, not the `Ready` phase, is what shows the manager accepted it.
 
 ## 7. Enable the agent
 
-New agents register **disabled** ([Kasm docs: Agent settings](https://www.kasmweb.com/docs/latest/guide/agent_settings.html)). In the admin UI: **Infrastructure → Agents → k8s-agent →
-Enable**. Allow one heartbeat interval (about 15 seconds) before launching anything; a session
-requested before that fails with "No resources are available".
+New agents register **disabled** ([Kasm docs: Agent settings](https://www.kasmweb.com/docs/latest/guide/agent_settings.html)). In the admin UI: **Infrastructure → Agents → the
+agent listed as `k8s-agent-session-proxy.kasm.svc.cluster.local` → Enable**. Allow one heartbeat
+interval (about 15 seconds) before launching anything; a session requested before that fails with
+"No resources are available".
 
 > **Note.** The manager setting `auto_agent` makes new agents enable themselves;
 > [Enable agents automatically](../how-to/enable-agents-automatically.md) seeds it.
@@ -122,8 +129,10 @@ group, launching fails with "Image Not Authorized".
 ## 9. Launch a session
 
 Back on the dashboard, click the workspace. Expected: a desktop or browser streaming inside your
-tab within about fifteen seconds on a node that already has the image. The first launch on a node
-also pulls the image, which is several gigabytes, so allow a few minutes then.
+tab within about fifteen seconds once the image is on a node. The image, several gigabytes, has to
+get there first: the operator starts pulling it as soon as the workspace is installed, and until it
+has landed a launch is **refused** with "No resources are available" rather than queued. Wait for
+`kubectl get kasmimagepullers.agent.kasm.com -n kasm` to show `ImagesStaged`, then click again.
 
 Look at the address bar: it still shows the control plane's address. Session traffic is relayed
 through the control plane to the session proxy inside the cluster, which is why nothing about

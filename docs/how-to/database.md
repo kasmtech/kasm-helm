@@ -22,10 +22,17 @@ moving between them means a dump and reload.
   | Survives | pod loss; not PVC loss | whatever your platform gives you |
   | Best for | evaluation, single-cluster, small deployments | production, HA, an existing DBA team |
 
-- External only: a database and a role that owns it, created by you (the chart creates the schema,
-  not the database or the role), and network reach from the cluster. With
-  `networkPolicies.enabled=true` the egress path to the database host has to be permitted
-  ([NetworkPolicy enforcement](networking/network-policies.md)).
+- External only, three things the chart does not do for you:
+  - a database and a role that owns it (the chart creates the schema, not the database or the
+    role);
+  - the `uuid-ossp` extension in that database (`CREATE EXTENSION IF NOT EXISTS "uuid-ossp";`,
+    a superuser once); the schema seed calls `uuid_generate_v4()` and fails without it;
+  - TLS on the server, or `database.ssl: false`. The chart connects with TLS by default (the
+    bundled database serves it); a server that only speaks plain TCP makes the init Job loop on
+    `Unable to initialize database connection` until the twelve attempts run out.
+
+  Network reach from the cluster, too: with `networkPolicies.enabled=true` the egress path to the
+  database host has to be permitted ([NetworkPolicy enforcement](networking/network-policies.md)).
 
 ## Steps
 
@@ -42,9 +49,12 @@ moving between them means a dump and reload.
          storageClassName: ""      # empty uses the cluster default
    ```
 
-   The PVC survives `helm uninstall` by design ([Day 2](day-2.md#uninstall)).
+   The PVC is **deleted** with the release by default
+   (`database.storage.retentionPolicy.whenDeleted: Delete`); set it to `Retain` before the first
+   uninstall if the data must outlive the release ([Day 2](day-2.md#uninstall)).
 
-2. **External.** Supply credentials through a Secret, not inline values.
+2. **External.** Supply credentials through a Secret, not inline values. `kasmDbSecret` is a
+   `secretKeyRef`: the Secret's name and the key that holds the password.
 
    ```yaml
    kasm-helm:
@@ -52,11 +62,12 @@ moving between them means a dump and reload.
        standalone: true
        hostname: postgres.internal.example.com
        port: 5432
+       ssl: true                       # false only for a server without TLS
        kasmDbName: kasm
        kasmDbUser: kasmapp
        kasmDbSecret:
-         existingSecret: kasm-db-credentials
-         existingSecretKey: password
+         name: kasm-db-credentials
+         key: password
    ```
 
 3. **Seeding happens once.** `kasmConfig` and the preseed values apply only when the database is
@@ -80,9 +91,8 @@ Expected:
 ```text
 NAME           STATUS     COMPLETIONS   DURATION   AGE
 kasm-db-init   Complete   1/1           47s        3m
-INFO  seeding default properties
-INFO  seeding default users
-INFO  database initialization complete
+Initializing database. Seeding database...
+Database initialization verified.
 ```
 
 A completed Job on a database that already had a schema does nothing, which is correct.
@@ -108,13 +118,16 @@ Installing `kasm-helm` directly, drop the `kasm-helm:` key. Backup and restore p
 
 A `kasm-db-init` Job stuck at `0/1` with `could not translate host name` is DNS or NetworkPolicy
 reaching an external database, not credentials; stuck with an authentication error is credentials.
-Otherwise [Troubleshooting](../reference/troubleshooting.md).
+The retry line `Unable to initialize database connection` hides the driver's reason; the full Job
+log (`kubectl logs job/kasm-db-init`) has it, and on an external server it is usually TLS refused
+(`database.ssl`) or `function uuid_generate_v4() does not exist` (the extension). Otherwise
+[Troubleshooting](../reference/troubleshooting.md).
 
 ## Decisions
 
 - [ ] Bundled or external decided before the first install.
-- [ ] External: PostgreSQL 16 confirmed; database and owning role created; egress permitted if NetworkPolicies are on.
+- [ ] External: PostgreSQL 16 confirmed; database and owning role created; `uuid-ossp` created; TLS on the server or `database.ssl: false`; egress permitted if NetworkPolicies are on.
 - [ ] Bundled: `database.storage.size` and class chosen, with history growth in mind.
-- [ ] Credentials supplied through `existingSecret`, never inline.
+- [ ] Credentials supplied through `kasmDbSecret` (`name` + `key`), never inline.
 - [ ] Preseed content settled before the database initializes; it never re-applies.
 - [ ] A backup path that has been restored from once.

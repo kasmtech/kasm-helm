@@ -51,8 +51,10 @@ flowchart LR
    ```
 
    The chart types the existing `<release>-rdp-gateway-<zone>` Service accordingly and publishes
-   `loadBalancerPort` onto the gateway's 3389. Point DNS for `rdpAccessURL` at the address the
-   Service gets.
+   `loadBalancerPort` onto the gateway's 3389. Because it is the same Service, the nginx sidecar's
+   port 9001 is published on the load balancer too (`9001:<nodeport>/TCP` beside
+   `3389:<nodeport>/TCP`); block it at the load balancer or firewall if it must not be reachable.
+   Point DNS for `rdpAccessURL` at the address the Service gets.
 
 3. **Path B: a Gateway API TCPRoute.** Follow
    [Gateway API: the RDP gateway (TCPRoute)](gateway-api-tcproute.md), which also covers the

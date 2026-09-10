@@ -59,7 +59,7 @@ For anything workspace-related, use an amd64 cluster.
 | k3s | Verified end to end | Traefik is bundled; its Gateway API provider is **off** by default and needs a `HelmChartConfig` |
 | kubeadm / vanilla | Verified end to end | Bring your own ingress controller or Gateway API implementation |
 | EKS / AKS / GKE | Supported, see caveats | Node images, GPU drivers, kernel modules and client-IP handling all differ - [Managed providers](managed-providers.md) |
-| OpenShift / ROSA / ARO | Supported, see caveats | Set `kasm-helm.isOpenshift=true`; Routes are the native path; SCCs govern the privileged components |
+| OpenShift / ROSA / ARO | Control plane supported, see caveats; agent half unverified | Set `kasm-helm.isOpenshift=true` so the restricted SCC can assign UIDs; Routes are the native path; SCCs govern the privileged components. The agent charts pin no UIDs and need no flag, but the pods the operator creates (agent, session proxy, every session) carry whatever the operator and the workspace images set, with no field on the `Agent` resource to change it; none of that has been run on OpenShift |
 
 ## What is not supported
 

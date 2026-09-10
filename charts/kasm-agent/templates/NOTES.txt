@@ -26,7 +26,7 @@ CHART NAME: {{ .Chart.Name }}
 CHART VERSION: {{ .Chart.Version }}
 APP VERSION: {{ .Chart.AppVersion }}
 
-The Kasm agent stack has been installed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+The Kasm agent stack has been {{ if .Release.IsUpgrade }}upgraded{{ else }}installed{{ end }} as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
 
 Installed with this release:
 {{ if $operatorEnabled }}  * operator            the Kasm agent operator (CRDs, cluster RBAC, controller-manager)
@@ -48,8 +48,8 @@ Watch the rollout:
 
 A freshly registered agent shows up DISABLED in the Kasm admin UI (Infrastructure -> Agents).
 Enable it there, allow one heartbeat interval before launching a session, and make sure the
-workspaces you want are authorized for the users' group. Re-registering after a gap sets the
-agent back to disabled.
+workspaces you want are authorized for the users' group. The manager keeps one server record
+per agent hostname and re-uses it, enabled state included, when the agent registers again.
 (To skip this click on future registrations, enable the manager setting "Automatically Enable Agents" - see docs/how-to/enable-agents-automatically.md.)
 {{ end }}
 {{- if $agentEnabled }}
@@ -172,7 +172,27 @@ NOTE: networkPolicies.enabled is true.
   networkPolicies.otelBackend.cidr are 0.0.0.0/0 on specific ports. Narrow them to the real
   destinations once known.
 
+  On Cilium a CIDR peer matches neither pods nor nodes: set networkPolicies.manager.inCluster.namespace
+  for an in-cluster control plane and networkPolicies.cilium.enabled=true for a node-hosted API
+  server, or the operator cannot elect a leader and every heartbeat is dropped.
+
 {{ end }}
+{{- if or $agentEnabled $operatorEnabled }}
+UNINSTALL IN TWO STEPS
+
+  helm uninstall deletes the Agent custom resources and the operator that clears their finalizers at
+  the same time; if the operator dies first the deletions hang. Always:
+
+    kubectl delete kasmworkspaces.agent.kasm.com --all -n {{ .Release.Namespace }} --wait
+    kubectl delete agents.agent.kasm.com --all -n {{ .Release.Namespace }} --wait
+    kubectl delete kasmimagepullers.agent.kasm.com --all -n {{ .Release.Namespace }} --wait
+    helm uninstall {{ .Release.Name }} -n {{ .Release.Namespace }}
+
+  The image puller the operator creates for the agent is not owned by the Agent resource, which
+  is why it gets its own line. The kasm-agent-state ConfigMap holds the agent's server identity. The agent creates it and it
+  outlives the release; delete it before registering this cluster with a different control plane.
+
+{{ end -}}
 Documentation: https://docs.kasm.com
 {{- if and $agentEnabled (not $operatorEnabled) (not (dig "operatorRBAC" "serviceAccount" "namespace" "" $agent)) }}
 

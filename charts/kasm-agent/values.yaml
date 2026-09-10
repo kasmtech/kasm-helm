@@ -356,6 +356,31 @@ networkPolicies:
     ports:
       - 443
       - 80
+      - 8080   # the control plane's in-cluster proxy Service, which inClusterControlPlane derives
+    # networkPolicies.manager.inCluster -- When the control plane runs in this cluster, name its
+    # namespace here to add a selector-based egress peer to its proxy pods next to the ipBlock rule.
+    # Cilium never matches a pod through an ipBlock, so without this the agent's heartbeats to an
+    # in-cluster manager are dropped there; on every CNI it is also the narrower rule. Leave the
+    # namespace empty when the manager is outside the cluster.
+    #
+    inCluster:
+      namespace: ""
+      # networkPolicies.manager.inCluster.podSelector -- Labels that select the control-plane proxy
+      # pods in that namespace; the kasm-helm chart's proxy carries this one.
+      #
+      podSelector:
+        app.kubernetes.io/component: proxy
+  # networkPolicies.cilium -- Cilium companion to the baseline. A Kubernetes NetworkPolicy ipBlock
+  # cannot reach the API server on Cilium when it runs on the nodes: Cilium matches nodes and the
+  # kube-apiserver entity by identity, never by CIDR, unless the cluster runs
+  # `policyCIDRMatchMode: nodes`. Without one of the two the operator loses the API server the moment
+  # the baseline lands and crash-loops on leader election.
+  #
+  cilium:
+    # networkPolicies.cilium.enabled -- Render a CiliumNetworkPolicy allowing egress to the
+    # `kube-apiserver` entity on `networkPolicies.apiServer.ports`. Needs the cilium.io/v2 CRDs.
+    #
+    enabled: false
   # networkPolicies.sessionProxy -- Inbound traffic to the session proxy, which is what users'
   # browsers connect to for a workspace session.
   #

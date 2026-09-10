@@ -29,14 +29,14 @@ OpenShift decide some of the rows for you.
 
 | Feature | Status | What you need | Turn it on |
 | ------- | ------ | ------------- | ---------- |
-| **Desktop, browser and app sessions** | ✅ | Any conformant cluster with containerd or CRI-O · [how-to](../how-to/install/one-cluster.md) | `operator.enabled=true`<br>`agent.enabled=true`<br>`agent.manager.hostname`<br>`agent.publicHostname` |
+| **Desktop, browser and app sessions** | ✅ | Any conformant cluster with containerd or CRI-O · [how-to](../how-to/install/one-cluster.md) | `operator.enabled=true`<br>`agent.enabled=true`<br>`agent.manager.hostname`<br>`agent.publicHostname`<br>(both derived under `kasm-platform`; the no-values install sets neither) |
 | **CPU and memory limits** | ⚠️ | Nothing | Set per workspace in the Kasm UI |
 | **Docker run and exec config overrides** | ⚠️ | Nothing | Set per workspace in the Kasm UI |
 | **Session recording** | ⚠️ | A Kasm license that includes recording, and session pods able to reach the Kasm API service · [how-to](../how-to/storage/README.md) | Turn recording on in the Kasm UI |
 | **Printing** | ✅ | A workspace image with CUPS - the stock Kasm images have it | Nothing |
 | **Startup and stop scripts** | ✅ | Nothing | Nothing |
 | **Session sharing and casting** | ✅ | Nothing | Nothing |
-| **Zone pinning** | ✅ | Nothing · [how-to](../how-to/multi-zone.md) | `agent.zone`<br>`kasm-helm.kasmZones` |
+| **Zone pinning** | ✅ | A `kasm-helm.kasmZones` entry per zone (each renders a manager), and the agent registering through that zone's hostname · [how-to](../how-to/multi-zone.md) | `kasm-helm.kasmZones[]`<br>`agent.manager.hostname` = the zone's `proxy_hostname`<br>`agent.zone` = the zone name |
 | **RDP and RemoteApp workspaces** | ✅ | RDP target hosts outside the cluster, reachable on TCP 3389 · [how-to](../how-to/networking/rdp-gateway.md) | `kasm-helm.components.rdpGateway.enabled`<br>`kasm-helm.components.rdpHttpsGateway.enabled` |
 
 **CPU and memory.** Kasm's **Shares** allocation (and *Inherit* under the default) gives a session
@@ -58,9 +58,12 @@ survives a container restart but not the loss of the pod: an evicted or OOM-kill
 what it had not yet uploaded. The pod is held open for the upload for the workspace's stop timeout
 plus 30 seconds.
 
-**Zone pinning.** One agent release serves one zone. `agent.zone` has to name a zone that exists on
-the control plane; several zones means several agent releases, each with its own
-`agent.publicHostname`.
+**Zone pinning.** One agent release serves one zone, and an agent joins the zone of the manager it
+registers with, so `agent.manager.hostname` has to be that zone's hostname (`kasmZones[].proxy_hostname`,
+or the in-cluster `<release>-proxy-<zone>` Service). `agent.zone` labels what the agent reports and
+must match the same name; on its own it moves nothing. A zone created only in the admin UI has no
+manager in a Kubernetes control plane and cannot take a Kubernetes agent. Several zones means several
+agent releases, each with its own `agent.publicHostname`.
 
 **RDP.** Both gateways are on by default. The targets are Windows or Linux hosts **outside** the
 cluster - the gateway brokers to them, nothing here schedules a pod for them.
@@ -70,7 +73,7 @@ cluster - the gateway brokers to them, nothing here schedules a pod for them.
 
 | Feature | Status | What you need | Turn it on |
 | ------- | ------ | ------------- | ---------- |
-| **Persistent profiles** | 🔧 | A StorageClass with dynamic provisioning. **Shared** profiles need `ReadWriteMany` - NFS, EFS, Azure Files, CephFS · [how-to](../how-to/storage/rwx-profiles.md) | Point Kasm at an RWX StorageClass you already have<br>or<br>`nfs-server-provisioner.enabled=true`<br>`nfs-server-provisioner.persistence.enabled=true` |
+| **Persistent profiles** | 🔧 | A StorageClass with dynamic provisioning. **Shared** profiles need `ReadWriteMany` - NFS, EFS, Azure Files, CephFS · [how-to](../how-to/storage/rwx-profiles.md) | The cluster's **default** StorageClass is used; make an RWX class you already have the default<br>or<br>`nfs-server-provisioner.enabled=true`<br>`nfs-server-provisioner.persistence.enabled=true` and make `kasm-rwx` the default |
 | **Cloud storage mappings (rclone, S3, Drive)** | 🔧 | FUSE on every node that runs sessions, and outbound access to the remote · [how-to](../how-to/storage/cloud-mappings.md) | `csiRclone.enabled=true`<br>`agent.storageMappings.enabled=true` |
 | **Volume mappings (host paths)** | ⚠️ | A namespace whose Pod Security Standard permits `hostPath` · [how-to](../how-to/nodes/privileged-workloads.md) | `agent.workspacesNodeSelector` |
 | **File mappings** | ✅ | Nothing | Nothing |
@@ -79,13 +82,17 @@ cluster - the gateway brokers to them, nothing here schedules a pod for them.
 
 **Persistent profiles.** `ReadWriteOnce` covers most provisioners (EBS, PD, Azure Disk, Longhorn,
 local-path) and pins a session to the node holding its volume. A profile marked persistent outlives
-the session. The bundled NFS provisioner is a convenience for clusters with no RWX driver, not a
-production storage recommendation - and without `nfs-server-provisioner.persistence.enabled=true`
-every profile is lost when its pod restarts.
+the session. No value names the class: the profile PVC is created without a `storageClassName`, so
+the cluster's default StorageClass provisions it, at 10Gi. The bundled NFS provisioner is a
+convenience for clusters with no RWX driver, not a production storage recommendation - and without
+`nfs-server-provisioner.persistence.enabled=true` every profile is lost when its pod restarts.
 
 **Cloud storage mappings.** Both values, always: the driver alone mounts nothing, and the agent
-flag alone points at a driver that is not there. Credentials stay in a Secret. Where more than one
-installation shares a cluster, scope the generated names with `agent.storageMappings.installationID`.
+flag alone points at a driver that is not there. The operator binds a static PersistentVolume and
+claim per session and mapping, with the rclone configuration in a per-session Secret; the same
+configuration, credentials included, is also carried in the `KasmWorkspace` spec today. Where more
+than one installation shares a cluster, scope the generated names with
+`agent.storageMappings.installationID`.
 
 **Volume mappings.** The mapping itself works; scheduling is the limit. Docker mounts a path on the
 one host it runs on, while an unpinned pod can land on a node where the path does not exist and
@@ -100,20 +107,23 @@ files live on the session's own disk and go when the session does.
 
 | Feature | Status | What you need | Turn it on |
 | ------- | ------ | ------------- | ---------- |
-| **External access to sessions** | 🔧 | Nothing on the relayed default beyond publishing the control plane. Direct-connect: a Gateway API implementation, an ingress controller, or a cloud load balancer / MetalLB, with an idle timeout of at least 3600s, and DNS · [how-to](../how-to/networking/README.md) | Exactly one of<br>`agent.gatewayRoute.enabled=true`<br>`agent.tlsRoute.enabled=true`<br>`agent.httpRoute.enabled=true`<br>`agent.ingress.enabled=true`<br>`agent.route.enabled=true`<br>`agent.sessionProxy.service.type=NodePort`<br>`agent.sessionProxy.service.type=LoadBalancer`<br>Control plane: `kasm-helm.ingress.enabled=true` or `kasm-helm.route.enabled=true` |
+| **External access to sessions** | 🔧 | Nothing on the relayed default beyond publishing the control plane. Direct-connect: an ingress controller, a Gateway API implementation, or a cloud load balancer / MetalLB, with an idle timeout of at least 3600s, DNS, and the session proxy able to reach the control plane's hostname from inside the cluster (on its post-DNAT backend port under the baseline policies). Known issue: sessions do not stream through a Gateway that selects the backend by SNI (passthrough, Envoy Gateway `HTTPRoute`); [Switch sessions to direct-connect](../how-to/networking/direct-connect.md#why-this-is-needed) · [how-to](../how-to/networking/README.md) | Exactly one of<br>`agent.ingress.enabled=true`<br>`agent.httpRoute.enabled=true`<br>`agent.route.enabled=true`<br>`agent.sessionProxy.service.type=NodePort`<br>`agent.sessionProxy.service.type=LoadBalancer`<br>`agent.gatewayRoute.enabled=true`<br>`agent.tlsRoute.enabled=true`<br>Control plane: `kasm-helm.ingress.enabled=true` or `kasm-helm.route.enabled=true` |
 | **TLS** | 🔧 | cert-manager, or a TLS Secret you create · [how-to](../how-to/networking/README.md) | Control plane: `kasm-helm.certificate.secretName`<br>Agent: `agent.sessionProxy.certificate.enabled=true`<br>or `agent.sessionProxy.certSecretName` |
 | **The login cookie reaching sessions** | ✅ | Nothing on the relayed default. Direct-connect only: a domain that covers both hostnames · [how-to](../how-to/networking/direct-connect.md) | Relayed: nothing<br>Direct-connect: `kasm-helm.kasmConfig.authDomain` |
-| **Real client IP addresses** | 🔧 | A load balancer that preserves the source address, or one that sends PROXY protocol · [how-to](../how-to/networking/loadbalancer-nodeport.md#preserving-real-client-ips) | `agent.sessionProxy.service.externalTrafficPolicy=Local`<br>or<br>`agent.sessionProxy.proxyProtocol.enabled=true`<br>`agent.sessionProxy.proxyProtocol.trustedCIDRs` |
+| **Real client IP addresses** | 🔧 | A load balancer that preserves the source address · [how-to](../how-to/networking/loadbalancer-nodeport.md#preserving-real-client-ips) | `agent.sessionProxy.service.externalTrafficPolicy=Local`<br>(`agent.sessionProxy.proxyProtocol.*` reaches the `Agent` resource but is not yet honoured by the operator) |
 | **Web filtering** | ✅ | Session pods able to reach the session proxy | Nothing |
-| **Network isolation (restrict to network)** | 🔧 | A CNI that **enforces** NetworkPolicy - Calico, Cilium, Antrea, Weave, Kube-router, GKE Dataplane V2, or AWS VPC CNI with Calico policy · [how-to](../how-to/networking/network-policies.md) | Nothing for per-session isolation.<br>`networkPolicies.enabled=true` adds the agent's own namespace baseline |
+| **Network isolation (restrict to network)** | 🔧 | A CNI that **enforces** NetworkPolicy - Calico, Cilium, Antrea, Weave, Kube-router, GKE Dataplane V2, or AWS VPC CNI with Calico policy · [how-to](../how-to/networking/network-policies.md) | Nothing for per-session isolation.<br>`networkPolicies.enabled=true` adds the agent's own namespace baseline; on Cilium also `networkPolicies.manager.inCluster.namespace` (in-cluster manager) and `networkPolicies.cilium.enabled=true` (node-hosted API server) |
 | **Egress gateways (per-session VPN)** | 🔧 | A namespace that permits `privileged` **and** host namespaces, and a runtime that honours chained CNI plugins · [how-to](../how-to/networking/egress.md) · [Kasm docs](https://www.kasmweb.com/docs/latest/guide/egress.html) | `egressInstaller.enabled=true`<br>`egressInstaller.distro`<br>or<br>`egressInstaller.cniBinDir` |
 
 **External access.** The two halves are exposed independently. On the relayed default only the
 control plane is published and its proxy reaches the session proxy in-cluster; on direct-connect
-the session proxy is published too, on its own hostname. `agent.gatewayRoute` is the preferred
-route there (Gateway API TLS passthrough); `agent.route` is the OpenShift path; `agent.httpRoute`
-also needs `agent.httpRoute.parentRefs`. Behind an ingress, leave the control plane's
-`kasm-helm.proxyService.type` as `ClusterIP`. [Deployment topologies](../explanation/topologies.md).
+the session proxy is published too, on its own hostname. `agent.ingress` and a published Service
+are the verified paths there; `agent.route` is the OpenShift path; `agent.httpRoute` also needs
+`agent.httpRoute.parentRefs`, and `agent.gatewayRoute` / `agent.tlsRoute` (Gateway API TLS
+passthrough) are subject to the known issue above. On a published Service set `agent.publicPort`
+to the port the Service exposes (4444), since the session proxy serves no 443 of its own. Behind
+an ingress, leave the control plane's `kasm-helm.proxyService.type` as `ClusterIP`.
+[Deployment topologies](../explanation/topologies.md).
 
 **The login cookie.** On the relayed default the browser only ever talks to the control plane, so nothing changes. On direct-connect the session proxy is a *different hostname* from the control plane, so Kasm's
 Authorization Domain has to cover both or the browser drops the cookie the moment streaming starts.
@@ -121,8 +131,9 @@ The value above applies at database initialisation, so it is a fresh-install set
 database set it in the admin UI under Settings → Auth ([Kasm docs: Settings](https://www.kasmweb.com/docs/latest/guide/settings.html)).
 
 **Real client IPs.** `externalTrafficPolicy=Local` only routes traffic through nodes running a
-session-proxy pod. With PROXY protocol the proxy in front **must** actually send it, or every
-connection breaks.
+session-proxy pod. `proxyProtocol` is accepted by the chart and written to the `Agent` resource,
+but the operator does not yet render it into the session proxy, so plain connections keep working
+and no PROXY header is read; do not rely on it until the operator honours it.
 
 **Web filtering** needs nothing set - the agent points the in-session filter at the session proxy
 for you. Enforcement is application-layer and happens inside the session pod, so a user with root
@@ -131,10 +142,12 @@ in the workspace can interfere with it.
 **Network isolation.** The operator writes a policy for every session on its own: default-deny,
 then ingress from the session proxy and egress limited to DNS, the manager, and the internet minus
 the cloud metadata address. It works in every topology with no namespace labels, including a
-manager in another cluster. Under Flannel or canal alone, though, every policy in the cluster is a
-no-op that silently succeeds. `networkPolicies.*` is the *agent's own* namespace baseline and a
-separate decision, settled by the layout ([Deployment topologies](../explanation/topologies.md#one-release-or-two-namespaces)),
-and extended with `networkPolicies.extraPolicies`.
+manager in another cluster. Under standalone Flannel or canal alone, though, every policy in the
+cluster is a no-op that silently succeeds (k3s's bundled flannel enforces through its embedded
+policy controller). `networkPolicies.*` is the *agent's own* namespace baseline and a separate
+decision, settled by the layout ([Deployment topologies](../explanation/topologies.md#one-release-or-two-namespaces)),
+and extended with `networkPolicies.extraPolicies`. On Cilium an `ipBlock` never matches a pod or a
+node, so the baseline needs the two Cilium values in the how-to.
 
 **Egress gateways.** Read the how-to before enabling this in production. A graceful shutdown
 restores every node's CNI configuration and removes the shim; a hard crash does not, and while no
@@ -173,7 +186,7 @@ attached.
 
 | Feature | Status | What you need | Turn it on |
 | ------- | ------ | ------------- | ---------- |
-| **Private image registries** | 🔧 | A `kubernetes.io/dockerconfigjson` Secret in the namespace · [how-to](../how-to/registries-and-airgap.md) | `agent.workspaceImagePullSecrets` (workspace images)<br>`agent.imagePullSecrets` (the agent's own images)<br>`kasm-helm.imagePullSecrets.enabled=true` |
+| **Private image registries** | ⚠️ | A `kubernetes.io/dockerconfigjson` Secret in the namespace. Known issue: `agent.workspaceImagePullSecrets` does not yet reach the session pods; pre-stage private workspace images with `agent.imagePuller`, or put the Secret on the session pods' ServiceAccount · [how-to](../how-to/registries-and-airgap.md) | `agent.imagePullSecrets` (the agent's own images)<br>`agent.imagePuller.images[].imagePullSecrets` (pre-staged workspace images)<br>`kasm-helm.imagePullSecrets.enabled=true` |
 | **Per-workspace registry credentials** | ⚠️ | Nothing | Set on the workspace in the Kasm UI |
 | **Trusted CA certificates** | ✅ | Your CA certificates in PEM · [how-to](../how-to/networking/certificates.md) | `kasm-helm.trustedCaBundle.enabled=true`<br>`kasm-helm.trustedCaBundle.caCerts` |
 | **Secure Boot nodes** | 🔧 | MOK signing keys enrolled in each node's UEFI, and the key pair in a Secret · [how-to](../how-to/nodes/secure-boot.md) | `nodePrep.secureBoot.existingMokSecret`<br>or<br>`nodePrep.modules.v4l2loopback.kmm.sign.enabled=true` |

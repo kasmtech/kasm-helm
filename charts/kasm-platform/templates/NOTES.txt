@@ -44,6 +44,8 @@
 {{- /* Relayed: browsers talk to the control plane only, whose proxy reaches the session proxy in-cluster.
        That is the topology the derived session hostname can only ever serve. */ -}}
 {{- $relayed := $publicDerived -}}
+{{- /* The agent-instance chart derives 4444 alongside the derived hostname; an explicit hostname keeps publicPort. */ -}}
+{{- $effectivePublicPort := ternary 4444 $publicPort $publicDerived -}}
 {{- $nodePrepEnabled := dig "nodePrep" "enabled" false $kasmAgent -}}
 {{- $videoEnabled := dig "videoDevicePlugin" "enabled" false $kasmAgent -}}
 {{- $egressEnabled := dig "egressInstaller" "enabled" false $kasmAgent -}}
@@ -52,7 +54,7 @@ CHART NAME: {{ .Chart.Name }}
 CHART VERSION: {{ .Chart.Version }}
 APP VERSION: {{ .Chart.AppVersion }}
 
-The Kasm platform has been installed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+The Kasm platform has been {{ if .Release.IsUpgrade }}upgraded{{ else }}installed{{ end }} as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
 
 Installed with this release:
 {{ if $cpEnabled }}  * kasm-helm    the control plane: web UI, manager/API, session proxy, Guacamole, RDP gateways, database
@@ -155,7 +157,8 @@ KUBERNETES AGENT
 
     1. Infrastructure -> the registered agent -> Enable. New agents register DISABLED, and a
        session requested before that fails with "No resources are available". Allow one
-       heartbeat interval (~15s) after enabling; re-registering after a gap disables it again.
+       heartbeat interval (~15s) after enabling. The manager keeps one server record per agent
+       hostname and re-uses it, enabled state included, when that agent registers again.
        (To skip this click on future registrations, enable the manager setting "Automatically Enable Agents" - see docs/how-to/enable-agents-automatically.md.)
     2. Workspaces -> the image -> assign it to the users' group, or launches fail with
        "Image Not Authorized".
@@ -195,7 +198,7 @@ SESSION TRAFFIC IS RELAYED THROUGH THE CONTROL PLANE. Nothing more to configure.
   Browsers only ever talk to the control plane; its proxy connects to the session proxy inside
   the cluster, at
 
-    {{ $effectivePublic }}:{{ $publicPort }}
+    {{ $effectivePublic }}:{{ $effectivePublicPort }}
 
   The zone keeps its seeded default of proxied connections, the Kasm Authorization Domain stays
   at its default, and the session proxy's self-signed certificate is never shown to a browser.
@@ -204,7 +207,8 @@ SESSION TRAFFIC IS RELAYED THROUGH THE CONTROL PLANE. Nothing more to configure.
 
     1. Publish the session proxy at a public hostname under the SAME parent domain as the control
        plane, and set kasm-agent.agent.publicHostname to it - together with one of
-       kasm-agent.agent.ingress / httpRoute / route / tlsRoute, and a certificate browsers trust.
+       kasm-agent.agent.ingress / httpRoute / route / tlsRoute / gatewayRoute, and a certificate
+       browsers trust.
     2. Scope the session cookie to that shared parent domain: kasm-helm.kasmConfig.authDomain on
        a fresh install, or Settings -> Auth -> Kasm Authorization Domain in the admin UI on an
        existing database. Otherwise every session connection fails with a 401.
@@ -326,14 +330,24 @@ UNINSTALL{{ if $agentEnabled }} IN TWO STEPS{{ end }}
 
     kubectl delete kasmworkspaces.agent.kasm.com --all -n {{ .Release.Namespace }} --wait
     kubectl delete agents.agent.kasm.com --all -n {{ .Release.Namespace }} --wait
+    kubectl delete kasmimagepullers.agent.kasm.com --all -n {{ .Release.Namespace }} --wait
     helm uninstall {{ .Release.Name }} -n {{ .Release.Namespace }}
 {{- else }}
     helm uninstall {{ .Release.Name }} -n {{ .Release.Namespace }}
 {{- end }}
 {{- if $cpEnabled }}
+{{- $whenDeleted := dig "database" "storage" "retentionPolicy" "whenDeleted" "Delete" $kasmHelm }}
+{{- if eq $whenDeleted "Retain" }}
 
-  The control plane's PersistentVolumeClaims (the database, and any backup volume) and its
-  credentials Secret survive an uninstall. Delete them deliberately, once you are sure.
+  The database PVC (retentionPolicy.whenDeleted: Retain), the backup PVCs and the credentials
+  Secret survive an uninstall. Delete them deliberately, once you are sure.
+{{- else }}
+
+  WARNING: the database PVC is DELETED with the release
+  (kasm-helm.database.storage.retentionPolicy.whenDeleted: {{ $whenDeleted }}). Set it to Retain
+  before uninstalling, or take a backup first, if the data must outlive the release. The backup
+  PVCs and the credentials Secret survive.
+{{- end }}
 {{- end }}
 
 --------------------------------------------------------------------------------
@@ -353,14 +367,23 @@ and charts/kasm-agent/README.md (everything under kasm-agent:).
   Before anyone real uses this, set one of:
     kasm-helm.certificate.secretName            - a kubernetes.io/tls Secret you supply
     kasm-helm.certificate.certManager.enabled   - issue it with cert-manager
-{{- if and $agentEnabled $agentInstanceEnabled (not $certEnabled) $selfSigned (not $relayed) }}
 
-  and, because browsers reach the session proxy directly, one of:
-    kasm-agent.agent.sessionProxy.certificate.enabled   - issue it with cert-manager
-    a pre-created Secret "{{ $certSecret }}"              - created before the first install
-{{- end }}
-
-  The generated certificates are reused across upgrades and follow their hostnames.
+  The generated certificate is reused across upgrades and follows publicAddr.
 ================================================================================
 {{- end }}
+{{- end }}
+{{- if and $agentEnabled $agentInstanceEnabled (not $relayed) (not $certEnabled) $selfSigned }}
+
+================================================================================
+  WARNING: the session proxy serves a SELF-SIGNED certificate to browsers.
+
+  Sessions are direct-connect (kasm-agent.agent.publicHostname is set), so browsers reach the
+  session proxy themselves and see the certificate in Secret "{{ $certSecret }}", which this release
+  generated unless it already existed. Browsers will warn, and on some paths fail silently. Set one of:
+    kasm-agent.agent.sessionProxy.certificate.enabled   - issue it with cert-manager
+    a pre-created Secret "{{ $certSecret }}"              - created before the first install
+
+  Changing the hostname regenerates the Secret, but the session-proxy pods keep serving the old
+  certificate until they restart: delete them after a hostname change.
+================================================================================
 {{- end }}

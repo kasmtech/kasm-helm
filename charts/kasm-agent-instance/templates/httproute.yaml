@@ -28,14 +28,11 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
+  {{- /* Passed through verbatim, as the kasm-helm chart does: sectionName, port and kind
+         are as much a part of a parentRef as name and namespace. */}}
   {{- with .Values.httpRoute.parentRefs }}
   parentRefs:
-    {{- range . }}
-    - name: {{ .name }}
-      {{- with .namespace }}
-      namespace: {{ . }}
-      {{- end }}
-    {{- end }}
+    {{- toYaml . | nindent 4 }}
   {{- end }}
   hostnames:
     {{- range $hostnames }}

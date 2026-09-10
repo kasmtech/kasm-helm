@@ -22,6 +22,33 @@ tests:
       - equal:
           path: spec.publicHostname
           value: k8s-agent-session-proxy.NAMESPACE.svc.cluster.local
+      - equal:
+          path: spec.manager.port
+          value: 8080                   # the in-cluster proxy Service, plain HTTP
+      - equal:
+          path: spec.manager.scheme
+          value: http
+      - equal:
+          path: spec.publicPort
+          value: 4444                   # the session proxy's own listener
+
+  - it: derives the port and scheme only alongside a derived hostname
+    template: templates/agent.yaml
+    set:
+      inClusterControlPlane: true
+      manager:
+        hostname: kasm.example.com
+      publicHostname: sessions.example.com
+    asserts:
+      - equal:
+          path: spec.manager.port
+          value: 443
+      - equal:
+          path: spec.manager.scheme
+          value: https
+      - equal:
+          path: spec.publicPort
+          value: 443
 
   - it: explicit values still win over the derived ones
     template: templates/agent.yaml

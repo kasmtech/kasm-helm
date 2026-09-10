@@ -4,6 +4,10 @@ All notable changes to the kasm-egress-installer chart are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- `containerdConfigPaths` and `containerdConfigDirs` covered only k3s and RKE2, so on kubeadm and most managed distributions the daemon never saw `/etc/containerd/config.toml`; both lists now include the standard containerd paths. `appVersion` was `latest`, which resolved the default image to a floating tag; it follows the agent family's `develop` now.
+
 ### Changed
 
 - `cniBinDir` now derives from a `distro` preset (`k3s` default -> `/var/lib/rancher/k3s/data/cni`, `vanilla` -> `/opt/cni/bin`) when left empty, instead of hardcoding `/opt/cni/bin`. The old default was wrong for k3s: the shim installed where the k3s runtime never reads plugins, so it was silently never invoked (pods got no egress tunnel, with no error). An explicit `cniBinDir` still overrides the preset; an unrecognized `distro` fails rendering rather than guessing a path.

@@ -127,12 +127,26 @@ kubectl delete agents.agent.kasm.com --all -n kasm --wait
 helm uninstall kasm -n kasm
 ```
 
+Two more things stay behind on the agent side. The operator-created `KasmImagePuller` and its
+DaemonSet are not deleted with the `Agent`; remove them between the second and third commands
+(`kubectl delete kasmimagepullers.agent.kasm.com --all -n kasm`). The `kasm-agent-state`
+ConfigMap keeps the agent's `server_id`, so a reinstall in the same namespace re-registers as the
+same server; delete it when the agent is to register with a **different** control plane
+(`kubectl delete configmap kasm-agent-state -n kasm`). The same order applies to a `helm upgrade`
+that turns the agent half off (`kasm-agent.enabled: false`).
+
 What survives, by design: the CRDs (Helm never removes a `crds/` CRD, and the `kasm-agent-crds`
-templates carry `helm.sh/resource-policy: keep`), the control plane's PersistentVolumeClaims (the
-database, any backup volume) and its credentials Secret (a pre-install hook). Delete them
-deliberately, once you are sure; deleting a CRD cascades to every custom resource of that kind in
-every namespace. Deleting the namespace is what makes the next install fresh, because it removes
-the database PVC and the preseed applies again.
+templates carry `helm.sh/resource-policy: keep`), the backup PVCs (the CronJob's volume and every
+`<release>-<version>-db-pre-upgrade-backup`), and the credentials and preseed Secrets (pre-install
+hooks, which Helm does not track for deletion). Delete them deliberately, once you are sure;
+deleting a CRD cascades to every custom resource of that kind in every namespace.
+
+> **Warning**
+> The database volume does **not** survive. The chart's default is
+> `kasm-helm.database.storage.retentionPolicy.whenDeleted: Delete`, so `helm uninstall` deletes
+> the database PVC with the StatefulSet, and the next install in the same namespace starts empty
+> (the preseed applies again). If the data must outlive the release, set the policy to `Retain`
+> **before** the uninstall (a `helm upgrade` with the new value is enough), or take a backup first.
 
 ### Backup
 
@@ -157,7 +171,31 @@ whoever runs it; the chart's machinery does not reach it.
 - From a dump taken elsewhere, including a Docker-based Kasm:
   [`examples/db-upload.yaml`](../../examples/db-upload.yaml).
 
-Both run against the bundled database in the release namespace. Rehearse one before it matters.
+Both run against the bundled database in the release namespace, and both need an **empty**
+target with **no other client connected**:
+
+- `pg_restore` does not drop objects that already exist, so a restore into a database the chart
+  has already initialized fails (the Job's log shows `already exists` errors). Adding `--clean`
+  does not rescue that on a live deployment: its `DROP` statements wait for an exclusive lock the
+  running API never releases, every new API query queues behind them, and the control plane is
+  down until someone runs `pg_terminate_backend` on the restore session.
+- So stop every database client first, restore, then start them again:
+
+  ```console
+  kubectl -n kasm scale deploy -l app.kubernetes.io/component=api --replicas=0
+  kubectl -n kasm scale deploy -l app.kubernetes.io/component=manager --replicas=0
+  kubectl -n kasm scale sts -l app.kubernetes.io/component=guac --replicas=0
+  kubectl -n kasm scale sts -l app.kubernetes.io/component=rdp-https-gateway --replicas=0
+  kubectl -n kasm apply -f examples/db-restore.yaml
+  kubectl -n kasm wait --for=condition=complete job/kasm-db-restore --timeout=15m
+  helm upgrade kasm ... -n kasm      # the same values restore the replica counts
+  ```
+
+  Rehearse into a fresh namespace (install with `dbManagement.initialize: false`, then restore)
+  rather than into the deployment that matters.
+- The example Job sets `lock_timeout` so a restore that meets a lock fails within a minute instead
+  of hanging; it is not retried (`backoffLimit: 1`), and its pod stays for the log until
+  `ttlSecondsAfterFinished` removes it.
 
 ### Node maintenance
 
@@ -179,9 +217,10 @@ curl -k -o /dev/null -w '%{http_code}\n' https://<address>/
 ```
 
 Expected: both Jobs `1/1` complete; the pre-upgrade backup PVC `Bound` beside the new
-`<release>-db-<version>` PVC; the upgrade log ending in the schema migration, after either
-`Database exists, running upgrade now...` or a `pg_restore`; every pod `Running`; and `200` from the
-login page. Then sign in, and launch one session.
+`<release>-db-<version>` PVC; the last lines of the upgrade log are the schema migration
+(`Upgrading Postgres Database` ... `Complete`), and its first line says which path it took
+(`Database exists, running upgrade now...`, or the `pg_restore` of the pre-upgrade dump); every pod
+`Running`; and `200` from the login page. Then sign in, and launch one session.
 
 After an agent-stack upgrade:
 

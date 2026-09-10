@@ -26,8 +26,9 @@ Three consequences, all of which are easier to accept before installing than aft
 2. **One certificate covers every hostname** - `publicAddr` plus every zone's `proxy_hostname`. A
    wildcard on the shared parent is the least painful answer. See
    [Certificates](../how-to/networking/certificates.md).
-3. **One agent release per zone**, each with `agent.zone` matching a zone name and its own
-   `agent.publicHostname`.
+3. **One agent release per zone**, each registering through that zone's hostname
+   (`agent.manager.hostname`), with `agent.zone` matching the zone name and its own
+   `agent.publicHostname`. The section below says why the hostname, not `agent.zone`, decides.
 
 ## Zone routing: the pair that picks the topology
 
@@ -73,9 +74,9 @@ Not everything fans out, and the difference catches people:
 
 | Component | Scope |
 | --------- | ----- |
-| Proxy Service, ingress rule / Route / Gateway API route | **every** zone, plus one for `publicAddr` → the primary zone |
+| API (`<release>-api-<zone>`), manager (`<release>-manager-<zone>`), proxy Service (`<release>-proxy-<zone>`), ingress rule / Route / Gateway API route | **every** zone, plus one route for `publicAddr` → the primary zone |
 | Guacamole, RDP gateway, RDP HTTPS gateway | **primary-region zones only** - zones sharing the primary zone's `region_name` |
-| API, manager, database | one set per deployment, not per zone |
+| Database, credentials Secret, certificate | one per deployment, not per zone |
 
 In the example above, `zonea` and `zoneb` share `us-east` with the primary, so both get a
 Guacamole and an RDP gateway. `zonec` in `eu-west` gets a proxy and a route, and no RDP gateway.
@@ -95,6 +96,22 @@ service/kasm-rdp-gateway-zoneb
 
 Three proxies, two RDP gateways - `zonec` is in another region. If that is not what you expected,
 `region_name` is the value to check.
+
+## Which zone an agent joins
+
+A zone is a manager. Every `kasmZones` entry renders one, and each zone's proxy forwards
+`/manager_api` to its own manager, so an agent joins the zone of the manager it registers with:
+the one behind `agent.manager.hostname`. An agent pointed at `publicAddr` reaches the primary
+zone's proxy and lands in the primary zone; one pointed at `zonec.kasm.example.com` (or the
+in-cluster `<release>-proxy-zonec` Service) lands in `zonec`. `agent.zone` only labels what the
+agent reports and has to match; it never moves an agent, and a move made by hand under
+Infrastructure → Agents is undone by the next heartbeat.
+
+The same rule is why a zone created only in the admin UI cannot take a Kubernetes agent: it has a
+record in the database and no manager on the control plane. Add it to `kasmZones` (which renders
+the manager) and, on an existing database where the preseed no longer runs, create the zone in
+the admin UI with the same name and hostname. Verified on Kasm 1.19: an agent with `agent.zone`
+naming a UI-created zone registered into `default`.
 
 ## The RDP gateway is the awkward one
 

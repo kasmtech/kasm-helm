@@ -38,15 +38,15 @@ spec:
   metricsIntervalSeconds: {{ .Values.metricsIntervalSeconds }}
   manager:
     hostname: {{ include "kasmAgentInstance.managerHostname" . | quote }}
-    port: {{ .Values.manager.port }}
-    scheme: {{ .Values.manager.scheme }}
+    port: {{ include "kasmAgentInstance.managerPort" . }}
+    scheme: {{ include "kasmAgentInstance.managerScheme" . }}
     pathPrefix: {{ .Values.manager.pathPrefix | quote }}
     {{- /* The token is always referenced, never inlined on the resource. */}}
     tokenSecretRef:
       name: {{ include "kasmAgentInstance.managerTokenSecretName" . }}
       key: {{ include "kasmAgentInstance.managerTokenSecretKey" . }}
   publicHostname: {{ include "kasmAgentInstance.publicHostname" . | quote }}
-  publicPort: {{ .Values.publicPort }}
+  publicPort: {{ include "kasmAgentInstance.publicPort" . }}
   zone: {{ .Values.zone | quote }}
   sessionProxy:
     image: {{ include "kasmAgentInstance.joinImage" (dict "image" .Values.sessionProxy.image "defaultTag" "" "path" "agent.sessionProxy.image") | quote }}

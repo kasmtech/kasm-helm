@@ -41,12 +41,12 @@ socketDir: /var/run/kasm-egress
 # distro -- Kubernetes distribution preset used to derive the CNI plugin bin dir (`cniBinDir`) when that is
 # left empty. Distributions read CNI plugin binaries from different host paths, and installing the shim to
 # the wrong one means the container runtime never invokes it — pods get no egress tunnel, with no error.
-# Recognized values: `k3s` (/var/lib/rancher/k3s/data/cni) and `vanilla` (/opt/cni/bin — kubeadm and most
-# managed distros). For any other distribution (including RKE2, whose bin dir varies by version) set
-# `cniBinDir` explicitly. This preset governs only the single bin dir the shim is installed into; the
-# conflist and containerd paths scanned below already cover k3s/RKE2/vanilla as a union.
+# Recognized values: `vanilla` (/opt/cni/bin — kubeadm and most managed distros, the default) and `k3s`
+# (/var/lib/rancher/k3s/data/cni). For any other distribution (including RKE2, whose bin dir varies by
+# version) set `cniBinDir` explicitly. This preset governs only the single bin dir the shim is installed
+# into; the conflist and containerd paths scanned below already cover k3s/RKE2/vanilla as a union.
 #
-distro: k3s
+distro: vanilla
 
 # cniBinDir -- Host path the kasm-egress-cni shim binary is installed into; must match the CNI bin dir your
 # container runtime actually reads plugins from. Leave empty to derive it from `distro` (recommended); set
@@ -79,6 +79,7 @@ containerdConfigPaths:
   - /var/lib/rancher/rke2/agent/etc/containerd/config.toml
   - /var/lib/rancher/rke2/agent/etc/containerd/config-v3.toml.tmpl
   - /var/lib/rancher/rke2/agent/etc/containerd/config.toml.tmpl
+  - /etc/containerd/config.toml
 
 # containerdConfigDirs -- Host directories containing the files listed in containerdConfigPaths above, mounted
 # read-only so the daemon can read whichever of those files exist on a given node. Only one of these two
@@ -88,6 +89,7 @@ containerdConfigPaths:
 containerdConfigDirs:
   - /var/lib/rancher/k3s/agent/etc/containerd
   - /var/lib/rancher/rke2/agent/etc/containerd
+  - /etc/containerd
 
 # excludedCIDRs -- CIDRs excluded from egress tunneling and routed through the pod's original default gateway
 # instead of the tunnel, once one is established. Empty by default (nothing bypassed).

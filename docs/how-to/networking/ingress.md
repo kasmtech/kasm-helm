@@ -6,8 +6,11 @@
 
 The classic path: a `networking.k8s.io/v1` Ingress on an existing controller terminates TLS and
 forwards plain HTTP to the workload. It is available for both halves, and the only mechanism where
-the control plane's certificate is wired in by the chart itself. It cannot carry the RDP gateway,
-which is raw TCP: [Publish the RDP gateway](rdp-gateway.md).
+the control plane's certificate is wired in by the chart itself. On direct-connect it is the
+mechanism verified end to end (Traefik 3.7 on k3s): the controller routes by `Host` header, so the
+session proxy's own hairpin lands back on it, which the SNI-routed Gateway paths cannot do today
+([Switch sessions to direct-connect](direct-connect.md#why-this-is-needed)). It cannot carry the
+RDP gateway, which is raw TCP: [Publish the RDP gateway](rdp-gateway.md).
 
 ```mermaid
 %%{init: {"theme":"base","themeVariables":{"primaryColor":"#eef3f8","primaryBorderColor":"#5b7a99","primaryTextColor":"#1d2b3a","secondaryColor":"#fbf3e6","secondaryBorderColor":"#b8863b","tertiaryColor":"#eaf5ec","tertiaryBorderColor":"#4f8a5b","lineColor":"#5b7a99","fontFamily":"Inter, Helvetica, Arial, sans-serif","fontSize":"14px"},"flowchart":{"curve":"basis","htmlLabels":true}}}%%
@@ -112,8 +115,10 @@ flowchart LR
 kubectl -n kasm get ingress
 ```
 
-Expected: the Ingress shows your `CLASS`, your `HOSTS` and an `ADDRESS`. An empty `ADDRESS` means
-no controller claimed it, usually a wrong class name.
+Expected: two rows, `kasm-proxy` for the control plane and
+`<release>-kasm-agent-instance-session-proxy` for the agent on direct-connect, each showing your
+`CLASS`, your `HOSTS` and an `ADDRESS`. An empty `ADDRESS` means no controller claimed it, usually
+a wrong class name. The agent Ingress points at `k8s-agent-session-proxy:4445`.
 
 ```console
 kubectl -n kasm get ingress kasm-proxy \

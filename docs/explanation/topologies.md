@@ -62,11 +62,13 @@ proxy_pass        $connect_schema://$connect_hostname:$connect_port/$connect_pat
 So nothing between the control-plane proxy and the session proxy may route on the `Host` header.
 That rules out `agent.ingress` and `agent.httpRoute` for a relayed zone whose agent sits outside the
 cluster: the relayed request carries the control plane's name, matches no rule and returns 404. A
-`LoadBalancer`, `NodePort` or `ClusterIP` Service does no host routing, and TLS passthrough
-(`agent.gatewayRoute`, `agent.tlsRoute`, an OpenShift `passthrough` Route) routes on SNI, which
-nginx takes from the `proxy_pass` host. On one cluster the in-cluster Service is enough, with no
-ingress object at all. The relay sets no `proxy_ssl_verify`, so the session proxy's self-signed
-certificate is accepted.
+`LoadBalancer`, `NodePort` or `ClusterIP` Service does no host routing. TLS passthrough
+(`agent.gatewayRoute`, `agent.tlsRoute`, an OpenShift `passthrough` Route) routes on SNI, and the
+relay sends none (`proxy_ssl_server_name` is off in the control-plane proxy's configuration), so a
+relayed agent behind a passthrough listener is unverified and expected to fail the handshake; use
+a published Service. On one cluster the in-cluster Service is enough, with no ingress object at
+all. The relay sets no `proxy_ssl_verify`, so the session proxy's self-signed certificate is
+accepted.
 
 **Why switch to direct-connect.** Every relayed session crosses the control-plane proxy: bandwidth,
 CPU, and one bottleneck for the whole deployment. The 30-minute idle ceiling is not a value.
@@ -76,7 +78,9 @@ and the zone switch.
 
 > **Note.** Sessions have been launched end to end on both paths, on k3s and on kind. The automated
 > tests all set `proxy_connections: false`; nothing guards the relay path against regression except
-> the no-values install itself.
+> the no-values install itself. On direct-connect, sessions do not stream through a Gateway that
+> selects the backend by SNI; the known issue is stated once in
+> [Switch sessions to direct-connect](../how-to/networking/direct-connect.md#why-this-is-needed).
 
 ## One release or two namespaces
 
@@ -168,15 +172,20 @@ Only three flows cross a cluster boundary, and none of them runs between agent c
 | From | To | Port | Carries | Needed |
 | ---- | -- | ---- | ------- | ------ |
 | every agent cluster | the control plane's public hostname | 443 | registration, heartbeats, session requests, image lists | always |
-| browsers | each agent cluster's session hostname | 443, or the Service port | the session itself | direct-connect |
-| the control-plane proxy | each agent cluster's session hostname | `agent.publicPort` | the session, relayed | relayed |
+| browsers | each agent cluster's session hostname | the zone's `proxy_port` (443 unless changed) | the session itself | direct-connect |
+| the control-plane proxy, and the API's launch calls | each agent cluster's session hostname | `agent.publicPort` | the session when relayed; the hello and create calls always | always |
 
-**Zones.** One zone per cluster is the default choice. The control plane declares the zone
-(`kasm-helm.kasmZones`, or **Infrastructure → Zones**; [Kasm docs: Deployment Zones](https://www.kasmweb.com/docs/latest/guide/zones/deployment_zones.html)), the agent names it (`agent.zone`), and
-users are pinned to zones by the same group settings as on any Kasm. Several clusters may share a
-zone: the manager then spreads sessions across them by capacity, which suits identical clusters in
-one region and nothing else. What a zone changes on the control-plane side, including the per-zone
-proxies that `kasmZones` renders in the control-plane cluster, is [Zones](multi-zone.md).
+**Zones.** One zone per cluster is the default choice, and a zone is a manager. `kasm-helm`
+renders a manager and a proxy per `kasm-helm.kasmZones` entry (`<release>-manager-<zone>`,
+`<release>-proxy-<zone>`), and an agent joins the zone of the manager it registers with: the one
+its `agent.manager.hostname` reaches, so an agent cluster for zone `eu` registers through that
+zone's `proxy_hostname`, not through `publicAddr`. `agent.zone` labels what the agent reports and
+must match; it never moves an agent. A zone created only under **Infrastructure → Zones**
+([Kasm docs: Deployment Zones](https://www.kasmweb.com/docs/latest/guide/zones/deployment_zones.html))
+has no manager in a Kubernetes control plane, so no Kubernetes agent can join it. Users are pinned
+to zones by the same group settings as on any Kasm. Several clusters may share a zone: the manager
+then spreads sessions across them by capacity, which suits identical clusters in one region and
+nothing else. What a zone changes on the control-plane side is [Zones](multi-zone.md).
 
 **Relayed across clusters works, but is rarely what you want.** Every session then hair-pins
 through the control-plane cluster, with its bandwidth and the 30-minute idle ceiling, and the

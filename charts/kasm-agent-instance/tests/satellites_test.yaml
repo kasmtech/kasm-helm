@@ -729,3 +729,37 @@ tests:
     asserts:
       - failedTemplate:
           errorMessage: "agent.publicHostname is required: set it to the externally reachable address browsers use to connect to this agent's session proxy. (With a kasm-helm control plane in this same release, agent.inClusterControlPlane=true derives it instead.)"
+
+  - it: passes sectionName and port through the http route parentRefs verbatim
+    template: templates/httproute.yaml
+    set:
+      publicHostname: sessions.example.com
+      httpRoute:
+        enabled: true
+        parentRefs:
+          - name: kasm-gateway
+            namespace: kube-system
+            sectionName: sessions
+            port: 443
+    asserts:
+      - equal:
+          path: spec.parentRefs[0].sectionName
+          value: sessions
+      - equal:
+          path: spec.parentRefs[0].port
+          value: 443
+
+  - it: passes sectionName through the tls route parentRefs verbatim
+    template: templates/tlsroute.yaml
+    set:
+      publicHostname: sessions.example.com
+      tlsRoute:
+        enabled: true
+        parentRefs:
+          - name: kasm-gateway
+            namespace: kube-system
+            sectionName: sessions-passthrough
+    asserts:
+      - equal:
+          path: spec.parentRefs[0].sectionName
+          value: sessions-passthrough

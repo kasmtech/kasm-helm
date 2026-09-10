@@ -65,7 +65,9 @@ These checks serve all three Gateway API pages; the other two link here.
 
    Expected: something like `v1.5.1`. `NotFound` means the Gateway API is not installed; use
    [Ingress](ingress.md) or install the CRDs. `kubectl get crd -o name | grep gateway.networking.k8s.io`
-   lists the kinds; no `tcproutes` means the bundle predates 1.6.
+   lists the kinds; no `tcproutes` means the bundle predates 1.6. An implementation installed
+   after the CRDs (Envoy Gateway with `--skip-crds`, for instance) still needs its own policy CRDs
+   applied.
 
 2. **A Gateway exists and is programmed:**
 
@@ -129,9 +131,23 @@ These checks serve all three Gateway API pages; the other two link here.
 > ```
 >
 > This is the shape verified with Traefik 3.7 on k3s; check `helm show values traefik/traefik` against
-> your Traefik version. One Gateway that did not work: on Cilium 1.20 / kubeadm 1.34 the
-> host-network Cilium Gateway reported `Accepted` and `Programmed` and never served traffic. Curl
-> the public hostname before trusting status conditions.
+> your Traefik version. Validate a new listener by patching the live Gateway first and move it into
+> the `HelmChartConfig` once it serves traffic: a listener the Traefik chart rejects fails its
+> upgrade job and briefly removes the Gateway.
+
+> **Warning.** The Cilium Gateway in host-network mode (`gatewayAPI.hostNetwork.enabled=true`,
+> Cilium 1.20 on kubeadm 1.34) reports `Accepted` and `Programmed` and serves nothing: cilium-envoy
+> runs without `NET_BIND_SERVICE` and logs `cannot bind '0.0.0.0:443': Permission denied`. Worse, a
+> Gateway in that state wedges the Cilium agent's proxy updates (`proxy updates failed ... context
+> deadline exceeded` every few seconds in the agent log), and from then on **every** new pod on the
+> node fails sandbox creation with `unable to create endpoint: Cilium API client timeout exceeded`
+> until the Gateway is deleted. If the Cilium agent logs `proxy updates failed`, delete the Gateway
+> at once; the node recovers within a minute. Cilium's own fix is
+> `envoy.securityContext.capabilities.keepCapNetBindService=true` with `NET_BIND_SERVICE` added,
+> a Cilium install change. Envoy Gateway 1.6 is a data plane where this page's Verify passes for
+> both halves, with its idle timeouts raised through a `ClientTrafficPolicy`
+> ([Idle timeouts](loadbalancer-nodeport.md#idle-timeouts)). Curl the public hostname before
+> trusting status conditions on any implementation.
 
 ## Steps
 
@@ -153,7 +169,10 @@ These checks serve all three Gateway API pages; the other two link here.
 
    With `kasmZones` set, the chart renders one `HTTPRoute` per zone plus one for `publicAddr`: an
    HTTPRoute's hostnames belong to the object, so they cannot be fanned out inside one route the way
-   Ingress rules can.
+   Ingress rules can. Every route attaches through `httpRoute.parentRefs`, so a `sectionName` there
+   must name a listener that admits every zone hostname (a wildcard). A zone that needs its own
+   listener gets its own `parentRefs` in `httpRoute.zones`
+   ([Deploy multiple zones](../multi-zone.md#steps)).
 
 2. **Agent, direct-connect only.**
 
@@ -170,7 +189,13 @@ These checks serve all three Gateway API pages; the other two link here.
 
    `httpRoute.hostnames` defaults to `[publicHostname]`; `httpRoute.backendPort` defaults to 4445,
    the proxy's plain-HTTP listener. Add `sectionName` under `parentRefs` to pin the route to one
-   listener. Then finish [Switch sessions to direct-connect](direct-connect.md).
+   listener; the entries are rendered verbatim, so `port` and `kind` pass through too. Then
+   finish [Switch sessions to direct-connect](direct-connect.md).
+
+   > **Warning.** Known issue: whether direct-connect sessions stream through an `HTTPRoute`
+   > depends on the data plane. Traefik 3.7 routes the session proxy's SNI-less hairpin by `Host`
+   > header and works; Envoy Gateway 1.6 selects the listener by SNI and returns `502`. The full
+   > statement is in [Switch sessions to direct-connect](direct-connect.md#why-this-is-needed).
 
 3. **Install or upgrade.**
 
@@ -197,7 +222,9 @@ kasm-gateway Accepted=True ResolvedRefs=True
 
 `Accepted=False` is almost always the listener refusing the namespace; `ResolvedRefs=False` is a
 backend that does not exist, usually a zone-name mismatch. On direct-connect, run the same against
-the agent's route in its namespace, then:
+the agent's route, named `<release>-kasm-agent-instance-session-proxy` and living in the agent
+release's namespace (`kasm` under one `kasm-platform` release, `kasm-agent` in the two-namespace
+layout), then:
 
 ```console
 kubectl -n kasm-agent get svc k8s-agent-session-proxy
@@ -208,6 +235,12 @@ Expected: a `ClusterIP` Service carrying 4444 and 4445 (created by the operator,
 `agent.name`), and an HTTP status line, `404` being correct with no active session. A certificate
 error means the Gateway serves the wrong certificate for this hostname. Then log in, launch a
 session and confirm it survives past 60 seconds.
+
+On direct-connect the session proxy also has to reach the zone's *Upstream Auth Address*, the
+control plane's public hostname, from inside the cluster: through the same Gateway, and with the
+baseline NetworkPolicies on, on the Gateway pod's backend port rather than 443, because policy is
+evaluated after DNAT ([NetworkPolicy enforcement](network-policies.md)). A session that spins for
+15 seconds and then fails is that path.
 
 ## Chart values
 

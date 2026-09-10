@@ -79,7 +79,10 @@ Work them in that order; each one's failure hides the next.
      components:
        api:
          image:
-           registry: registry.internal.example.com    # one block per component
+           registry: registry.internal.example.com    # one block per component: api, manager, proxy, guac, rdpGateway, rdpHttpsGateway
+     database:
+       image:
+         registry: registry.internal.example.com      # postgres lives here, not under components (there is no components.db)
      imagePullSecrets:
        enabled: true
        registry: registry.internal.example.com        # the chart creates the Secret
@@ -121,9 +124,17 @@ Work them in that order; each one's failure hides the next.
 
    Set only `kasm-helm.imagePullSecrets.enabled` and `.name` to reuse a Secret you created. Registry
    overrides are per component on the control plane, so one missed component is one
-   `ImagePullBackOff` in an otherwise healthy release. The third-party subcharts have their own
-   paths: `csiRclone.imagePullSecrets`, `nfs-server-provisioner.image.repository`, and NVIDIA's
-   air-gap procedure for `gpuOperator`, whose operands are not in the list.
+   `ImagePullBackOff` in an otherwise healthy release; the override list has to match the seven
+   entries in `images.txt`, six under `components.*` plus `database.image` (the values schema
+   rejects `components.db`). The third-party subcharts have their own paths:
+   `csiRclone.imagePullSecrets`, `nfs-server-provisioner.image.repository`, and NVIDIA's air-gap
+   procedure for `gpuOperator`, whose operands are not in the list.
+
+   > **Note.** An upgrade that adds `kasm-helm.imagePullSecrets` (or changes a registry) less than
+   > five minutes after the previous one fails with
+   > `cannot patch "kasm-db-init" with kind Job: ... field is immutable` and leaves the release
+   > `failed`, because the completed Job is still inside its `ttlSecondsAfterFinished` window.
+   > `kubectl -n kasm delete job kasm-db-init`, then run the same upgrade again.
 
 3. **Workspace images.** The one that is not a chart value. Workspace images are pulled from
    whatever registry the **manager** has configured for each workspace; mirroring the component
@@ -137,6 +148,15 @@ Work them in that order; each one's failure hides the next.
        workspaceImagePullSecrets:
          - name: internal-registry
    ```
+
+   > **Warning**
+   > Known issue: the agent receives this list (`KASM_IMAGE_PULL_SECRETS` on its pod) but does
+   > not yet write it into the `KasmWorkspace` resources it creates, so session pods launch with
+   > no pull Secret and a private workspace image ends in `ImagePullBackOff`. Until the agent
+   > does, use the Kubernetes-level fallback: add the Secret to `imagePullSecrets` of the
+   > ServiceAccount the session pods run as (`kubectl get pod <session pod> -o
+   > jsonpath='{.spec.serviceAccountName}'` names it), or pre-stage the images on every node
+   > with `agent.imagePuller` (step 1), whose per-entry `imagePullSecrets` do work.
 
 4. **Node-prep inputs.** `nodePrep` is the one component that fetches at **run** time, and only in
    some modes:
@@ -180,8 +200,9 @@ kubectl -n kasm-agent get kasmimagepullers.agent.kasm.com
 
 Expected: `No resources found` from the events query (no `ErrImagePull` or `ImagePullBackOff`);
 every pod `Running` or `Completed`; `kubernetes.io/dockerconfigjson`; the image-puller DaemonSet
-with a pod on every session node. Then launch a session from a private workspace image with the
-boundary closed: the pod reaches `Running` without a pull error.
+with a pod on every session node. Events live about an hour, so a pull failure from earlier work
+still shows; judge by the event's age, or by pod status alone. Then launch a session from a
+private workspace image with the boundary closed: the pod reaches `Running` without a pull error.
 
 ## Chart values
 
@@ -215,7 +236,7 @@ Installing the charts directly, drop the `kasm-helm:` and `kasm-agent:` keys.
 
 | Symptom | Cause | Fix |
 | ------- | ----- | --- |
-| Agent and operator pods run, **session** pods `ImagePullBackOff` | Only `imagePullSecrets` was set; workspace images use a different value | Set `agent.workspaceImagePullSecrets` |
+| Agent and operator pods run, **session** pods `ImagePullBackOff` | Session pods carry no pull Secret: `agent.workspaceImagePullSecrets` is not yet propagated to workspaces (known issue, step 3) | Pre-stage the image with `agent.imagePuller`, or add the Secret to the session pods' ServiceAccount |
 | Every session fails to launch, control plane healthy | Workspace images unreachable; they come from the manager's registry, not from values | Re-point them in the manager |
 | Pull works in one namespace, fails in the other | Secrets do not cross namespaces | Create the Secret in both release namespaces |
 | ECR pulls fail every morning | ECR tokens expire after 12 hours | Credential helper, external-secrets, or the node role |
@@ -230,7 +251,7 @@ The rest is in [Troubleshooting](../reference/troubleshooting.md).
 ## Decisions
 
 - [ ] Charts mirrored as OCI artifacts, or carried as `make package-agent` archives.
-- [ ] Control-plane images from `images.txt` mirrored and every `components.*.image.registry` re-pointed.
+- [ ] Control-plane images from `images.txt` mirrored; every `components.*.image.registry` and `database.image.registry` re-pointed.
 - [ ] Agent-family images from `make images-agent` mirrored, conditional ones included; `make images-check` green.
 - [ ] Workspace images mirrored and re-pointed **in the manager**; `workspaceImagePullSecrets` set.
 - [ ] A `dockerconfigjson` Secret in every release namespace, with a refresh story for expiring tokens.

@@ -102,6 +102,34 @@ app.kubernetes.io/part-of: kasm-ai
 {{- end }}
 
 {{/*
+  Whether the manager address is derived from a kasm-helm release alongside (inClusterControlPlane
+  with no explicit hostname). The port and scheme follow the hostname: the derived target is the
+  control plane's in-cluster proxy Service, plain HTTP on 8080, and only then. An explicit
+  manager.hostname takes the ordinary manager.port / manager.scheme (443 / https).
+*/}}
+{{- define "kasmAgentInstance.managerDerived" -}}
+{{- if and .Values.inClusterControlPlane (not .Values.manager.hostname) -}}true{{- end -}}
+{{- end }}
+
+{{- define "kasmAgentInstance.managerPort" -}}
+{{- if include "kasmAgentInstance.managerDerived" . -}}8080{{- else -}}{{ .Values.manager.port }}{{- end -}}
+{{- end }}
+
+{{- define "kasmAgentInstance.managerScheme" -}}
+{{- if include "kasmAgentInstance.managerDerived" . -}}http{{- else -}}{{ .Values.manager.scheme }}{{- end -}}
+{{- end }}
+
+{{/*
+  The port the manager reaches the session proxy on. Derived to 4444, the proxy's own HTTPS
+  listener, only while the public hostname is derived too (relayed, in-cluster); an explicit
+  publicHostname takes publicPort as set (443 by default), because then something in front of
+  the proxy owns the port.
+*/}}
+{{- define "kasmAgentInstance.publicPort" -}}
+{{- if and .Values.inClusterControlPlane (not .Values.publicHostname) -}}4444{{- else -}}{{ .Values.publicPort }}{{- end -}}
+{{- end }}
+
+{{/*
   The agent's public hostname, which has no default. Also used as the fallback
   for the session-proxy certificate's names and the HTTPRoute's hostnames.
 */}}
