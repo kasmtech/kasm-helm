@@ -12,6 +12,16 @@ KUBECTL := $(BIN_DIR)/kubectl
 CLOUD_PROVIDER_KIND := $(BIN_DIR)/cloud-provider-kind
 CRANE := $(BIN_DIR)/crane
 HELM_DOCS := $(BIN_DIR)/helm-docs
+# The HTML values-table renderers every chart's README.md.gotmpl used to carry as byte-identical
+# copies now live once in _templates.gotmpl at the repo root, prepended to each chart's own
+# README.md.gotmpl. helm-docs resolves a --template-files path that starts with ./ or ../ against
+# --chart-search-root (a bare name is looked up inside each chart directory), so the same file is
+# reached two ways: ../_templates.gotmpl from the repo root with --chart-search-root charts
+# (readme-all, readme-check-all), and ../../_templates.gotmpl from inside $(CHART_DIR) (readme,
+# readme-check), where the search root defaults to the chart itself.
+HELM_DOCS_SHARED_TEMPLATE := _templates.gotmpl
+HELM_DOCS_TEMPLATES_FROM_ROOT := --template-files=../$(HELM_DOCS_SHARED_TEMPLATE) --template-files=README.md.gotmpl
+HELM_DOCS_TEMPLATES_FROM_CHART := --template-files=../../$(HELM_DOCS_SHARED_TEMPLATE) --template-files=README.md.gotmpl
 HELM_PLUGINS_DIR := $(CURDIR)/.helm/plugins
 PYTEST_IMAGE ?= kasm-e2e-pytest:latest
 ifeq ($(strip $(PYTEST_IMAGE)),)
@@ -312,7 +322,7 @@ readme: $(HELM_DOCS) ## Regenerate charts/kasm-helm/README.md (+ optionally bump
 	@if [ -n "$(CHART_VERSION)" ]; then \
 	  python3 scripts/set_versions.py --chart-version "$(CHART_VERSION)" $(if $(APP_VERSION),--app-version "$(APP_VERSION)",); \
 	fi
-	cd $(CHART_DIR) && $(HELM_DOCS)
+	cd $(CHART_DIR) && $(HELM_DOCS) $(HELM_DOCS_TEMPLATES_FROM_CHART)
 
 # Fails (non-zero exit) if the committed README.md files are out of date:
 #   - charts/kasm-helm/README.md vs. values.yaml + README.md.gotmpl (helm-docs)
@@ -323,7 +333,7 @@ readme-check: $(HELM_DOCS) ## Verify both README.md files are up to date (use `m
 	tmp_dir=$$(mktemp -d); \
 	trap 'rm -rf "$$tmp_dir"' EXIT; \
 	cp $(CHART_DIR)/README.md $$tmp_dir/README.md.before; \
-	cd $(CHART_DIR) && $(HELM_DOCS) >/dev/null && cd - >/dev/null; \
+	cd $(CHART_DIR) && $(HELM_DOCS) $(HELM_DOCS_TEMPLATES_FROM_CHART) >/dev/null && cd - >/dev/null; \
 	if ! diff -u $$tmp_dir/README.md.before $(CHART_DIR)/README.md > $$tmp_dir/diff; then \
 	  echo ""; \
 	  echo "ERROR: $(CHART_DIR)/README.md is out of date with values.yaml + README.md.gotmpl."; \

@@ -12,14 +12,14 @@ Kasm is a platform specializing in providing secure browser-based workspaces for
 | ---- | ------ | --- |
 | Kasm Technologies, Inc. |  | <https://github.com/kasmtech/kasm-helm> |
 
-<!-- This README.md.gotmpl is used by helm-docs to generate README.md which in turn generates the information on https://artifacthub.io/packages/helm/nautobot/nautobot so there are parts of this which are duplicated from `docs` -->
 ## Documentation
 
 Please see our [official documentation site](https://docs.kasm.com) for more information.
 
 > **Note:** Make sure to select the correct Kasm Workspaces version in the top-right version selector on the documentation site to ensure the guides match your deployment.
 
-<!-- This section is a duplicate of docs/installation/prerequisites.md -->
+This page is the chart reference; the [documentation index](../../docs/README.md) has the tutorial and the how-to guides.
+
 ## Prerequisites
 
 * Kubernetes 1.24 or newer (older versions of Kubernetes may work, however, we try to keep this chart updated to [supported versions of Kubernetes](https://kubernetes.io/releases/))
