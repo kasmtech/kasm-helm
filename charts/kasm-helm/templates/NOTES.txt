@@ -1,6 +1,11 @@
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- $primaryZone := (include "kasm.primaryZone" . | fromYaml) -}}
 {{- $zoneName := $primaryZone.name -}}
+{{- $secretsName := $constants.secrets.name -}}
+{{- $proxySvc := printf "%s-%s" $constants.proxy.svc (include "kasm.zoneName" $zoneName) -}}
+{{- $proxyType := .Values.proxyService.type -}}
+{{- $fronted := or .Values.ingress.enabled .Values.route.enabled .Values.httpRoute.enabled .Values.tlsRoute.enabled -}}
+{{- $externalAddress := include "kasm.proxyExternalAddress" . -}}
 CHART NAME: {{ .Chart.Name }}
 CHART VERSION: {{ .Chart.Version }}
 APP VERSION: {{ .Chart.AppVersion }}
@@ -9,29 +14,86 @@ APP VERSION: {{ .Chart.AppVersion }}
 
 To log into your Kasm deployment use the information below:
 
-Kasm URL:                                   https://{{ .Values.publicAddr }}
-External Agent Kasm Upstream Auth Address:  https://{{ .Values.publicAddr }}
-KubeVirt Kasm Upstream Auth Address:        {{ printf "%s-%s.%s.svc.%s" $constants.proxy.svc (include "kasm.zoneName" $zoneName) .Release.Namespace (.Values.clusterDomain | default "--seeK8sAdminForClusterDomain--") }}
-Kasm Admin User:                            admin@kasm.local
+Kasm URL:                                   {{ if $externalAddress }}https://{{ $externalAddress }}{{ else }}(not known yet - see below){{ end }}
+External Agent Kasm Upstream Auth Address:  {{ if .Values.publicAddr }}https://{{ .Values.publicAddr }}{{ else }}(publicAddr is unset){{ end }}
+KubeVirt Kasm Upstream Auth Address:        {{ printf "%s.%s.svc.%s" $proxySvc .Release.Namespace (.Values.clusterDomain | default "--seeK8sAdminForClusterDomain--") }}
+Kasm Admin User:                            {{ .Values.kasmConfig.adminUsername | default "admin@kasm.local" }}
 Kasm Un-privileged User:                    user@kasm.local
+{{- if not .Values.publicAddr }}
 
+publicAddr is unset, so Kasm has no hostname of its own yet.
+{{- if $externalAddress }}
+The Kasm URL above is the address the cluster assigned to the {{ $proxyType }} Service, read back at
+render time. It is reachable from wherever that address routes - on a local kind or k3d cluster
+that is the container network, not your workstation.
+{{- else if eq $proxyType "LoadBalancer" }}
+The proxy is published by a LoadBalancer Service; browse to https://<address> once the cloud
+provider (or MetalLB, or k3s ServiceLB) has assigned one:
+
+kubectl get svc --namespace {{ .Release.Namespace }} {{ .Release.Name }}-proxy-ext-default -o jsonpath='{.status.loadBalancer.ingress[0].ip}{.status.loadBalancer.ingress[0].hostname}'; echo
+
+Helm renders these notes before it creates anything, so the first install cannot show the
+address. From the next `helm upgrade` on (same values) it is read back and printed above.
+{{- else if eq $proxyType "NodePort" }}
+The proxy is published on a NodePort; browse to https://<any node address>:<port>, where port is:
+
+kubectl get svc --namespace {{ .Release.Namespace }} {{ .Release.Name }}-proxy-ext-default -o jsonpath='{.spec.ports[0].nodePort}'; echo
+
+Pin the port with proxyService.nodePort and the URL is printed above from the first install.
+{{- else }}
+Nothing publishes the proxy outside the cluster{{ if $fronted }} by hostname{{ end }}. Reach it with a port-forward:
+
+kubectl port-forward --namespace {{ .Release.Namespace }} svc/{{ $proxySvc }} 8443:8443    ->  https://localhost:8443
+{{- end }}
+
+Before anyone else uses it, set publicAddr to the DNS name users will type - it becomes the
+certificate name, the Ingress/Route/Gateway host, and the address Kasm advertises to agents -
+and helm upgrade.
+{{- end }}
+
+{{ if .Values.kasmSecrets.create -}}
+Passwords were generated on first install into Secret "{{ $secretsName }}" and are reused on every
+upgrade. Delete the Secret to have new ones generated.
+{{- else -}}
+Passwords come from the Secret you supplied, "{{ $secretsName }}" (kasmSecrets.create=false).
+{{- end }}
 
 Retrieve Kasm Admin Password:
-kubectl get secret --namespace {{ .Release.Namespace }} {{ .Release.Name }}-secrets -o jsonpath="{.data.admin-password}" | base64 -d; echo
+kubectl get secret --namespace {{ .Release.Namespace }} {{ $secretsName }} -o jsonpath="{.data.admin-password}" | base64 -d; echo
 
 Retrieve Kasm User Password:
-kubectl get secret --namespace {{ .Release.Namespace }} {{ .Release.Name }}-secrets -o jsonpath="{.data.user-password}" | base64 -d; echo
+kubectl get secret --namespace {{ .Release.Namespace }} {{ $secretsName }} -o jsonpath="{.data.user-password}" | base64 -d; echo
 
 
 If you would like to get the remaining password values to store in a secure vault for future use.
 If you update or upgrade your deployment using this Helm chart, these values will be reused
 
 Retrieve Kasm DB Password:
-kubectl get secret --namespace {{ .Release.Namespace }} {{ .Release.Name }}-secrets -o jsonpath="{.data.db-password}" | base64 -d; echo
+kubectl get secret --namespace {{ .Release.Namespace }} {{ $secretsName }} -o jsonpath="{.data.db-password}" | base64 -d; echo
 
 Retrieve Kasm Manager Token:
-kubectl get secret --namespace {{ .Release.Namespace }} {{ .Release.Name }}-secrets -o jsonpath="{.data.manager-token}" | base64 -d; echo
+kubectl get secret --namespace {{ .Release.Namespace }} {{ $secretsName }} -o jsonpath="{.data.manager-token}" | base64 -d; echo
 
 Retrieve Kasm Service Registration Token:
-kubectl get secret --namespace {{ .Release.Namespace }} {{ .Release.Name }}-secrets -o jsonpath="{.data.service-token}" | base64 -d; echo
+kubectl get secret --namespace {{ .Release.Namespace }} {{ $secretsName }} -o jsonpath="{.data.service-token}" | base64 -d; echo
 
+
+{{ if include "kasm.selfSignedCertNeeded" . }}
+================================================================================
+  WARNING: this release generated a SELF-SIGNED TLS certificate.
+
+  No certificate was configured, so the chart created one itself
+  ({{ include "kasm.name" (list . "cert-manager" "secret") }}) rather than leave
+  every pod stuck waiting for a Secret that does not exist.
+
+  It is NOT publicly trusted. Browsers will warn on it and you will have to accept
+  the warning; it is intended for evaluation only.
+
+  To use a real certificate instead, set ONE of:
+    certificate.secretName             - a kubernetes.io/tls Secret you supply
+    certificate.certManager.enabled    - issue it with cert-manager
+
+  The generated certificate is reused across upgrades and follows publicAddr; to
+  replace it by hand, delete the Secret and set one of the above.
+================================================================================
+{{ end }}

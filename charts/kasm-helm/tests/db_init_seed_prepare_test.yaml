@@ -1,0 +1,322 @@
+suite: db-init seed preparation - settings upsert and kasmConfig.authDomain
+templates:
+  - templates/db-init-job.yaml
+
+tests:
+  # ---------- gating of the prepare-db-preseed init container ----------
+
+  - it: does not render the prepare-db-preseed init container when authDomain, generatePreseed and existingDefaultPropertiesSecret are all unset
+    set:
+      dbManagement:
+        initialize: true
+        upgrade:
+          enable: false
+      kasmConfig:
+        generatePreseed: false
+        authDomain: ""
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.initContainers
+          count: 1
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: db-is-ready
+      - notContains:
+          path: spec.template.spec.volumes
+          content:
+            name: db-preseed-data
+            emptyDir:
+              sizeLimit: 16Mi
+
+  - it: renders the prepare-db-preseed init container for kasmConfig.authDomain alone
+    set:
+      dbManagement:
+        initialize: true
+        upgrade:
+          enable: false
+      kasmConfig:
+        generatePreseed: false
+        authDomain: example.com
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: prepare-db-preseed
+      # the db-init container has to read the rewritten seed file, so the shared emptyDir
+      # has to be declared and mounted even without a custom_properties.yaml to merge
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: db-preseed-data
+            emptyDir:
+              sizeLimit: 16Mi
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: db-preseed-data
+            mountPath: /opt/kasm/current/conf/database/seed_data
+            readOnly: true
+
+  - it: renders the prepare-db-preseed init container for generatePreseed alone
+    set:
+      dbManagement:
+        initialize: true
+        upgrade:
+          enable: false
+      kasmConfig:
+        generatePreseed: true
+        defaultUsers: false
+        authDomain: ""
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: prepare-db-preseed
+      - contains:
+          path: spec.template.spec.initContainers[0].volumeMounts
+          content:
+            name: custom-db-preseed
+            mountPath: /custom-preseed/custom_properties.yaml
+            subPath: custom_properties.yaml
+            readOnly: true
+
+  - it: renders the prepare-db-preseed init container when both authDomain and generatePreseed are set
+    set:
+      dbManagement:
+        initialize: true
+        upgrade:
+          enable: false
+      kasmConfig:
+        generatePreseed: true
+        defaultUsers: false
+        authDomain: example.com
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: prepare-db-preseed
+      - equal:
+          path: spec.template.spec.initContainers[0].env[?(@.name=="KASM_AUTH_DOMAIN")].value
+          value: example.com
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].args[0]
+          pattern: 'Merged custom preseed into'
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].args[0]
+          pattern: 'Set kasm_auth_domain to'
+
+  - it: renders the prepare-db-preseed init container for authDomain combined with existingDefaultPropertiesSecret
+    set:
+      dbManagement:
+        initialize: true
+        upgrade:
+          enable: false
+      kasmConfig:
+        generatePreseed: false
+        authDomain: example.com
+        existingDefaultPropertiesSecret:
+          name: my-custom-seed
+          key: default_properties.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: prepare-db-preseed
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].args[0]
+          pattern: 'cp "\$\{EXISTING_DEFAULT_PROPERTIES\}" "\$\{DEFAULT_PROPERTIES\}"'
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].args[0]
+          pattern: 'Set kasm_auth_domain to'
+
+  # ---------- the KASM_AUTH_DOMAIN env var ----------
+
+  - it: carries the auth domain in the KASM_AUTH_DOMAIN env var and never inlines it in the yq program
+    set:
+      dbManagement:
+        initialize: true
+        upgrade:
+          enable: false
+      kasmConfig:
+        generatePreseed: false
+        authDomain: parent.example.com
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].env[?(@.name=="KASM_AUTH_DOMAIN")].value
+          value: parent.example.com
+      # the script reads the value from the environment, so the domain itself must not appear
+      # anywhere in the single-quoted yq expression
+      - notMatchRegex:
+          path: spec.template.spec.initContainers[0].args[0]
+          pattern: 'parent\.example\.com'
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].args[0]
+          pattern: 'strenv\(KASM_AUTH_DOMAIN\) as \$domain'
+
+  - it: omits the KASM_AUTH_DOMAIN env var when authDomain is unset
+    set:
+      dbManagement:
+        initialize: true
+        upgrade:
+          enable: false
+      kasmConfig:
+        generatePreseed: true
+        defaultUsers: false
+        authDomain: ""
+    asserts:
+      - notExists:
+          path: spec.template.spec.initContainers[0].env
+
+  # ---------- the settings upsert (Change 1) ----------
+
+  - it: upserts settings on name and category instead of concatenating the two lists
+    set:
+      dbManagement:
+        initialize: true
+        upgrade:
+          enable: false
+      kasmConfig:
+        generatePreseed: true
+        defaultUsers: false
+    asserts:
+      # the two-key match that replaces a default entry with its custom counterpart
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].args[0]
+          pattern: 'map\(select\(\.name == \$d\.name and \.category == \$d\.category\)\)'
+      # the custom-only pass that appends entries with no default counterpart
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].args[0]
+          pattern: 'map\(select\(\.name == \$c\.name and \.category == \$c\.category\)\)'
+      # the old plain concatenation duplicated every seed-existing setting and made
+      # /api/authenticate 500 with MultipleResultsFound
+      - notMatchRegex:
+          path: spec.template.spec.initContainers[0].args[0]
+          pattern: '\(\$default\.settings // \[\]\) \+ \(\$custom\.settings // \[\]\)'
+      # group_settings keeps its own, different merge and must not be caught by the change
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].args[0]
+          pattern: '\(\(\$default\.group_settings // \[\]\) \| map\(select\(\.group_id == null\)\)\) \+'
+
+  - it: appends a complete kasm_auth_domain entry when the seed does not already carry one
+    set:
+      dbManagement:
+        initialize: true
+        upgrade:
+          enable: false
+      kasmConfig:
+        generatePreseed: false
+        authDomain: example.com
+    asserts:
+      # existing entry: update its value in place
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].args[0]
+          pattern: '\(\.\[\] \| select\(\.name == "kasm_auth_domain"\) \| \.value\) = \$domain'
+      # missing entry: append one carrying the full field set the live seed uses
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].args[0]
+          pattern: '"category": "auth"'
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].args[0]
+          pattern: '"title": "Kasm Authorization Domain"'
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].args[0]
+          pattern: '"value_type": "string"'
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].args[0]
+          pattern: '"services_restart": null'
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].args[0]
+          pattern: 'map\(select\(\$existing == 0\)\)'
+
+  # ---------- conditional gating of the script's own sections ----------
+
+  - it: authDomain alone emits neither the existing-secret overlay nor the custom merge
+    set:
+      dbManagement:
+        initialize: true
+        upgrade:
+          enable: false
+      kasmConfig:
+        generatePreseed: false
+        authDomain: example.com
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.initContainers[0].args[0]
+          pattern: 'Applied customer-provided default_properties\.yaml from Secret'
+      - notMatchRegex:
+          path: spec.template.spec.initContainers[0].args[0]
+          pattern: 'Merged custom preseed into'
+      - notMatchRegex:
+          path: spec.template.spec.initContainers[0].args[0]
+          pattern: 'MERGED_PROPERTIES\}" "\$\{DEFAULT_PROPERTIES'
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].args[0]
+          pattern: 'Set kasm_auth_domain to'
+      - notContains:
+          path: spec.template.spec.initContainers[0].volumeMounts
+          content:
+            name: custom-db-preseed
+            mountPath: /custom-preseed/custom_properties.yaml
+            subPath: custom_properties.yaml
+            readOnly: true
+
+  - it: generatePreseed alone emits the merge but no auth-domain step
+    set:
+      dbManagement:
+        initialize: true
+        upgrade:
+          enable: false
+      kasmConfig:
+        generatePreseed: true
+        defaultUsers: false
+        authDomain: ""
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].args[0]
+          pattern: 'Merged custom preseed into'
+      - notMatchRegex:
+          path: spec.template.spec.initContainers[0].args[0]
+          pattern: 'Set kasm_auth_domain to'
+      - notMatchRegex:
+          path: spec.template.spec.initContainers[0].args[0]
+          pattern: 'strenv\(KASM_AUTH_DOMAIN\)'
+
+  - it: applies the auth-domain edit after the custom merge so it wins deterministically
+    set:
+      dbManagement:
+        initialize: true
+        upgrade:
+          enable: false
+      kasmConfig:
+        generatePreseed: true
+        defaultUsers: false
+        authDomain: example.com
+        existingDefaultPropertiesSecret:
+          name: my-custom-seed
+          key: default_properties.yaml
+    asserts:
+      # overlay, then merge, then the auth-domain edit against the finished file
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].args[0]
+          pattern: '(?s)Applied customer-provided default_properties\.yaml from Secret.*Merged custom preseed into.*Set kasm_auth_domain to'
+      # and the auth-domain edit is an in-place edit of DEFAULT_PROPERTIES, not of the merge temp file
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].args[0]
+          pattern: "' \"\\$\\{DEFAULT_PROPERTIES\\}\""
+
+  # tests/kyverno/resources.required.enforce.yaml requires cpu+memory requests AND limits on every
+  # container and initContainer; prepare-db-preseed had none, so it silently escaped the gate while
+  # the policy was misconfigured. Pinned here so it cannot lose them again.
+  - it: prepare-db-preseed carries cpu and memory requests and limits
+    set:
+      kasmConfig:
+        authDomain: example.test
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name=="prepare-db-preseed")].resources.requests.cpu
+          value: 500m
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name=="prepare-db-preseed")].resources.requests.memory
+          value: 512Mi
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name=="prepare-db-preseed")].resources.limits.cpu
+          value: 500m
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name=="prepare-db-preseed")].resources.limits.memory
+          value: 1Gi

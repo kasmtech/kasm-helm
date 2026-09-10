@@ -1,0 +1,8 @@
+{{/*
+  Renders no manifest.
+
+  It exists so the cross-value checks in _validation.tpl run on every render -
+  `helm install`, `helm upgrade`, `helm template` and `--dry-run` alike -
+  without being bolted onto a resource that only renders under some values.
+*/}}
+{{- include "kasm.validateExposure" . -}}

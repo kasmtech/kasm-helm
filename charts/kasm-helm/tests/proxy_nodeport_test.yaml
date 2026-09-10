@@ -1,0 +1,84 @@
+suite: proxyService NodePort
+
+templates:
+  - templates/proxy-service-external.yaml
+  - templates/validation.yaml
+
+tests:
+  # Before this, NodePort was accepted by the schema and documented as valid but
+  # published nothing at all: the external Service rendered only for LoadBalancer.
+  - it: publishes an external Service for NodePort
+    template: templates/proxy-service-external.yaml
+    set:
+      proxyService:
+        type: NodePort
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: spec.type
+          value: NodePort
+      - equal:
+          path: spec.ports[0].port
+          value: 443
+
+  - it: pins the node port when asked
+    template: templates/proxy-service-external.yaml
+    set:
+      proxyService:
+        type: NodePort
+        nodePort: 31443
+    asserts:
+      - equal:
+          path: spec.ports[0].nodePort
+          value: 31443
+
+  - it: leaves the node port to Kubernetes when unset
+    template: templates/proxy-service-external.yaml
+    set:
+      proxyService:
+        type: NodePort
+    asserts:
+      - isNull:
+          path: spec.ports[0].nodePort
+
+  - it: still renders for LoadBalancer
+    template: templates/proxy-service-external.yaml
+    set:
+      proxyService:
+        type: LoadBalancer
+    asserts:
+      - equal:
+          path: spec.type
+          value: LoadBalancer
+
+  - it: renders nothing for ClusterIP, which publishes through a front end instead
+    template: templates/proxy-service-external.yaml
+    set:
+      proxyService:
+        type: ClusterIP
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: NodePort alongside an Ingress is refused, as LoadBalancer already was
+    template: templates/validation.yaml
+    set:
+      proxyService:
+        type: NodePort
+      ingress:
+        enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "proxyService.type must not be NodePort when an Ingress, OpenShift Route or Gateway API route already publishes the proxy - that would be a second door onto the same Service carrying none of the front end's TLS, timeouts or host routing. Set proxyService.type=ClusterIP, or disable the front end."
+
+  - it: NodePort with multi-zone is refused - a node port cannot route by hostname
+    template: templates/validation.yaml
+    values:
+      - ../../../tests/values/multizone-config.yaml
+    set:
+      proxyService:
+        type: NodePort
+    asserts:
+      - failedTemplate:
+          errorMessage: "proxyService.type must not be NodePort in a Multi-Zone deployment: a node port cannot route by hostname, so each zone would be unreachable. Use an Ingress, an OpenShift Route or the Gateway API, with proxyService.type=ClusterIP."

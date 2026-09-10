@@ -7,9 +7,15 @@
 #
 # Prerequisites:
 #   - This job must be deployed in the same namespace as your Kasm Helm release.
-#   - The database and user are created automatically when the Helm chart is installed.
-#     Do NOT set dbManagement.initialize=true — doing so will pre-populate the schema
-#     and conflict with the restore.
+#   - The target database must be EMPTY: pg_restore does not drop objects that already
+#     exist, so a restore into a database the chart has initialized fails with
+#     "already exists" errors. Install with dbManagement.initialize=false (the database
+#     and user are still created), or restore into a fresh namespace.
+#   - No other client may be connected: scale the api, manager, guac and rdp-https-gateway
+#     workloads to zero first (docs/how-to/day-2.md, Restore). A restore that meets a lock
+#     held by a running API fails after PGOPTIONS' lock_timeout instead of hanging.
+#   - A failed Job is not retried (backoffLimit: 1); read its pod log before the
+#     ttlSecondsAfterFinished window removes it.
 #   - The PVC must already exist and contain your backup file before applying this job.
 #
 # Field reference:
@@ -32,6 +38,7 @@ metadata:
   name: kasm-db-restore
 spec:
   ttlSecondsAfterFinished: 300
+  backoffLimit: 1
   template:
     spec:
       securityContext:
@@ -39,7 +46,7 @@ spec:
         runAsGroup: 1000
         fsGroup: 1000
         fsGroupChangePolicy: OnRootMismatch
-      restartPolicy: OnFailure
+      restartPolicy: Never
       containers:
         - name: kasm-db-restore
           image: kasmweb/api:1.19.0  # <-- REPLACE with your Kasm version
@@ -79,6 +86,7 @@ spec:
               set -e
               while ! pg_isready -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -t 10; do echo "Waiting for DB..."; sleep 5; done
               export PGPASSWORD=$POSTGRES_PASSWORD
+              export PGOPTIONS='-c lock_timeout=60s -c statement_timeout=0'
               BACKUP_FILE="/data/kasm-db-dump/$BACKUP_FILENAME"
               echo "Restoring database from $BACKUP_FILE"
               pg_restore -h "${POSTGRES_HOST}" -p "${POSTGRES_PORT}" -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" "${BACKUP_FILE}"

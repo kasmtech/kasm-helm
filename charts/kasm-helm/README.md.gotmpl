@@ -12,73 +12,77 @@
 
 {{ template "chart.requirementsSection" . }}
 
-<!-- This README.md.gotmpl is used by helm-docs to generate README.md which in turn generates the information on https://artifacthub.io/packages/helm/nautobot/nautobot so there are parts of this which are duplicated from `docs` -->
 ## Documentation
 
 Please see our [official documentation site](https://docs.kasm.com) for more information.
 
 > **Note:** Make sure to select the correct Kasm Workspaces version in the top-right version selector on the documentation site to ensure the guides match your deployment.
 
-<!-- This section is a duplicate of docs/installation/prerequisites.md -->
+This page is the chart reference; the [documentation index](../../docs/README.md) has the tutorial and the how-to guides.
+
 ## Prerequisites
 
 * Kubernetes 1.24 or newer (older versions of Kubernetes may work, however, we try to keep this chart updated to [supported versions of Kubernetes](https://kubernetes.io/releases/))
 * Helm 3.18.x or newer ([installation](https://helm.sh/docs/helm/helm_install/))
-{{ define "chart.valueDefaultColumnRender" }}
-{{- $defaultValue := (default .Default .AutoDefault)  -}}
-{{- $notationType := .NotationType }}
-{{- if (and (hasPrefix "`" $defaultValue) (hasSuffix "`" $defaultValue) ) -}}
-{{- $defaultValue = (toYaml (fromJson (trimAll "`" (default .Default .AutoDefault) ) ) ) -}}
-{{- $notationType = "json" }}
-{{- end -}}
-{{- if (eq $notationType "tpl" ) }}
-<pre lang="{{ $notationType }}">
-{{ .Key }}: |
-{{- $defaultValue | nindent 2 }}
-</pre>
-{{- else if (eq $notationType "email") }}
-<a href="mailto:{{ $defaultValue }}" style="color: green;">"{{ $defaultValue }}"</a>
-{{- else }}
-<pre lang="{{ $notationType }}">
-{{ $defaultValue }}
-</pre>
-{{- end }}
-{{ end }}
+* An ingress controller, a Gateway API implementation, or a cloud load balancer, depending on how you publish Kasm — see below. Gateway API 1.5 or newer for `tlsRoute`, and 1.6 or newer for `tcpRoute`.
+* [cert-manager](https://cert-manager.io/) when `certificate.certManager.enabled` is set.
 
-{{ define "chart.typeColumnRender" }}
-{{- if (eq .Type "string/email") }}
-<a href="#stringemail" title="{{- template "chart.valuetypes.email" -}}">{{.Type}}</a>
-{{- else if (eq .Type "k8s/storage/persistent-volume/access-modes" )}}
-<a target="_blank" 
-   href="https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes"
-   >{{- .Type }}</a>
-{{- else }}
-{{ .Type }}
-{{- end }}
-{{ end }}
+## Publishing Kasm outside the cluster
 
-{{ define "chart.valuesTableHtml" }}
-<table>
-	<thead>
-		<th>Key</th>
-		<th>Type</th>
-		<th>Default</th>
-		<th>Description</th>
-	</thead>
-	<tbody>
-	{{- range .Values }}
-		<tr>
-			<td id="{{ .Key | replace "." "--" }}"><a href="./values.yaml#L{{ .LineNumber }}">{{ .Key }}</a></td>
-			<td>{{- template "chart.typeColumnRender" . -}}</td>
-			<td>
-				<div style="max-width: 520px;">{{ template "chart.valueDefaultColumnRender" . }}</div>
-			</td>
-			<td>{{ if .Description }}{{ .Description }}{{ else }}{{ .AutoDescription }}{{ end }}</td>
-		</tr>
-	{{- end }}
-	</tbody>
-</table>
-{{ end }}
+The Kasm proxy Service can be published five ways, and **at most one may be used** — all of them
+front the same Service, so enabling two gives one hostname two owners. The chart fails the render
+with an explicit message rather than letting the conflict reach the cluster.
+
+| Values | Publishes with | TLS terminates at | Use when |
+| ------ | -------------- | ----------------- | -------- |
+| `ingress.enabled` | `networking.k8s.io/v1` Ingress | the ingress controller | an ingress controller already fronts the cluster |
+| `route.enabled` | OpenShift `Route` | the OpenShift router (`edge` by default) | OpenShift |
+| `httpRoute.enabled` | Gateway API `HTTPRoute` | the Gateway | a Gateway API implementation fronts the cluster |
+| `tlsRoute.enabled` | Gateway API `TLSRoute`, SNI passthrough | the Kasm proxy itself | TLS must not terminate on shared cluster infrastructure |
+| `proxyService.type` = `LoadBalancer` or `NodePort` | the Service itself, on `<release>-proxy-ext-<zone>` | the Kasm proxy itself | no ingress layer at all |
+
+The last row is the default (`LoadBalancer`) and needs a cluster that actually provisions load
+balancers — a cloud, MetalLB, or `cloud-provider-kind` run as root. Where there is none, or where
+something already holds `:443` (k3s ships Traefik doing exactly that), `NodePort` publishes on a
+port from 30000–32767 instead and needs no provider and no ingress controller. Pin it with
+`proxyService.nodePort`, or let Kubernetes choose.
+
+**Both external types are rejected alongside any of the first four**, because the ingress, Route or
+Gateway already owns the external address — set `proxyService.type=ClusterIP` there. Both are also
+rejected with `kasmZones`, since neither can route by hostname.
+
+> **Match `kasmZones[].proxy_port` to the port users reach.** Kasm builds session URLs from the
+> zone's `proxy_port`, not from this Service. Publishing on a node port while the zone still says
+> 443 gives a working login and sessions that send the browser to a port nothing serves.
+
+### Certificates differ between the Ingress and the Gateway API
+
+An Ingress carries its own TLS block, so `ingress.tls` wires `certificate.secretName` straight into
+it. A Gateway API route carries no certificate at all — the **Gateway's listener** does. With
+`httpRoute` or `tlsRoute`, this chart still mints the Secret (through `certificate.certManager`, or
+whatever you put in `certificate.secretName`), but you have to reference it from that listener's
+`certificateRefs` yourself, and add a `ReferenceGrant` when the Gateway lives in another namespace.
+`tlsRoute` additionally needs the listener to be `protocol: TLS` with `tls.mode: Passthrough`; a
+terminating HTTPS listener will not serve it.
+
+### Multi-zone
+
+With `kasmZones` set, the Ingress renders one rule per zone while the Route and both Gateway API
+routes render one object per zone, plus one for `publicAddr` pointing at the primary zone. The
+certificate has to cover `publicAddr` and every zone's `proxy_hostname`.
+
+### The RDP Gateway
+
+`components.rdpGateway.enabled` speaks raw RDP, so it is published separately from the proxy — by
+`directRdpService` as a `LoadBalancer` or `NodePort` Service, or by `tcpRoute` as a Gateway API
+`TCPRoute`. Set one or the other, not both.
+
+`tcpRoute` needs Gateway API 1.6 or newer, where `TCPRoute` is standard-channel `v1`. Shipping in
+the standard bundle is not the same as the data plane implementing it, so confirm your Gateway
+implementation supports `TCPRoute` before choosing it over a Service. And because a `TCPRoute`
+matches on neither hostname nor SNI, zones cannot share one listener the way they do for
+`httpRoute`: when more than one zone sits in the primary region, give each an entry in
+`tcpRoute.zones` with its own `parentRefs[].sectionName`.
 
 ## Chart value settings in `values.yaml`
 

@@ -14,12 +14,9 @@ Deploy the RDP Gateway if .Values.components.rdpGateway.enabled set to true
 {{- range $zone := (include "kasm.primaryRegionZones" $ | fromYamlArray) }}
 ---
 {{ $rdpGwSvc := printf "%s-rdp-gateway-%s" $.Release.Name (include "kasm.zoneName" $zone.name) -}}
-{{- $serverName := $rdpGwSvc -}}
-{{- if and $.Values.directRdpService.enabled $.Values.directRdpService.rdpAccessURL }}
-  {{- $serverName = $.Values.directRdpService.rdpAccessURL -}}
-{{- else if $.Values.directRdpService.enabled }}
-  {{- fail "directRdpService.rdpAccessURL must be set if directRdpService.enabled is true." -}}
-{{- end -}}
+{{/* The advertised hostname, whether a LoadBalancer/NodePort Service or a TCPRoute publishes
+     this gateway; empty when it is only reachable in-cluster. See kasm.rdpAccessURL. */}}
+{{- $serverName := (include "kasm.rdpAccessURL" $) | default $rdpGwSvc -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:

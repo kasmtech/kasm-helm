@@ -1,0 +1,156 @@
+suite: self-signed fallback certificate
+
+templates:
+  - templates/self-signed-cert.yaml
+
+tests:
+  - it: generates a certificate when nothing else is configured
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Secret
+      - equal:
+          path: type
+          value: kubernetes.io/tls
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-cert-manager        # exactly what every pod mounts
+      - isNotNullOrEmpty:
+          path: data["tls.crt"]
+      - isNotNullOrEmpty:
+          path: data["tls.key"]
+      - equal:
+          path: data["self-signed-for"]
+          value: a2FzbS5sb2NhbA==            # b64 "kasm.local" - the empty-publicAddr fallback
+
+  - it: records the hostname it was generated for, so a changed publicAddr regenerates it
+    set:
+      publicAddr: kasm.example.com
+    asserts:
+      - equal:
+          path: data["self-signed-for"]
+          value: a2FzbS5leGFtcGxlLmNvbQ==    # b64 "kasm.example.com"
+
+  - it: does not generate one when a Secret is supplied
+    set:
+      certificate:
+        secretName: my-own-tls
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: does not generate one when cert-manager is issuing
+    set:
+      certificate:
+        certManager:
+          enabled: true
+          issuerName: letsencrypt-prod
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: can be turned off, restoring the bring-your-own-certificate requirement
+    set:
+      certificate:
+        selfSigned:
+          enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # ---------- an existing Secret at the chart's name, fed to `lookup` by kubernetesProvider ----------
+  - it: stands aside when a Secret of that name exists that this release does not own
+    # A pre-created Secret carries no Helm ownership annotations. Emitting it would make
+    # `helm install` fail with "exists and cannot be imported into the current release".
+    kubernetesProvider:
+      scheme:
+        "v1/Secret":
+          gvr:
+            group: ""
+            version: v1
+            resource: secrets
+          namespaced: true
+      objects:
+        - kind: Secret
+          apiVersion: v1
+          type: kubernetes.io/tls
+          metadata:
+            name: RELEASE-NAME-cert-manager
+            namespace: NAMESPACE
+          data:
+            tls.crt: dXNlci1jZXJ0
+            tls.key: dXNlci1rZXk=
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: reuses the bytes of a Secret this release generated for the same publicAddr
+    set:
+      publicAddr: kasm.example.com
+    kubernetesProvider:
+      scheme:
+        "v1/Secret":
+          gvr:
+            group: ""
+            version: v1
+            resource: secrets
+          namespaced: true
+      objects:
+        - kind: Secret
+          apiVersion: v1
+          type: kubernetes.io/tls
+          metadata:
+            name: RELEASE-NAME-cert-manager
+            namespace: NAMESPACE
+            annotations:
+              meta.helm.sh/release-name: RELEASE-NAME
+              meta.helm.sh/release-namespace: NAMESPACE
+          data:
+            tls.crt: b2xkLWNlcnQ=
+            tls.key: b2xkLWtleQ==
+            self-signed-for: a2FzbS5leGFtcGxlLmNvbQ==    # b64 "kasm.example.com"
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: data["tls.crt"]
+          value: b2xkLWNlcnQ=
+      - equal:
+          path: data["self-signed-for"]
+          value: a2FzbS5leGFtcGxlLmNvbQ==
+
+  - it: regenerates a Secret this release generated for a different publicAddr
+    set:
+      publicAddr: kasm.example.com
+    kubernetesProvider:
+      scheme:
+        "v1/Secret":
+          gvr:
+            group: ""
+            version: v1
+            resource: secrets
+          namespaced: true
+      objects:
+        - kind: Secret
+          apiVersion: v1
+          type: kubernetes.io/tls
+          metadata:
+            name: RELEASE-NAME-cert-manager
+            namespace: NAMESPACE
+            annotations:
+              meta.helm.sh/release-name: RELEASE-NAME
+              meta.helm.sh/release-namespace: NAMESPACE
+          data:
+            tls.crt: b2xkLWNlcnQ=
+            tls.key: b2xkLWtleQ==
+            self-signed-for: b2xkLmV4YW1wbGUuY29t    # b64 "old.example.com"
+    asserts:
+      - hasDocuments:
+          count: 1
+      - notEqual:
+          path: data["tls.crt"]
+          value: b2xkLWNlcnQ=
+      - equal:
+          path: data["self-signed-for"]
+          value: a2FzbS5leGFtcGxlLmNvbQ==

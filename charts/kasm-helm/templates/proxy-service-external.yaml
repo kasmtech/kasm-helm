@@ -1,14 +1,20 @@
 {{/*
-Deploy the Kasm Proxy service
+  The externally-typed Kasm proxy Service.
+
+  Rendered for both LoadBalancer and NodePort. The in-cluster Service
+  (proxy-service.yaml) is always ClusterIP; this is the one that publishes the
+  proxy outside the cluster, so with proxyService.type=ClusterIP neither this
+  template nor any external address exists - publish through an Ingress, an
+  OpenShift Route or the Gateway API instead.
+
+  NodePort assigns a port from the cluster's service-node-port-range (30000-32767
+  by default) unless proxyService.nodePort pins one. Note that Kasm builds session
+  URLs from the zone's proxy_port, so a NodePort deployment reached on a
+  non-standard port needs kasmZones[].proxy_port set to match, or the browser is
+  sent somewhere nothing is listening.
 */}}
-{{- if and (or .Values.ingress.enabled .Values.route.enabled) (eq .Values.proxyService.type "LoadBalancer") -}}
-  {{- fail "The service.type must not be LoadBalancer when using an ingress or a route - any load balancer or Route should be provisioned using the Ingress/Route settings. Set service.type=ClusterIP or mark ingress.enabled or route.enabled to disabled." -}}
-{{- end -}}
-{{- if and (eq .Values.proxyService.type "LoadBalancer") .Values.kasmZones -}}
-  {{- fail "The service.type must not be LoadBalancer when using a Multi-Zone Kasm deployment - any load balancer or Route should be provisioned using the Ingress/Route settings. Set service.type=ClusterIP or remove your kasmZones settings." -}}
-{{- end -}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
-{{- if eq .Values.proxyService.type "LoadBalancer" -}}
+{{- if or (eq .Values.proxyService.type "LoadBalancer") (eq .Values.proxyService.type "NodePort") -}}
 apiVersion: v1
 kind: Service
 metadata:
@@ -22,4 +28,7 @@ spec:
       protocol: TCP
       port: {{ $constants.proxy.extHttps }}
       targetPort: {{ $constants.proxy.portName }}-https
+      {{- if and (eq .Values.proxyService.type "NodePort") .Values.proxyService.nodePort }}
+      nodePort: {{ .Values.proxyService.nodePort }}
+      {{- end }}
 {{- end }}

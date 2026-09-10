@@ -1,0 +1,20 @@
+# Gateway API: the proxy on an HTTPRoute, the RDP Gateway on a TCPRoute.
+# proxyService stays ClusterIP because the Gateway owns the external address.
+publicAddr: kasm.example.com
+proxyService:
+  type: ClusterIP
+components:
+  rdpGateway:
+    enabled: true
+httpRoute:
+  enabled: true
+  parentRefs:
+    - name: kasm-gateway
+      namespace: kube-system
+tcpRoute:
+  enabled: true
+  rdpAccessURL: rdp.kasm.example.com
+  parentRefs:
+    - name: kasm-gateway
+      namespace: kube-system
+      sectionName: rdp

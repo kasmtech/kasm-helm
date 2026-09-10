@@ -2,7 +2,7 @@
 Backup the DB
 */}}
 {{- if and .Values.dbManagement.initialize .Values.dbManagement.upgrade.enable -}}
-  {{- fail "You cannot enable both initialize and upgrade for the DB. If you have an existing Kasm deployment you wish to upgrade, refer to our upgrade procedures - https://some.upgrade.url. Otherwise, select initialize for a new deployment." -}}
+  {{- fail "You cannot enable both initialize and upgrade for the DB. If you have an existing Kasm deployment you wish to upgrade, set dbManagement.initialize=false and dbManagement.upgrade.enable=true; the procedure is docs/how-to/day-2.md (Upgrade the control plane) in the chart repository. Otherwise, select initialize for a new deployment." -}}
 {{- end -}}
 {{- $kasmSecrets := (default (printf "%s-secrets" .Release.Name) .Values.dbManagement.upgrade.oldDbSecretsName) }}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}

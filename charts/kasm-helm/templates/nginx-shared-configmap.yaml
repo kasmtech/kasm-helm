@@ -108,6 +108,7 @@ data:
       map $x_forwarded_proto $default_http_port {
       default 443;
       "https" 443;
+      "http"  80;
     }
     
     # Extract the real port of the client request url (unfortunately nginx has no variable to get this info)

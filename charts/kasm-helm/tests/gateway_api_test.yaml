@@ -1,0 +1,253 @@
+suite: Gateway API routes (HTTPRoute, TLSRoute, TCPRoute)
+
+templates:
+  - templates/httproute.yaml
+  - templates/tlsroute.yaml
+  - templates/tcproute.yaml
+
+tests:
+  - it: renders no Gateway API routes by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: httpRoute publishes publicAddr at the primary zone's proxy Service
+    template: templates/httproute.yaml
+    set:
+      publicAddr: kasm.example.com
+      proxyService:
+        type: ClusterIP
+      httpRoute:
+        enabled: true
+        parentRefs:
+          - name: kasm-gateway
+            namespace: kube-system
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: HTTPRoute
+      - isAPIVersion:
+          of: gateway.networking.k8s.io/v1
+      - equal:
+          path: spec.hostnames[0]
+          value: kasm.example.com
+      - equal:
+          path: spec.parentRefs[0].name
+          value: kasm-gateway
+      - equal:
+          path: spec.parentRefs[0].namespace
+          value: kube-system
+      - equal:
+          path: spec.rules[0].backendRefs[0].name
+          value: RELEASE-NAME-proxy-default
+      - equal:
+          path: spec.rules[0].backendRefs[0].port
+          value: 8080
+
+  - it: httpRoute backendProtocol https targets the proxy's HTTPS port
+    template: templates/httproute.yaml
+    set:
+      publicAddr: kasm.example.com
+      proxyService:
+        type: ClusterIP
+      httpRoute:
+        enabled: true
+        backendProtocol: https
+        parentRefs:
+          - name: kasm-gateway
+    asserts:
+      - equal:
+          path: spec.rules[0].backendRefs[0].port
+          value: 8443
+
+  - it: httpRoute fans out one route per zone plus one for publicAddr
+    template: templates/httproute.yaml
+    values:
+      - ../../../tests/values/multizone-config.yaml
+    set:
+      httpRoute:
+        enabled: true
+        parentRefs:
+          - name: kasm-gateway
+    asserts:
+      - hasDocuments:
+          count: 3
+      - equal:
+          path: spec.hostnames[0]
+          value: kasm.example.com
+        documentIndex: 0
+      - equal:
+          path: spec.rules[0].backendRefs[0].name
+          value: RELEASE-NAME-proxy-zonea
+        documentIndex: 0
+      - equal:
+          path: spec.hostnames[0]
+          value: zonea.kasm.example.com
+        documentIndex: 1
+      - equal:
+          path: spec.hostnames[0]
+          value: zoneb.kasm.example.com
+        documentIndex: 2
+      - equal:
+          path: spec.rules[0].backendRefs[0].name
+          value: RELEASE-NAME-proxy-zoneb
+        documentIndex: 2
+
+  - it: tlsRoute passes through to the proxy's own HTTPS listener
+    template: templates/tlsroute.yaml
+    set:
+      publicAddr: kasm.example.com
+      proxyService:
+        type: ClusterIP
+      tlsRoute:
+        enabled: true
+        parentRefs:
+          - name: kasm-gateway
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: TLSRoute
+      - isAPIVersion:
+          of: gateway.networking.k8s.io/v1
+      - equal:
+          path: spec.rules[0].backendRefs[0].port
+          value: 8443
+
+  - it: tlsRoute honours an apiVersion override for pre-1.5 CRD bundles
+    template: templates/tlsroute.yaml
+    set:
+      publicAddr: kasm.example.com
+      proxyService:
+        type: ClusterIP
+      tlsRoute:
+        enabled: true
+        apiVersion: gateway.networking.k8s.io/v1alpha2
+        parentRefs:
+          - name: kasm-gateway
+    asserts:
+      - isAPIVersion:
+          of: gateway.networking.k8s.io/v1alpha2
+
+  - it: tcpRoute publishes the RDP Gateway Service on its RDP port
+    template: templates/tcproute.yaml
+    set:
+      publicAddr: kasm.example.com
+      proxyService:
+        type: ClusterIP
+      tcpRoute:
+        enabled: true
+        rdpAccessURL: rdp.kasm.example.com
+        parentRefs:
+          - name: kasm-gateway
+            namespace: kube-system
+            sectionName: rdp
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: TCPRoute
+      - equal:
+          path: spec.parentRefs[0].sectionName
+          value: rdp
+      - equal:
+          path: spec.rules[0].backendRefs[0].name
+          value: RELEASE-NAME-rdp-gateway-default
+      - equal:
+          path: spec.rules[0].backendRefs[0].port
+          value: 3389
+
+  - it: tcpRoute follows directRdpService.loadBalancerPort, so route and Service cannot drift
+    template: templates/tcproute.yaml
+    set:
+      publicAddr: kasm.example.com
+      proxyService:
+        type: ClusterIP
+      directRdpService:
+        loadBalancerPort: 33389
+      tcpRoute:
+        enabled: true
+        rdpAccessURL: rdp.kasm.example.com
+        parentRefs:
+          - name: kasm-gateway
+    asserts:
+      - equal:
+          path: spec.rules[0].backendRefs[0].port
+          value: 33389
+
+  - it: tcpRoute gives each primary-region zone its own listener
+    template: templates/tcproute.yaml
+    values:
+      - ../../../tests/values/multizone-same-region.yaml
+    set:
+      tcpRoute:
+        enabled: true
+        rdpAccessURL: rdp.kasm.example.com
+        zones:
+          - name: zonea
+            parentRefs:
+              - name: kasm-gateway
+                namespace: kube-system
+                sectionName: rdp-zonea
+          - name: zoneb
+            parentRefs:
+              - name: kasm-gateway
+                namespace: kube-system
+                sectionName: rdp-zoneb
+    asserts:
+      - hasDocuments:
+          count: 2
+      - equal:
+          path: spec.parentRefs[0].sectionName
+          value: rdp-zonea
+        documentIndex: 0
+      - equal:
+          path: spec.rules[0].backendRefs[0].name
+          value: RELEASE-NAME-rdp-gateway-zonea
+        documentIndex: 0
+      - equal:
+          path: spec.parentRefs[0].sectionName
+          value: rdp-zoneb
+        documentIndex: 1
+      - equal:
+          path: spec.rules[0].backendRefs[0].name
+          value: RELEASE-NAME-rdp-gateway-zoneb
+        documentIndex: 1
+
+  - it: httpRoute.zones gives a zone its own listener while the others keep httpRoute.parentRefs
+    template: templates/httproute.yaml
+    values:
+      - ../../../tests/values/multizone-config.yaml
+    set:
+      httpRoute:
+        enabled: true
+        parentRefs:
+          - name: kasm-gateway
+            namespace: kube-system
+            sectionName: kasm-https
+        zones:
+          - name: zoneb
+            parentRefs:
+              - name: kasm-gateway
+                namespace: kube-system
+                sectionName: zoneb-https
+    asserts:
+      - hasDocuments:
+          count: 3
+      - equal:
+          path: spec.parentRefs[0].sectionName
+          value: kasm-https
+        documentIndex: 0
+      - equal:
+          path: spec.parentRefs[0].sectionName
+          value: kasm-https
+        documentIndex: 1
+      - equal:
+          path: spec.parentRefs[0].sectionName
+          value: zoneb-https
+        documentIndex: 2
+      - equal:
+          path: spec.hostnames[0]
+          value: zoneb.kasm.example.com
+        documentIndex: 2
