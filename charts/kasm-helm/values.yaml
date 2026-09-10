@@ -207,6 +207,19 @@ httpRoute:
   #       namespace: kube-system
   #
   parentRefs: []
+  # httpRoute.zones -- Per-zone Gateway attachment, for zones that cannot share `httpRoute.parentRefs`:
+  # a `sectionName` that pins the route to a single-hostname listener is right for `publicAddr` and
+  # rejects every other zone's hostname. Each entry names a zone from `kasmZones` and carries its own
+  # `parentRefs`; zones without an entry use `httpRoute.parentRefs`.
+  # Example:
+  #   zones:
+  #     - name: zoneb
+  #       parentRefs:
+  #         - name: kasm-gateway
+  #           namespace: kube-system
+  #           sectionName: zoneb-https
+  #
+  zones: []
   # httpRoute.backendProtocol -- The protocol the Gateway uses to reach the Kasm proxy Service.
   # Valid values: http or https
   #
@@ -431,6 +444,10 @@ database:
   # database.port -- The port Kasm will use to connect to the PostgreSQL DB server
   #
   port: 5432
+  # database.ssl -- Connect to PostgreSQL over TLS. The bundled database serves TLS and most managed
+  # services require it; set `false` for an external server that only speaks plain TCP.
+  #
+  ssl: true
   # database.kasmDbName -- The name of the database where Kasm is to be initialized and that Kasm services are to connect
   #
   kasmDbName: kasm

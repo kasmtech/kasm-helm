@@ -62,7 +62,7 @@ spec:
             - name: POSTGRES_MAX_OVERFLOW
               value: "20"
             - name: KASM_DB_SSL
-              value: "true"
+              value: {{ $.Values.database.ssl | quote }}
             {{- include "kasm.trustedCaEnv" $ | indent 12 }}
             - name: "SERVER_ZONE_NAME"
               value: {{ $zone.name | quote }}

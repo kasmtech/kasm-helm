@@ -43,3 +43,29 @@ tests:
           content:
             name: POSTGRES_HOST
             value: postgresql.example.test
+
+  - it: connects over TLS by default
+    templates:
+      - templates/api-deployment.yaml
+      - templates/manager-deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KASM_DB_SSL
+            value: "true"
+
+  - it: database.ssl=false turns TLS off for the API, the manager and the app config they share
+    values:
+      - ../../../tests/values/external-db.yaml
+    set:
+      database.ssl: false
+    templates:
+      - templates/api-deployment.yaml
+      - templates/manager-deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KASM_DB_SSL
+            value: "false"

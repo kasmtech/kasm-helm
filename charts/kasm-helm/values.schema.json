@@ -1662,6 +1662,12 @@
           "title": "port",
           "type": "integer"
         },
+        "ssl": {
+          "default": true,
+          "description": "Connect to PostgreSQL over TLS. The bundled database serves TLS and most managed services require it; set false for an external server that only speaks plain TCP.",
+          "title": "ssl",
+          "type": "boolean"
+        },
         "postgresMasterUser": {
           "additionalProperties": false,
           "description": "An object defining the PostgreSQL DB Master user and the Kubernetes secret and key values for the Master DB password. These credentials are only used by the `db-init-job` to create the `kasmDbName` database, the `kasmDbUser` user account, set permissions for the user account, and initialize and pre-seed the Kasm Database.",
@@ -2648,6 +2654,56 @@
               "port": {
                 "type": "integer",
                 "title": "port"
+              }
+            }
+          }
+        },
+        "zones": {
+          "description": "Per-zone Gateway attachment, for zones that cannot share httpRoute.parentRefs: a sectionName pinned to a single-hostname listener rejects every other zone's hostname. Zones without an entry use httpRoute.parentRefs.",
+          "title": "zones",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "parentRefs"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "title": "name",
+                "description": "Zone name, matching an entry in kasmZones."
+              },
+              "parentRefs": {
+                "description": "Gateways to attach the route to. Passed through verbatim, so any field of a Gateway API ParentReference is accepted - name, namespace, sectionName, port, kind, group.",
+                "title": "parentRefs",
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "required": [
+                    "name"
+                  ],
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "title": "name"
+                    },
+                    "namespace": {
+                      "type": "string",
+                      "title": "namespace"
+                    },
+                    "sectionName": {
+                      "type": "string",
+                      "title": "sectionName"
+                    },
+                    "port": {
+                      "type": "integer",
+                      "title": "port"
+                    }
+                  }
+                }
               }
             }
           }

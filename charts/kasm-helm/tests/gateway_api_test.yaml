@@ -214,3 +214,40 @@ tests:
           path: spec.rules[0].backendRefs[0].name
           value: RELEASE-NAME-rdp-gateway-zoneb
         documentIndex: 1
+
+  - it: httpRoute.zones gives a zone its own listener while the others keep httpRoute.parentRefs
+    template: templates/httproute.yaml
+    values:
+      - ../../../tests/values/multizone-config.yaml
+    set:
+      httpRoute:
+        enabled: true
+        parentRefs:
+          - name: kasm-gateway
+            namespace: kube-system
+            sectionName: kasm-https
+        zones:
+          - name: zoneb
+            parentRefs:
+              - name: kasm-gateway
+                namespace: kube-system
+                sectionName: zoneb-https
+    asserts:
+      - hasDocuments:
+          count: 3
+      - equal:
+          path: spec.parentRefs[0].sectionName
+          value: kasm-https
+        documentIndex: 0
+      - equal:
+          path: spec.parentRefs[0].sectionName
+          value: kasm-https
+        documentIndex: 1
+      - equal:
+          path: spec.parentRefs[0].sectionName
+          value: zoneb-https
+        documentIndex: 2
+      - equal:
+          path: spec.hostnames[0]
+          value: zoneb.kasm.example.com
+        documentIndex: 2

@@ -16,7 +16,7 @@ data:
       host: db
       port: 5432
       type: postgres
-      ssl: true
+      ssl: {{ $.Values.database.ssl }}
       pool_size: 10
       max_overflow: 20
       pool_timeout: 10

@@ -12,9 +12,18 @@
   (certificate.secretName, or the cert-manager Certificate) has to be referenced
   from that listener's certificateRefs, and needs a ReferenceGrant when the
   Gateway lives in another namespace.
+
+  Every route attaches through httpRoute.parentRefs unless httpRoute.zones names
+  the zone: a sectionName that pins the publicAddr route to a single-hostname
+  listener would reject every other zone's hostname, so a zone that needs its
+  own listener carries its own parentRefs there.
 */}}
 {{- if .Values.httpRoute.enabled }}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $zoneRefs := dict -}}
+{{- range $z := .Values.httpRoute.zones -}}
+  {{- $zoneRefs = set $zoneRefs $z.name $z.parentRefs -}}
+{{- end -}}
 {{- $primaryZone := (include "kasm.primaryZone" . | fromYaml) -}}
 {{- $backendPort := ternary $constants.proxy.https $constants.proxy.http (eq .Values.httpRoute.backendProtocol "https") -}}
 apiVersion: gateway.networking.k8s.io/v1
@@ -31,6 +40,7 @@ spec:
         - name: {{ printf "%s-%s" $constants.proxy.svc (include "kasm.zoneName" $primaryZone.name) }}
           port: {{ $backendPort }}
 {{- range $idx, $zone := .Values.kasmZones }}
+{{- $refs := (get $zoneRefs $zone.name) | default $.Values.httpRoute.parentRefs }}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -38,7 +48,7 @@ metadata:
   {{- include "kasm.metadata" (dict "context" $ "component" "proxy" "resource" "httpRoute" "zone" $zone.name "include" "all") | indent 2 }}
 spec:
   parentRefs:
-    {{- toYaml $.Values.httpRoute.parentRefs | nindent 4 }}
+    {{- toYaml $refs | nindent 4 }}
   hostnames:
     - {{ include "kasm.zoneProxyHostnameRequired" $zone | quote }}
   rules:
