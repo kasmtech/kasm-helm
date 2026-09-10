@@ -14,9 +14,8 @@ Privileged DaemonSet that chains a CNI shim into every node's active CNI conflis
 
 ## Read this before installing
 
-This chart has been validated in a live k3s cluster (install, pod scheduling through the chained shim, crash restart, and graceful uninstall). It was ported from `kasm-kubernetes-operator`'s
-unmerged `feature/DEV-228-k8s-agent-egress` branch; see `docs/egress-installer-port-notes.md` in
-kasm-monorepo for the full review it's based on. Two findings from that review matter enough to repeat
+This chart has been validated in a live k3s cluster (install, pod scheduling through the chained shim,
+crash restart, and graceful uninstall). Two findings from its security review matter enough to state
 here:
 
 1. **Graceful shutdown cleans up after itself; a crash does not (until the next start).** This
@@ -41,8 +40,13 @@ here:
    `ClusterPolicy` with an unconditional `disallow-host-namespaces` rule and no exception mechanism). That
    is a genuine, unresolved policy conflict, not a chart bug — it needs an explicit decision (a scoped
    policy exception, or accepting this workload sits outside the baseline policy set), not a silent bypass.
+This page is the chart reference; the [documentation index](../../docs/README.md) has the tutorial and the how-to guides.
 
 ## What this chart does
+
+The control-plane side of egress (providers, gateways, credentials, assignment) is configured as on
+any Kasm and documented in [Egress in the Kasm documentation](https://www.kasmweb.com/docs/latest/guide/egress.html). This chart is the
+Kubernetes node-side piece only.
 
 1. The daemon starts, installs its bundled `kasm-egress-cni` binary onto the host's CNI bin directory, and
    patches every `.conflist` file it finds in `cniConfDirs` to chain that shim into the plugin list —

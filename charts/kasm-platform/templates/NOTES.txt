@@ -156,6 +156,7 @@ KUBERNETES AGENT
     1. Infrastructure -> the registered agent -> Enable. New agents register DISABLED, and a
        session requested before that fails with "No resources are available". Allow one
        heartbeat interval (~15s) after enabling; re-registering after a gap disables it again.
+       (To skip this click on future registrations, enable the manager setting "Automatically Enable Agents" - see docs/how-to/enable-agents-automatically.md.)
     2. Workspaces -> the image -> assign it to the users' group, or launches fail with
        "Image Not Authorized".
 {{- if and (not $cpEnabled) (or $managerDerived $tokenDerived $publicDerived) }}

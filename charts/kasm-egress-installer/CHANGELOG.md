@@ -7,6 +7,7 @@ All notable changes to the kasm-egress-installer chart are documented here.
 ### Changed
 
 - `cniBinDir` now derives from a `distro` preset (`k3s` default -> `/var/lib/rancher/k3s/data/cni`, `vanilla` -> `/opt/cni/bin`) when left empty, instead of hardcoding `/opt/cni/bin`. The old default was wrong for k3s: the shim installed where the k3s runtime never reads plugins, so it was silently never invoked (pods got no egress tunnel, with no error). An explicit `cniBinDir` still overrides the preset; an unrecognized `distro` fails rendering rather than guessing a path.
+- README states the two security findings plainly, without the references to an unmerged branch and to a file in another repository; the first section links the docs index. The HTML values-table template moved to the shared `_templates.gotmpl`.
 
 ### Added
 

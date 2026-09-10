@@ -25,6 +25,8 @@ Please see our [official documentation site](https://docs.kasm.com) for more inf
 
 > **Note:** Make sure to select the correct Kasm Workspaces version in the top-right version selector on the documentation site to ensure the guides match your deployment.
 
+This repository's own documentation starts at the [documentation index](../../docs/README.md); this page is the chart reference.
+
 ## Prerequisites
 
 * Kubernetes 1.26 or newer — the shared floor for the whole `kasm-agent` family (older versions of Kubernetes may work, however, we try to keep this chart updated to [supported versions of Kubernetes](https://kubernetes.io/releases/))
@@ -37,11 +39,12 @@ Please see our [official documentation site](https://docs.kasm.com) for more inf
 
 * An `Agent` custom resource. The operator reconciles it into the agent Deployment, the session-proxy Deployment, and a session-proxy Service named `<name>-session-proxy`. None of those are created by this chart.
 * A `Secret` holding the manager token, only when the token is supplied inline via `manager.token`. Referencing an existing Secret through `manager.existingTokenSecret` is preferred and takes precedence.
+* The session proxy's TLS `Secret`, named by `sessionProxy.certSecretName` (`kasm-session-proxy-tls`), self-signed, whenever `sessionProxy.selfSigned.enabled` is true and `sessionProxy.certificate.enabled` is false. The template looks that Secret up at render time and does one of three things: no Secret of that name exists, so it generates one (also the `helm template` and `--dry-run` path); the Secret exists and this release owns it, so it reuses the bytes, regenerating them only when the `self-signed-for` marker no longer matches `publicHostname`; the Secret exists and someone else created it, so it renders nothing and the proxy mounts that Secret as-is. Pre-create the Secret before the first install to bring your own certificate.
 * Optionally, a cert-manager `Certificate` for the session proxy's HTTPS listener, a `KasmImagePuller` that pre-stages workspace images on every node, and - to expose the session proxy at the agent's public hostname - one of a Gateway API `HTTPRoute`, a Gateway API `TLSRoute`, a classic `networking.k8s.io/v1` `Ingress`, or an OpenShift `Route`. The `TLSRoute` can instead be delegated to the operator via `gatewayRoute`, in which case this chart creates no route object of its own. The session-proxy Service can also be published directly, without any of those, through `sessionProxy.service`.
 
 ## External access
 
-The session-proxy Service the operator creates is a `ClusterIP` by default, reachable only inside the cluster. This chart offers five mutually exclusive ways to publish it at `publicHostname`; enable at most one, because all of them point at the same Service:
+The session-proxy Service the operator creates is a `ClusterIP` by default, reachable only inside the cluster. This chart offers five mutually exclusive ways to publish it at `publicHostname`:
 
 * `httpRoute.enabled` renders a Gateway API `HTTPRoute` attached to the Gateways in `httpRoute.parentRefs`. The Gateway's listener has to allow routes from this namespace. Only the `parentRefs` cross namespaces, so no `ReferenceGrant` is needed.
 * `ingress.enabled` renders a `networking.k8s.io/v1` `Ingress` on `ingress.className`, with one `/` `Prefix` rule per entry in `ingress.hosts`, TLS from `ingress.tls`, and annotations from `ingress.annotations` merged over `commonAnnotations`.
@@ -49,15 +52,16 @@ The session-proxy Service the operator creates is a `ClusterIP` by default, reac
 * `gatewayRoute.enabled` asks the **operator** to create a Gateway API `TLSRoute` - SNI-based TLS passthrough, the same end-to-end shape as the OpenShift `Route` but on any cluster with the Gateway API.
 * `tlsRoute.enabled` renders that same passthrough `TLSRoute` **from this chart** instead.
 
-All five default their hostname to `publicHostname`.
+All five default their hostname to `publicHostname`, and **at most one may be enabled**: all of them front the same Service, so enabling two gives one hostname two owners. The chart fails the render with an explicit message naming the colliding values rather than letting the conflict reach the cluster. `httpRoute` and `tlsRoute` are also refused with an empty `parentRefs`, because the route would attach to no Gateway and the session proxy would stay unreachable.
 
 Or skip the ingress layer entirely and publish the session-proxy Service itself - see below.
 
-### `gatewayRoute` vs `tlsRoute` — who owns the route
+### `gatewayRoute` vs `tlsRoute`: who owns the route
 
-Both produce a `TLSRoute` doing SNI-based passthrough to the session proxy, and both need the same things from the cluster: the `TLSRoute` CRD — in the Gateway API **standard** channel as `v1` since release 1.5, which needs Kubernetes 1.31 or newer (the chart-managed route falls back to `v1alpha2` on older, experimental-channel installs; see `tlsRoute.apiVersion`) — and the Gateway needs a listener with `protocol: TLS` and `tls.mode: Passthrough` whose `allowedRoutes` admits this namespace. What differs is ownership.
+Both produce a `TLSRoute` doing SNI-based passthrough to the session proxy, and both need the same things from the cluster: the `TLSRoute` CRD (standard-channel `v1` since Gateway API 1.5, which needs Kubernetes 1.31 or newer; the chart-managed route falls back to `v1alpha2` on older experimental-channel installs, see `tlsRoute.apiVersion`) and a Gateway listener with `protocol: TLS` and `tls.mode: Passthrough` whose `allowedRoutes` admits this namespace. What differs is ownership.
 
-**Prefer `gatewayRoute` when the operator supports it.** The operator creates and reconciles the route itself, alongside the session-proxy Service it already owns, so the two cannot drift apart:
+* `gatewayRoute`: the **operator** creates and reconciles the route alongside the session-proxy Service it already owns, so the two cannot drift apart. `gatewayRoute.parentRef` is a **single** reference, and `parentRef.name` is required whenever `gatewayRoute.enabled` is true (templating fails without it). Leave `gatewayRoute.hostnames` empty: the operator defaults it to `[publicHostname]`. Prefer this when the operator supports it.
+* `tlsRoute`: the route is a Helm-release object, owned by the release and torn down with it. It takes a list of `parentRefs`, defaults `hostnames` to `publicHostname`, and exposes `backendPort` (4444, the proxy's own HTTPS listener). Reach for it when the operator predates `spec.gatewayRoute`, or when release tooling has to own the route.
 
 ```yaml
 gatewayRoute:
@@ -68,31 +72,18 @@ gatewayRoute:
     sectionName: tls-passthrough   # optional: pick one listener on the Gateway
 ```
 
-Note the shape: `gatewayRoute.parentRef` is a **single** reference, where `tlsRoute.parentRefs` is a list. `parentRef.name` is required whenever `gatewayRoute.enabled` is true and templating fails without it. `gatewayRoute.hostnames` is left empty in the normal case — the *operator* defaults it to `[publicHostname]`, so this chart omits the field rather than filling it in.
+### LoadBalancer / NodePort: no ingress layer at all
 
-Reach for `tlsRoute` when the operator predates `spec.gatewayRoute`, or when the route has to be a Helm-release object — owned by the release, torn down with it, patched by other release tooling — rather than an operator-owned one. That path takes a list of `parentRefs`, defaults `hostnames` to `publicHostname` in the chart, and exposes a `backendPort` (4444, the proxy's own HTTPS listener).
-
-### LoadBalancer / NodePort — no ingress layer at all
-
-Publishing the session proxy directly — a cloud NLB straight onto sessions, a corporate load
-balancer forwarding to NodePorts, external SSL termination handing plain HTTP to the cluster — is
-first-class: `sessionProxy.service` is passed through to the Agent, and the operator applies it to
-the session-proxy Service it owns. The whole block is omitted from the Agent resource while it holds
-nothing but defaults, so leaving it alone keeps the plain `ClusterIP` the operator creates on its
-own; any single non-default value pulls it in.
-
-NodePort with pinned ports, preserving the client IP:
+`sessionProxy.service` is passed through to the `Agent`, and the operator applies it to the session-proxy Service it owns. The whole block is omitted from the resource while it holds nothing but defaults, so leaving it alone keeps the plain `ClusterIP`; any single non-default value pulls it in.
 
 ```yaml
 sessionProxy:
   service:
     type: NodePort
-    externalTrafficPolicy: Local   # real client IPs; see the caveat below
+    externalTrafficPolicy: Local   # real client IPs; routes only through nodes running a proxy pod
     httpsNodePort: 30443           # the proxy's own TLS listener (4444)
     httpNodePort: 30080            # plain HTTP (4445), for TLS terminated in front
 ```
-
-LoadBalancer with cloud annotations:
 
 ```yaml
 sessionProxy:
@@ -105,77 +96,7 @@ sessionProxy:
       service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
 ```
 
-`httpsNodePort` and `httpNodePort` are only worth pinning when a firewall rule or an external load
-balancer has to be aimed at a fixed port: the operator carries the ports Kubernetes allocated across
-reconciles, so an unpinned NodePort stays stable in practice anyway. Both must fall inside the
-cluster's node-port range — the CRD rejects anything outside 30000–32767.
-
-Two caveats carry over regardless of how the Service is created. With `networkPolicies` enabled the
-session-ingress allow must cover the exposure path (`networkPolicies.sessionProxy.ports` already
-admits 4444/4445 from anywhere by default). And NodePort reachability from outside depends on your
-environment actually routing the 30000–32767 range to the nodes — VM/cloud firewalls that only
-forward 443/80 will refuse the connection before Kubernetes ever sees it (verified: the same
-NodePort answers in-cluster while an unrouted LAN client gets connection-refused).
-
-#### Preserving the client IP
-
-Two independent mechanisms, at different layers; pick the one that matches how traffic actually
-reaches the proxy.
-
-`sessionProxy.service.externalTrafficPolicy: Local` works at **L4**. `Cluster`, the Kubernetes
-default, SNATs the connection, so the session proxy logs the node's address instead of the user's.
-`Local` skips that SNAT — but it also only routes traffic through nodes that are hosting a
-session-proxy pod, and a node without one blackholes the connection. Pair it with a load balancer
-that honours the Service's health check, or make sure every node it advertises runs a proxy pod
-(raise `sessionProxy.replicas`, or pin the pods with `nodeSelector`).
-
-`sessionProxy.proxyProtocol` works at **L7**, for an external L4 proxy that cannot set
-`X-Forwarded-For` but can prepend a PROXY protocol header:
-
-```yaml
-sessionProxy:
-  proxyProtocol:
-    enabled: true
-    trustedCIDRs:               # the fronting LB's own source range
-      - 10.0.0.0/16
-```
-
-This one is all-or-nothing and needs both ends configured. Enabling it turns on `proxy_protocol` on
-both nginx listeners, and nginx then **requires** a PROXY header on every connection with no
-fallback: once it is on, anything connecting directly — a browser hitting the NodePort, a health
-check, `curl` against the Service — fails on those listeners. Turn it on only together with the
-matching setting on the load balancer in front (for example
-`service.beta.kubernetes.io/aws-load-balancer-proxy-protocol: "*"` in
-`sessionProxy.service.annotations`). `trustedCIDRs` is the set of source ranges nginx trusts to send
-an accurate header — normally the fronting load balancer's address range: its node subnet, the cloud
-LB's CIDR, the MetalLB pool.
-
-#### Older operator builds
-
-Before the operator grew `sessionProxy.service`, the working pattern was a **second Service** you
-own, deployed through the umbrella chart's `extraObjects` — the operator ignores it, and its
-selector matches the proxy pods, whose labels are stable. It still works, and remains the fallback
-when running an operator that predates the field:
-
-```yaml
-# kasm-agent umbrella values — alongside agent.*
-extraObjects:
-  - apiVersion: v1
-    kind: Service
-    metadata:
-      # "k8s-agent" is the default agent.name — keep the two in sync if you change it.
-      name: k8s-agent-session-proxy-external
-    spec:
-      type: LoadBalancer             # or NodePort
-      externalTrafficPolicy: Local
-      selector:
-        app.kubernetes.io/name: k8s-agent          # = agent.name
-        app.kubernetes.io/component: session-proxy
-      ports:
-        - name: https                # the proxy's own TLS listener
-          port: 443
-          targetPort: 4444
-```
+`httpsNodePort` and `httpNodePort` must fall inside the cluster's node-port range: the CRD rejects anything outside 30000-32767. They are only worth pinning when a firewall rule or an external load balancer has to be aimed at a fixed port; the operator carries allocated ports across reconciles, so an unpinned NodePort stays stable anyway. `sessionProxy.proxyProtocol.enabled` (with `trustedCIDRs`, the fronting load balancer's source range) turns on PROXY protocol on both nginx listeners; it is all-or-nothing, so anything that connects without a PROXY header then fails on those listeners. Client-IP preservation, NodePort reachability and the NetworkPolicy interaction are in [Publish with a LoadBalancer or NodePort](../../docs/how-to/networking/loadbalancer-nodeport.md).
 
 ### Where TLS terminates
 
@@ -217,12 +138,13 @@ The two passthrough routes (`gatewayRoute`, `tlsRoute`) and direct `sessionProxy
 
 ## Required values
 
-Two values have no defaults and must be set:
+Three values have no default and must be set, unless `inClusterControlPlane: true` derives them from a `kasm-helm` release of the same name in the same namespace:
 
 * `manager.hostname` - the Kasm manager (or the proxy in front of it) this agent registers with.
+* exactly one of `manager.existingTokenSecret` or `manager.token` - the registration token.
 * `publicHostname` - the externally reachable address browsers use to connect to this agent's session proxy.
 
-Exactly one of `manager.existingTokenSecret` or `manager.token` must also be set. Templating fails with a specific message when any of these is missing.
+Templating fails with a specific message when any of these is missing. `sessionProxy.certSecretName` is not one of them: the chart generates a self-signed Secret at that name unless one already exists (see [What this chart deploys](#what-this-chart-deploys)).
 
 ## Environment variables
 

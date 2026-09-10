@@ -50,6 +50,7 @@ A freshly registered agent shows up DISABLED in the Kasm admin UI (Infrastructur
 Enable it there, allow one heartbeat interval before launching a session, and make sure the
 workspaces you want are authorized for the users' group. Re-registering after a gap sets the
 agent back to disabled.
+(To skip this click on future registrations, enable the manager setting "Automatically Enable Agents" - see docs/how-to/enable-agents-automatically.md.)
 {{ end }}
 {{- if $agentEnabled }}
 {{- if not $certEnabled }}

@@ -15,9 +15,8 @@
 ## What this chart does
 
 Kubernetes will not schedule a pod onto a node because of a device file; it schedules on resources. This
-chart deploys Kasm's own video-device-plugin (built from `apps/kasm-video-device-plugin` in kasm-monorepo) as
-a DaemonSet that implements the kubelet Device Plugin API (v1beta1) and turns the node's video devices into a
-countable, allocatable extended resource:
+chart deploys Kasm's own video-device-plugin as a DaemonSet that implements the kubelet Device Plugin API
+(v1beta1) and turns the node's video devices into a countable, allocatable extended resource:
 
 1. The plugin scans `/dev` every 10 seconds for entries starting with `devicePrefix` (default `video`, so
    `video0`, `video1`, ...), sorted numerically by suffix so the advertised order stays stable as devices
@@ -36,6 +35,8 @@ find no devices and advertise a capacity of zero.
 
 Allocation is entirely kubelet's job here. There is no assignment tracking to configure and no way for two
 sessions to end up on the same virtual webcam.
+This page is the chart reference; the [documentation index](../../docs/README.md) has the tutorial and the how-to guides.
+
 
 ## Security posture
 
@@ -91,58 +92,6 @@ kubectl get nodes -o custom-columns='NODE:.metadata.name,VIDEO:.status.allocatab
 
 A node showing a capacity of `0` (or no value) has no `/dev/video*` devices; check the `kasm-node-prep` pod
 log on that node.
-
-{{ define "chart.valueDefaultColumnRender" }}
-{{- $defaultValue := (default .Default .AutoDefault)  -}}
-{{- $notationType := .NotationType }}
-{{- if (and (hasPrefix "`" $defaultValue) (hasSuffix "`" $defaultValue) ) -}}
-{{- $defaultValue = (toYaml (fromJson (trimAll "`" (default .Default .AutoDefault) ) ) ) -}}
-{{- $notationType = "json" }}
-{{- end -}}
-{{- if (eq $notationType "tpl" ) }}
-<pre lang="{{ $notationType }}">
-{{ .Key }}: |
-{{- $defaultValue | nindent 2 }}
-</pre>
-{{- else if (eq $notationType "email") }}
-<a href="mailto:{{ $defaultValue }}" style="color: green;">"{{ $defaultValue }}"</a>
-{{- else }}
-<pre lang="{{ $notationType }}">
-{{ $defaultValue }}
-</pre>
-{{- end }}
-{{ end }}
-
-{{ define "chart.typeColumnRender" }}
-{{- if (eq .Type "string/email") }}
-<a href="#stringemail" title="{{- template "chart.valuetypes.email" -}}">{{.Type}}</a>
-{{- else }}
-{{ .Type }}
-{{- end }}
-{{ end }}
-
-{{ define "chart.valuesTableHtml" }}
-<table>
-	<thead>
-		<th>Key</th>
-		<th>Type</th>
-		<th>Default</th>
-		<th>Description</th>
-	</thead>
-	<tbody>
-	{{- range .Values }}
-		<tr>
-			<td id="{{ .Key | replace "." "--" }}"><a href="./values.yaml#L{{ .LineNumber }}">{{ .Key }}</a></td>
-			<td>{{- template "chart.typeColumnRender" . -}}</td>
-			<td>
-				<div style="max-width: 520px;">{{ template "chart.valueDefaultColumnRender" . }}</div>
-			</td>
-			<td>{{ if .Description }}{{ .Description }}{{ else }}{{ .AutoDescription }}{{ end }}</td>
-		</tr>
-	{{- end }}
-	</tbody>
-</table>
-{{ end }}
 
 ## Chart value settings in `values.yaml`
 

@@ -1,22 +1,18 @@
-# kasm-agent values for the RECOMMENDED two-namespace, single-cluster deployment — the
-# counterpart of a kasm-helm control-plane install in namespace `kasm` (see
-# examples/kasm-agent/single-cluster-control-plane-values.yaml for that half, and
-# "Running alongside the kasm-helm control plane" in charts/kasm-agent/README.md for the
-# full walkthrough).
+# kasm-agent values for the two-namespace, single-cluster layout: the control plane (kasm-helm)
+# in namespace `kasm`, this agent in namespace `kasm-agent`, DIRECT connections. The other half
+# is examples/kasm-agent/single-cluster-control-plane-values.yaml. The layout and its trade-offs:
+# docs/how-to/install/two-namespaces.md.
 #
-# Two namespaces is the recommended layout because it keeps the blast radii apart:
-#   * the `privileged` Pod Security Standard that nodePrep / videoDevicePlugin require
-#     stays confined to THIS namespace — the control plane keeps normal enforcement;
-#   * the umbrella's baseline NetworkPolicies can be ENABLED here (below) without any
-#     risk of cutting off control-plane traffic, which is why this file turns them on
-#     while the shared-namespace example must leave them off.
+# Two namespaces keeps the blast radii apart: the `privileged` Pod Security Standard that
+# nodePrep / videoDevicePlugin / egressInstaller need stays confined to THIS namespace, and the
+# umbrella's baseline NetworkPolicies can be enforced here (below) without cutting off the
+# control plane.
 #
-# Install order (control plane first — the agent needs its zone and token):
+# Install order (control plane first: the agent needs its zone and token):
 #
 #   # 1. Control plane
-#   helm install kasm charts/kasm-helm -n kasm --create-namespace \
+#   helm install kasm oci://registry-1.docker.io/kasmweb/kasm-helm -n kasm --create-namespace \
 #     -f examples/kasm-agent/single-cluster-control-plane-values.yaml
-#   kubectl label namespace kasm kasm.com/role=manager   # optional; only for direct manager->workspace ingress
 #
 #   # 2. Copy the registration token across (Secrets do not cross namespaces)
 #   kubectl create namespace kasm-agent
@@ -25,16 +21,24 @@
 #       -o jsonpath='{.data.manager-token}' | base64 -d)"
 #
 #   # 3. The agent (this file)
-#   helm dependency build charts/kasm-agent
-#   helm install kasm-agent charts/kasm-agent -n kasm-agent \
+#   helm install kasm-agent oci://registry-1.docker.io/kasmweb/kasm-agent -n kasm-agent \
 #     -f examples/kasm-agent/single-cluster-agent-values.yaml
 #
-# Hostname plan — both under ONE parent domain (the control-plane values seed
-# kasm_auth_domain to that parent, so the session cookie reaches both):
+#   (From a checkout: `make deps-agent` first, then charts/kasm-helm and charts/kasm-agent in
+#   place of the OCI references.)
+#
+# Out-of-chart prerequisites: an ingress controller (traefik below), DNS for
+# sessions.example.com pointing at it, and a kubernetes.io/tls Secret `kasm-agent-public-tls`
+# in namespace kasm-agent for that hostname (or cert-manager). The `kasm.com/role=manager` label
+# on the control plane's namespace is optional and only needed for direct manager->workspace
+# ingress.
+#
+# Placeholders: every example.com hostname and the TLS Secret name.
+#
+# Hostname plan, both under ONE parent domain (the control-plane values seed kasm_auth_domain
+# to that parent, so the session cookie reaches both):
 #   control plane UI/API:  kasm.example.com        (that file's publicAddr)
 #   agent session proxy:   sessions.example.com    (agent.publicHostname here)
-#
-# Replace every example.com hostname and the TLS handling before use.
 
 agent:
   manager:
@@ -52,9 +56,10 @@ agent:
   zone: default
 
   sessionProxy:
-    # TLS for sessions.example.com, served by the session proxy itself. Either create
-    # this Secret out of band, or uncomment the certificate block to have cert-manager
-    # issue and renew it.
+    # The session proxy's own TLS Secret. The chart generates a self-signed one at this
+    # name unless a Secret of that name already exists; with the Ingress below
+    # terminating TLS, browsers never see it. Pre-create it, or uncomment the
+    # certificate block, for a real one.
     certSecretName: kasm-session-proxy-tls
     # certificate:
     #   enabled: true
@@ -62,9 +67,10 @@ agent:
     #     name: letsencrypt
     #     kind: ClusterIssuer
 
-  # Expose the session proxy on publicHostname. Pick exactly ONE of ingress /
-  # httpRoute / route (OpenShift). Kasm sessions are long-lived websockets: the
-  # controller must allow upgrades and use read/send timeouts of at least 3600s.
+  # Expose the session proxy on publicHostname. Exactly ONE of ingress / httpRoute /
+  # route (OpenShift) / tlsRoute / gatewayRoute may be enabled; the chart refuses to
+  # render more than one. Kasm sessions are long-lived websockets: the controller must
+  # allow upgrades and use read/send timeouts of at least 3600s.
   ingress:
     enabled: true
     className: traefik
@@ -105,8 +111,8 @@ networkPolicies:
 #     sysctls:
 #       enabled: true          # desktop-density inotify limits
 #     swap:
-#       enabled: true          # requires kubelet fail-swap-on=false first — see
-#                              # examples/kasm-agent/k3s-node-swap-config.yaml
+#       enabled: true          # requires kubelet fail-swap-on=false first; see
+#                              # docs/how-to/nodes/tuning-and-swap.md
 # videoDevicePlugin:
 #   enabled: true              # advertises /dev/video* as kasm.com/video
 # csiRclone:

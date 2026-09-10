@@ -1,27 +1,29 @@
-# Whole-stack values for the kasm-platform umbrella chart: the Kasm control plane and the
-# Kubernetes agent, one release, one namespace.
+# kasm-platform values: the control plane and the Kubernetes agent as ONE release in ONE
+# namespace, switched from the relayed default to DIRECT connections (browsers reach the
+# session proxy on its own hostname). The relayed default needs no values at all; that install
+# is docs/tutorials/get-started.md. This layout and its trade-offs: docs/how-to/install/one-cluster.md.
 #
-#   helm dependency build charts/kasm-agent      # inside-out: agent deps first
-#   helm dependency build charts/kasm-platform   # (or just: make deps-agent)
-#   helm install kasm charts/kasm-platform -n kasm --create-namespace \
+#   helm install kasm oci://registry-1.docker.io/kasmweb/kasm-platform -n kasm --create-namespace \
 #     -f examples/kasm-agent/platform-values.yaml --timeout 20m
-#   kubectl label namespace kasm kasm.com/role=manager   # optional; only for direct manager->workspace ingress
 #
-# The `--timeout 20m` is not optional padding: the control plane's database initialization and the
-# first image pulls for both halves take a while on a cold cluster.
+# (From a checkout: `make deps-agent` first, then charts/kasm-platform in place of the OCI
+# reference.) The `--timeout 20m` covers database initialization and the first image pulls on a
+# cold cluster.
 #
-# Everything under `kasm-helm:` is a charts/kasm-helm value and everything under `kasm-agent:` is a
-# charts/kasm-agent value; see those two charts' READMEs for the full references, and the "Running
-# alongside the kasm-helm control plane" section of charts/kasm-agent/README.md for why the
-# pairing needs the settings it does.
+# Out-of-chart prerequisites: an ingress controller (traefik below), DNS for both hostnames
+# pointing at it, and two kubernetes.io/tls Secrets in namespace kasm, `kasm-tls` for
+# kasm.example.com and `kasm-agent-public-tls` for sessions.example.com (or cert-manager for
+# both). The `kasm.com/role=manager` namespace label is optional and only needed for direct
+# manager->workspace ingress.
 #
-# Hostname plan — both under ONE parent domain, because the session cookie has to reach both:
+# Placeholders: every example.com hostname, the manager token, and the TLS Secret names.
+# NOTHING HERE IS A REAL SECRET. Everything under `kasm-helm:` is a charts/kasm-helm value and
+# everything under `kasm-agent:` a charts/kasm-agent value; their READMEs are the value references.
+#
+# Hostname plan, both under ONE parent domain (the session cookie has to reach both):
 #   control plane UI/API:  kasm.example.com        (kasm-helm.publicAddr)
 #   agent session proxy:   sessions.example.com    (kasm-agent.agent.publicHostname)
-#   auth cookie domain:    example.com             (kasm-helm.kasmConfig.authDomain below)
-#
-# Replace every example.com hostname, the manager token, and the TLS Secret names before use.
-# NOTHING HERE IS A REAL SECRET.
+#   auth cookie domain:    example.com             (kasm-helm.kasmConfig.authDomain)
 
 # ---------------------------------------------------------------------------------------------
 # The umbrella's own values
@@ -64,14 +66,15 @@ kasm-helm:
       # block creates when you first sign in.
       manager-token: "change-me-agent-registration-token"
 
-  # Two zone defaults break Kubernetes-agent sessions, and both are preseed-able on a FRESH
-  # database (the preseed only runs at database initialisation; on an existing control plane make
-  # the same two changes in the admin UI under Infrastructure -> Zones):
-  #   proxy_connections: false      browsers connect straight to the agent's hostname instead of
-  #                                 being relayed through the control-plane proxy, which forwards
-  #                                 the original Host header and 404s behind host-routing ingress.
-  #   upstream_auth_address         where the agent-side session proxy validates sessions; the
-  #                                 $request_host$ default points it at the agent's own hostname.
+  # The relayed default needs none of the zone settings below: browsers talk only to the control
+  # plane, whose proxy reaches the session proxy inside the cluster. This file switches the zone
+  # to DIRECT connections, where browsers reach the session proxy on its own hostname. Both
+  # settings are preseeded on a FRESH database only; on an existing control plane make the same
+  # two changes in the admin UI under Infrastructure -> Zones.
+  #   proxy_connections: false      browsers connect to the agent's hostname instead of being
+  #                                 relayed through the control-plane proxy.
+  #   upstream_auth_address         where the agent-side session proxy validates sessions: the
+  #                                 control plane's publicAddr, not the $request_host$ default.
   kasmZones:
     - name: default
       proxy_hostname: kasm.example.com
@@ -83,24 +86,16 @@ kasm-helm:
     generatePreseed: true
 
     # The PARENT domain of publicAddr and kasm-agent.agent.publicHostname. It scopes the Kasm
-    # session cookie (`kasm_auth_domain`); the $request_host$ default pins the cookie to the
-    # control-plane hostname and every direct session connection 401s.
-    #
-    # Applied at database initialization, so this covers FRESH INSTALLS only. On an existing
-    # database, change it in the admin UI (Settings -> Auth) or with the 3-call admin API
-    # sequence in charts/kasm-platform/README.md.
-    #
-    # Note this is NOT a kasmConfig.config.settings entry. Routing kasm_auth_domain through
-    # config.settings used to be the broken path — the settings preseed concatenated rather than
-    # upserted, and the duplicate row made /api/authenticate 500 with MultipleResultsFound. That
-    # merge now upserts on name + category, so config.settings is safe for seed-existing settings
-    # too, but authDomain is the supported route here: it is applied last, against the finished
-    # seed file, so it wins over the merge and over existingDefaultPropertiesSecret.
+    # session cookie (kasm_auth_domain) so the cookie reaches both hostnames; only direct
+    # connections need it. Applied at database initialization, so fresh installs only: on an
+    # existing database set it in the admin UI (Settings -> Auth). It is applied last, against
+    # the finished seed file, so it wins over kasmConfig.config.settings and over
+    # existingDefaultPropertiesSecret.
     authDomain: example.com
 
     # Optionally seed workspace images at database initialization too, so the library is
     # not empty on first login (a fresh Kasm database seeds no workspaces). Uncomment and
-    # adapt — the full field reference is in charts/kasm-helm/docs/preseed.md:
+    # adapt; the full field reference is in docs/reference/preseed.md:
     # config:
     #   images:
     #     - name: kasmweb/doom:develop
@@ -139,8 +134,9 @@ kasm-agent:
     zone: default
 
     sessionProxy:
-      # TLS for sessions.example.com, terminated by the session proxy itself. Either create this
-      # Secret out of band or let cert-manager issue it with sessionProxy.certificate.enabled.
+      # The session proxy's own TLS Secret. The chart generates a self-signed one at this name
+      # unless a Secret of that name already exists; with the Ingress below terminating TLS,
+      # browsers never see it. Pre-create it, or enable sessionProxy.certificate, for a real one.
       certSecretName: kasm-session-proxy-tls
       # certificate:
       #   enabled: true
@@ -148,8 +144,9 @@ kasm-agent:
       #     name: letsencrypt
       #     kind: ClusterIssuer
 
-    # Expose the session proxy on publicHostname. Pick exactly ONE of ingress / httpRoute / route.
-    # Kasm sessions are long-lived websockets: the controller must allow upgrades and use read and
+    # Expose the session proxy on publicHostname. Exactly ONE of ingress / httpRoute / route /
+    # tlsRoute / gatewayRoute may be enabled; the chart refuses to render more than one. Kasm
+    # sessions are long-lived websockets: the controller must allow upgrades and use read and
     # send timeouts of at least 3600s, or sessions are cut off mid-use.
     ingress:
       enabled: true

@@ -6,14 +6,16 @@ Umbrella chart for the Kasm Workspaces Kubernetes agent: operator, telemetry col
 
 **Homepage:** <https://kasm.com>
 
-A Kasm *agent* is the half of a Kasm Workspaces deployment that actually runs user sessions. It
-registers with a Kasm *manager* (installed separately by the `kasm-helm` chart, or already running
-elsewhere — including a Kasm-hosted one), and from then on the manager schedules workspaces into
-this cluster. This umbrella chart installs everything an agent needs on the Kubernetes side, plus
-the optional cluster infrastructure that individual Kasm features depend on.
+A Kasm *agent* is the half of a Kasm Workspaces deployment that runs user sessions. It registers
+with a Kasm *manager* (installed separately by the `kasm-helm` chart, or already running elsewhere,
+including a Kasm-hosted one), and from then on the manager schedules workspaces into this cluster.
+This umbrella chart installs everything an agent needs on the Kubernetes side, plus the optional
+cluster infrastructure that individual Kasm features depend on.
 
-> New to this? The [repository README](../../README.md#quickstart) has the shortest path from
-> nothing to one running session. This page is the full reference for everything below that.
+This page is the chart reference: what it installs, what the cluster has to supply, the values that
+interact, and the generated values table. Procedures live in the
+[documentation index](../../docs/README.md); [Get started](../../docs/tutorials/get-started.md) is
+the shortest path from nothing to one running session.
 
 ## What this chart installs
 
@@ -21,7 +23,7 @@ Each dependency is aliased, so every value below is set as `<alias>.<subchart va
 
 | Alias | Chart | Default | What it is |
 | ----- | ----- | ------- | ---------- |
-| `operator` | `kasm-agent-operator` | enabled | The CRDs, cluster RBAC, and controller-manager that reconcile `Agent`, `KasmWorkspace`, and `KasmImagePuller` resources. |
+| `operator` | `kasm-agent-operator` | enabled | The five CRDs (`Agent`, `KasmWorkspace`, `KasmImagePuller`, `WarmPool`, `WarmPoolInstance`), the cluster RBAC, and the controller-manager that reconciles them. |
 | `otelCollector` | `kasm-otel-collector` | enabled | An OpenTelemetry collector that receives traces, metrics, and logs from the operator, the agent, and workspace pods on ports 4317/4318, and forwards them to your telemetry backends. |
 | `agent` | `kasm-agent-instance` | enabled | The `Agent` resource that registers this cluster as a Kasm deployment zone, plus the session proxy users' browsers connect to. |
 | `nodePrep` | `kasm-node-prep` | disabled | A privileged DaemonSet that builds and loads host kernel modules (`v4l2loopback`, `wireguard`). |
@@ -33,6 +35,14 @@ Each dependency is aliased, so every value below is set as `<alias>.<subchart va
 
 On top of the subcharts, the umbrella itself owns only two things: an optional set of baseline
 namespace NetworkPolicies (`networkPolicies.*`) and an `extraObjects` escape hatch.
+
+The operator's five CustomResourceDefinitions arrive from its `crds/` directory: Helm creates them
+on install and never upgrades them. To put them under Helm's control instead, install
+[`kasm-agent-crds`](../kasm-agent-crds/README.md) as its own release before this one and upgrade it
+first thereafter; otherwise apply schema changes out of band with
+`kubectl apply --server-side -f charts/kasm-agent-operator/crds/`. Both paths are described in
+[CustomResourceDefinition lifecycle](../kasm-agent-operator/README.md#customresourcedefinition-lifecycle)
+and [Install the CRDs](../../docs/how-to/install/crds.md).
 
 ## Scope
 
@@ -70,249 +80,77 @@ A few boundaries worth knowing before you plan an install.
 
 ## Prerequisites
 
-Required for every install, regardless of which features you turn on:
+| Requirement | Why |
+| ----------- | --- |
+| Kubernetes 1.26+ (or OpenShift 4.10+) | The shared floor for the whole agent family (this umbrella and its six Kasm subcharts), set by the Gateway API v1 route types and the operator's CRDs. The control-plane `kasm-helm` chart, installed separately, has a lower floor of Kubernetes 1.24+. |
+| Helm 3.18 or newer | The charts are published to an OCI registry and use current chart features. |
+| A default StorageClass with dynamic provisioning | Workspace volumes and persistent profiles. |
+| Working in-pod DNS resolution (CoreDNS) | The agent, the session proxy and workspaces resolve Services by name. |
+| A reachable Kasm manager, and a registration token issued by it | What the agent registers with. See [Required values](#required-values). |
+| The `privileged` Pod Security Standard on the namespace | Only when `nodePrep`, `videoDevicePlugin` or `egressInstaller` is enabled. See [Cluster preparation checklist](#cluster-preparation-checklist). |
+| One way to publish the session proxy | Only for direct connections. On the relayed default the control plane reaches the proxy inside the cluster. See [External access](#external-access). |
 
-* Kubernetes 1.26+ (or OpenShift 4.10+) — the shared floor for the whole agent family (this umbrella and its six Kasm subcharts: operator, agent instance, telemetry collector, node prep, video device plugin, egress installer), set by the Gateway API v1 route types and the operator's CRDs
-* Helm 3
-* A default StorageClass with dynamic provisioning
-* Working in-pod DNS resolution (CoreDNS)
-* A reachable Kasm manager, and a registration token issued by it
+## Required values
 
-The control-plane `kasm-helm` chart, installed separately, has a lower floor of Kubernetes 1.24+.
+Three values have no default and cannot be guessed:
 
-## Quickstart
+| Value | What it is |
+| ----- | ---------- |
+| `agent.manager.hostname` | The Kasm manager, or the proxy in front of it, this agent registers with: the control plane's `publicAddr`. Leave `agent.manager.pathPrefix` at `/manager_api`, the path the control plane's proxy routes to the manager. |
+| `agent.manager.existingTokenSecret` (with `agent.manager.tokenSecretKey`), or `agent.manager.token` | The registration token. The control plane generates it as the `manager-token` key of Secret `<release>-secrets`. Prefer the Secret: an inline token lands in the release history in plain text. |
+| `agent.publicHostname` | The hostname browsers reach this agent's session proxy on. Direct connections need a real external hostname under the same parent domain as the control plane's; on the relayed default it is the in-cluster session-proxy Service. |
 
-The chart needs five things it cannot guess: which manager to register with, a token to register
-with, the hostname users will reach this agent's sessions on, a TLS certificate for the session
-proxy, and one way to publish that proxy to the internet.
+`agent.inClusterControlPlane: true` derives all three from a `kasm-helm` release of the same name in
+the same namespace, which is what `kasm-platform` does.
 
-Create the namespace, the manager token (as a Secret, rather than a value that lands in the release
-history), and the session proxy's certificate:
-
-```console
-kubectl create namespace kasm-agent
-
-kubectl create secret generic kasm-manager-token \
-  --namespace kasm-agent \
-  --from-literal=token='<registration token from the Kasm manager>'
-
-kubectl create secret tls kasm-agent-tls \
-  --namespace kasm-agent \
-  --cert=tls.crt --key=tls.key
-```
-
-Then a minimal `values.yaml`:
+Everything else has a default. `agent.zone` is `default`, the zone a fresh `kasm-helm` install seeds.
+The session proxy's TLS Secret (`agent.sessionProxy.certSecretName`, `kasm-session-proxy-tls`) is
+generated self-signed unless a Secret of that name already exists, in which case it is used as-is:
+pre-create it before the first install to bring your own certificate, or let cert-manager issue it
+with `agent.sessionProxy.certificate`. Browsers only see that certificate on direct connections.
 
 ```yaml
 agent:
   manager:
-    # The Kasm manager this agent registers with.
     hostname: kasm.example.com
-    existingTokenSecret: kasm-manager-token
-  # The hostname users' browsers reach this agent's session proxy on. It must differ from the
-  # manager's hostname and share a parent domain with it.
+    existingTokenSecret: kasm-manager-token   # key "token"
   publicHostname: sessions.example.com
-  sessionProxy:
-    # A kubernetes.io/tls Secret that already exists in the release namespace.
-    certSecretName: kasm-agent-tls
-  # Publish the session proxy. Enable exactly ONE of ingress / httpRoute / gatewayRoute /
-  # tlsRoute / route — see "External access" below.
-  ingress:
-    enabled: true
-    className: nginx
-    annotations:
-      # The one tuning value that is not optional: ingress-nginx cuts an idle websocket at 60s,
-      # so without these every session dies about a minute in.
-      nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
-      nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
-    tls:
-      - secretName: kasm-agent-tls
-        hosts:
-          - sessions.example.com
 ```
-
-Nothing else has to be set. `agent.zone` defaults to `default`, the zone a fresh `kasm-helm`
-install seeds — name yours only if it differs. `agent.manager.tokenSecretKey` defaults to `token`,
-the key the `kubectl create secret` above writes.
-
-Install from the published chart. The OCI artifact embeds every dependency, so there is no
-checkout and no dependency build:
 
 ```console
 helm install kasm-agent oci://registry-1.docker.io/kasmweb/kasm-agent \
-  --namespace kasm-agent \
-  --values values.yaml
+  --version 0.1.0 --namespace kasm-agent --create-namespace --values values.yaml
+kubectl get agents.agent.kasm.com -n kasm-agent   # PHASE reaches Ready once the manager accepts it
 ```
 
-Pin the version with `--version`, and check what is published before relying on a particular one:
+New agents register **disabled**. In the admin UI: **Infrastructure** → the agent → **Enable**,
+then **Workspaces** → the image → assign it to a group. The manager setting `auto_agent`
+("Automatically Enable Agents") skips the first click; see
+[Enable agents automatically](../../docs/how-to/enable-agents-automatically.md).
+`helm get notes kasm-agent -n kasm-agent` reprints the post-install notes, including any
+cross-feature warnings, at any time.
 
-```console
-helm install kasm-agent oci://registry-1.docker.io/kasmweb/kasm-agent \
-  --version 0.1.0 \
-  --namespace kasm-agent \
-  --values values.yaml
-```
+## Installing
 
-Confirm the agent registered — `PHASE` reaches `Ready` once the manager has acknowledged it:
-
-```console
-kubectl get agents.agent.kasm.com -n kasm-agent
-```
-
-Then, in the Kasm admin UI, **Infrastructure** → the new agent → **Enable**; agents register
-disabled. Post-install notes, including any cross-feature warnings, are available at any time with
-`helm get notes kasm-agent -n kasm-agent`.
-
-Either command installs the operator's five CustomResourceDefinitions from its `crds/` directory,
-which Helm creates on install and then never upgrades — so a later `helm upgrade` of this release
-does not pick up a CRD schema change. If you would rather Helm owned that lifecycle, install the
-[`kasm-agent-crds`](../kasm-agent-crds) chart as its own release **before** this one, and upgrade it
-before this one thereafter; otherwise apply schema changes out of band with
-`kubectl apply --server-side -f charts/kasm-agent-operator/crds/`. Both paths, and the procedure for
-adopting CRDs a previous install already created, are covered in
-[`charts/kasm-agent-operator/README.md`](../kasm-agent-operator/README.md#customresourcedefinition-lifecycle).
-
-Instead of supplying `agent.sessionProxy.certSecretName` yourself, you can have cert-manager issue
-and renew the certificate:
-
-```yaml
-agent:
-  sessionProxy:
-    certificate:
-      enabled: true
-      issuerRef:
-        kind: ClusterIssuer
-        name: letsencrypt-prod
-      dnsNames:
-        - sessions.example.com
-```
-
-Users' browsers connect to the session proxy directly, so its certificate has to be trusted by the
-client — a cluster-internal CA is not enough.
-
-`agent.manager.token` accepts the token inline if you would rather not pre-create a Secret, but the
-value then lives in your release history in plain text.
-
-A fuller, copy-paste-ready values file for a lab cluster — with commented variants — is checked in
-as [`dev-cluster-values.yaml`](../../examples/kasm-agent/dev-cluster-values.yaml).
+See [Get started](../../docs/tutorials/get-started.md),
+[Install on one cluster](../../docs/how-to/install/one-cluster.md),
+[Install in two namespaces](../../docs/how-to/install/two-namespaces.md) and
+[Add an agent cluster to an existing control plane](../../docs/how-to/install/agent-only.md).
 
 ## Running alongside the kasm-helm control plane
 
-The control plane (the `kasm-helm` chart) and this chart can share one cluster. The control plane
-creates no cluster-scoped objects at all — no CRDs, no ClusterRoles, no ClusterRoleBindings — so
-nothing it installs can collide with the `agent.kasm.com` CRDs and the cluster RBAC
-this chart's operator owns. Two namespaces (one per release) is the recommended layout, but even a
-**single shared namespace** works — the two charts' resource names and label selectors are fully
-disjoint, and it lets the agent reference the control plane's token Secret directly
-(`agent.manager.existingTokenSecret: <release>-secrets`, `tokenSecretKey: manager-token`) instead of
-copying it. Two caveats in shared-namespace mode: the `privileged` Pod Security Standard that
-`nodePrep`/`videoDevicePlugin`/`egressInstaller` require then also covers the control-plane pods —
-and `egressInstaller` additionally runs in the host PID and network namespaces, so those have to be
-permitted there too; and leave the umbrella's `networkPolicies` **disabled** (its baseline models
-only the agent stack's flows and would cut the control plane off). No namespace label is needed even
-here — see the optional `kasm.com/role=manager` label below.
+See [Install in two namespaces](../../docs/how-to/install/two-namespaces.md) for the procedure,
+[Topologies](../../docs/explanation/topologies.md) for the relayed default against direct
+connections, and [Switch to direct connections](../../docs/how-to/networking/direct-connect.md) for
+the zone and auth-domain settings that switch needs.
 
-Four things have to line up between the two releases.
+## External access
 
-**The zone.** `agent.zone` must name a zone that already exists on the control plane. A fresh
-`kasm-helm` install seeds exactly one, named `default`; the control plane's `kasmZones` creates
-others. An agent pointed at a zone the manager does not know will not register.
-
-**The registration token.** The control plane generates it as the `manager-token` key of its
-`<release>-secrets` Secret. Secrets do not cross namespaces, so copy the value into the agent's
-namespace:
-
-```console
-kubectl create secret generic kasm-manager-token \
-  --namespace kasm-agent \
-  --from-literal=token="$(kubectl get secret -n kasm kasm-secrets \
-    -o jsonpath='{.data.manager-token}' | base64 -d)"
-```
-
-The control plane's `kasmSecrets.passwords.manager-token` pins it to a known value at install time
-instead, if you would rather not read it back afterwards.
-
-**The manager address.** Point `agent.manager.hostname` at the control plane's `publicAddr` and
-leave `agent.manager.pathPrefix` at its `/manager_api` default — that is the path the control
-plane's proxy routes to the manager. Only when addressing the manager Service directly should
-`pathPrefix` be emptied.
-
-**Distinct hostnames.** The control plane's `publicAddr` and this chart's `agent.publicHostname`
-front different services and must be different names. Both usually terminate on the same ingress
-controller or Gateway, so give each its own hostname and certificate rather than sharing a listener;
-where a Gateway restricts `allowedRoutes` by namespace, admit both namespaces.
-
-**The `kasm.com/role=manager` label is optional.** The operator's default per-workspace
-NetworkPolicy admits ingress from the session proxy **by podSelector** (verified against the
-stamped policy on a live deployment), and all session and manager traffic flows through the
-session proxy — so sessions work with no namespace labels in every topology, including a
-manager in another cluster (where a namespaceSelector could never match anyway). Label the
-manager's namespace `kasm.com/role=manager` only if something there genuinely needs *direct*
-ingress to workspace pods; the same selector also appears as a workspace egress allow, but
-cross-cluster manager egress is covered by the policy's internet catch-all.
-
-Two worked examples ship for this pairing. The recommended **two-namespace** layout is the pair
-[`single-cluster-control-plane-values.yaml`](../../examples/kasm-agent/single-cluster-control-plane-values.yaml)
-(the `kasm-helm` half) and
-[`single-cluster-agent-values.yaml`](../../examples/kasm-agent/single-cluster-agent-values.yaml)
-(this chart, with the umbrella's NetworkPolicies enforced). The **single-namespace** layout is the
-`kasm-platform` chart driven by
-[`platform-values.yaml`](../../examples/kasm-agent/platform-values.yaml). The
-[demo runbook](../../examples/kasm-agent/demo-runbook.md) walks the single-command install end to
-end.
-
-**The zone must use direct connections, and the auth cookie must reach the agent's hostname.**
-Two control-plane defaults break Kubernetes-agent sessions and both must change:
-
-* *Proxy Connections* (zone setting, seeded enabled) routes browser session traffic through the
-  control-plane proxy to the agent's address while preserving the original `Host` header — behind
-  host-routing ingress (Traefik, most Gateway/Ingress setups) that request matches no route and
-  dies as a 404. The Kubernetes agent's session proxy is built to be reached directly (that is
-  what `agent.httpRoute` / `agent.ingress` / `agent.route` / `agent.gatewayRoute` / `agent.tlsRoute`
-  expose, and what
-  `agent.sessionProxy.service` publishes without an ingress layer at all), so disable it, and set the
-  zone's *Upstream Auth Address* to the control plane's `publicAddr` (not the `$request_host$`
-  default, which would point the session proxy's auth subrequests at the agent's own hostname).
-* *Kasm Auth Domain* (global setting, defaults `$request_host$`) scopes the session cookie to the
-  control plane's own hostname, so the browser never sends it to `agent.publicHostname` and every
-  direct session connection fails with a 401. Set it to a parent domain that covers **both**
-  hostnames — pick the two hostnames as siblings under one parent from the start.
-
-On a **fresh** control-plane install both halves are plain `kasm-helm` values — the zone preseed
-merges by name and every field passes through, and `kasmConfig.authDomain` writes the auth domain
-into the seed (verified live; see
-`examples/kasm-agent/single-cluster-control-plane-values.yaml`):
-
-```yaml
-kasmZones:
-  - name: default
-    proxyAddress: kasm.example.com
-    proxy_connections: false
-    upstream_auth_address: kasm.example.com
-kasmConfig:
-  generatePreseed: true
-  # The parent domain of publicAddr and agent.publicHostname. Applied last against the finished
-  # seed file, and independent of generatePreseed.
-  authDomain: example.com
-```
-
-Reach for `kasmConfig.authDomain` rather than a `kasmConfig.config.settings` entry. Routing
-`kasm_auth_domain` through `config.settings` used to be the broken path: the settings preseed
-concatenated the two lists instead of upserting, so any setting that already exists in Kasm's
-default seed ended up with a duplicate row and every `/api/authenticate` call 500'd with
-`MultipleResultsFound`. That merge now upserts on `name` + `category`, so `config.settings` is safe
-for seed-existing settings too — but `authDomain` is the supported route for this one, because it
-is applied last and therefore wins over both the merge and `existingDefaultPropertiesSecret`.
-
-On an **existing** control plane the preseed does not run at all — it only applies at database
-initialization. Change *Kasm Auth Domain* and the two zone settings in the admin UI (Settings →
-Auth; Infrastructure → Zones) or via the admin API, where `update_setting` takes top-level
-`setting_id` (from `get_settings`) and `value`.
-
-Finally, expose the control plane with its `ingress.enabled` and leave its `proxyService.type` as
-`ClusterIP`. A `LoadBalancer` there claims port 443 on the node, which the ingress controller
-fronting this chart's session proxy normally already holds — the control plane chart rejects that
-combination outright whenever an ingress or route is configured.
+The session proxy can be published five ways (`agent.ingress`, `agent.httpRoute`, `agent.route`,
+`agent.tlsRoute`, `agent.gatewayRoute`), or as a Service through `agent.sessionProxy.service`. At
+most one of the five may be enabled; the chart refuses to render more. See
+[External access](../kasm-agent-instance/README.md#external-access) in the `kasm-agent-instance`
+README, which also states the websocket timeouts every HTTP path needs.
 
 ## Cluster preparation checklist
 
@@ -329,7 +167,7 @@ status, what the cluster has to supply first, and the limits worth knowing.
 | Webcam passthrough | `nodePrep.enabled=true` with `nodePrep.modules.v4l2loopback.enabled=true`, **and** `videoDevicePlugin.enabled=true`. [KMM mode](../kasm-node-prep/README.md#kmm-mode) builds the module once per kernel instead of on every node |
 | Per-session VPN egress | `egressInstaller.enabled=true` with `egressInstaller.distro` ([kasm-egress-installer](../kasm-egress-installer/README.md)) |
 | Workspace network isolation | Nothing — the operator stamps a policy per session. `networkPolicies.enabled=true` adds the namespace baseline |
-| External access to sessions | Exactly one of `agent.gatewayRoute.enabled=true` (preferred), `agent.tlsRoute.enabled=true`, `agent.httpRoute.enabled=true`, `agent.ingress.enabled=true`, `agent.route.enabled=true` (OpenShift), or `agent.sessionProxy.service.type` |
+| External access to sessions | Only for direct connections. Exactly one of `agent.gatewayRoute.enabled=true` (preferred), `agent.tlsRoute.enabled=true`, `agent.httpRoute.enabled=true`, `agent.ingress.enabled=true`, `agent.route.enabled=true` (OpenShift), or none of them plus `agent.sessionProxy.service.type`; the chart refuses to render more than one of the five |
 | Image pre-pulling | `agent.imagePuller.enabled=true` with `agent.imagePuller.images` |
 | Private workspace registries | `agent.workspaceImagePullSecrets` |
 | Telemetry | `otelCollector.exporters.otlp.*` and/or `otelCollector.exporters.clickhouse.*` |
@@ -350,137 +188,9 @@ to be scoped or excepted deliberately.
 
 ## Workspace node best practices
 
-Kasm's own Docker agent installer tunes the host it runs on. A Kubernetes node never runs that
-installer, so the tuning has to come from somewhere else — partly from this chart, partly from the
-node's kubelet, which no chart can configure. This section is what that adds up to.
+See [Node tuning and swap](../../docs/how-to/nodes/tuning-and-swap.md).
 
-| Concern | What Kasm does or recommends | On Kubernetes |
-| ------- | ---------------------------- | ------------- |
-| **Swap** | The installer creates `/mnt/Kasm.swap` (`fallocate` + `mkswap` + `swapon`) on every agent host, offering a 4/8/12/16 GB menu — `--swap-size 8192` in the docs. "It is imperative to a have a swap file for Kasm to be stable." | `nodePrep.tuning.swap.enabled=true` — **after** the node's kubelet is configured for swap. See below. |
-| **Kernel tunables** | Nothing: the installer sets no sysctls. | `nodePrep.tuning.sysctls.enabled=true` raises the inotify limits, which desktop sessions consume heavily. Our judgement, not upstream's. |
-| **Image GC** | The agent guards image pulls with `disk_usage_limit: 0.90`. | kubelet `imageGCHighThresholdPercent: 90` / `imageGCLowThresholdPercent: 80`. **Node setting.** |
-| **Container logs** | — | kubelet `containerLogMaxSize: 10Mi`, `containerLogMaxFiles: 5`. **Node setting.** |
-| **PID exhaustion** | — | kubelet `podPidsLimit` raised (e.g. `8192`). **Node setting.** |
-| **Node disk** | `80GB + (Users × space_per_user)`. | Same formula, applied to the volume holding the container runtime's image store. |
-| **`/dev/shm`** | Kasm's Docker agent gives each session `512m`. | The operator mounts a memory-backed `emptyDir` at `/dev/shm` per session — 2Gi by default, per-workspace via the `KasmWorkspace` `shmSize` field. Kubernetes' own default would be **64Mi**, which browsers do not survive. |
-| **CPU** | CPU Shares by default: a session is "only throttled if there is CPU contention". Cores Override pins a count. | No CPU *limit* on workspace pods — that is the same behaviour. CPU *requests* are the analogue of Cores Override. |
-
-Sources: [System requirements (swap section)](https://docs.kasm.com/docs/explanations/system-requirements/index.html),
-[Docker Agent management](https://docs.kasm.com/docs/how-to/infra-autoscale/docker-agent/index.html),
-[Sizing and operations](https://docs.kasm.com/docs/explanations/sizing-operations/index.html).
-
-### Swap, and the kubelet setting that must come first
-
-Kasm wants swap so the kernel can park the memory of idle and stopped sessions instead of the OOM
-killer destroying a live one: "Not having a swap file can result in user desktops being destroyed
-when RAM is over subscribed."
-
-Kubernetes will not use node swap until the **node's kubelet** is configured for it — cgroup v2,
-`failSwapOn: false`, and `memorySwap.swapBehavior: LimitedSwap`. The order is not negotiable: a
-kubelet still carrying the default `failSwapOn: true` **refuses to start** while the node has swap
-active, so enabling swap first quietly arms an outage for the next kubelet restart or node reboot.
-`nodePrep` therefore refuses to create swap until it can read that setting out of the node's kubelet
-configuration, and says so in its log. Apply
-[`examples/kasm-agent/k3s-node-swap-config.yaml`](../../examples/kasm-agent/k3s-node-swap-config.yaml)
-on each node first, restart k3s, then set `nodePrep.tuning.swap.enabled=true`.
-
-Two caveats about what a session actually gets:
-
-* `LimitedSwap` gives each **Burstable** pod a share proportional to its memory request:
-  `(pod memory request / node MemTotal) × total node swap`. A default workspace (2768Mi) on a 16 GiB
-  node with an 8 GiB swapfile gets `2768 / 16384 × 8192 MiB ≈ 1384 MiB`.
-* **Workspace sessions get zero swap as the operator configures them today.** The kubelet's
-  `LimitedSwap` grants a container swap only when its **memory request is strictly less than its
-  memory limit** (a container with request = limit gets none, whatever its QoS class or CPU
-  allocation method; Guaranteed and BestEffort pods get none either way). Kasm derives a workspace's
-  memory request *and* limit from the same `memory_bytes`, so every session container has request =
-  limit and therefore no swap — verified on k3s 1.36 and kubeadm 1.34. The node's swapfile still
-  benefits other Burstable pods with memory headroom (the agent, sidecars, system pods). Two further
-  gotchas: the kubelet only sees swap it was (re)started *after* the swapfile exists — enabling
-  `nodePrep.tuning.swap` on an already-running kubelet needs one more kubelet restart before any pod
-  gets a share — and `swapBehavior: LimitedSwap` must be set or every pod's share is zero.
-
-Sizing, the `force` escape hatch, the zram question, and the full rationale are in
-[**Node tuning**](../kasm-node-prep/README.md#node-tuning) in the `kasm-node-prep` README.
-
-### Settings this chart cannot make for you
-
-The four kubelet settings marked **Node setting** above are worth changing on any node that hosts
-workspaces, and none of them is reachable from Helm — the kubelet is what runs the chart's pods.
-They are all in the same example file:
-
-* **`imageGCHighThresholdPercent: 90` / `imageGCLowThresholdPercent: 80`.** The stock 85/80 starts
-  garbage-collecting images while the node is still healthy, and a workspace image is multi-GB — every
-  eviction is repaid as a slow re-pull at the next session launch. 90 also matches the agent's own
-  `disk_usage_limit: 0.90`, so the two stop disagreeing about when the disk is full.
-* **`containerLogMaxSize: 10Mi` / `containerLogMaxFiles: 5`.** These are the kubelet's defaults; pin
-  them so a chatty session (Xorg, the desktop, the browser) cannot fill the same disk the images live
-  on if a distribution has changed them.
-* **`podPidsLimit`.** The kubelet default is unlimited-per-pod. One desktop plus one browser is
-  already dozens of processes and hundreds of threads, so a runaway session can exhaust the node's
-  PIDs; a generous explicit cap (`8192`) contains that without affecting normal use.
-
-### Node sizing
-
-Apply Kasm's disk formula — `80GB + (Users × space_per_user)` — to the volume backing the container
-runtime's image store, not to the root filesystem in general. That is where workspace images land, and
-image GC (above) is what happens when the estimate is wrong.
-
-For memory, size against concurrent sessions at their memory *limit*, not their request, and leave the
-node headroom for the per-session `/dev/shm` `emptyDir`: it is memory-backed, so it counts against the
-pod's memory limit **and** toward node memory pressure and eviction. This is the one place where the
-Kubernetes default is actively dangerous rather than merely different — 64Mi against Kasm's 512m —
-which is why the operator sets 2Gi instead of leaving it alone.
-
-For CPU, leave workspace pods without a CPU limit. That reproduces Kasm's default CPU Shares behaviour
-("only throttled if there is CPU contention") rather than throttling an idle-but-bursty desktop; CPU
-requests are what actually reserve capacity, and are the analogue of Kasm's Cores Override. On
-virtualized nodes, plan for roughly 25% CPU overcommit.
-
-## Airgapped installation
-
-The chart installs with no internet access at all. Four things have to cross the airgap: the chart
-archive, the container images, the node-prep build inputs, and — if you enable it — whatever the
-GPU Operator needs. Do the first three from a machine that *does* have network access.
-
-### 1. Build the transferable chart artifact
-
-A git clone is **not** enough: three of the nine dependencies (`csi-driver-rclone`, `gpu-operator`,
-`nfs-server-provisioner`) are remote, their `.tgz` files are gitignored, and installing from a
-checkout still runs `helm dependency build`. A packaged umbrella chart, on the other hand, embeds
-every dependency under its own `charts/` directory and is completely self-contained:
-
-```console
-make package-agent
-# -> dist/kasm-agent-0.1.0.tgz
-```
-
-Equivalently, without the Makefile:
-
-```console
-helm dependency build charts/kasm-agent
-helm package charts/kasm-agent -d dist/
-```
-
-Copy that single `.tgz` across, and install from it directly — no repositories are contacted:
-
-```console
-helm install kasm-agent ./kasm-agent-0.1.0.tgz \
-  --namespace kasm-agent \
-  --values values.yaml
-```
-
-### 2. Mirror the images
-
-Get the list from the rendered manifests of every test scenario, deduped:
-
-```console
-make images-agent
-# prints the list and writes dist/kasm-agent-images.txt
-```
-
-Then mirror each one (`skopeo copy`, `crane copy`, `docker pull`/`tag`/`push`, or your registry's
-own replication) into the internal registry.
+## Pulling from a private registry
 
 Every image in the Kasm charts is split into `registry` / `repository` / `tag`, so pointing the
 whole release at a mirror is one override block:
@@ -521,69 +231,13 @@ nodePrep:
     tag: "22.04-v0.13.2"
 ```
 
-Two image sets are **not** covered by that block and have to be pointed at the internal registry
-separately:
-
-* **Workspace images.** These come from the Kasm manager's workspace registry, not from this chart.
-  Re-point each workspace's image in the manager UI (or in its workspace registry) at the mirror.
-* **`agent.imagePuller.images`.** Every entry's `image` field is a full reference used verbatim, so
-  each must already name the internal registry, with `imagePullSecrets` per entry where the mirror
-  needs credentials:
-
-  ```yaml
-  agent:
-    imagePuller:
-      enabled: true
-      images:
-        - image: registry.example.internal/kasmweb/chrome:1.18.0
-          registry: https://registry.example.internal
-          imagePullSecrets:
-            - name: internal-registry
-  ```
-
-  The image-puller mechanism itself pulls through the node's container runtime, so it works against
-  a mirror configured either here in values or at the runtime level (containerd
-  `registry.mirrors`/`hosts.toml`, CRI-O `registries.conf`) — in the latter case the references may
-  keep their original names and the runtime rewrites them.
-
-### 3. Node prep: use a pre-baked builder image
-
-`nodePrep` is the one component that fetches at *runtime*: `apt-get` for the toolchain and headers,
-`git clone` for the module sources. Both go away with a builder image that already carries them,
-plus `nodePrep.modules.*.sourcePath` pointing at the vendored sources inside it. The reconcile
-script detects the pre-baked case, logs `build prerequisites already present; skipping package
-installation`, and performs no network operation.
-
-See **Airgapped / offline nodes** in the [`kasm-node-prep` README](../kasm-node-prep/README.md) for
-the Dockerfile pattern and the values, including the caveat that the kernel build tree has to come
-from the node image (`/lib/modules` and `/usr/src` are host mounts and shadow the builder image).
-
-If instead you delegate `v4l2loopback` to the Kernel Module Management operator
-(`nodePrep.modules.v4l2loopback.method=kmm`), the airgap path is different — KMM only *pulls* prebuilt
-per-kernel module images, and the operator's own images are mirrored with `make kmm-install-mirrored
-KMM_IMAGE_REGISTRY=<mirror>` — and is covered end to end by
-**[Airgapped KMM (prebuilt modules)](../kasm-node-prep/README.md#airgapped-kmm-prebuilt-modules)** in the
-`kasm-node-prep` README.
-
-### 4. Third-party subcharts
-
-* **`csi-driver-rclone`** — four images, each overridable on its own value path:
-  `csiRclone.image.rclone.repository` (plus `.tag`), `csiRclone.image.csiProvisioner.repository`,
-  `csiRclone.image.livenessProbe.repository`, `csiRclone.image.nodeDriverRegistrar.repository`.
-  Note these are `repository`-only (the registry is part of the repository string) and take an
-  optional sibling `tag`. Add pull secrets with `csiRclone.imagePullSecrets`.
-* **`nfs-server-provisioner`** — one image: `nfs-server-provisioner.image.repository` and
-  `nfs-server-provisioner.image.tag` (again, registry included in the repository string).
-* **`gpu-operator`** — do **not** try to do this from the image list above. The operator pulls a
-  much larger set of operand images (driver, container toolkit, DCGM, MIG manager, device plugin,
-  …) at runtime, and NVIDIA publishes a dedicated procedure covering the local registry, the driver
-  images per kernel, and the required values:
-  [Install the GPU Operator in an air-gapped environment](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/install-gpu-operator-air-gapped.html).
-  Everything nested under `gpuOperator` is passed straight to that chart, so its air-gap values
-  apply as-is with the `gpuOperator.` prefix.
-
-Run `helm show values` against a staged dependency for the full third-party reference, for example
-`helm show values charts/kasm-agent/charts/csi-driver-rclone-0.5.0.tgz`.
+Two image sets are not covered by that block: workspace images come from the Kasm manager's
+workspace registry and are re-pointed there, and every entry in `agent.imagePuller.images` is a full
+reference used verbatim. The third-party subcharts (`csiRclone`, `nfs-server-provisioner`,
+`gpuOperator`) take their own image values. `make images-agent` writes every image the rendered
+manifests reference to `dist/kasm-agent-images.txt`, and `make images-check` fails when that list
+misses one. The full procedure, including the node-prep builder image and the GPU Operator, is
+[Registries and airgap](../../docs/how-to/registries-and-airgap.md).
 
 ## Baseline network policies
 
@@ -599,50 +253,7 @@ before treating a default-deny policy as isolation.
 
 ## Publishing
 
-Releases go to `oci://registry-1.docker.io/kasmweb/`, the same registry and namespace the
-`kasm-helm` control plane chart is published to. Four of the ten charts in this repo are published
-as standalone releases — built by the `helm-build-agent` GitLab job on `develop` and `release/*`,
-then pushed by the manual `helm-deploy-agent-docker-hub` job:
-
-* **`kasm-agent`** — this chart, with all nine dependencies embedded.
-* **`kasm-platform`** — the control plane and this chart composed into one release.
-* **`kasm-agent-crds`** — the five CRDs as ordinary templates, for fleets that upgrade CRD schemas
-  through Helm rather than the `kubectl` side channel.
-* **`kasm-egress-installer`** — the CNI shim, which a platform team may want to roll out on a
-  cluster running nothing else from Kasm.
-
-The other five charts are only ever consumed as subcharts of this one and travel inside its
-archive, so publishing them separately would offer a release nobody should install on its own.
-
-**`make deps-agent` has to run before any packaging, and it builds inside-out.** `helm package`
-does not resolve dependencies — it archives whatever the chart's `charts/` directory already
-holds. `deps-agent` stages `charts/kasm-agent` first and only then `charts/kasm-platform`, which
-archives `kasm-agent` off disk and would otherwise embed a copy missing all nine of its own
-dependencies:
-
-```console
-make deps-agent package-agent-all
-# -> dist/kasm-agent-0.1.0.tgz + the other three
-```
-
-**Every `file://` version pin is maintained by hand, and a stale one is only half-loud.** This
-chart pins its six local subcharts at an exact version, and `kasm-platform` pins `kasm-helm` and
-`kasm-agent` the same way. Bump a subchart without bumping the pin that names it and `helm
-dependency build` refuses it — but `helm package` against an already-staged `charts/` directory
-exits 0 and embeds the *old* archive, so the published umbrella ships the subchart the release was
-meant to replace. `make version-check-agent` is the guard; it runs inside `make test` and again at
-the top of the CI package job. The fix moves the chart and every pin naming it in one step:
-
-```console
-python3 scripts/agent_versions.py --bump kasm-agent-instance 0.2.0            # dry run
-python3 scripts/agent_versions.py --bump kasm-agent-instance 0.2.0 --write
-helm dependency update charts/kasm-agent oci://registry-1.docker.io/kasmweb/kasm-platform                 # refresh Chart.lock
-```
-
-At `0.1.0` / appVersion `develop` these are previews rather than a moving release line, so
-every build produces the same version. The publish job therefore refuses to overwrite a version
-already present in the registry; re-pushing one takes `FORCE_REPUBLISH=true` on the pipeline, which
-makes replacing a published preview a deliberate act.
+See [Publish the charts](../../docs/how-to/publish-charts.md).
 
 ## Requirements
 

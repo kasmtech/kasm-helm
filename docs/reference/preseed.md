@@ -1,9 +1,14 @@
 # Kasm DB Preseed
 
-The preseed feature generates a `custom_properties.yaml` that Kasm's `startup.sh` merges into the default seed data at DB initialization time. This lets you declare Kasm configuration—users, groups, images, autoscale providers, SSO connectors, and more—as Helm values rather than post-install API calls.
+> **Applies to:** control plane
 
->>> [!warning] The current version of Kasm does not apply API config permissions (`apiConfigs[].permissions`) seeded via DB Preseed. This is an application bug, not a Helm chart defect, and is queued for a fix. Seeded API configs are created, but any `permissions` list on them is not applied at DB initialization time; grant permissions manually via the Kasm API/UI after install until the bug is resolved.
->>>
+> **Note.** Values on this page are written as they sit in a `kasm-helm` values file
+> (`kasmConfig.generatePreseed`). Under `kasm-platform`, prefix them with `kasm-helm.`
+> (`kasm-helm.kasmConfig.generatePreseed`).
+
+The preseed feature generates a `custom_properties.yaml` that Kasm's `startup.sh` merges into the default seed data at DB initialization time. This lets you declare Kasm configuration - users, groups, images, autoscale providers, SSO connectors, and more - as Helm values rather than post-install API calls.
+
+> **Warning.** The current version of Kasm does not apply API config permissions (`apiConfigs[].permissions`) seeded via DB Preseed. This is an application bug, not a Helm chart defect, and is queued for a fix. Seeded API configs are created, but any `permissions` list on them is not applied at DB initialization time; grant permissions manually via the Kasm API/UI after install until the bug is resolved.
 
 ## Enabling Preseed
 
@@ -20,7 +25,7 @@ kasmConfig:
 
 ## Supplying a Custom `default_properties.yaml` via Secret
 
-`kasmConfig.config` expresses preseed data as Helm values, which the chart renders into `custom_properties.yaml` and merges with Kasm's baked-in `default_properties.yaml`. For infrastructure-as-code workflows that manage the entire seed file directly as a Kubernetes Secret—rather than expressing every section as Helm values—reference that Secret with `kasmConfig.existingDefaultPropertiesSecret`:
+`kasmConfig.config` expresses preseed data as Helm values, which the chart renders into `custom_properties.yaml` and merges with Kasm's baked-in `default_properties.yaml`. For infrastructure-as-code workflows that manage the entire seed file directly as a Kubernetes Secret - rather than expressing every section as Helm values - reference that Secret with `kasmConfig.existingDefaultPropertiesSecret`:
 
 ```yaml
 kasmConfig:
@@ -68,10 +73,9 @@ kasmConfig:
   - `site_admins`
   - `workspace_admins`
 
-The default Administrator user is `admin@kasm.local`, the only true built-in admin account. Use `adminUsername` to change the login username seeded on the admin-group member (for example, `system@kasm.local`); doing so seeds that account with generated (non-built-in) credentials instead of the built-in `admin@kasm.local` token-based credentials — see [Default Users and Groups](default-users.md#users).
+The default Administrator user is `admin@kasm.local`, the only true built-in admin account. Use `adminUsername` to change the login username seeded on the admin-group member (for example, `system@kasm.local`); doing so seeds that account with generated (non-built-in) credentials instead of the built-in `admin@kasm.local` token-based credentials - see [Default Users and Groups](default-users.md#users).
 
->>> [!note] See [Default Users and Groups](default-users.md) for the full account list, group membership, and per-group permission set.
->>>
+> **Note.** See [Default Users and Groups](default-users.md) for the full account list, group membership, and per-group permission set.
 
 ### Default API Users
 
@@ -80,8 +84,7 @@ The default Administrator user is `admin@kasm.local`, the only true built-in adm
 
 `defaultUsers` and `defaultApiUsers` are independent. Set both to reproduce the full default seed:
 
->>> [!note] See [Default API Users](default-api-users.md) for the full API credential list and permission set.
->>>
+> **Note.** See [Default API Users](default-api-users.md) for the full API credential list and permission set.
 
 User-supplied entries under `kasmConfig.config` override defaults when `username`, `key`, or `name` matches.
 
@@ -155,7 +158,7 @@ The chart generates stable IDs and credentials at render time using Kasm startup
 
 For user-supplied entities (non-built-in users, API configs), the chart generates a random password at render time, stores it in the `<release>-secrets` Secret, and stores the corresponding salt in `<release>-password-salts`. On subsequent `helm upgrade` calls, the chart re-reads those Secrets via `lookup` so passwords are stable across upgrades.
 
-Built-in users — exactly `admin@kasm.local` and `user@kasm.local` — always use `${crypt:password:N}` tokens. The actual credential at N=2 is the `admin-password` value from the passwords Secret. If `kasmConfig.defaultUsers` and `kasmConfig.adminUsername` (set to anything other than `admin@kasm.local`) replace it with a renamed admin account, that account is no longer a built-in user: it gets a generated password/salt/hash like any other non-built-in user, stored under a `<local-part>-password`/`<local-part>-salt` key pair (e.g. `system@kasm.local` → `system-password`), and the chart does not create an `admin-password` key at all in that case.
+Built-in users - exactly `admin@kasm.local` and `user@kasm.local` - always use `${crypt:password:N}` tokens. The actual credential at N=2 is the `admin-password` value from the passwords Secret. If `kasmConfig.defaultUsers` and `kasmConfig.adminUsername` (set to anything other than `admin@kasm.local`) replace it with a renamed admin account, that account is no longer a built-in user: it gets a generated password/salt/hash like any other non-built-in user, stored under a `<local-part>-password`/`<local-part>-salt` key pair (e.g. `system@kasm.local` → `system-password`), and the chart does not create an `admin-password` key at all in that case.
 
 ### Name-based cross-references
 
@@ -240,8 +243,7 @@ kasmConfig:
           - autoscale_modify
 ```
 
->>> [!warning] `permissions` is not currently applied by Kasm at DB initialization time (application bug, fix pending). The API config is created, but with no permissions granted; assign them manually after install.
->>>
+> **Warning.** `permissions` is not currently applied by Kasm at DB initialization time (application bug, fix pending). The API config is created, but with no permissions granted; assign them manually after install.
 
 ### settings
 
@@ -302,7 +304,7 @@ Zones are derived from `kasmZones` at the chart level and are not set under `kas
 ```yaml
 kasmZones:
   - name: default
-    proxyAddress: kasm.example.com
+    proxy_hostname: kasm.example.com
     primary: true
 ```
 
@@ -537,7 +539,7 @@ When `generatePreseed: true`, the chart emits up to three Secrets:
 
 | Secret | Contains |
 |---|---|
-| `<release>-secrets` | manager-token, service-token, db-password, user-password, per-user passwords, per-api-config passwords, and admin-password (only while `admin@kasm.local` is actually seeded — see [Default Users and Groups](default-users.md#users)) |
+| `<release>-secrets` | manager-token, service-token, db-password, user-password, per-user passwords, per-api-config passwords, and admin-password (only while `admin@kasm.local` is actually seeded - see [Default Users and Groups](default-users.md#users)) |
 | `<release>-password-salts` | per-user salts, per-api-config salts (emitted only when non-built-in users or apiConfigs are present) |
 | `<release>-db-preseed` | `custom_properties.yaml` mounted into the db-init Job |
 

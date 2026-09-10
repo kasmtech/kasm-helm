@@ -3,7 +3,7 @@
 
 Locations updated:
   - charts/kasm-helm/Chart.yaml: `version:` and `appVersion:`
-  - README.md: badge line, both `helm install --version` snippets, and the
+  - README.md: badge line, any `kasm-helm ... --version` snippets, and (if present) the
     "This branch (...) is the ... release" sentence in ## Versioning.
   - charts/kasm-helm/values.yaml: `useImageTags:`, set to "<app version>-rolling"
     (or literal "develop" when APP_VERSION is "develop").
@@ -110,17 +110,18 @@ def update_root_readme(chart_version: str, app_version: str) -> None:
     if n_badge != 1:
         raise RuntimeError(f"expected exactly one badge line in {ROOT_README}, found {n_badge}")
 
-    text, n_install = re.subn(r"--version [^\s\\]+", f"--version {chart_version}", text)
-    if n_install != 2:
-        raise RuntimeError(f"expected exactly two '--version' install snippets in {ROOT_README}, found {n_install}")
+    # Only pins that name the kasm-helm chart are ours to move; the root README may carry none
+    # (its one install command is the unpinned kasm-platform umbrella).
+    text, n_install = re.subn(r"(kasm-helm[^\n]*?--version )[^\s\\]+", rf"\g<1>{chart_version}", text)
+    print(f"root README: {n_install} kasm-helm --version pin(s) updated")
 
     text, n_branch = re.subn(
         r"This branch \(`[^`]*` / app `[^`]*`\)[^\n]*\.",
         branch_sentence(chart_version, app_version),
         text,
     )
-    if n_branch != 1:
-        raise RuntimeError(f"expected exactly one 'This branch (...)' sentence in {ROOT_README}, found {n_branch}")
+    if n_branch > 1:
+        raise RuntimeError(f"expected at most one 'This branch (...)' sentence in {ROOT_README}, found {n_branch}")
 
     ROOT_README.write_text(text, encoding="utf-8")
 

@@ -14,9 +14,8 @@
 
 ## Read this before installing
 
-This chart has been validated in a live k3s cluster (install, pod scheduling through the chained shim, crash restart, and graceful uninstall). It was ported from `kasm-kubernetes-operator`'s
-unmerged `feature/DEV-228-k8s-agent-egress` branch; see `docs/egress-installer-port-notes.md` in
-kasm-monorepo for the full review it's based on. Two findings from that review matter enough to repeat
+This chart has been validated in a live k3s cluster (install, pod scheduling through the chained shim,
+crash restart, and graceful uninstall). Two findings from its security review matter enough to state
 here:
 
 1. **Graceful shutdown cleans up after itself; a crash does not (until the next start).** This
@@ -41,8 +40,14 @@ here:
    `ClusterPolicy` with an unconditional `disallow-host-namespaces` rule and no exception mechanism). That
    is a genuine, unresolved policy conflict, not a chart bug — it needs an explicit decision (a scoped
    policy exception, or accepting this workload sits outside the baseline policy set), not a silent bypass.
+This page is the chart reference; the [documentation index](../../docs/README.md) has the tutorial and the how-to guides.
+
 
 ## What this chart does
+
+The control-plane side of egress (providers, gateways, credentials, assignment) is configured as on
+any Kasm and documented in [Egress in the Kasm documentation](https://www.kasmweb.com/docs/latest/guide/egress.html). This chart is the
+Kubernetes node-side piece only.
 
 1. The daemon starts, installs its bundled `kasm-egress-cni` binary onto the host's CNI bin directory, and
    patches every `.conflist` file it finds in `cniConfDirs` to chain that shim into the plugin list —
@@ -136,58 +141,6 @@ This preset governs the install directory and nothing else. The conflist directo
 that already covers the k3s, RKE2, and vanilla layouts, and entries that do not exist on a given
 node are skipped rather than treated as an error — so there is no matching `distro` choice to make
 for those.
-
-{{ define "chart.valueDefaultColumnRender" }}
-{{- $defaultValue := (default .Default .AutoDefault)  -}}
-{{- $notationType := .NotationType }}
-{{- if (and (hasPrefix "`" $defaultValue) (hasSuffix "`" $defaultValue) ) -}}
-{{- $defaultValue = (toYaml (fromJson (trimAll "`" (default .Default .AutoDefault) ) ) ) -}}
-{{- $notationType = "json" }}
-{{- end -}}
-{{- if (eq $notationType "tpl" ) }}
-<pre lang="{{ $notationType }}">
-{{ .Key }}: |
-{{- $defaultValue | nindent 2 }}
-</pre>
-{{- else if (eq $notationType "email") }}
-<a href="mailto:{{ $defaultValue }}" style="color: green;">"{{ $defaultValue }}"</a>
-{{- else }}
-<pre lang="{{ $notationType }}">
-{{ $defaultValue }}
-</pre>
-{{- end }}
-{{ end }}
-
-{{ define "chart.typeColumnRender" }}
-{{- if (eq .Type "string/email") }}
-<a href="#stringemail" title="{{- template "chart.valuetypes.email" -}}">{{.Type}}</a>
-{{- else }}
-{{ .Type }}
-{{- end }}
-{{ end }}
-
-{{ define "chart.valuesTableHtml" }}
-<table>
-	<thead>
-		<th>Key</th>
-		<th>Type</th>
-		<th>Default</th>
-		<th>Description</th>
-	</thead>
-	<tbody>
-	{{- range .Values }}
-		<tr>
-			<td id="{{ .Key | replace "." "--" }}"><a href="./values.yaml#L{{ .LineNumber }}">{{ .Key }}</a></td>
-			<td>{{- template "chart.typeColumnRender" . -}}</td>
-			<td>
-				<div style="max-width: 520px;">{{ template "chart.valueDefaultColumnRender" . }}</div>
-			</td>
-			<td>{{ if .Description }}{{ .Description }}{{ else }}{{ .AutoDescription }}{{ end }}</td>
-		</tr>
-	{{- end }}
-	</tbody>
-</table>
-{{ end }}
 
 ## Chart value settings in `values.yaml`
 

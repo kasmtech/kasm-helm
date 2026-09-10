@@ -23,6 +23,8 @@ Please see our [official documentation site](https://docs.kasm.com) for more inf
 
 > **Note:** Make sure to select the correct Kasm Workspaces version in the top-right version selector on the documentation site to ensure the guides match your deployment.
 
+This page is the chart reference; the [documentation index](../../docs/README.md) has the tutorial and the how-to guides.
+
 ## Prerequisites
 
 * Kubernetes 1.26 or newer — the shared floor for the whole `kasm-agent` family (older versions of Kubernetes may work, however, we try to keep this chart updated to [supported versions of Kubernetes](https://kubernetes.io/releases/))

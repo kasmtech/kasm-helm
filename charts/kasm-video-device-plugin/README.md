@@ -15,9 +15,8 @@ Kubelet device plugin DaemonSet that advertises the v4l2loopback video devices o
 ## What this chart does
 
 Kubernetes will not schedule a pod onto a node because of a device file; it schedules on resources. This
-chart deploys Kasm's own video-device-plugin (built from `apps/kasm-video-device-plugin` in kasm-monorepo) as
-a DaemonSet that implements the kubelet Device Plugin API (v1beta1) and turns the node's video devices into a
-countable, allocatable extended resource:
+chart deploys Kasm's own video-device-plugin as a DaemonSet that implements the kubelet Device Plugin API
+(v1beta1) and turns the node's video devices into a countable, allocatable extended resource:
 
 1. The plugin scans `/dev` every 10 seconds for entries starting with `devicePrefix` (default `video`, so
    `video0`, `video1`, ...), sorted numerically by suffix so the advertised order stays stable as devices
@@ -36,6 +35,7 @@ find no devices and advertise a capacity of zero.
 
 Allocation is entirely kubelet's job here. There is no assignment tracking to configure and no way for two
 sessions to end up on the same virtual webcam.
+This page is the chart reference; the [documentation index](../../docs/README.md) has the tutorial and the how-to guides.
 
 ## Security posture
 

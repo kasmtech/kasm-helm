@@ -1,70 +1,71 @@
-# Kasm on Kubernetes — documentation
+# Kasm on Kubernetes: documentation
 
-Kasm on Kubernetes is **two halves**: the control plane (the `kasm-helm` chart — the web UI, the
-API, the database) and one or more agents (the `kasm-agent` family — where sessions actually run).
-They are deployed, published and certificated independently, and almost every decision below
-applies to both. Pages say explicitly which half they are talking about.
+> **Applies to:** both halves
 
-## Reading order
+Kasm on Kubernetes is two halves: the control plane (the `kasm-helm` chart: web UI, API, manager,
+database) and one or more agents (the `kasm-agent` family: where sessions run). Every page opens
+with an **Applies to** line that says which half it is about.
 
-1. **[Architecture](overview/architecture.md)** — the two halves, the chart dependency tree, and the
-   deployment topologies. Start here if you have not deployed Kasm on Kubernetes before.
-2. **[The charts](overview/charts.md)** — what each of the ten charts installs, and which one you
-   want.
-3. **[What works on Kubernetes](reference/feature-matrix.md)** — every Kasm feature, whether it
-   works here, and what it needs from the cluster. Read this before promising anyone a feature.
-4. **[Planning](planning/README.md)** — the decision sequence, in order, ending in a values file you
-   can install. Everything below hangs off it.
-5. **[Install and verify](operate/install-and-verify.md)** — the order to install in, and the
-   commands that prove each step worked.
+**Values convention.** Values are written as they appear in a `kasm-platform` values file:
+`kasm-helm.publicAddr` for the control plane, `kasm-agent.agent.publicHostname` for the agent.
+Installing `kasm-helm` or `kasm-agent` on its own, drop the leading `kasm-helm.` or `kasm-agent.`.
 
-## Planning
+**Reading path.** Start with the [root README](../README.md) (one command), then the tutorial,
+then the one how-to you need. Explanation and reference are one link away from every page.
 
-| Topic | Covers |
-| ----- | ------ |
-| [Planning overview](planning/README.md) | The decision sequence and the master checklist |
-| [Supported platforms](planning/support.md) | Kubernetes versions, distributions, and what changes on EKS / AKS / GKE / OpenShift |
-| [Managed providers in detail](planning/managed-providers.md) | Per-provider specifics for every feature |
-| [Capacity](planning/capacity.md) | What a session costs, the four ceilings, node sizing |
-| [Multi-zone](planning/multi-zone.md) | `kasmZones`, per-zone hostnames and agents, what multi-zone forces |
-| [Networking](planning/networking/README.md) | Publishing both halves — certificates first, then one mechanism per half |
-| [Storage](planning/storage/README.md) | Profiles, user mappings, recordings, the node image store |
-| [Database](planning/database.md) | Bundled PostgreSQL or your own, sizing, backup and restore |
-| [Registries and image pulling](planning/registries.md) | Private registries, pull secrets, pre-pulling |
-| [Airgap](planning/airgap.md) | The four things that need mirroring, in order |
-| [Nodes and devices](planning/nodes/README.md) | GPU, webcam, kernel modules, Secure Boot, swap, privileged workloads |
-| [Security](planning/security.md) | Pod Security, RBAC, isolation, what the charts need and why |
+## Tutorial
 
-## Operating
+| Page | What you end up with |
+| ---- | -------------------- |
+| [Get started](tutorials/get-started.md) | The no-values install, end to end, to a running session |
 
-| Topic | Covers |
-| ----- | ------ |
-| [Install and verify](operate/install-and-verify.md) | Install order, and what good looks like at each step |
-| [Upgrade](operate/upgrade.md) | Chart and CRD upgrade discipline |
-| [Uninstall](operate/uninstall.md) | What Helm removes, and what it leaves behind |
-| [Backup and restore](operate/backup-restore.md) | The database, and what else is stateful |
-| [Troubleshooting](operate/troubleshooting.md) | Symptom → cause → command |
+## How-to guides
+
+One task per page. Each ends in a Decisions block that is the checklist.
+
+| Page | Task |
+| ---- | ---- |
+| [Install on one cluster](how-to/install/one-cluster.md) | `kasm-platform`, one release: the relayed default, with a hostname and certificate |
+| [Install in two namespaces](how-to/install/two-namespaces.md) | `kasm-helm` and `kasm-agent` as separate releases: token copy, PSS scope, NetworkPolicies |
+| [Add an agent cluster](how-to/install/agent-only.md) | `kasm-agent` in another cluster, against a control plane that already exists: the multi-cluster building block |
+| [Install the CRDs as their own release](how-to/install/crds.md) | `kasm-agent-crds`, and the upgrade order it imposes |
+| [Networking](how-to/networking/README.md) | Pick one exposure mechanism per half: [certificates](how-to/networking/certificates.md), [Ingress](how-to/networking/ingress.md), [HTTPRoute](how-to/networking/gateway-api-httproute.md), [TLS passthrough](how-to/networking/gateway-api-passthrough.md), [TCPRoute](how-to/networking/gateway-api-tcproute.md), [LoadBalancer and NodePort](how-to/networking/loadbalancer-nodeport.md), [OpenShift Route](how-to/networking/openshift-route.md), [NetworkPolicies](how-to/networking/network-policies.md), [egress](how-to/networking/egress.md) |
+| [Switch sessions to direct-connect](how-to/networking/direct-connect.md) | Hostname pair, authorization domain, zone routing |
+| [Publish the RDP gateway](how-to/networking/rdp-gateway.md) | `directRdpService` or a `TCPRoute` |
+| [Nodes](how-to/nodes/README.md) | [GPU](how-to/nodes/gpu.md), [webcam and kernel modules](how-to/nodes/webcam-kernel-modules.md), [Secure Boot](how-to/nodes/secure-boot.md), [tuning and swap](how-to/nodes/tuning-and-swap.md), [privileged workloads](how-to/nodes/privileged-workloads.md) |
+| [Storage](how-to/storage/README.md) | [RWX profiles](how-to/storage/rwx-profiles.md), [cloud storage mappings](how-to/storage/cloud-mappings.md) |
+| [Registries and airgap](how-to/registries-and-airgap.md) | Private registries, pull secrets, pre-pulling, the four things to mirror |
+| [Database](how-to/database.md) | Bundled PostgreSQL or your own, sizing, seeding |
+| [Deploy multiple zones](how-to/multi-zone.md) | Declare zones on the control plane and add one agent release per zone |
+| [Enable agents automatically](how-to/enable-agents-automatically.md) | `auto_agent` by preseed or on an existing database |
+| [Day 2](how-to/day-2.md) | Upgrade, uninstall in two steps, backup, restore |
+| [Publish the charts](how-to/publish-charts.md) | Package and push the OCI artifacts |
+
+## Explanation
+
+| Page | Question it answers |
+| ---- | ------------------- |
+| [Architecture](explanation/architecture.md) | What the two halves are, and how the ten charts compose |
+| [Deployment topologies](explanation/topologies.md) | Relayed or direct-connect; one release or two namespaces; one cluster or many, and what each fixes |
+| [Capacity](explanation/capacity.md) | What a session costs, and which ceiling binds first |
+| [Zones](explanation/multi-zone.md) | What a zone is, and what more than one forces |
+| [Security posture](explanation/security-posture.md) | PSS, RBAC, the privileged charts, isolation |
+| [Managed providers](explanation/managed-providers.md) | What EKS, AKS, GKE and OpenShift decide for you |
+| [Supported platforms](explanation/supported-platforms.md) | Version floors, node architecture, distributions |
+| [Sessions: Docker agent vs Kubernetes](explanation/sessions-docker-vs-kubernetes.md) | What the operator adds to a session's environment |
+| [Why the CRDs are split](explanation/why-the-crds-are-split.md) | Two ways to install a CRD, and why the repo ships both |
+| [Why no hook Jobs](explanation/why-no-hook-jobs.md) | Why the charts leave some steps to you |
 
 ## Reference
 
-| Page | Covers |
-| ---- | ------ |
-| [What works on Kubernetes](reference/feature-matrix.md) | Feature-by-feature support and requirements |
-| [Kasm settings → agent CRD fields](reference/settings-to-crd.md) | How manager-side settings map onto the cluster |
-| [Preseeding](reference/preseed.md) | Seeding the database at install time |
-| [Default users](reference/default-users.md) · [Default API users](reference/default-api-users.md) | What `defaultUsers` / `defaultApiUsers` create |
+| Page | Contains |
+| ---- | -------- |
+| [What works on Kubernetes](reference/feature-matrix.md) | Every Kasm feature, its status, and the how-to that installs what it needs |
+| [Ports and hostnames](reference/ports-and-hostnames.md) | Every port, Service name and hostname |
+| [Troubleshooting](reference/troubleshooting.md) | Symptom, cause, command: the one failures table |
+| [The charts](reference/charts.md) | Ten charts, one line each, linking every value reference |
+| [Preseeding](reference/preseed.md) | Seeding the database at initialization |
+| [Default users](reference/default-users.md) · [Default API users](reference/default-api-users.md) | What `defaultUsers` and `defaultApiUsers` create |
+| [Where Kasm's documentation takes over](reference/kasm-docs.md) | The boundary between these pages and Kasm's own: admin-UI configuration is documented there, not here |
 
-Per-chart value reference lives in each chart's own README, generated from its `values.yaml` — for
-example [`kasm-helm`](../charts/kasm-helm/README.md) and
-[`kasm-agent`](../charts/kasm-agent/README.md).
-
-## How these pages are organised
-
-* **Overview** answers *what is this*. **Planning** answers *what do I decide*. **Operating**
-  answers *what do I run, and what should I see*. **Reference** answers *what is the exact value*.
-* Every planning page covers **both halves** — the control plane and the agent — and says which is
-  which.
-* Every verification command shows its **expected output**, so you can tell a healthy result from a
-  plausible-looking broken one.
-* All install commands use the **published charts** at `oci://registry-1.docker.io/kasmweb/`. See
-  [Where the charts are published](../README.md#where-the-charts-are-published).
+Adding or changing a page: [CONTRIBUTING.md](../CONTRIBUTING.md).

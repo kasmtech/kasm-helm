@@ -10,7 +10,7 @@ All notable changes to the kasm-agent-operator chart are documented here.
 - `manager-role` no longer grants any access to Secrets. The operator only ever reads, creates and updates the per-workspace storage-mapping Secret by name, so that access is granted per namespace by the `kasm-agent-instance` chart (`operatorRBAC.*`) wherever an Agent is installed. Requires the operator build that stops caching Secrets (2026-09-08 or later); an older operator fails its cache sync under this role.
 - `manager-role` ClusterRole narrowed to match the operator build that stops caching Secrets (2026-09-08): `secrets` is get/create/update only (no list, watch, patch, delete), `persistentvolumes` and `clusterrolebindings` drop list/watch (and patch), `rolebindings` drops delete. Every other rule is unchanged. Requires that operator build; an older operator's Secret informer needs the previous broad rule.
 - CRDs updated from the operator (2026-09-04): `Agent` gains `spec.sessionProxy.otel.endpoint` (session-proxy sidecar OTLP endpoint override; empty disables the exporter), and `KasmWorkspace.spec.fileMappings[]` gains `binaryData` (binary file content, mirrors a ConfigMap's `binaryData`) and `writable` (copy-on-start so the session user can edit the file).
-
+- README lists all five CRDs it owns, adding `warmpools` and `warmpoolinstances` in `pools.kasm.ai`; the regeneration hint says `make readme-all`; the first section links the docs index. The HTML values-table template moved to the shared `_templates.gotmpl`.
 
 ### Added
 

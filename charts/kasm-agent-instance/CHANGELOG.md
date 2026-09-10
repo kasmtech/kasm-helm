@@ -4,6 +4,10 @@ All notable changes to the kasm-agent-instance chart are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- README lists the self-signed session-proxy Secret with its three render-time lookup cases (generate; reuse or regenerate when release-owned; leave untouched when created by anyone else), states that only one of the five exposure options renders and that `httpRoute`/`tlsRoute` need a non-empty `parentRefs`, cuts the LoadBalancer/NodePort, client-IP and older-operator material to the two value snippets and the 30000-32767 constraint (linking the how-to), and lists the required values with `inClusterControlPlane` in mind. The HTML values-table template moved to the shared `_templates.gotmpl`.
+
 ### Fixed
 
 - `make images-agent` also missed every `KasmImagePuller.spec.images[].image` entry: its extractor did not match a key that opens a YAML list item (`- image: ...`), so the workspace images a release pre-pulls were absent from the airgap mirror list. Found by `make images-check`, which now extracts references with an independent structural yq walk instead of re-running the same awk (an earlier version could not fail).

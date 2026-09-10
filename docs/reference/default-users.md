@@ -1,5 +1,11 @@
 # Default Users and Groups
 
+> **Applies to:** control plane
+
+> **Note.** Values on this page are written as they sit in a `kasm-helm` values file
+> (`kasmConfig.generatePreseed`). Under `kasm-platform`, prefix them with `kasm-helm.`
+> (`kasm-helm.kasmConfig.generatePreseed`).
+
 This document describes every user account, group, and group permission that `kasmConfig.defaultUsers: true` seeds into the database. All entries are generated at DB initialization time via the preseed mechanism and are not re-applied on upgrade.
 
 ## Control flags
@@ -13,7 +19,7 @@ kasmConfig:
 
 `defaultUsers` seeds users and groups only. API credentials are controlled separately by [`defaultApiUsers`](default-api-users.md).
 
-`adminUsername` sets the login username for the seeded admin account (the `admins`-group member). It defaults to `admin@kasm.local`, the only true built-in administrator account. Setting it to any other value (for example, `system@kasm.local` for Kasm internal deployments) still seeds an admin-group member under that username, but it is no longer treated as the built-in account: its password and salt are generated the same way as any other non-built-in user (see below), under a secret key derived from the local part of the username (the part before `@`) — e.g. `system@kasm.local` → `system-password`/`system-salt`. In that case the chart also does not create the `admin-password` key in the `<release>-secrets` Secret at all, and does not populate `DEFAULT_ADMIN_PASSWORD` for the db-init Job. All other user accounts, group memberships, and permissions are unaffected by this value.
+`adminUsername` sets the login username for the seeded admin account (the `admins`-group member). It defaults to `admin@kasm.local`, the only true built-in administrator account. Setting it to any other value (for example, `system@kasm.local` for Kasm internal deployments) still seeds an admin-group member under that username, but it is no longer treated as the built-in account: its password and salt are generated the same way as any other non-built-in user (see below), under a secret key derived from the local part of the username (the part before `@`) - e.g. `system@kasm.local` → `system-password`/`system-salt`. In that case the chart also does not create the `admin-password` key in the `<release>-secrets` Secret at all, and does not populate `DEFAULT_ADMIN_PASSWORD` for the db-init Job. All other user accounts, group memberships, and permissions are unaffected by this value.
 
 ---
 
@@ -26,9 +32,9 @@ kasmConfig:
 | `siteadmin@kasm.local` | local | no | generated | site_admins, all_site_users, all_users |
 | `workspaceadmin@kasm.local` | local | no | generated | workspace_admins, all_site_users, all_users |
 
-**Built-in users** are exactly `admin@kasm.local` and `user@kasm.local` — these two usernames use Kasm startup token credentials regardless of any other configuration. The admin account password is the `admin-password` key in the `<release>-secrets` Secret. The user account password is the `user-password` key in the same Secret. Both keys only exist while their respective built-in account is actually seeded.
+**Built-in users** are exactly `admin@kasm.local` and `user@kasm.local` - these two usernames use Kasm startup token credentials regardless of any other configuration. The admin account password is the `admin-password` key in the `<release>-secrets` Secret. The user account password is the `user-password` key in the same Secret. Both keys only exist while their respective built-in account is actually seeded.
 
-**Non-built-in users** (`siteadmin@kasm.local` → `site-admin-password`/`site-admin-salt`, `workspaceadmin@kasm.local` → `workspace-admin-password`/`workspace-admin-salt`, and the `admins`-group member seeded when `adminUsername` is set to anything other than `admin@kasm.local` → `<local-part>-password`/`<local-part>-salt`) receive generated credentials stored in the `<release>-secrets` and `<release>-password-salts` Secrets under these short, readable keys — the same naming convention used for every non-built-in default user.
+**Non-built-in users** (`siteadmin@kasm.local` → `site-admin-password`/`site-admin-salt`, `workspaceadmin@kasm.local` → `workspace-admin-password`/`workspace-admin-salt`, and the `admins`-group member seeded when `adminUsername` is set to anything other than `admin@kasm.local` → `<local-part>-password`/`<local-part>-salt`) receive generated credentials stored in the `<release>-secrets` and `<release>-password-salts` Secrets under these short, readable keys - the same naming convention used for every non-built-in default user.
 
 ---
 
@@ -88,7 +94,7 @@ kasmConfig:
 
 **Permissions:** `user`
 
-**Settings (partial — full list is authoritative in `_kasm_config_helper.tpl`):**
+**Settings (partial - full list is authoritative in `_kasm_config_helper.tpl`):**
 
 | Setting | Value |
 |---|---|

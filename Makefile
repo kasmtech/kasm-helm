@@ -34,7 +34,7 @@ AGENT_CRDS_SOURCE_DIR := charts/kasm-agent-operator/crds
 # dependencies, so it rides along on the *-agent targets rather than getting its own family.
 #
 # Dependency build order matters: `helm dependency build charts/kasm-platform` packages
-# charts/kasm-agent as it finds it on disk, charts/ directory included, so kasm-agent's own 8
+# charts/kasm-agent as it finds it on disk, charts/ directory included, so kasm-agent's own 9
 # dependencies must already be staged or the resulting archive is missing them. deps-agent builds
 # them in that order.
 PLATFORM_CHART_DIR := charts/kasm-platform
@@ -70,6 +70,16 @@ KUBECTL := $(BIN_DIR)/kubectl
 CLOUD_PROVIDER_KIND := $(BIN_DIR)/cloud-provider-kind
 CRANE := $(BIN_DIR)/crane
 HELM_DOCS := $(BIN_DIR)/helm-docs
+# The HTML values-table renderers every chart's README.md.gotmpl used to carry as byte-identical
+# copies now live once in _templates.gotmpl at the repo root, prepended to each chart's own
+# README.md.gotmpl. helm-docs resolves a --template-files path that starts with ./ or ../ against
+# --chart-search-root (a bare name is looked up inside each chart directory), so the same file is
+# reached two ways: ../_templates.gotmpl from the repo root with --chart-search-root charts
+# (readme-all, readme-check-all), and ../../_templates.gotmpl from inside $(CHART_DIR) (readme,
+# readme-check), where the search root defaults to the chart itself.
+HELM_DOCS_SHARED_TEMPLATE := _templates.gotmpl
+HELM_DOCS_TEMPLATES_FROM_ROOT := --template-files=../$(HELM_DOCS_SHARED_TEMPLATE) --template-files=README.md.gotmpl
+HELM_DOCS_TEMPLATES_FROM_CHART := --template-files=../../$(HELM_DOCS_SHARED_TEMPLATE) --template-files=README.md.gotmpl
 YQ := $(BIN_DIR)/yq
 HELM_PLUGINS_DIR := $(CURDIR)/.helm/plugins
 PYTEST_IMAGE ?= kasm-e2e-pytest:latest
@@ -418,7 +428,7 @@ validate-preseed: tools render ## Validate preseed output against the 1.19.0 sch
 
 ##@ Kasm Agent Charts
 
-deps-agent: $(HELM) ## Build the kasm-agent and kasm-platform Helm dependencies (needs network access: 3 of kasm-agent's 8 deps are remote -- csi-driver-rclone over OCI, gpu-operator and nfs-server-provisioner over HTTP repos)
+deps-agent: $(HELM) ## Build the kasm-agent and kasm-platform Helm dependencies (needs network access: 3 of kasm-agent's 9 deps are remote -- csi-driver-rclone over OCI, gpu-operator and nfs-server-provisioner over HTTP repos)
 	$(HELM) dependency build $(AGENT_CHART_DIR)
 	@# Second, and only second: kasm-platform archives $(AGENT_CHART_DIR) from disk, so the line
 	@# above has to have staged kasm-agent's own dependencies first.
@@ -543,7 +553,7 @@ render-agent: deps-agent ## Render all kasm-agent test scenario values to .rende
 	  echo "Rendering agent-crds"; \
 	  $(HELM) template kasm-agent-crds-test $(AGENT_CRDS_CHART_DIR) -n kasm-agent-test > .rendered/agent-crds.yaml
 
-# `helm package` embeds every staged dependency (all 8, the 3 remote ones included) inside the
+# `helm package` embeds every staged dependency (all 9, the 3 remote ones included) inside the
 # archive's charts/ directory, so the resulting dist/kasm-agent-0.1.0.tgz is a self-contained
 # artifact: `helm install` from it needs no chart repository and no network. This is the file to
 # carry across the airgap -- a git clone is not enough, because installing from a checkout still
@@ -706,7 +716,7 @@ readme: $(HELM_DOCS) ## Regenerate charts/kasm-helm/README.md (+ optionally bump
 	@if [ -n "$(CHART_VERSION)" ]; then \
 	  python3 scripts/set_versions.py --chart-version "$(CHART_VERSION)" $(if $(APP_VERSION),--app-version "$(APP_VERSION)",); \
 	fi
-	cd $(CHART_DIR) && $(HELM_DOCS)
+	cd $(CHART_DIR) && $(HELM_DOCS) $(HELM_DOCS_TEMPLATES_FROM_CHART)
 
 # Fails (non-zero exit) if the committed README.md files are out of date:
 #   - charts/kasm-helm/README.md vs. values.yaml + README.md.gotmpl (helm-docs)
@@ -717,7 +727,7 @@ readme-check: $(HELM_DOCS) ## Verify both README.md files are up to date (use `m
 	tmp_dir=$$(mktemp -d); \
 	trap 'rm -rf "$$tmp_dir"' EXIT; \
 	cp $(CHART_DIR)/README.md $$tmp_dir/README.md.before; \
-	cd $(CHART_DIR) && $(HELM_DOCS) >/dev/null && cd - >/dev/null; \
+	cd $(CHART_DIR) && $(HELM_DOCS) $(HELM_DOCS_TEMPLATES_FROM_CHART) >/dev/null && cd - >/dev/null; \
 	if ! diff -u $$tmp_dir/README.md.before $(CHART_DIR)/README.md > $$tmp_dir/diff; then \
 	  echo ""; \
 	  echo "ERROR: $(CHART_DIR)/README.md is out of date with values.yaml + README.md.gotmpl."; \
@@ -738,7 +748,7 @@ readme-check: $(HELM_DOCS) ## Verify both README.md files are up to date (use `m
 # kasm-helm's own release-version scheme (see scripts/set_versions.py) and doesn't apply to the
 # agent-family charts, which are independently versioned starting at 0.1.0.
 readme-all: $(HELM_DOCS) ## Regenerate README.md for every chart (kasm-helm + all kasm-agent-family charts) from its values.yaml + README.md.gotmpl
-	$(HELM_DOCS) --chart-search-root charts
+	$(HELM_DOCS) --chart-search-root charts $(HELM_DOCS_TEMPLATES_FROM_ROOT)
 
 # Same drift-detection idiom as readme-check (snapshot -> regenerate in place -> diff -> restore on
 # failure), just looped across $(ALL_CHART_DIRS) instead of a single chart. Regeneration itself is
@@ -752,7 +762,7 @@ readme-check-all: $(HELM_DOCS) ## Verify every chart's README.md is up to date (
 	for chart_dir in $(ALL_CHART_DIRS); do \
 	  cp "$$chart_dir/README.md" "$$tmp_dir/$$(basename $$chart_dir).README.md.before"; \
 	done; \
-	$(HELM_DOCS) --chart-search-root charts >/dev/null; \
+	$(HELM_DOCS) --chart-search-root charts $(HELM_DOCS_TEMPLATES_FROM_ROOT) >/dev/null; \
 	drift=0; \
 	for chart_dir in $(ALL_CHART_DIRS); do \
 	  before="$$tmp_dir/$$(basename $$chart_dir).README.md.before"; \

@@ -6,7 +6,7 @@ All notable changes to the kasm-agent-crds chart are documented here.
 
 ### Changed
 - CRDs updated from the operator (2026-09-04): `Agent` gains `spec.sessionProxy.otel.endpoint` (session-proxy sidecar OTLP endpoint override; empty disables the exporter), and `KasmWorkspace.spec.fileMappings[]` gains `binaryData` (binary file content, mirrors a ConfigMap's `binaryData`) and `writable` (copy-on-start so the session user can edit the file).
-
+- README lists all five CRDs, adding `warmpools` and `warmpoolinstances` in `pools.kasm.ai`; the regeneration hint says `make readme-all`; the first section links the docs index.
 
 ### Added
 

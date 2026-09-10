@@ -4,6 +4,10 @@ All notable changes to the kasm-platform chart are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- README rewritten around the relayed default: a no-values quickstart, `publicAddr` plus an optional real TLS Secret, the namespace rules, and a short pointer to the direct-connect how-to; the auth-domain explanation and the direct-connect quickstart moved to docs, and Publishing links the publishing how-to. Fixed the `helm dependency update` command, which named an OCI URL instead of `charts/kasm-platform`. NOTES: one line next to the Enable step pointing at the "Automatically Enable Agents" setting.
+
 ### Fixed
 
 - NOTES.txt was wrong for the chart's own defaults. It printed the agent's manager hostname, token source and session hostname as `unset` while `inClusterControlPlane` derives all three, and its "auth domain" and "zone must use direct connections" steps would break the default relayed topology if followed. It now branches on the topology in use: the relayed default gets a "nothing more to configure" section carrying the recipe for switching to direct connections, and direct-connect installs keep the auth-domain and zone checks. It also covers how to reach the control plane when `publicAddr` is unset (the assigned LoadBalancer address or node:port read back with `lookup` from the first `helm upgrade` on, else the `kubectl` command or a port-forward), which accounts are seeded and where every generated credential lives, the two manual admin steps after the agent registers, and warns when the derived wiring cannot match the control plane (`kasm-helm.enabled=false`, a custom `kasmSecrets.name`, `kasmZones` without a zone named `default`, or an agent zone the control plane does not define). The self-signed certificate warning no longer repeats itself.
