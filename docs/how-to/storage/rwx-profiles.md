@@ -1,6 +1,6 @@
 # RWX storage for persistent profiles
 
-> **Applies to:** agent · **Charts/values:** `nfs-server-provisioner.enabled`, `nfs-server-provisioner.persistence.enabled`, `nfs-server-provisioner.persistence.storageClass`, `nfs-server-provisioner.persistence.size`, `nfs-server-provisioner.storageClass.create`, `nfs-server-provisioner.storageClass.name`, `nfs-server-provisioner.storageClass.reclaimPolicy`, `nfs-server-provisioner.storageClass.mountOptions`
+> **Applies to:** agent · **Charts/values:** `agent.persistentProfiles.storageClass`, `agent.persistentProfiles.accessModes`, `agent.persistentProfiles.capacity`, `nfs-server-provisioner.enabled`, `nfs-server-provisioner.persistence.enabled`, `nfs-server-provisioner.persistence.storageClass`, `nfs-server-provisioner.persistence.size`, `nfs-server-provisioner.storageClass.create`, `nfs-server-provisioner.storageClass.name`, `nfs-server-provisioner.storageClass.reclaimPolicy`, `nfs-server-provisioner.storageClass.mountOptions`
 
 ## Why this is needed
 
@@ -8,10 +8,11 @@ A Kasm persistent profile is a PVC the operator attaches to every session a user
 `ReadWriteOnce` class that PVC binds to one node, so the user's next session must land on that same
 node or fail to start. **Shared** profiles - the same profile mounted by more than one session, or a
 session that must be schedulable anywhere - need a `ReadWriteMany` StorageClass. No chart value
-creates the profile itself: `spec.profiles` on the `KasmWorkspace` comes from the Kasm manager, and
-no value or manager setting names the class. The operator leaves the profile PVC's
-`storageClassName` empty, so the **cluster's default StorageClass** provisions it. The charts' job
-here is making an RWX class exist; yours is making it the default.
+creates the profile itself: `spec.profiles` on the `KasmWorkspace` comes from the Kasm manager,
+which sends only the profile path. The class, access modes and size of every profile PVC are the
+agent's defaults, `agent.persistentProfiles`; left empty, the cluster's default StorageClass,
+`ReadWriteOnce` and `10Gi` apply. The charts' job here is making an RWX class exist and naming it
+there.
 
 ## Before you start
 
@@ -78,24 +79,27 @@ storage recommendation. It is also **un-aliased** in `values.yaml` (the upstream
    Under [kasm-platform](../../../charts/kasm-platform/README.md) the same block nests under
    `kasm-agent:` - see [Chart values](#chart-values).
 
-5. **Make the RWX class the cluster's default.** The operator creates each profile PVC with no
-   `storageClassName`, so the default StorageClass is the one that provisions it; nothing on the
-   manager and nothing in the charts selects a class per profile. Move the default annotation from
-   the current class to the RWX one:
+5. **Point the agent's profile defaults at the class.** The manager never names a class, so the
+   agent's defaults decide every profile PVC:
 
-   ```console
-   kubectl annotate storageclass local-path storageclass.kubernetes.io/is-default-class-
-   kubectl annotate storageclass kasm-rwx storageclass.kubernetes.io/is-default-class=true
+   ```yaml
+   kasm-agent:
+     agent:
+       persistentProfiles:
+         storageClass: kasm-rwx
+         accessModes: [ReadWriteMany]
+         capacity: 20Gi                # default 10Gi
    ```
 
-   Every other PVC created without a class in the cluster follows the same default, which is the
-   trade-off to accept before doing this.
+   A `helm upgrade` with these rolls the agent; profile PVCs created afterwards use them, existing
+   ones keep what they were created with. Nothing else in the cluster changes: the default
+   StorageClass stays whatever it is.
 
 6. **Turn profiles on in the manager, as on any Kasm.** The workspace's *Persistent Profile Path*
    (for example `/profiles/{username}/{image_id}`) and the group's *Allow Persistent Profile*
    setting are Kasm configuration and work the same here
    ([Kasm docs: Workspaces](https://www.kasmweb.com/docs/latest/guide/workspaces.html)). The
-   operator turns the path into a PVC of 10Gi (not a value) mounted at the session's home.
+   operator turns the path into a PVC of `persistentProfiles.capacity` mounted at the session's home.
 
 ## Verify
 
@@ -132,9 +136,10 @@ it produced:
 kubectl -n kasm-agent get pvc | grep kasm-profile-
 ```
 
-Expected: one `kasm-profile-<profile name>-<hash>` claim, `Bound`, `10Gi`, and its `STORAGECLASS`
-column showing `kasm-rwx` with `RWX` access. `local-path` and `RWO` there means the default class
-was not moved (step 5). The PVC outlives the session: destroy it, relaunch, and a file written to
+Expected: one `kasm-profile-<profile name>-<hash>` claim, `Bound`, the size from
+`persistentProfiles.capacity`, and its `STORAGECLASS` column showing `kasm-rwx` with `RWX` access.
+`local-path` and `RWO` there means the agent's defaults are not set (step 5) or the PVC predates
+them. The PVC outlives the session: destroy it, relaunch, and a file written to
 the home directory is still there. Then launch two sessions for the same user on different nodes
 and confirm both start.
 
@@ -164,7 +169,7 @@ Installing `kasm-agent` directly? Drop the `kasm-agent:` key and start at `nfs-s
 | Test PVC stays `Pending`, events say `no persistent volumes available` | The class is RWO-only (EBS, PD, Azure Disk, `local-path`) | Use an RWX driver, or Path B above |
 | Profiles empty after a cluster restart | `nfs-server-provisioner.persistence.enabled` left `false` - the export lived on the pod's ephemeral storage | Enable it and set `persistence.storageClass` + `persistence.size`; re-provision |
 | Second session for a user stays `Pending` on a node | RWO profile PVC is bound to another node | Move to an RWX class, or pin sessions with `agent.workspacesNodeSelector` |
-| Profile PVCs bind on `local-path` (or another RWO class) although `kasm-rwx` exists | The profile PVC names no class, so the cluster default wins | Make the RWX class the default (step 5); existing profile PVCs keep their class |
+| Profile PVCs bind on `local-path` (or another RWO class) although `kasm-rwx` exists | `agent.persistentProfiles.storageClass` is empty, so the cluster default wins | Set it (step 5) and upgrade; existing profile PVCs keep their class |
 | `--set nfsServerProvisioner.enabled=true` does nothing | The dependency is un-aliased | Use the kebab-case key: `--set nfs-server-provisioner.enabled=true` (escape the dots as needed) |
 | NFS pods `CrashLoopBackOff` on OpenShift | The provisioner needs an SCC it does not have | Use ODF/CephFS instead |
 
@@ -175,7 +180,7 @@ Installing `kasm-agent` directly? Drop the `kasm-agent:` key and start at `nfs-s
 - [ ] If bundled: `nfs-server-provisioner.persistence.enabled=true` with a backing `storageClass` and `size`
 - [ ] `nfs-server-provisioner.storageClass.name` chosen and recorded
 - [ ] Test PVC with `accessModes: [ReadWriteMany]` reaches `Bound`
-- [ ] The RWX class is the cluster's default StorageClass; the trade-off for other claims accepted
+- [ ] `agent.persistentProfiles.storageClass` names the RWX class, `accessModes` is `[ReadWriteMany]`, `capacity` chosen
 - [ ] Persistent Profile Path set on the workspace and allowed for the group, in the manager
 - [ ] A launched session's `kasm-profile-*` PVC shows the RWX class
 - [ ] Two concurrent sessions for the same user start on different nodes

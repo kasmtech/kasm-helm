@@ -11,28 +11,28 @@ own hostname instead: no relay hop, no 30-minute idle ceiling, and the agent sca
 Three things change together: the agent gets a public hostname, the login cookie is scoped to a
 domain covering both hostnames, and the zone stops relaying.
 
-> **Warning.** Known issue: on direct-connect, sessions cannot stream through any Gateway listener
-> that selects the backend by SNI. That is TLS passthrough (the operator-managed `gatewayRoute` and
-> the chart `tlsRoute`) and a terminating `HTTPRoute` on a data plane that needs SNI to pick a
-> listener (Envoy Gateway 1.6). The session proxy's `/desktop/<id>/` location proxies to its own
-> public address, that hairpin carries no SNI, and the Gateway resets it: the browser gets a `502`
-> and the session-proxy error log shows `peer closed connection in SSL handshake while SSL
-> handshaking to upstream`. What works: a plain `LoadBalancer` or `NodePort` Service (the hairpin
-> lands on the same pod) and a front end that routes by `Host` header and answers without SNI (an
-> Ingress or `HTTPRoute` on Traefik 3.7 verified). The relayed default is unaffected. This is an
-> agent and session-proxy bug pending a fix upstream; the pages for the affected mechanisms point
-> back here.
+> **Note.** How it works: on direct-connect the session proxy answers the browser directly for its
+> own sessions. It serves each session's `/desktop/<id>/...` path locally, authorizes every request
+> with the control plane, and proxies straight to the workspace Service; nothing loops back through
+> the public address. So the front end's routing method does not matter: TLS passthrough
+> (`agent.gatewayRoute`, `agent.tlsRoute`, an OpenShift `passthrough` Route), an `HTTPRoute` on any
+> data plane, an Ingress, a `LoadBalancer` or a `NodePort` Service all stream. Only a session hosted
+> on a different session proxy behind a shared hostname takes a second hop, and that hop sends SNI.
 
 ```mermaid
-%%{init: {"theme":"base","themeVariables":{"primaryColor":"#eef3f8","primaryBorderColor":"#5b7a99","primaryTextColor":"#1d2b3a","secondaryColor":"#fbf3e6","secondaryBorderColor":"#b8863b","tertiaryColor":"#eaf5ec","tertiaryBorderColor":"#4f8a5b","lineColor":"#5b7a99","fontFamily":"Inter, Helvetica, Arial, sans-serif","fontSize":"14px"},"flowchart":{"curve":"basis","htmlLabels":true}}}%%
+%%{init: {"theme":"base","themeVariables":{"background":"#ffffff","primaryColor":"#f2f4f7","primaryBorderColor":"#f2f4f7","primaryTextColor":"#0f2a44","lineColor":"#0f2a44","clusterBkg":"#ffffff","clusterBorder":"#4a4a4a","edgeLabelBackground":"#ffffff","fontFamily":"Montserrat, Helvetica, Arial, sans-serif","fontSize":"13px"},"flowchart":{"curve":"linear","htmlLabels":true,"nodeSpacing":36,"rankSpacing":64}}}%%
 flowchart LR
-  browser["Browser"] -->|"HTTPS 443 · kasm.example.com"| cp["Control plane proxy"]
-  browser -->|"HTTPS 443 · sessions.example.com"| sp["Session proxy"]
-  sp -->|"6901"| ws["Workspace pod"]
-  classDef agent fill:#eaf5ec,stroke:#4f8a5b
-  classDef ext fill:#fbf3e6,stroke:#b8863b
-  class sp,ws agent
-  class browser ext
+  browser["Browser"]:::card
+  cp["Control plane proxy"]:::card
+  sp["Session proxy"]:::card
+  ws["Workspace pod"]:::card
+  browser -->|"HTTPS (443) · kasm.example.com"| cp
+  browser -->|"HTTPS (443) · sessions.example.com"| sp
+  sp -->|"6901"| ws
+  classDef card fill:#f2f4f7,stroke:#f2f4f7,color:#0f2a44,font-weight:600
+  linkStyle 0 stroke:#5ec2ef,stroke-width:2px
+  linkStyle 1 stroke:#f0b429,stroke-width:2px
+  linkStyle 2 stroke:#b39ddb,stroke-width:2px
 ```
 
 ## Before you start
@@ -62,10 +62,9 @@ side yet.
 1. **Publish the session proxy at its hostname.** Set `kasm-agent.agent.publicHostname` and enable
    exactly one of `ingress`, `httpRoute`, `route`, `tlsRoute`, `gatewayRoute` or
    `sessionProxy.service.type`. The mechanism pages have the values; the umbrella example under
-   [Chart values](#chart-values) uses an Ingress. While the warning above stands, pick an Ingress,
-   a `Host`-routing `HTTPRoute`, or a published Service. Setting `publicHostname` also switches
-   `agent.publicPort` from the derived 4444 to 443; a published Service exposes 4444 and 4445
-   only, so set `publicPort` to the port the Service exposes there
+   [Chart values](#chart-values) uses an Ingress. Setting `publicHostname` also switches
+   `agent.publicPort` from the derived 4444 to 443; a `LoadBalancer` answers there with
+   `sessionProxy.service.httpsPort: 443`, and a NodePort needs `publicPort` set to the node port
    ([LoadBalancer and NodePort](loadbalancer-nodeport.md)).
 
 2. **Scope the login cookie to the shared parent domain.** Kasm issues its cookie for the
@@ -144,9 +143,10 @@ a timeout means the route or the Service is wrong. The certificate's SANs includ
 `httpRoute` and `ingress` it is the Gateway's or the controller's.
 
 > **Note.** Changing `publicHostname` regenerates the session proxy's self-signed Secret with the
-> new name, but the operator does not roll the session-proxy pods, so the old certificate is served
-> until the pod restarts: `kubectl -n <ns> delete pod -l app.kubernetes.io/component=session-proxy`. The
-> same applies to a certificate issued or renewed by cert-manager ([Certificates](certificates.md)).
+> new name. The operator keeps a hash of the session proxy's configuration and TLS Secret on the
+> Deployment's pod template, so the session-proxy pods roll on their own and the `openssl` check
+> above shows the new name after about 30 s. The same applies to a certificate issued or renewed by
+> cert-manager ([Certificates](certificates.md)).
 
 Then check the manager's side. After the switch the agent registers with `sessions.example.com`
 as its hostname, and the API reaches it at `https://sessions.example.com:<publicPort>` from
@@ -157,7 +157,7 @@ the agent looks healthy is that path.
 
 Then log in at `kasm.example.com` and launch a session. Expected: the address bar shows
 **`sessions.example.com`**, and the session survives past 60 seconds, which proves the idle timeout
-is raised. A `502` on connect is the known issue in the warning above.
+is raised.
 
 ## Chart values
 
@@ -207,15 +207,16 @@ and the `kasm-helm:` key for `kasm-helm`.
 [Troubleshooting](../../reference/troubleshooting.md): a 401 on session connect is the cookie scope;
 a 404 from the ingress is a zone still relaying; a session that dies after a minute is the idle
 timeout; a 502 on connect with `peer closed connection in SSL handshake` in the session-proxy
-error log is the SNI hairpin known issue above; "No resources are available" after the switch is
-the API failing to reach `<publicHostname>:<publicPort>` from inside the cluster.
+error log is a session hosted on another session proxy behind a shared hostname, never the local
+path; "No resources are available" after the switch is the API failing to reach
+`<publicHostname>:<publicPort>` from inside the cluster.
 
 ## Decisions
 
 - [ ] Two sibling hostnames under one registrable parent; DNS for both.
 - [ ] Kasm Auth Domain set to that parent: `kasm-helm.kasmConfig.authDomain` on a fresh install, Settings → Auth on an existing one.
 - [ ] Zone switched: `proxy_connections: false`, `upstream_auth_address` = the control plane hostname.
-- [ ] Exactly one exposure mechanism on the agent, not an SNI-routed Gateway while the known issue stands; idle timeout raised on whatever fronts it.
+- [ ] Exactly one exposure mechanism on the agent; idle timeout raised on whatever fronts it.
 - [ ] `agent.publicPort` equals the port the manager reaches the session proxy on (443 behind a front end, the Service port on a published Service).
 - [ ] Session-proxy certificate publicly trusted, with the wildcard where browsers reach the proxy directly.
 - [ ] A browser session connects on `sessions.example.com` and survives past 60 seconds.

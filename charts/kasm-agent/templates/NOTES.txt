@@ -42,7 +42,8 @@ Watch the rollout:
 
   kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }} -w
 
-{{ if $agentEnabled }}Check that the agent registered with its Kasm manager:
+{{ if $agentEnabled }}Check that the agent registered with its Kasm manager (PHASE turns Ready once it has
+registered and its heartbeats are arriving):
 
   kubectl get agents.agent.kasm.com -n {{ .Release.Namespace }}
 

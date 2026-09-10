@@ -200,6 +200,13 @@ sessionProxy:
     # `LoadBalancer` types only, inside 30000-32767, omitted from the Agent resource when empty, and stable
     # across reconciles even when left unpinned.
     httpNodePort: ""
+    # sessionProxy.service.httpsPort -- Service-facing port for the HTTPS (4444) listener, for example `443` so a
+    # `LoadBalancer` publishes the session proxy on 443 without touching the zone's port or `publicPort`. The
+    # container keeps listening on 4444. Empty keeps 4444.
+    httpsPort: ""
+    # sessionProxy.service.httpPort -- Service-facing port for the HTTP (4445) listener, for example `80`. The
+    # container keeps listening on 4445. Empty keeps 4445.
+    httpPort: ""
   # sessionProxy.proxyProtocol -- PROXY protocol on the session proxy's nginx listeners, so the real client
   # address survives an external L4 proxy that cannot set `X-Forwarded-For`. This is the layer-7 companion to
   # `sessionProxy.service.externalTrafficPolicy: Local`; use one or the other, whichever matches how traffic
@@ -290,6 +297,20 @@ storageMappings:
   # storageMappings.installationID -- Scopes the derived StorageClass and Secret names. Defaults to the Agent
   # resource name when empty.
   installationID: ""
+
+# persistentProfiles -- Cluster-wide defaults for the PVC behind every persistent profile. The manager sends
+# only the profile path with a launch, never a StorageClass, access mode or size, so those come from here.
+# Leave a field empty to keep the operator's default: the cluster's default StorageClass, `ReadWriteOnce`
+# and `10Gi`. Set an RWX-capable class with `ReadWriteMany` so one user's profile can be mounted by
+# concurrent sessions on different nodes.
+persistentProfiles:
+  # persistentProfiles.storageClass -- StorageClass for persistent-profile PVCs. Empty means the cluster default.
+  storageClass: ""
+  # persistentProfiles.accessModes -- Access modes for persistent-profile PVCs, for example `[ReadWriteMany]`.
+  # Empty means `ReadWriteOnce`.
+  accessModes: []
+  # persistentProfiles.capacity -- Size of each persistent-profile PVC, for example `20Gi`. Empty means `10Gi`.
+  capacity: ""
 
 # serverID -- The stable UUID this agent registers under. Leave empty to have the operator generate one and
 # record it in the Agent's status; set it to adopt an existing registration. Omitted from the Agent resource

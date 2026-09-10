@@ -1,0 +1,33 @@
+suite: session-proxy Service ports on the Agent
+templates:
+  - templates/agent.yaml
+set:
+  manager:
+    hostname: zonea.example.com
+    existingTokenSecret: kasm-manager-token
+  publicHostname: agent.example.com
+tests:
+  - it: renders no Service port overrides by default
+    asserts:
+      - isNull:
+          path: spec.sessionProxy.service.httpsPort
+      - isNull:
+          path: spec.sessionProxy.service.httpPort
+
+  - it: passes httpsPort and httpPort through as integers
+    set:
+      sessionProxy:
+        service:
+          type: LoadBalancer
+          httpsPort: 443
+          httpPort: 80
+    asserts:
+      - equal:
+          path: spec.sessionProxy.service.type
+          value: LoadBalancer
+      - equal:
+          path: spec.sessionProxy.service.httpsPort
+          value: 443
+      - equal:
+          path: spec.sessionProxy.service.httpPort
+          value: 80

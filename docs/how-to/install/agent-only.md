@@ -34,7 +34,9 @@ three flows that cross a cluster boundary.
   control plane's proxy and the session proxy may route on the `Host` header, so use a
   `LoadBalancer`/`NodePort` Service, not an Ingress or HTTPRoute (TLS passthrough is unverified
   there); [Deployment topologies](../../explanation/topologies.md) explains why. A published
-  Service exposes the session proxy's own ports, 4444 and 4445, never 443.
+  Service exposes the session proxy's own ports, 4444 and 4445, unless
+  `agent.sessionProxy.service.httpsPort` and `httpPort` map them elsewhere; the values below map
+  443 onto 4444.
 - A certificate for the session proxy if browsers will reach it directly:
   [Certificates](../networking/certificates.md).
 
@@ -57,18 +59,19 @@ three flows that cross a cluster boundary.
        hostname: eu.kasm.example.com   # the zone's hostname (kasmZones[].proxy_hostname), not publicAddr
        existingTokenSecret: kasm-manager-token
      publicHostname: eu.sessions.example.com
-     publicPort: 4444                  # a LoadBalancer Service exposes the proxy's own 4444, not 443
      zone: eu                          # must match the zone behind manager.hostname
      sessionProxy:
        service:
          type: LoadBalancer            # published directly; works on a relayed or a direct-connect zone
+         httpsPort: 443                # the Service's 443 onto the proxy's 4444 listener
    ```
 
-   With `publicHostname` set, `publicPort` defaults to 443, which nothing serves on a plain
-   Service: the manager's hello call to `<publicHostname>:443` fails and every launch returns
-   "No resources are available". The `Agent` resource has no Service port field, so only a load
-   balancer you run outside the Service can present 443; then `publicPort` stays 443
-   ([LoadBalancer and NodePort](../networking/loadbalancer-nodeport.md)).
+   With `publicHostname` set, `publicPort` defaults to 443, and `httpsPort: 443` is what makes the
+   Service answer there: the container keeps listening on 4444, the Service publishes it as 443,
+   and the manager's hello call to `<publicHostname>:443` succeeds. Leave `httpsPort` empty and
+   the Service publishes the proxy's own 4444 instead, so that call fails and every launch returns
+   "No resources are available". A NodePort is reached on its node port, which `publicPort` then
+   has to name ([LoadBalancer and NodePort](../networking/loadbalancer-nodeport.md)).
 
 3. **Install.**
 
@@ -87,8 +90,8 @@ three flows that cross a cluster boundary.
    Authorization Domain to the parent domain shared by both hostnames, and the zone's *Upstream Auth
    Address* to the control plane's hostname:
    [Switch sessions to direct-connect](../networking/direct-connect.md). Browsers are sent to
-   `eu.sessions.example.com` on the zone's *Proxy Port*, not on `publicPort`; with the Service
-   above that port is 4444, so set the zone's Proxy Port to match
+   `eu.sessions.example.com` on the zone's *Proxy Port*, not on `publicPort`; with `httpsPort: 443`
+   above, the zone's default of 443 already matches. Only a NodePort has to be named there
    (`kasmZones[].proxy_port`, or Infrastructure → Zones).
 
 7. **Uninstall in two steps, when the time comes.** Delete the `KasmWorkspace` and `Agent`
@@ -107,17 +110,18 @@ three flows that cross a cluster boundary.
 ```console
 kubectl get agents.agent.kasm.com -n kasm-agent
 kubectl get svc -n kasm-agent k8s-agent-session-proxy
-curl -sk -o /dev/null -w '%{http_code}\n' https://eu.sessions.example.com:4444/
+curl -sk -o /dev/null -w '%{http_code}\n' https://eu.sessions.example.com/
 ```
 
-Expected: `PHASE` is `Ready`; the Service has an `EXTERNAL-IP` and `4444:<nodeport>/TCP,4445:<nodeport>/TCP`;
+Expected: `PHASE` is `Ready`, which means the agent registered with the zone's manager and its
+heartbeats are arriving; the Service has an `EXTERNAL-IP` and `443:<nodeport>/TCP,4445:<nodeport>/TCP`;
 the `curl` prints `404`, which is correct with no active session (it proves the session proxy
-answered). `Ready` is the operator's view of the pods, not the manager's acceptance, so also check
+answered). The `Agent` status carries no zone and no enabled state, so also check
 **Infrastructure → Agents** on the control plane: the agent is listed as `eu.sessions.example.com`
-in zone `eu` with its last-reported time advancing (or `get_servers` on the API shows
-`last_reported` advancing). An agent listed in the primary zone registered through the primary
-hostname. Then launch a session from the control plane; the API log shows
-`Requesting Hello ... https://eu.sessions.example.com:4444/agent/api/v1/create_container/` and the
+in zone `eu` (or `get_servers` on the API shows it with `zone_name: eu`) and is enabled. An agent
+listed in the primary zone registered through the primary hostname. Then launch a session from
+the control plane; the API log shows
+`Requesting Hello ... https://eu.sessions.example.com:443/agent/api/v1/create_container/` and the
 `KasmWorkspace` appears in this cluster.
 
 ## Chart values
@@ -128,11 +132,11 @@ agent:
     hostname: eu.kasm.example.com
     existingTokenSecret: kasm-manager-token
   publicHostname: eu.sessions.example.com
-  publicPort: 4444
   zone: eu
   sessionProxy:
     service:
       type: LoadBalancer
+      httpsPort: 443
 ```
 
 Under `kasm-platform` with `kasm-helm.enabled: false`, nest the block under `kasm-agent:`.
@@ -140,19 +144,21 @@ Under `kasm-platform` with `kasm-helm.enabled: false`, nest the block under `kas
 ## Troubleshooting
 
 [Troubleshooting](../../reference/troubleshooting.md). A `PHASE` short of `Ready` is the token, the
-manager address, or an agent image tag the control plane's `manager/agent_version` setting does
-not accept. `Ready` with no record on the control plane is a manager the agent cannot reach. A
-record in the wrong zone is `manager.hostname` pointing at another zone's manager. "No resources
-are available" on launch is `publicPort` not matching the Service.
+manager address (`Progressing` with `waiting for workloads (agent=false, ...)` and
+`heartbeat failed` in the agent log), or an agent image tag the control plane's
+`manager/agent_version` setting does not accept. A record in the wrong zone is `manager.hostname`
+pointing at another zone's manager. "No resources are available" on launch with a `Ready` agent is
+the agent not enabled, or `publicPort` not matching the port the Service exposes (443 with
+`httpsPort: 443`; the node port on a NodePort).
 
 ## Decisions
 
 - [ ] Manager token obtained and stored as a Secret, not inline in values.
 - [ ] One zone per cluster decided; the zone has a manager (`kasmZones` entry) and `agent.manager.hostname` is that zone's hostname; `agent.zone` matches.
 - [ ] Exposure mechanism chosen; on a relayed zone, a published Service.
-- [ ] `agent.publicPort` equals the port the Service exposes (4444), and on direct-connect the zone's Proxy Port matches it.
+- [ ] `sessionProxy.service.httpsPort: 443`, so `agent.publicPort` and the zone's Proxy Port stay at 443; on a NodePort both name the node port.
 - [ ] `agent.publicHostname` reachable from the manager, and from browsers on a direct-connect zone.
-- [ ] The control plane lists the agent in the intended zone with its last-reported time advancing.
+- [ ] `PHASE Ready`; the control plane lists the agent in the intended zone.
 - [ ] Two-step uninstall known; `kasm-agent-state` deleted before re-registering elsewhere.
 - [ ] Session-proxy certificate trusted by browsers if the zone is direct-connect.
 - [ ] Enable click owned, or `auto_agent` on.

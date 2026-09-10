@@ -171,12 +171,14 @@ Expected indicators:
   `*-allow-apiserver-egress`, `*-allow-manager-egress`, `*-allow-session-ingress`,
   `*-allow-otlp-backend-egress`; with `cilium.enabled`, one `CiliumNetworkPolicy` beside them
   (`kubectl get cnp -n kasm-agent`).
-* The `Agent` resource reports **Ready**, which is the operator's view of the pods and **not**
-  proof the heartbeat survives: an agent has stayed `Ready` while every heartbeat timed out. The
-  proof is on the manager's side: under **Infrastructure → Agents** the agent is listed (by its
-  session-proxy hostname) with its last-reported time advancing, or `get_servers` on the API
-  shows `last_reported` advancing. `kubectl -n kasm-agent logs deploy/k8s-agent | grep heartbeat`
-  must show no `heartbeat failed` lines after the policies landed.
+* The `Agent` resource reports **Ready**, which means it registered and its heartbeats reach the
+  manager through the policies. An agent the policies cut off drops to `Progressing` with
+  `Available=False WorkloadsUnavailable` (`waiting for workloads (agent=false, sessionProxy=true)`)
+  within about a minute. To confirm the allow:
+  `kubectl -n kasm-agent logs deploy/k8s-agent | grep heartbeat` shows no `heartbeat failed` lines
+  after the policies landed, and under **Infrastructure → Agents** the agent is listed (by its
+  session-proxy hostname) with its last-reported time advancing, or `get_servers` on the API shows
+  `last_reported` advancing.
 * The step-1 deny test times out rather than connecting. A blocked destination must **hang until the
   curl timeout**, not return a response.
 * A browser session still connects (session-proxy ingress and web filtering are unaffected).
@@ -212,7 +214,7 @@ Installing `kasm-agent` directly? Drop the `kasm-agent:` key and start at `netwo
 | Sessions launch but the browser cannot connect | Session-proxy ingress restricted by `networkPolicies.sessionProxy.from`, or the ports do not match the proxy's listeners | Keep `from: []`, and keep `sessionProxy.ports` at `[4444, 4445]` |
 | Operator/agent pods log API-server timeouts | `networkPolicies.apiServer.cidr` tightened past the real endpoint | Check `kubectl get endpoints kubernetes -n default` and widen |
 | Operator crash-loops the moment the policies land: `leaderelection ... context deadline exceeded`, `leader election lost`, exit 1; `cilium-dbg monitor --type drop` on the node shows `drop (Policy denied)` from the operator pod to the API server address on 6443 | Cilium: the `ipBlock` allow never matches the node that hosts the API server | `networkPolicies.cilium.enabled=true`, or Cilium's `policyCIDRMatchMode: nodes` |
-| Agent logs `heartbeat failed ... context deadline exceeded` every 30 s, the `Agent` stays `Ready`, the manager never lists it; `cilium-dbg monitor --type drop` shows `Policy denied` from the agent pod to the control-plane proxy pod on 8080 | Cilium: the `ipBlock` allow never matches a pod | `networkPolicies.manager.inCluster.namespace` set to the control plane's namespace |
+| Agent logs `heartbeat failed ... context deadline exceeded` every 30 s, the `Agent` stays `Progressing` (`WorkloadsUnavailable`), the manager never lists it; `cilium-dbg monitor --type drop` shows `Policy denied` from the agent pod to the control-plane proxy pod on 8080 | Cilium: the `ipBlock` allow never matches a pod | `networkPolicies.manager.inCluster.namespace` set to the control plane's namespace |
 
 ## Decisions
 
@@ -222,6 +224,6 @@ Installing `kasm-agent` directly? Drop the `kasm-agent:` key and start at `netwo
 - [ ] `networkPolicies.manager.ports` includes the real post-DNAT backend port
 - [ ] On Cilium: `manager.inCluster.namespace` for an in-cluster manager, `cilium.enabled` for a node-hosted API server
 - [ ] Seven policies present in the namespace
-- [ ] The manager lists the agent with its last-reported time advancing; no `heartbeat failed` in the agent log
+- [ ] The `Agent` is `Ready` and its log shows no `heartbeat failed`; the manager lists the agent with its last-reported time advancing
 - [ ] `apiServer`, `manager`, `otelBackend` CIDRs tightened from `0.0.0.0/0`
 - [ ] A browser session still connects end to end

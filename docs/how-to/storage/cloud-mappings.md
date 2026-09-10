@@ -19,11 +19,12 @@ is not there.
 * The rclone CSI driver is **cluster-scoped** - enable `csiRclone` in at most one release per
   cluster, and leave it off if the driver is already installed by something else
   ([Scope](../../../charts/kasm-agent/README.md#scope)).
-* The remote's credentials, as an rclone INI stanza, entered in the manager. The operator writes
-  them into a per-session Secret that the CSI driver reads. The same stanza, credentials included,
-  is also carried in `KasmWorkspace.spec.storageMappings[].config.configData` today, so anyone who
-  can read `KasmWorkspace` resources in the agent namespace can read them; scope that RBAC
-  accordingly.
+* The remote's credentials, as an rclone INI stanza, entered in the manager. At launch the agent
+  writes them into a per-session Secret (`<workspace>-<mount>-sm-config`, owned by the
+  `KasmWorkspace`, so it goes when the session does) that the CSI driver reads; the
+  `KasmWorkspace` itself carries only the Secret's name in
+  `spec.storageMappings[].config.secretRef`. Reading the workspace resources does not expose the
+  credentials; reading Secrets in the agent namespace does, so scope that RBAC accordingly.
 
 Distro / cloud variants for FUSE:
 
@@ -75,10 +76,10 @@ FUSE as a node-image prerequisite.
    ```
 
 4. **Configure the mapping in the Kasm manager** (Admin → Storage Providers / storage mappings).
-   For every session that carries a mapping the operator binds a static PersistentVolume and
-   claim pair (`<workspace>-<mount>-sm-pv`, `<workspace>-<mount>-sm`) to the rclone CSI driver and
-   writes the rclone configuration into a Secret beside them (`<workspace>-<mount>-sm-config`);
-   all three go when the session does. No StorageClass is created. You do **not** need
+   For every session that carries a mapping the agent writes the rclone configuration into a
+   Secret (`<workspace>-<mount>-sm-config`) and the operator binds a static PersistentVolume and
+   claim pair (`<workspace>-<mount>-sm-pv`, `<workspace>-<mount>-sm`) to the rclone CSI driver
+   with that Secret; all three go when the session does. No StorageClass is created. You do **not** need
    `csiRclone.storageClasses` for Kasm mappings - that pass-through list is only for StorageClasses
    you want to declare yourself.
 
@@ -173,7 +174,7 @@ Installing `kasm-agent` directly? Drop the `kasm-agent:` key and start at `csiRc
 - [ ] `kubectl get csidriver rclone.csi.veloxpack.io` returns the object
 - [ ] Node-plugin DaemonSet Running on every session node
 - [ ] Mapping configured in the Kasm manager; a session's `-sm` PV, PVC and Secret appear at launch
-- [ ] RBAC on `KasmWorkspace` resources reviewed, since the rclone stanza is readable there
+- [ ] RBAC on Secrets in the agent namespace reviewed, since each session's rclone stanza lives in one
 - [ ] Non-AWS S3 endpoints configured as a **Custom** provider (`volume_config.driver: rclone`)
 - [ ] One storage provider per distinct mount path
 - [ ] User-scoped mappings only where the group has `allow_user_storage_mapping` enabled

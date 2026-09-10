@@ -142,11 +142,12 @@ release:
 kubectl -n kasm-agent-zonea get agents.agent.kasm.com
 ```
 
-Expected: `k8s-agent Ready`. The `Agent` status carries no zone (only `phase` and the
-conditions), so the check that counts is on the control plane: **Infrastructure → Agents** lists
-the agent (by its session-proxy hostname) in `zonea` with its last-reported time advancing, or the
-admin API's `get_servers` shows it with `zone_name: zonea`. An agent listed in the primary zone
-instead registered through `publicAddr` or the `default` proxy; fix `agent.manager.hostname`.
+Expected: `k8s-agent Ready`, which means it registered with a manager and its heartbeats are
+arriving. The `Agent` status carries no zone (only `phase` and the conditions), so which zone it
+joined is only visible on the control plane: **Infrastructure → Agents** lists the agent (by its
+session-proxy hostname) in `zonea`, or the admin API's `get_servers` shows it with
+`zone_name: zonea`. An agent listed in the primary zone instead registered through `publicAddr` or
+the `default` proxy; fix `agent.manager.hostname`.
 
 ## Chart values
 

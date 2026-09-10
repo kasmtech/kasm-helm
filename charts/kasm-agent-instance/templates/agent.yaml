@@ -69,6 +69,12 @@ spec:
       {{- with $service.httpNodePort }}
       httpNodePort: {{ . }}
       {{- end }}
+      {{- with $service.httpsPort }}
+      httpsPort: {{ . }}
+      {{- end }}
+      {{- with $service.httpPort }}
+      httpPort: {{ . }}
+      {{- end }}
       {{- /* Keys and values are quoted individually rather than passed through
              toYaml: load-balancer annotations are routinely numeric-looking
              (idle timeouts, ports), and both the CRD's map[string]string and the
@@ -124,6 +130,21 @@ spec:
     {{- with .Values.storageMappings.installationID }}
     installationID: {{ . | quote }}
     {{- end }}
+  {{- end }}
+  {{- with .Values.persistentProfiles }}
+  {{- if or .storageClass .accessModes .capacity }}
+  persistentProfiles:
+    {{- with .storageClass }}
+    storageClass: {{ . | quote }}
+    {{- end }}
+    {{- with .accessModes }}
+    accessModes:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .capacity }}
+    capacity: {{ . | quote }}
+    {{- end }}
+  {{- end }}
   {{- end }}
   {{- with .Values.imagePullSecrets }}
   imagePullSecrets:

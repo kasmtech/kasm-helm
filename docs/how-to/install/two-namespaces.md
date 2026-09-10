@@ -90,8 +90,8 @@ namespace, and the agent's baseline NetworkPolicies can be turned on.
    On **Cilium**, an `ipBlock` never matches a pod or the node hosting the API server, so add to
    the same block: `networkPolicies.manager.inCluster.namespace: kasm` (an egress peer to the
    control plane's proxy pods) and, when the API server runs on a node, `networkPolicies.cilium.enabled: true`.
-   Without them the operator crash-loops and every heartbeat is dropped, while the `Agent` still
-   reports `Ready`. [NetworkPolicy enforcement](../networking/network-policies.md) has the detail.
+   Without them the operator crash-loops and every heartbeat is dropped, so the agent pod goes
+   unready. [NetworkPolicy enforcement](../networking/network-policies.md) has the detail.
 
 5. **Enable the agent and authorize a workspace**, as in [Get started](../../tutorials/get-started.md),
    or seed `auto_agent` on the control plane first with
@@ -107,12 +107,13 @@ kubectl get netpol -n kasm-agent
 ```
 
 Expected: every pod in both namespaces `Running`; the agent `PHASE` is `Ready`; seven
-NetworkPolicies in `kasm-agent` when the baseline is on. `Ready` is the operator's view of the
-agent's pods, not the manager's acceptance, so also open **Infrastructure → Agents** on the
-control plane: the agent is listed as `k8s-agent-session-proxy.kasm-agent.svc.cluster.local` with
-its last-reported time advancing (or `get_servers` on the API shows `last_reported` advancing).
-That is what proves the token copy and the manager address. Log in at `https://kasm.example.com`
-and launch a session; the address bar stays on the control plane.
+NetworkPolicies in `kasm-agent` when the baseline is on. `Ready` means the agent registered through
+the copied token and the manager address, and its heartbeats are arriving; an agent stuck in
+`Progressing` with `waiting for workloads (agent=false, ...)` has one of those wrong. Then open
+**Infrastructure → Agents** on the control plane: the agent is listed as
+`k8s-agent-session-proxy.kasm-agent.svc.cluster.local` and shows **Enabled** (step 5, or
+`auto_agent`). Log in at `https://kasm.example.com` and launch a session; the address bar stays on
+the control plane.
 
 > **Note.** An agent that moved from the control plane's namespace (a one-release install turned
 > into this layout) registers as a **new** server record, because its session-proxy hostname
@@ -168,7 +169,8 @@ Cilium values.
 ## Troubleshooting
 
 [Troubleshooting](../../reference/troubleshooting.md). The failures specific to this layout: an
-agent that never reaches `Ready` (the token copy, or the manager address), heartbeats refused
+agent that never reaches `Ready` (the token copy, or the manager address: `Progressing` with
+`waiting for workloads (agent=false, ...)` and `heartbeat failed` in its log), heartbeats refused
 after enabling the baseline (the post-DNAT port), and on Cilium heartbeats timing out and the
 operator crash-looping after enabling the baseline (the two Cilium values).
 
@@ -178,6 +180,6 @@ operator crash-looping after enabling the baseline (the two Cilium values).
 - [ ] Manager token copied into `kasm-agent` as `kasm-manager-token`.
 - [ ] Manager address chosen: in-cluster Service (8080, http) or the public hostname (443, https).
 - [ ] `networkPolicies.enabled=true` only after the CNI is proven to enforce; `manager.ports` matches the address chosen; on Cilium, `manager.inCluster.namespace` and `cilium.enabled` set.
-- [ ] The manager lists the agent with its last-reported time advancing, not only `PHASE Ready`.
+- [ ] `PHASE Ready`, and the agent enabled under Infrastructure → Agents (or `auto_agent` on).
 - [ ] Relayed sessions accepted (the in-cluster session hostname), or [direct-connect](../networking/direct-connect.md) scheduled.
 - [ ] Gateway or Ingress listeners admit both namespaces if both halves are published through one.

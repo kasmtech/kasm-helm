@@ -6,23 +6,29 @@
 
 The classic path: a `networking.k8s.io/v1` Ingress on an existing controller terminates TLS and
 forwards plain HTTP to the workload. It is available for both halves, and the only mechanism where
-the control plane's certificate is wired in by the chart itself. On direct-connect it is the
-mechanism verified end to end (Traefik 3.7 on k3s): the controller routes by `Host` header, so the
-session proxy's own hairpin lands back on it, which the SNI-routed Gateway paths cannot do today
+the control plane's certificate is wired in by the chart itself. On direct-connect it is verified
+end to end (Traefik 3.7 on k3s): the controller routes by `Host` header to the session proxy,
+which answers the browser for its own sessions itself
 ([Switch sessions to direct-connect](direct-connect.md#why-this-is-needed)). It cannot carry the
 RDP gateway, which is raw TCP: [Publish the RDP gateway](rdp-gateway.md).
 
 ```mermaid
-%%{init: {"theme":"base","themeVariables":{"primaryColor":"#eef3f8","primaryBorderColor":"#5b7a99","primaryTextColor":"#1d2b3a","secondaryColor":"#fbf3e6","secondaryBorderColor":"#b8863b","tertiaryColor":"#eaf5ec","tertiaryBorderColor":"#4f8a5b","lineColor":"#5b7a99","fontFamily":"Inter, Helvetica, Arial, sans-serif","fontSize":"14px"},"flowchart":{"curve":"basis","htmlLabels":true}}}%%
+%%{init: {"theme":"base","themeVariables":{"background":"#ffffff","primaryColor":"#f2f4f7","primaryBorderColor":"#f2f4f7","primaryTextColor":"#0f2a44","lineColor":"#0f2a44","clusterBkg":"#ffffff","clusterBorder":"#4a4a4a","edgeLabelBackground":"#ffffff","fontFamily":"Montserrat, Helvetica, Arial, sans-serif","fontSize":"13px"},"flowchart":{"curve":"linear","htmlLabels":true,"nodeSpacing":36,"rankSpacing":64}}}%%
 flowchart LR
-  browser["Browser"] -->|"HTTPS 443 · the controller's certificate"| ing["Ingress controller"]
-  ing -->|"HTTP 8080 · kasm.example.com"| cp["Control plane proxy"]
-  ing -->|"HTTP 4445 · sessions.example.com"| sp["Session proxy"]
-  sp -->|"6901"| ws["Workspace pod"]
-  classDef agent fill:#eaf5ec,stroke:#4f8a5b
-  classDef ext fill:#fbf3e6,stroke:#b8863b
-  class sp,ws agent
-  class browser,ing ext
+  browser["Browser"]:::card
+  ing["Ingress controller"]:::card
+  cp["Control plane proxy"]:::card
+  sp["Session proxy"]:::card
+  ws["Workspace pod"]:::card
+  browser -->|"HTTPS (443) · the controller's certificate"| ing
+  ing -->|"HTTP (8080) · kasm.example.com"| cp
+  ing -->|"HTTP (4445) · sessions.example.com"| sp
+  sp -->|"6901"| ws
+  classDef card fill:#f2f4f7,stroke:#f2f4f7,color:#0f2a44,font-weight:600
+  linkStyle 0 stroke:#5ec2ef,stroke-width:2px
+  linkStyle 1 stroke:#e0413f,stroke-width:2px
+  linkStyle 2 stroke:#f0b429,stroke-width:2px
+  linkStyle 3 stroke:#b39ddb,stroke-width:2px
 ```
 
 ## Before you start

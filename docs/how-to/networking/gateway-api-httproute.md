@@ -16,16 +16,22 @@ gives HTTP-level routing and timeouts. The other two route kinds have their own 
 | `TCPRoute` | none, raw TCP | `kasm-helm.tcpRoute.enabled` (RDP gateway) | none | 1.6 |
 
 ```mermaid
-%%{init: {"theme":"base","themeVariables":{"primaryColor":"#eef3f8","primaryBorderColor":"#5b7a99","primaryTextColor":"#1d2b3a","secondaryColor":"#fbf3e6","secondaryBorderColor":"#b8863b","tertiaryColor":"#eaf5ec","tertiaryBorderColor":"#4f8a5b","lineColor":"#5b7a99","fontFamily":"Inter, Helvetica, Arial, sans-serif","fontSize":"14px"},"flowchart":{"curve":"basis","htmlLabels":true}}}%%
+%%{init: {"theme":"base","themeVariables":{"background":"#ffffff","primaryColor":"#f2f4f7","primaryBorderColor":"#f2f4f7","primaryTextColor":"#0f2a44","lineColor":"#0f2a44","clusterBkg":"#ffffff","clusterBorder":"#4a4a4a","edgeLabelBackground":"#ffffff","fontFamily":"Montserrat, Helvetica, Arial, sans-serif","fontSize":"13px"},"flowchart":{"curve":"linear","htmlLabels":true,"nodeSpacing":36,"rankSpacing":64}}}%%
 flowchart LR
-  browser["Browser"] -->|"HTTPS 443 · the Gateway's certificate"| gw["Gateway"]
-  gw -->|"HTTP 8080 · kasm.example.com"| cp["Control plane proxy"]
-  gw -->|"HTTP 4445 · sessions.example.com"| sp["Session proxy"]
-  sp -->|"6901"| ws["Workspace pod"]
-  classDef agent fill:#eaf5ec,stroke:#4f8a5b
-  classDef ext fill:#fbf3e6,stroke:#b8863b
-  class sp,ws agent
-  class browser,gw ext
+  browser["Browser"]:::card
+  gw["Gateway"]:::card
+  cp["Control plane proxy"]:::card
+  sp["Session proxy"]:::card
+  ws["Workspace pod"]:::card
+  browser -->|"HTTPS (443) · the Gateway's certificate"| gw
+  gw -->|"HTTP (8080) · kasm.example.com"| cp
+  gw -->|"HTTP (4445) · sessions.example.com"| sp
+  sp -->|"6901"| ws
+  classDef card fill:#f2f4f7,stroke:#f2f4f7,color:#0f2a44,font-weight:600
+  linkStyle 0 stroke:#5ec2ef,stroke-width:2px
+  linkStyle 1 stroke:#e0413f,stroke-width:2px
+  linkStyle 2 stroke:#f0b429,stroke-width:2px
+  linkStyle 3 stroke:#b39ddb,stroke-width:2px
 ```
 
 ## Certificates live on the Gateway, not the route
@@ -192,10 +198,12 @@ These checks serve all three Gateway API pages; the other two link here.
    listener; the entries are rendered verbatim, so `port` and `kind` pass through too. Then
    finish [Switch sessions to direct-connect](direct-connect.md).
 
-   > **Warning.** Known issue: whether direct-connect sessions stream through an `HTTPRoute`
-   > depends on the data plane. Traefik 3.7 routes the session proxy's SNI-less hairpin by `Host`
-   > header and works; Envoy Gateway 1.6 selects the listener by SNI and returns `502`. The full
-   > statement is in [Switch sessions to direct-connect](direct-connect.md#why-this-is-needed).
+   > **Note.** Direct-connect sessions stream through an `HTTPRoute` on any data plane: the session
+   > proxy serves its own sessions locally, so the Gateway routes only the browser's requests,
+   > whether it selects the listener by `Host` header or by SNI
+   > ([Switch sessions to direct-connect](direct-connect.md#why-this-is-needed)). Verified live on
+   > Traefik 3.7, and the SNI-selected case through an SNI-only passthrough front; Envoy Gateway 1.6
+   > has not been re-run since the session proxy changed.
 
 3. **Install or upgrade.**
 

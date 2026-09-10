@@ -1,0 +1,40 @@
+suite: persistent profile defaults on the Agent
+templates:
+  - templates/agent.yaml
+set:
+  manager:
+    hostname: zonea.example.com
+    existingTokenSecret: kasm-manager-token
+  publicHostname: agent.example.com
+tests:
+  - it: renders no persistentProfiles block by default
+    asserts:
+      - isNull:
+          path: spec.persistentProfiles
+
+  - it: passes storageClass, accessModes and capacity through to the Agent
+    set:
+      persistentProfiles:
+        storageClass: kasm-rwx
+        accessModes: [ReadWriteMany]
+        capacity: 20Gi
+    asserts:
+      - equal:
+          path: spec.persistentProfiles.storageClass
+          value: kasm-rwx
+      - equal:
+          path: spec.persistentProfiles.accessModes
+          value: [ReadWriteMany]
+      - equal:
+          path: spec.persistentProfiles.capacity
+          value: 20Gi
+
+  - it: renders only the fields that are set
+    set:
+      persistentProfiles:
+        storageClass: kasm-rwx
+    asserts:
+      - equal:
+          path: spec.persistentProfiles
+          value:
+            storageClass: kasm-rwx

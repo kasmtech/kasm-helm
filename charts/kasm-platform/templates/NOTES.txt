@@ -383,7 +383,7 @@ and charts/kasm-agent/README.md (everything under kasm-agent:).
     kasm-agent.agent.sessionProxy.certificate.enabled   - issue it with cert-manager
     a pre-created Secret "{{ $certSecret }}"              - created before the first install
 
-  Changing the hostname regenerates the Secret, but the session-proxy pods keep serving the old
-  certificate until they restart: delete them after a hostname change.
+  Changing the hostname regenerates the Secret; the session-proxy pods roll on their own and serve
+  the new certificate within about 30 s.
 ================================================================================
 {{- end }}

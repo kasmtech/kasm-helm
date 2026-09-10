@@ -12,12 +12,12 @@ the one failures table; the how-to pages link here rather than carrying their ow
 | ------- | ----- | -------------- |
 | "No resources are available" | The agent is not enabled, or was enabled less than 15 seconds ago | Infrastructure → Agents → Enable; or seed `auto_agent` ([Enable agents automatically](../how-to/enable-agents-automatically.md)) |
 | "No resources are available", agent enabled | The workspace image is not staged on any node yet: the operator pre-pulls the manager's image list and launches are refused, not queued, until it is | `kubectl -n <ns> get kasmimagepullers.agent.kasm.com` shows `ImagesStaged`; retry after that |
-| "No resources are available" after switching to direct-connect, or with `publicHostname` set | The API cannot reach `https://<publicHostname>:<publicPort>/agent/api/v1/hello/` from inside the cluster: the public name does not route from the pods, or `publicPort` is not the port the session proxy is published on (a plain Service exposes 4444, not 443) | The API pod's log names the URL; fix DNS/hairpin routing, or set `agent.publicPort` to the Service port ([LoadBalancer and NodePort](../how-to/networking/loadbalancer-nodeport.md)) |
+| "No resources are available" after switching to direct-connect, or with `publicHostname` set | The API cannot reach `https://<publicHostname>:<publicPort>/agent/api/v1/hello/` from inside the cluster: the public name does not route from the pods, or `publicPort` is not the port the session proxy is published on (a `LoadBalancer` without `sessionProxy.service.httpsPort: 443` exposes 4444, not 443; a NodePort exposes the node port) | The API pod's log names the URL; fix DNS/hairpin routing, set `agent.sessionProxy.service.httpsPort: 443` on a `LoadBalancer`, or set `agent.publicPort` to the node port on a NodePort ([LoadBalancer and NodePort](../how-to/networking/loadbalancer-nodeport.md)) |
 | "Image Not Authorized" | The workspace is not assigned to the user's group | Workspaces → the image → assign the group ([Kasm docs: Workspaces](https://www.kasmweb.com/docs/latest/guide/workspaces.html), [Groups](https://www.kasmweb.com/docs/latest/guide/groups.html)) |
 | Session connect returns **401** (direct-connect) | The Kasm Authorization Domain does not cover both hostnames, so the cookie is never sent to the agent | `kasm-helm.kasmConfig.authDomain` on a fresh install, Settings → Auth on an existing one; then a fresh private window ([Switch sessions to direct-connect](../how-to/networking/direct-connect.md)) |
 | Session connect returns **401** (relayed) | A stale cookie from an earlier install on the same address | A fresh private window |
 | Session connect returns **404** from the ingress (direct-connect) | The zone still relays: *Proxy Connections* is on, so the request carries the control plane's `Host` header and matches no route on the agent side | Infrastructure → Zones: *Proxy Connections* off, *Upstream Auth Address* = the control plane |
-| Session connect returns **502** (direct-connect); session-proxy error log: `peer closed connection in SSL handshake while SSL handshaking to upstream` | The session proxy hairpins `/desktop/<id>/` to its own public address without SNI, and a Gateway that selects the backend by SNI (passthrough, Envoy Gateway `HTTPRoute`) resets it | Known issue, pending an upstream fix; publish the session proxy through an Ingress, a `Host`-routing HTTPRoute or a Service instead ([Switch sessions to direct-connect](../how-to/networking/direct-connect.md#why-this-is-needed)) |
+| Session connect returns **502** (direct-connect); session-proxy error log: `peer closed connection in SSL handshake while SSL handshaking to upstream` | The session is hosted on a different session proxy behind a shared hostname, and the hop to it failed its TLS handshake. A session proxy serves its own sessions locally, so the local path never produces this | Check the front on the shared hostname between the session proxies; the hop sends SNI ([Switch sessions to direct-connect](../how-to/networking/direct-connect.md#why-this-is-needed)) |
 | Login returns 500 on a fresh install | `kasm_auth_domain` was preseeded through `config.settings` | Use `kasm-helm.kasmConfig.authDomain` instead |
 | Session dies after ~60s (ingress-nginx), ~30s (OpenShift router), ~350s (AWS NLB) | The idle timeout on whatever fronts the session proxy | [Idle timeouts](../how-to/networking/loadbalancer-nodeport.md#idle-timeouts) |
 | Relayed session dies at 30 minutes idle | The control-plane proxy's fixed `proxy_read_timeout 1800s` | Not a value; switch to direct-connect |
@@ -40,16 +40,25 @@ kubectl -n kasm-agent get agent k8s-agent \
 Expected on a healthy agent: `Available=True AgentAvailable`, `Progressing=False AgentAvailable` and
 `Degraded=False GatewayRouteUsable` (plus `GatewayRouteAccepted=True TLSRouteReconciled` with an
 operator-managed Gateway route).
-`Ready` is the operator's view of the agent's pods, not the manager's acceptance: an agent has
-reported `Ready` while every heartbeat timed out and the manager listed nothing. The manager-side
-check is **Infrastructure → Agents** listing the agent (by its session-proxy hostname) with its
-last-reported time advancing, or `get_servers` on the API with `last_reported` advancing. A phase
-short of `Ready` is one of:
+`Ready` means the agent registered with the manager and its heartbeats are arriving. The agent's
+readiness probe (`GET /__ready` on its API port 4443) answers 503 until registration succeeds and
+while heartbeats fail; the pod goes unready (it is not restarted) and the `Agent` follows its pods.
+So a manager path that does not work reads `phase: Progressing`, `Available=False` with reason
+`WorkloadsUnavailable` and message `waiting for workloads (agent=false, sessionProxy=true)`, and the
+agent log shows `heartbeat failed` with the reason (DNS, connection refused, timeout). A manager
+that stops answering drops a `Ready` agent back to `Progressing` within about a minute. While the
+agent pod is unready its Service has no endpoints, so the manager's hello call and the session
+proxy's session-ready callback fail until it is ready again; running session streams do not go
+through it.
+`Ready` says nothing about the agent being **enabled**: new registrations are disabled until
+enabled, or `auto_agent` is on. **Infrastructure → Agents** (or `get_servers` on the API) shows the
+enabled state, the zone the agent joined and its last-reported time. A phase short of `Ready` is
+one of:
 
 | Cause | Check |
 | ----- | ----- |
 | The manager token Secret is missing or wrong | `kubectl -n <ns> get secret <existingTokenSecret>`; the two-namespace layout needs the copy |
-| The manager is unreachable from the cluster | `kubectl -n <ns> logs deploy/<agent>`; with NetworkPolicies on, `networkPolicies.manager.ports` must carry the post-DNAT port (Traefik 8443, or 8080 for the in-cluster proxy), and on Cilium an in-cluster manager needs `networkPolicies.manager.inCluster.namespace` ([NetworkPolicy enforcement](../how-to/networking/network-policies.md)) |
+| The manager is unreachable from the cluster | `Progressing` with `waiting for workloads (agent=false, ...)`; `kubectl -n <ns> logs deploy/<agent>` shows `heartbeat failed` with the reason; with NetworkPolicies on, `networkPolicies.manager.ports` must carry the post-DNAT port (Traefik 8443, or 8080 for the in-cluster proxy), and on Cilium an in-cluster manager needs `networkPolicies.manager.inCluster.namespace` ([NetworkPolicy enforcement](../how-to/networking/network-policies.md)) |
 | The agent image tag is out of step with the control plane's `manager/agent_version` | A registration failure in the agent log; align the versions ([Day 2](../how-to/day-2.md)) |
 | `Degraded=True` with `TLSRouteForbidden` or `TLSRouteUnavailable` | The operator cannot manage TLSRoutes: its `manager-role` lacks the rule, or the CRD is not served. Sessions keep working; only `agent.gatewayRoute` is unfulfilled | Upgrade the operator chart (a `helm upgrade` re-applies its RBAC) or install Gateway API 1.5+ |
 
@@ -64,14 +73,15 @@ short of `Ready` is one of:
 | `ResolvedRefs=False` | A backend that does not exist, usually a zone-name mismatch | Compare the route's `backendRefs` with `kubectl get svc` |
 | Gateway shows `Accepted`/`Programmed`, connections refused or hang | The host-network Cilium Gateway (Cilium 1.20 / kubeadm 1.34): cilium-envoy lacks `NET_BIND_SERVICE` and logs `cannot bind '0.0.0.0:443': Permission denied` | Prove with `curl`, not status; Cilium's fix is `envoy.securityContext.capabilities.keepCapNetBindService=true` plus `NET_BIND_SERVICE`; Envoy Gateway 1.6 and Traefik 3.7 served the same routes ([Gateway API: HTTPRoute](../how-to/networking/gateway-api-httproute.md)) |
 | Every new pod on a node fails with `FailedCreatePodSandBox ... Cilium API client timeout exceeded`; the Cilium agent logs `proxy updates failed` | A Cilium Gateway in the state above wedges the agent's proxy updates | Delete the Gateway; the node recovers within a minute |
-| Passthrough serves the old certificate after a hostname or certificate change; the fingerprint check fails | The Secret was regenerated or reissued, but the operator does not roll the session-proxy pods | `kubectl -n <ns> delete pod -l app.kubernetes.io/component=session-proxy` |
+| Passthrough serves the old certificate after a hostname or certificate change; the fingerprint check fails | The session-proxy pods roll on their own when the Secret changes (the operator hashes it onto the pod template), so a mismatch that persists past about 30 s means the Secret itself did not change | Compare the Secret's own fingerprint with the served one ([Certificates](../how-to/networking/certificates.md#verify)); equal and still old means the issue or renewal never landed: `kubectl -n <ns> describe certificate <name>`, or replace the Secret you created |
 | `TLSRoute` not recognised, or `no matches for kind "TLSRoute" in version …/v1alpha2` | Gateway API older than 1.5, or an old version rendered | Install 1.5+; the chart selects `v1` automatically, else set `agent.tlsRoute.apiVersion` |
 | `TCPRoute` `Accepted=True`, no traffic | The implementation does not serve TCPRoute | Use `directRdpService` ([Publish the RDP gateway](../how-to/networking/rdp-gateway.md)) |
 | Browser certificate warning on the session hostname | Passthrough serves the session proxy's certificate, which does not cover the hostname, or the self-signed default is still in place | Add the hostname and `*.<hostname>` to `agent.sessionProxy.certificate.dnsNames`, or pre-create `kasm-session-proxy-tls` |
 | cert-manager Certificate stuck at `READY False` | Almost always the ACME challenge | `kubectl -n <ns> describe certificate <name>` |
 | Route rendered with no TLS column | `route.tls` left empty | Set at least `termination` |
 | NodePort answers in-cluster, refused from a LAN client | The environment does not route 30000 to 32767 to the nodes | Open the range, or front the proxy with an ingress or load balancer |
-| `agent.sessionProxy.proxyProtocol.enabled=true` changes nothing: plain connections still answer, the client IP is still the load balancer's | The value reaches the `Agent` resource but the operator does not yet render it into the session proxy's nginx config or roll the Deployment | Not yet honoured; use `externalTrafficPolicy: Local` ([LoadBalancer and NodePort](../how-to/networking/loadbalancer-nodeport.md#preserving-real-client-ips)) |
+| Plain connections fail once `agent.sessionProxy.proxyProtocol.enabled=true`: the TLS handshake fails from a browser on the NodePort, a health check, or `curl` against the Service | nginx expects a PROXY header on every connection and refuses one without it | The front must send PROXY protocol on every connection; disable the value for a front that does not ([LoadBalancer and NodePort](../how-to/networking/loadbalancer-nodeport.md#preserving-real-client-ips)) |
+| PROXY protocol on, the client IP in the access log and `X-Real-IP` is still the front's | `agent.sessionProxy.proxyProtocol.trustedCIDRs` is empty, so no source is trusted for the header | List the load balancer's address range in `trustedCIDRs` |
 | Some clients time out with `externalTrafficPolicy: Local` | Traffic routed via a node with no session-proxy pod | Raise `agent.sessionProxy.replicas`, pin with `nodeSelector`, or use a load balancer that honours the health check |
 
 ## Pods will not start
@@ -86,7 +96,7 @@ short of `Ready` is one of:
 | Control plane loses connectivity right after enabling `networkPolicies` | The baseline was enabled in a namespace shared with the control plane | Turn it off there ([Deployment topologies](../explanation/topologies.md#one-release-or-two-namespaces)) |
 | Agent heartbeats `connection refused` after enabling `networkPolicies`; "No Agent slots available" | Policy is evaluated after DNAT; the allow list lacks the backend port | Add it to `networkPolicies.manager.ports` |
 | Operator crash-loops right after enabling `networkPolicies` on Cilium: `leaderelection ... context deadline exceeded`, `leader election lost`; `cilium-dbg monitor --type drop` shows `Policy denied` to the API server on 6443 | On Cilium an `ipBlock` never matches the node-hosted API server's identity | `networkPolicies.cilium.enabled=true` (a `CiliumNetworkPolicy` allowing `toEntities: [kube-apiserver]`), or run Cilium with `policyCIDRMatchMode: nodes` |
-| Agent heartbeats time out (`heartbeat failed ... context deadline exceeded`) with an in-cluster manager on Cilium; the `Agent` still reports `Ready` | On Cilium an `ipBlock` never matches a pod, so the manager allow drops the connection to the control-plane proxy | `networkPolicies.manager.inCluster.namespace: <control-plane namespace>` ([NetworkPolicy enforcement](../how-to/networking/network-policies.md)) |
+| Agent heartbeats time out (`heartbeat failed ... context deadline exceeded`) with an in-cluster manager on Cilium; the `Agent` stays `Progressing` (`WorkloadsUnavailable`) | On Cilium an `ipBlock` never matches a pod, so the manager allow drops the connection to the control-plane proxy | `networkPolicies.manager.inCluster.namespace: <control-plane namespace>` ([NetworkPolicy enforcement](../how-to/networking/network-policies.md)) |
 
 ## The database
 

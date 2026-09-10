@@ -11,18 +11,30 @@ that page. [Certificates](certificates.md) applies to all of them.
 ## Choosing a mechanism
 
 ```mermaid
-%%{init: {"theme":"base","themeVariables":{"primaryColor":"#eef3f8","primaryBorderColor":"#5b7a99","primaryTextColor":"#1d2b3a","secondaryColor":"#fbf3e6","secondaryBorderColor":"#b8863b","tertiaryColor":"#eaf5ec","tertiaryBorderColor":"#4f8a5b","lineColor":"#5b7a99","fontFamily":"Inter, Helvetica, Arial, sans-serif","fontSize":"14px"},"flowchart":{"curve":"basis","htmlLabels":true}}}%%
+%%{init: {"theme":"base","themeVariables":{"background":"#ffffff","primaryColor":"#f2f4f7","primaryBorderColor":"#f2f4f7","primaryTextColor":"#0f2a44","lineColor":"#0f2a44","clusterBkg":"#ffffff","clusterBorder":"#4a4a4a","edgeLabelBackground":"#ffffff","fontFamily":"Montserrat, Helvetica, Arial, sans-serif","fontSize":"13px"},"flowchart":{"curve":"linear","htmlLabels":true,"nodeSpacing":36,"rankSpacing":64}}}%%
 flowchart TB
-    A["Publish a half"] --> B{"OpenShift?"}
-    B -- yes --> R["OpenShift Route"]
-    B -- no --> C{"Must TLS reach the workload un-terminated?"}
-    C -- yes --> D{"Gateway API with a Passthrough listener?"}
-    D -- yes --> GW["TLS passthrough (TLSRoute)"]
-    D -- no --> SVC["LoadBalancer or NodePort"]
-    C -- no --> E{"What fronts the cluster today?"}
-    E -- "Gateway API" --> HR["HTTPRoute"]
-    E -- "Ingress controller" --> IN["Ingress"]
-    E -- Nothing --> SVC
+  A["Publish a half"]:::card
+  B{"OpenShift?"}:::card
+  R["OpenShift Route"]:::card
+  C{"Must TLS reach the workload un-terminated?"}:::card
+  D{"Gateway API with a Passthrough listener?"}:::card
+  GW["TLS passthrough (TLSRoute)"]:::card
+  SVC["LoadBalancer or NodePort"]:::card
+  E{"What fronts the cluster today?"}:::card
+  HR["HTTPRoute"]:::card
+  IN["Ingress"]:::card
+  A --> B
+  B -- yes --> R
+  B -- no --> C
+  C -- yes --> D
+  D -- yes --> GW
+  D -- no --> SVC
+  C -- no --> E
+  E -- "Gateway API" --> HR
+  E -- "Ingress controller" --> IN
+  E -- Nothing --> SVC
+  classDef card fill:#f2f4f7,stroke:#f2f4f7,color:#0f2a44,font-weight:600
+  linkStyle 0,1,2,3,4,5,6,7,8,9 stroke:#4a4a4a,stroke-width:2px,stroke-dasharray:6 4
 ```
 
 | Mechanism | Control plane | Agent | TLS terminates at | Page |
@@ -33,10 +45,10 @@ flowchart TB
 | OpenShift Route | `kasm-helm.route.enabled` | `kasm-agent.agent.route.enabled` | the router, or the workload with `passthrough` | [OpenShift Route](openshift-route.md) |
 | Service, published directly | `kasm-helm.proxyService.type` | `kasm-agent.agent.sessionProxy.service.type` | the workload | [LoadBalancer and NodePort](loadbalancer-nodeport.md) |
 
-> **Warning.** Known issue on direct-connect: sessions cannot stream through a Gateway listener
-> that selects the backend by SNI (TLS passthrough on either agent value, and an `HTTPRoute` on
-> Envoy Gateway). An Ingress, a `Host`-routing `HTTPRoute` (Traefik) and a published Service work.
-> The statement is in [Switch sessions to direct-connect](direct-connect.md#why-this-is-needed).
+> **Note.** On direct-connect every mechanism in the table streams sessions: the session proxy
+> serves its own sessions locally and never loops back through the public address, so a front end
+> that routes on SNI serves as well as one that routes on `Host`.
+> [Switch sessions to direct-connect](direct-connect.md#why-this-is-needed) says how.
 
 **Exactly one per half.** All of a half's options publish the same Service, so enabling two gives
 one hostname two owners. `kasm-agent-instance` refuses to render more than one of `ingress`,

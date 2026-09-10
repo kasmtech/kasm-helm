@@ -73,7 +73,7 @@ cluster - the gateway brokers to them, nothing here schedules a pod for them.
 
 | Feature | Status | What you need | Turn it on |
 | ------- | ------ | ------------- | ---------- |
-| **Persistent profiles** | 🔧 | A StorageClass with dynamic provisioning. **Shared** profiles need `ReadWriteMany` - NFS, EFS, Azure Files, CephFS · [how-to](../how-to/storage/rwx-profiles.md) | The cluster's **default** StorageClass is used; make an RWX class you already have the default<br>or<br>`nfs-server-provisioner.enabled=true`<br>`nfs-server-provisioner.persistence.enabled=true` and make `kasm-rwx` the default |
+| **Persistent profiles** | 🔧 | A StorageClass with dynamic provisioning. **Shared** profiles need `ReadWriteMany` - NFS, EFS, Azure Files, CephFS · [how-to](../how-to/storage/rwx-profiles.md) | `agent.persistentProfiles.storageClass`, `accessModes`, `capacity` (empty: the cluster default class, `ReadWriteOnce`, `10Gi`)<br>with an RWX class you already have, or<br>`nfs-server-provisioner.enabled=true`<br>`nfs-server-provisioner.persistence.enabled=true` and `storageClass: kasm-rwx` |
 | **Cloud storage mappings (rclone, S3, Drive)** | 🔧 | FUSE on every node that runs sessions, and outbound access to the remote · [how-to](../how-to/storage/cloud-mappings.md) | `csiRclone.enabled=true`<br>`agent.storageMappings.enabled=true` |
 | **Volume mappings (host paths)** | ⚠️ | A namespace whose Pod Security Standard permits `hostPath` · [how-to](../how-to/nodes/privileged-workloads.md) | `agent.workspacesNodeSelector` |
 | **File mappings** | ✅ | Nothing | Nothing |
@@ -107,21 +107,22 @@ files live on the session's own disk and go when the session does.
 
 | Feature | Status | What you need | Turn it on |
 | ------- | ------ | ------------- | ---------- |
-| **External access to sessions** | 🔧 | Nothing on the relayed default beyond publishing the control plane. Direct-connect: an ingress controller, a Gateway API implementation, or a cloud load balancer / MetalLB, with an idle timeout of at least 3600s, DNS, and the session proxy able to reach the control plane's hostname from inside the cluster (on its post-DNAT backend port under the baseline policies). Known issue: sessions do not stream through a Gateway that selects the backend by SNI (passthrough, Envoy Gateway `HTTPRoute`); [Switch sessions to direct-connect](../how-to/networking/direct-connect.md#why-this-is-needed) · [how-to](../how-to/networking/README.md) | Exactly one of<br>`agent.ingress.enabled=true`<br>`agent.httpRoute.enabled=true`<br>`agent.route.enabled=true`<br>`agent.sessionProxy.service.type=NodePort`<br>`agent.sessionProxy.service.type=LoadBalancer`<br>`agent.gatewayRoute.enabled=true`<br>`agent.tlsRoute.enabled=true`<br>Control plane: `kasm-helm.ingress.enabled=true` or `kasm-helm.route.enabled=true` |
+| **External access to sessions** | 🔧 | Nothing on the relayed default beyond publishing the control plane. Direct-connect: an ingress controller, a Gateway API implementation, or a cloud load balancer / MetalLB, with an idle timeout of at least 3600s, DNS, and the session proxy able to reach the control plane's hostname from inside the cluster (on its post-DNAT backend port under the baseline policies). Every listed front streams: the session proxy serves its own sessions locally, so SNI-routed and `Host`-routed fronts serve alike; [Switch sessions to direct-connect](../how-to/networking/direct-connect.md#why-this-is-needed) · [how-to](../how-to/networking/README.md) | Exactly one of<br>`agent.ingress.enabled=true`<br>`agent.httpRoute.enabled=true`<br>`agent.route.enabled=true`<br>`agent.sessionProxy.service.type=NodePort`<br>`agent.sessionProxy.service.type=LoadBalancer` with `agent.sessionProxy.service.httpsPort=443`<br>`agent.gatewayRoute.enabled=true`<br>`agent.tlsRoute.enabled=true`<br>Control plane: `kasm-helm.ingress.enabled=true` or `kasm-helm.route.enabled=true` |
 | **TLS** | 🔧 | cert-manager, or a TLS Secret you create · [how-to](../how-to/networking/README.md) | Control plane: `kasm-helm.certificate.secretName`<br>Agent: `agent.sessionProxy.certificate.enabled=true`<br>or `agent.sessionProxy.certSecretName` |
 | **The login cookie reaching sessions** | ✅ | Nothing on the relayed default. Direct-connect only: a domain that covers both hostnames · [how-to](../how-to/networking/direct-connect.md) | Relayed: nothing<br>Direct-connect: `kasm-helm.kasmConfig.authDomain` |
-| **Real client IP addresses** | 🔧 | A load balancer that preserves the source address · [how-to](../how-to/networking/loadbalancer-nodeport.md#preserving-real-client-ips) | `agent.sessionProxy.service.externalTrafficPolicy=Local`<br>(`agent.sessionProxy.proxyProtocol.*` reaches the `Agent` resource but is not yet honoured by the operator) |
+| **Real client IP addresses** | 🔧 | A load balancer that preserves the source address, or one that sends PROXY protocol on every connection · [how-to](../how-to/networking/loadbalancer-nodeport.md#preserving-real-client-ips) | `agent.sessionProxy.service.externalTrafficPolicy=Local`<br>or `agent.sessionProxy.proxyProtocol.enabled=true` with `agent.sessionProxy.proxyProtocol.trustedCIDRs` |
 | **Web filtering** | ✅ | Session pods able to reach the session proxy | Nothing |
 | **Network isolation (restrict to network)** | 🔧 | A CNI that **enforces** NetworkPolicy - Calico, Cilium, Antrea, Weave, Kube-router, GKE Dataplane V2, or AWS VPC CNI with Calico policy · [how-to](../how-to/networking/network-policies.md) | Nothing for per-session isolation.<br>`networkPolicies.enabled=true` adds the agent's own namespace baseline; on Cilium also `networkPolicies.manager.inCluster.namespace` (in-cluster manager) and `networkPolicies.cilium.enabled=true` (node-hosted API server) |
 | **Egress gateways (per-session VPN)** | 🔧 | A namespace that permits `privileged` **and** host namespaces, and a runtime that honours chained CNI plugins · [how-to](../how-to/networking/egress.md) · [Kasm docs](https://www.kasmweb.com/docs/latest/guide/egress.html) | `egressInstaller.enabled=true`<br>`egressInstaller.distro`<br>or<br>`egressInstaller.cniBinDir` |
 
 **External access.** The two halves are exposed independently. On the relayed default only the
 control plane is published and its proxy reaches the session proxy in-cluster; on direct-connect
-the session proxy is published too, on its own hostname. `agent.ingress` and a published Service
-are the verified paths there; `agent.route` is the OpenShift path; `agent.httpRoute` also needs
-`agent.httpRoute.parentRefs`, and `agent.gatewayRoute` / `agent.tlsRoute` (Gateway API TLS
-passthrough) are subject to the known issue above. On a published Service set `agent.publicPort`
-to the port the Service exposes (4444), since the session proxy serves no 443 of its own. Behind
+the session proxy is published too, on its own hostname. Every listed front works there, because
+the session proxy serves its own sessions locally and never loops back through the public
+address; `agent.route` is the OpenShift path, unexercised on OpenShift itself; `agent.httpRoute`
+also needs `agent.httpRoute.parentRefs`. On a `LoadBalancer`, `agent.sessionProxy.service.httpsPort=443`
+maps the Service's 443 onto the session proxy's 4444 listener, so `agent.publicPort` and the zone's
+port stay at 443; on a `NodePort` set `agent.publicPort` to the node port instead. Behind
 an ingress, leave the control plane's `kasm-helm.proxyService.type` as `ClusterIP`.
 [Deployment topologies](../explanation/topologies.md).
 
@@ -131,9 +132,10 @@ The value above applies at database initialisation, so it is a fresh-install set
 database set it in the admin UI under Settings → Auth ([Kasm docs: Settings](https://www.kasmweb.com/docs/latest/guide/settings.html)).
 
 **Real client IPs.** `externalTrafficPolicy=Local` only routes traffic through nodes running a
-session-proxy pod. `proxyProtocol` is accepted by the chart and written to the `Agent` resource,
-but the operator does not yet render it into the session proxy, so plain connections keep working
-and no PROXY header is read; do not rely on it until the operator honours it.
+session-proxy pod. `proxyProtocol.enabled` puts `proxy_protocol` on both session-proxy listeners
+and rolls the Deployment; the client address becomes the real one only for sources listed in
+`trustedCIDRs`, and a connection that arrives without a PROXY header is refused, so the front must
+send it on every connection.
 
 **Web filtering** needs nothing set - the agent points the in-session filter at the session proxy
 for you. Enforcement is application-layer and happens inside the session pod, so a user with root
@@ -186,7 +188,7 @@ attached.
 
 | Feature | Status | What you need | Turn it on |
 | ------- | ------ | ------------- | ---------- |
-| **Private image registries** | ⚠️ | A `kubernetes.io/dockerconfigjson` Secret in the namespace. Known issue: `agent.workspaceImagePullSecrets` does not yet reach the session pods; pre-stage private workspace images with `agent.imagePuller`, or put the Secret on the session pods' ServiceAccount · [how-to](../how-to/registries-and-airgap.md) | `agent.imagePullSecrets` (the agent's own images)<br>`agent.imagePuller.images[].imagePullSecrets` (pre-staged workspace images)<br>`kasm-helm.imagePullSecrets.enabled=true` |
+| **Private image registries** | ✅ | For workspace images: registry credentials on the image in the Kasm admin UI, which the agent turns into a per-registry pull Secret on every session pod. For the charts' own images: a `kubernetes.io/dockerconfigjson` Secret in the namespace. Known issue: the chart-level `agent.workspaceImagePullSecrets` list is not yet propagated · [how-to](../how-to/registries-and-airgap.md) | `agent.imagePullSecrets` (the agent's own images)<br>`agent.imagePuller.images[].imagePullSecrets` (pre-staged workspace images)<br>`kasm-helm.imagePullSecrets.enabled=true` |
 | **Per-workspace registry credentials** | ⚠️ | Nothing | Set on the workspace in the Kasm UI |
 | **Trusted CA certificates** | ✅ | Your CA certificates in PEM · [how-to](../how-to/networking/certificates.md) | `kasm-helm.trustedCaBundle.enabled=true`<br>`kasm-helm.trustedCaBundle.caCerts` |
 | **Secure Boot nodes** | 🔧 | MOK signing keys enrolled in each node's UEFI, and the key pair in a Secret · [how-to](../how-to/nodes/secure-boot.md) | `nodePrep.secureBoot.existingMokSecret`<br>or<br>`nodePrep.modules.v4l2loopback.kmm.sign.enabled=true` |

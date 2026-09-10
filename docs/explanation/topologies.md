@@ -15,29 +15,37 @@ a switch you make deliberately, with
 ### Relayed (the default)
 
 ```mermaid
-%%{init: {"theme":"base","themeVariables":{"primaryColor":"#eef3f8","primaryBorderColor":"#5b7a99","primaryTextColor":"#1d2b3a","secondaryColor":"#fbf3e6","secondaryBorderColor":"#b8863b","tertiaryColor":"#eaf5ec","tertiaryBorderColor":"#4f8a5b","lineColor":"#5b7a99","fontFamily":"Inter, Helvetica, Arial, sans-serif","fontSize":"14px"},"flowchart":{"curve":"basis","htmlLabels":true}}}%%
+%%{init: {"theme":"base","themeVariables":{"background":"#ffffff","primaryColor":"#f2f4f7","primaryBorderColor":"#f2f4f7","primaryTextColor":"#0f2a44","lineColor":"#0f2a44","clusterBkg":"#ffffff","clusterBorder":"#4a4a4a","edgeLabelBackground":"#ffffff","fontFamily":"Montserrat, Helvetica, Arial, sans-serif","fontSize":"13px"},"flowchart":{"curve":"linear","htmlLabels":true,"nodeSpacing":36,"rankSpacing":64}}}%%
 flowchart LR
-  browser["Browser"] -->|"HTTPS 443 · one hostname"| cp["Control plane proxy"]
-  cp -->|"HTTPS 4444 · in-cluster Service"| sp["Session proxy"]
-  sp -->|"6901"| ws["Workspace pod"]
-  classDef agent fill:#eaf5ec,stroke:#4f8a5b
-  classDef ext fill:#fbf3e6,stroke:#b8863b
-  class sp,ws agent
-  class browser ext
+  browser["Browser"]:::card
+  cp["Control plane proxy"]:::card
+  sp["Session proxy"]:::card
+  ws["Workspace pod"]:::card
+  browser -->|"HTTPS (443) · one hostname"| cp
+  cp -->|"HTTPS (4444) · in-cluster Service"| sp
+  sp -->|"6901"| ws
+  classDef card fill:#f2f4f7,stroke:#f2f4f7,color:#0f2a44,font-weight:600
+  linkStyle 0 stroke:#5ec2ef,stroke-width:2px
+  linkStyle 1 stroke:#e0413f,stroke-width:2px
+  linkStyle 2 stroke:#b39ddb,stroke-width:2px
 ```
 
 ### Direct-connect
 
 ```mermaid
-%%{init: {"theme":"base","themeVariables":{"primaryColor":"#eef3f8","primaryBorderColor":"#5b7a99","primaryTextColor":"#1d2b3a","secondaryColor":"#fbf3e6","secondaryBorderColor":"#b8863b","tertiaryColor":"#eaf5ec","tertiaryBorderColor":"#4f8a5b","lineColor":"#5b7a99","fontFamily":"Inter, Helvetica, Arial, sans-serif","fontSize":"14px"},"flowchart":{"curve":"basis","htmlLabels":true}}}%%
+%%{init: {"theme":"base","themeVariables":{"background":"#ffffff","primaryColor":"#f2f4f7","primaryBorderColor":"#f2f4f7","primaryTextColor":"#0f2a44","lineColor":"#0f2a44","clusterBkg":"#ffffff","clusterBorder":"#4a4a4a","edgeLabelBackground":"#ffffff","fontFamily":"Montserrat, Helvetica, Arial, sans-serif","fontSize":"13px"},"flowchart":{"curve":"linear","htmlLabels":true,"nodeSpacing":36,"rankSpacing":64}}}%%
 flowchart LR
-  browser["Browser"] -->|"HTTPS 443 · kasm.example.com · login"| cp["Control plane proxy"]
-  browser -->|"HTTPS 443 · sessions.example.com · session"| sp["Session proxy"]
-  sp -->|"6901"| ws["Workspace pod"]
-  classDef agent fill:#eaf5ec,stroke:#4f8a5b
-  classDef ext fill:#fbf3e6,stroke:#b8863b
-  class sp,ws agent
-  class browser ext
+  browser["Browser"]:::card
+  cp["Control plane proxy"]:::card
+  sp["Session proxy"]:::card
+  ws["Workspace pod"]:::card
+  browser -->|"HTTPS (443) · kasm.example.com · login"| cp
+  browser -->|"HTTPS (443) · sessions.example.com · session"| sp
+  sp -->|"6901"| ws
+  classDef card fill:#f2f4f7,stroke:#f2f4f7,color:#0f2a44,font-weight:600
+  linkStyle 0 stroke:#5ec2ef,stroke-width:2px
+  linkStyle 1 stroke:#f0b429,stroke-width:2px
+  linkStyle 2 stroke:#b39ddb,stroke-width:2px
 ```
 
 | | Relayed | Direct-connect |
@@ -70,6 +78,13 @@ a published Service. On one cluster the in-cluster Service is enough, with no in
 all. The relay sets no `proxy_ssl_verify`, so the session proxy's self-signed certificate is
 accepted.
 
+**Direct-connect has no such constraint.** The session proxy answers the browser for its own
+sessions itself: it serves `/desktop/<id>/...` locally, authorizes each request with the control
+plane, and proxies straight to the workspace Service. Nothing loops back through the public
+address, so the front end may route on SNI (passthrough) or on the `Host` header (an Ingress, an
+`HTTPRoute`) alike. The one hop that leaves the pod is a session hosted on a different session
+proxy behind a shared hostname, and that hop sends SNI.
+
 **Why switch to direct-connect.** Every relayed session crosses the control-plane proxy: bandwidth,
 CPU, and one bottleneck for the whole deployment. The 30-minute idle ceiling is not a value.
 Multi-zone loses much of its point when traffic hair-pins through the control plane wherever the
@@ -78,9 +93,7 @@ and the zone switch.
 
 > **Note.** Sessions have been launched end to end on both paths, on k3s and on kind. The automated
 > tests all set `proxy_connections: false`; nothing guards the relay path against regression except
-> the no-values install itself. On direct-connect, sessions do not stream through a Gateway that
-> selects the backend by SNI; the known issue is stated once in
-> [Switch sessions to direct-connect](../how-to/networking/direct-connect.md#why-this-is-needed).
+> the no-values install itself.
 
 ## One release or two namespaces
 
@@ -132,39 +145,45 @@ cluster. Each agent cluster joins the control plane as a member of a zone, and t
 one zone per cluster.
 
 ```mermaid
-%%{init: {"theme":"base","themeVariables":{"primaryColor":"#eef3f8","primaryBorderColor":"#5b7a99","primaryTextColor":"#1d2b3a","secondaryColor":"#fbf3e6","secondaryBorderColor":"#b8863b","tertiaryColor":"#eaf5ec","tertiaryBorderColor":"#4f8a5b","lineColor":"#5b7a99","fontFamily":"Inter, Helvetica, Arial, sans-serif","fontSize":"14px"},"flowchart":{"curve":"basis","htmlLabels":true}}}%%
+%%{init: {"theme":"base","themeVariables":{"background":"#ffffff","primaryColor":"#f2f4f7","primaryBorderColor":"#f2f4f7","primaryTextColor":"#0f2a44","lineColor":"#0f2a44","clusterBkg":"#ffffff","clusterBorder":"#4a4a4a","edgeLabelBackground":"#ffffff","fontFamily":"Montserrat, Helvetica, Arial, sans-serif","fontSize":"13px"},"flowchart":{"curve":"linear","htmlLabels":true,"nodeSpacing":36,"rankSpacing":64}}}%%
 flowchart LR
-  browser["Browser"]
+  browser["Browser"]:::card
   subgraph cpc["Control-plane cluster, or VMs"]
     direction TB
-    cp["Control plane proxy"]
-    api["API / manager"]
-    db["Database"]
+    cp["Control plane proxy"]:::card
+    api["API / manager"]:::card
+    db["Database"]:::card
     cp --> api --> db
   end
   subgraph c1["Agent cluster · zone eu"]
     direction TB
-    ag1["Agent"]
-    sp1["Session proxy"]
-    ws1["Workspace pods"]
+    ag1["Agent"]:::card
+    sp1["Session proxy"]:::card
+    ws1["Workspace pods"]:::card
     sp1 --> ws1
   end
   subgraph c2["Agent cluster · zone us"]
     direction TB
-    ag2["Agent"]
-    sp2["Session proxy"]
-    ws2["Workspace pods"]
+    ag2["Agent"]:::card
+    sp2["Session proxy"]:::card
+    ws2["Workspace pods"]:::card
     sp2 --> ws2
   end
-  browser -->|"HTTPS 443 · kasm.example.com · login"| cp
-  ag1 -.->|"HTTPS 443 · register, heartbeat"| api
-  ag2 -.->|"HTTPS 443 · register, heartbeat"| api
-  browser -->|"HTTPS 443 · eu.sessions.example.com"| sp1
-  browser -->|"HTTPS 443 · us.sessions.example.com"| sp2
-  classDef agent fill:#eaf5ec,stroke:#4f8a5b
-  classDef ext fill:#fbf3e6,stroke:#b8863b
-  class ag1,sp1,ws1,ag2,sp2,ws2 agent
-  class browser ext
+  browser -->|"HTTPS (443) · kasm.example.com · login"| cp
+  ag1 -.->|"HTTPS (443) · register, heartbeat"| api
+  ag2 -.->|"HTTPS (443) · register, heartbeat"| api
+  browser -->|"HTTPS (443) · eu.sessions.example.com"| sp1
+  browser -->|"HTTPS (443) · us.sessions.example.com"| sp2
+  classDef card fill:#f2f4f7,stroke:#f2f4f7,color:#0f2a44,font-weight:600
+  style cpc fill:#ffffff,stroke:#4a4a4a,stroke-dasharray:6 4
+  style c1 fill:#ffffff,stroke:#4a4a4a,stroke-dasharray:6 4
+  style c2 fill:#ffffff,stroke:#4a4a4a,stroke-dasharray:6 4
+  linkStyle 0 stroke:#4a4a4a,stroke-width:2px
+  linkStyle 1 stroke:#e9a53b,stroke-width:2px
+  linkStyle 2,3 stroke:#b39ddb,stroke-width:2px
+  linkStyle 4 stroke:#5ec2ef,stroke-width:2px
+  linkStyle 5,6 stroke:#4a4a4a,stroke-width:2px,stroke-dasharray:6 4
+  linkStyle 7,8 stroke:#f0b429,stroke-width:2px
 ```
 
 Only three flows cross a cluster boundary, and none of them runs between agent clusters:

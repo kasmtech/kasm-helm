@@ -10,16 +10,28 @@ Miss one and the failure appears much later than the install. Private registries
 cluster are the same four things with a pull secret each.
 
 ```mermaid
-%%{init: {"theme":"base","themeVariables":{"primaryColor":"#eef3f8","primaryBorderColor":"#5b7a99","primaryTextColor":"#1d2b3a","secondaryColor":"#fbf3e6","secondaryBorderColor":"#b8863b","tertiaryColor":"#eaf5ec","tertiaryBorderColor":"#4f8a5b","lineColor":"#5b7a99","fontFamily":"Inter, Helvetica, Arial, sans-serif","fontSize":"14px"},"flowchart":{"curve":"basis","htmlLabels":true}}}%%
+%%{init: {"theme":"base","themeVariables":{"background":"#ffffff","primaryColor":"#f2f4f7","primaryBorderColor":"#f2f4f7","primaryTextColor":"#0f2a44","lineColor":"#0f2a44","clusterBkg":"#ffffff","clusterBorder":"#4a4a4a","edgeLabelBackground":"#ffffff","fontFamily":"Montserrat, Helvetica, Arial, sans-serif","fontSize":"13px"},"flowchart":{"curve":"linear","htmlLabels":true,"nodeSpacing":36,"rankSpacing":64}}}%%
 flowchart TB
-    A["Airgap"] --> B["1. The charts<br/>OCI artifacts or packaged archives"]
-    A --> C["2. Component images<br/>the pods the charts run"]
-    A --> D["3. Workspace images<br/>what sessions are made of"]
-    A --> E["4. Node-prep inputs<br/>kernel modules and builders"]
-    B --> F["helm install succeeds"]
-    C --> G["pods start"]
-    D --> H["sessions launch"]
-    E --> I["webcam and WireGuard work"]
+  A["Airgap"]:::card
+  B["1. The charts<br/>OCI artifacts or packaged archives"]:::card
+  C["2. Component images<br/>the pods the charts run"]:::card
+  D["3. Workspace images<br/>what sessions are made of"]:::card
+  E["4. Node-prep inputs<br/>kernel modules and builders"]:::card
+  F["helm install succeeds"]:::card
+  G["pods start"]:::card
+  H["sessions launch"]:::card
+  I["webcam and WireGuard work"]:::card
+  A --> B
+  A --> C
+  A --> D
+  A --> E
+  B --> F
+  C --> G
+  D --> H
+  E --> I
+  classDef card fill:#f2f4f7,stroke:#f2f4f7,color:#0f2a44,font-weight:600
+  linkStyle 0,1,2,3 stroke:#4a4a4a,stroke-width:2px,stroke-dasharray:6 4
+  linkStyle 4,5,6,7 stroke:#4a4a4a,stroke-width:2px,stroke-dasharray:2 4
 ```
 
 Work them in that order; each one's failure hides the next.
@@ -35,7 +47,7 @@ Work them in that order; each one's failure hides the next.
   | Flow | Who pulls | Value |
   | ---- | --------- | ----- |
   | Kasm component images (agent API, session proxy, operator, collector, plugins) | kubelet, per chart | each chart's own `imagePullSecrets` |
-  | **Workspace** images launched as sessions | kubelet, injected by the agent | `agent.workspaceImagePullSecrets` |
+  | **Workspace** images launched as sessions | kubelet, with a pull Secret the agent creates from the credentials the manager sends per image | the workspace image's registry credentials in the Kasm admin UI (not a chart value) |
   | Pre-staged images on every node | the image-puller DaemonSet via `crictl` | `agent.imagePuller.images[].imagePullSecrets` |
 
 - `kasm-node-prep` has **no** `imagePullSecrets` value. Its builder image (`nodePrep.image.*`) must
@@ -139,24 +151,27 @@ Work them in that order; each one's failure hides the next.
 3. **Workspace images.** The one that is not a chart value. Workspace images are pulled from
    whatever registry the **manager** has configured for each workspace; mirroring the component
    images does nothing for them. Re-point them in the Kasm admin UI, or seed them that way
-   ([Preseeding](../reference/preseed.md)), and supply credentials with the separate value the
-   agent injects into every session pod:
-
-   ```yaml
-   kasm-agent:
-     agent:
-       workspaceImagePullSecrets:
-         - name: internal-registry
-   ```
+   ([Preseeding](../reference/preseed.md)), and put the credentials on the workspace image
+   itself: **Workspaces → the image → Docker Registry, Docker Username, Docker Password**
+   ([Kasm docs: Workspaces](https://www.kasmweb.com/docs/latest/guide/workspaces.html)). The
+   manager sends them with every launch request; the agent writes them into a
+   `kubernetes.io/dockerconfigjson` Secret named after the registry host
+   (`kasm-registry-<host>`, with `auths` for the host's usual spellings), and puts that Secret in
+   `imagePullSecrets` of the `KasmWorkspace` and the session pod. The Secret is per registry, not
+   per session, so it stays behind after the session ends and is reused. Name the image with
+   its registry host (`registry.internal.example.com/team/chrome:1.19.0`): the agent uses the
+   name as given and does not prepend the registry, so a bare `team/chrome:1.19.0` goes to
+   Docker Hub.
 
    > **Warning**
-   > Known issue: the agent receives this list (`KASM_IMAGE_PULL_SECRETS` on its pod) but does
-   > not yet write it into the `KasmWorkspace` resources it creates, so session pods launch with
-   > no pull Secret and a private workspace image ends in `ImagePullBackOff`. Until the agent
-   > does, use the Kubernetes-level fallback: add the Secret to `imagePullSecrets` of the
-   > ServiceAccount the session pods run as (`kubectl get pod <session pod> -o
-   > jsonpath='{.spec.serviceAccountName}'` names it), or pre-stage the images on every node
-   > with `agent.imagePuller` (step 1), whose per-entry `imagePullSecrets` do work.
+   > Known issue: the chart-level list `agent.workspaceImagePullSecrets` (a Secret you create
+   > for every session, as an alternative to per-image credentials) reaches the agent as
+   > `KASM_IMAGE_PULL_SECRETS` but is not yet written into the `KasmWorkspace` resources. Until
+   > it is, use the per-image credentials above; or, for a cluster-wide Secret, add it to
+   > `imagePullSecrets` of the ServiceAccount the session pods run as
+   > (`kubectl get pod <session pod> -o jsonpath='{.spec.serviceAccountName}'` names it), or
+   > pre-stage the images on every node with `agent.imagePuller` (step 1), whose per-entry
+   > `imagePullSecrets` do work.
 
 4. **Node-prep inputs.** `nodePrep` is the one component that fetches at **run** time, and only in
    some modes:
@@ -236,7 +251,7 @@ Installing the charts directly, drop the `kasm-helm:` and `kasm-agent:` keys.
 
 | Symptom | Cause | Fix |
 | ------- | ----- | --- |
-| Agent and operator pods run, **session** pods `ImagePullBackOff` | Session pods carry no pull Secret: `agent.workspaceImagePullSecrets` is not yet propagated to workspaces (known issue, step 3) | Pre-stage the image with `agent.imagePuller`, or add the Secret to the session pods' ServiceAccount |
+| Agent and operator pods run, **session** pods `ImagePullBackOff` | The workspace image has no registry credentials in the manager, or its name lacks the registry host (a bare name goes to Docker Hub); `agent.workspaceImagePullSecrets` alone is not propagated (known issue, step 3) | Set Docker Registry/Username/Password on the image and use the full image reference; check `kubectl get secret kasm-registry-<host>` exists and is in the session pod's `imagePullSecrets` |
 | Every session fails to launch, control plane healthy | Workspace images unreachable; they come from the manager's registry, not from values | Re-point them in the manager |
 | Pull works in one namespace, fails in the other | Secrets do not cross namespaces | Create the Secret in both release namespaces |
 | ECR pulls fail every morning | ECR tokens expire after 12 hours | Credential helper, external-secrets, or the node role |
@@ -253,7 +268,7 @@ The rest is in [Troubleshooting](../reference/troubleshooting.md).
 - [ ] Charts mirrored as OCI artifacts, or carried as `make package-agent` archives.
 - [ ] Control-plane images from `images.txt` mirrored; every `components.*.image.registry` and `database.image.registry` re-pointed.
 - [ ] Agent-family images from `make images-agent` mirrored, conditional ones included; `make images-check` green.
-- [ ] Workspace images mirrored and re-pointed **in the manager**; `workspaceImagePullSecrets` set.
+- [ ] Workspace images mirrored and re-pointed **in the manager**, with registry credentials on each private image and the registry host in its name.
 - [ ] A `dockerconfigjson` Secret in every release namespace, with a refresh story for expiring tokens.
 - [ ] `nodePrep` in a mode that does not fetch at runtime, or a pre-baked builder image supplied.
 - [ ] One session launched end to end with the boundary closed.

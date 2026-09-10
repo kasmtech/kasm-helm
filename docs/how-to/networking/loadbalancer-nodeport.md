@@ -11,16 +11,22 @@ controller nor a load-balancer provider (`NodePort`), and the common way to publ
 relayed zone from another cluster, because a Service does no `Host` routing.
 
 ```mermaid
-%%{init: {"theme":"base","themeVariables":{"primaryColor":"#eef3f8","primaryBorderColor":"#5b7a99","primaryTextColor":"#1d2b3a","secondaryColor":"#fbf3e6","secondaryBorderColor":"#b8863b","tertiaryColor":"#eaf5ec","tertiaryBorderColor":"#4f8a5b","lineColor":"#5b7a99","fontFamily":"Inter, Helvetica, Arial, sans-serif","fontSize":"14px"},"flowchart":{"curve":"basis","htmlLabels":true}}}%%
+%%{init: {"theme":"base","themeVariables":{"background":"#ffffff","primaryColor":"#f2f4f7","primaryBorderColor":"#f2f4f7","primaryTextColor":"#0f2a44","lineColor":"#0f2a44","clusterBkg":"#ffffff","clusterBorder":"#4a4a4a","edgeLabelBackground":"#ffffff","fontFamily":"Montserrat, Helvetica, Arial, sans-serif","fontSize":"13px"},"flowchart":{"curve":"linear","htmlLabels":true,"nodeSpacing":36,"rankSpacing":64}}}%%
 flowchart LR
-  browser["Browser"] -->|"HTTPS 443 · the workload's certificate"| lb["LoadBalancer"]
-  lb -->|"TCP 8443 · Service kasm-proxy-ext-default"| cp["Control plane proxy"]
-  lb -->|"TCP 4444 · Service k8s-agent-session-proxy"| sp["Session proxy"]
-  sp -->|"6901"| ws["Workspace pod"]
-  classDef agent fill:#eaf5ec,stroke:#4f8a5b
-  classDef ext fill:#fbf3e6,stroke:#b8863b
-  class sp,ws agent
-  class browser,lb ext
+  browser["Browser"]:::card
+  lb["LoadBalancer"]:::card
+  cp["Control plane proxy"]:::card
+  sp["Session proxy"]:::card
+  ws["Workspace pod"]:::card
+  browser -->|"HTTPS (443) · the workload's certificate"| lb
+  lb -->|"TCP (8443) · Service kasm-proxy-ext-default"| cp
+  lb -->|"TCP (4444) · Service k8s-agent-session-proxy"| sp
+  sp -->|"6901"| ws
+  classDef card fill:#f2f4f7,stroke:#f2f4f7,color:#0f2a44,font-weight:600
+  linkStyle 0 stroke:#5ec2ef,stroke-width:2px
+  linkStyle 1 stroke:#e0413f,stroke-width:2px
+  linkStyle 2 stroke:#f0b429,stroke-width:2px
+  linkStyle 3 stroke:#b39ddb,stroke-width:2px
 ```
 
 ## Before you start
@@ -37,9 +43,10 @@ flowchart LR
   speaker skips nodes carrying `node.kubernetes.io/exclude-from-external-load-balancers`, which
   kubeadm puts on control-plane nodes: on a single-node or control-plane-only cluster the address
   is allocated and never announced until `speaker.ignoreExcludeLB=true` is set (MetalLB 0.16).
-- A Service publishes the session proxy's **own** ports, 4444 (HTTPS) and 4445 (HTTP). The
-  `Agent` resource has no Service port field, so a `LoadBalancer` Service never presents 443;
-  only a load balancer you run outside the Service can map 443 to 4444.
+- The session proxy listens on 4444 (HTTPS) and 4445 (HTTP), and a Service publishes those same
+  ports unless `agent.sessionProxy.service.httpsPort` and `httpPort` name others. `httpsPort: 443`
+  makes a `LoadBalancer` present 443 while the container keeps listening on 4444, so neither
+  `publicPort` nor the zone's port has to move.
 
 - For `NodePort`: a port in 30000 to 32767 open on every node the load balancer or DNS points at,
   and a node address clients can reach (`kubectl get nodes -o wide`). A VM host that only forwards
@@ -92,14 +99,17 @@ flowchart LR
    > to the node port (preseed, so at database initialization) or change **Proxy Port** under
    > Infrastructure → Zones on a running deployment.
 
-3. **Agent.** Two ports, two owners. `agent.publicPort` is the port the **manager and API** use
-   to reach the session proxy (the hello and create calls for every launch, and the session
-   proxy's own hairpin); it must be the port the Service actually exposes, and it is derived to
-   4444 only while `publicHostname` is left empty, 443 otherwise. Browsers, on direct-connect,
+3. **Agent.** Two ports, two audiences. `agent.publicPort` is the port the **manager and API** use
+   to reach the session proxy (the hello and create calls for every launch); it must be the port
+   the Service actually exposes, and it is derived to 4444 only while `publicHostname` is left
+   empty, 443 otherwise. Browsers, on direct-connect,
    are sent to `publicHostname` on the **zone's `proxy_port`**, which Kasm reads from the zone
-   record and never from `publicPort`. So a NodePort, or a LoadBalancer on anything but 443, needs
-   the zone's *Proxy Port* set to the same number: `kasm-helm.kasmZones[].proxy_port` at
-   database initialization, or **Infrastructure → Zones** on a running deployment
+   record and never from `publicPort`. Both default to 443, so publish the session proxy on 443
+   and neither needs setting: on a `LoadBalancer`, `sessionProxy.service.httpsPort: 443` maps the
+   Service's 443 onto the proxy's 4444 listener (`httpPort: 80` does the same for the plain 4445
+   one). A NodePort cannot sit on 443, so there both have to name the node port: `publicPort` in
+   values, and the zone's *Proxy Port* as `kasm-helm.kasmZones[].proxy_port` at database
+   initialization or **Infrastructure → Zones** on a running deployment
    ([Kasm docs: Deployment Zones](https://www.kasmweb.com/docs/latest/guide/zones/deployment_zones.html)).
    Verified on Kasm 1.19: with `publicPort: 30443` and the zone at 443, the API reached the agent
    on 30443 and the browser was sent to `:443`. On the relayed default the zone's `proxy_port` is
@@ -111,16 +121,17 @@ flowchart LR
    ```yaml
    kasm-agent:
      agent:
-       publicHostname: sessions.example.com
-       publicPort: 4444                 # the Service exposes the proxy's own 4444, not 443
+       publicHostname: sessions.example.com   # publicPort stays at its default, 443
        sessionProxy:
          service:
            type: LoadBalancer
+           httpsPort: 443                     # the Service's 443 onto the proxy's 4444 listener
            externalTrafficPolicy: Local
    ```
 
-   On direct-connect, set the zone's Proxy Port to 4444 as well, or run a load balancer outside
-   the Service that maps 443 to 4444 and keep both at 443.
+   The port fields are part of the `Agent` resource the chart renders, so the Service change
+   rolls through the operator. Left empty, `httpsPort` keeps the Service on the proxy's own
+   4444, and `publicPort` and the zone's Proxy Port would both have to follow it there.
 
    NodePort with a pinned port:
 
@@ -163,17 +174,19 @@ no load-balancer controller.
 ```console
 curl -sk -o /dev/null -w '%{http_code}\n' https://<address>/
 kubectl -n kasm-agent get svc k8s-agent-session-proxy
-curl -kI https://sessions.example.com:4444/      # :30443 on the NodePort example
+curl -kI https://sessions.example.com/           # :30443 on the NodePort example
 ```
 
 Expected: `200` from the control plane; the session-proxy Service with a real `EXTERNAL-IP` and
-`4444:<nodeport>/TCP,4445:<nodeport>/TCP`, or `4444:30443/TCP` on the NodePort example; an HTTP
-status line from the session hostname on that port, `404` being correct with no session, served
+`443:<nodeport>/TCP,4445:<nodeport>/TCP` (`80:<nodeport>/TCP` beside it with `httpPort: 80`), or
+`4444:30443/TCP,4445:<nodeport>/TCP` on the NodePort example; an HTTP status line from the session
+hostname on that port, `404` being correct with no session, served
 with the session proxy's own certificate. Run the `curl` from **outside** the cluster, on the
 network path a user will be on: a NodePort that answers from a node and refuses from a laptop is
 a firewall problem. On direct-connect, launch a session and read the port in the address bar: it
 is the zone's `proxy_port`, and it must be the one that answered above. The session-proxy access
-log then shows the hairpin, `/desktop/<id>/...` followed by `/container/<id>/...`, both `200`.
+log then shows only the browser's `/desktop/<id>/...` requests, `200`; the session proxy serves
+its own sessions locally, so no `/container/<id>/...` request follows.
 
 ## Chart values
 
@@ -186,20 +199,22 @@ kasm-helm:
 kasm-agent:
   agent:
     publicHostname: sessions.example.com
-    publicPort: 4444             # the Service port; 30443 with a pinned NodePort
     sessionProxy:
       service:
-        type: LoadBalancer       # or NodePort, with httpsNodePort
+        type: LoadBalancer       # or NodePort, with httpsNodePort: 30443 and publicPort: 30443
+        httpsPort: 443           # LoadBalancer: the Service's 443 onto the proxy's 4444 listener
         externalTrafficPolicy: Local
 ```
 
-On direct-connect the zone's `proxy_port` carries the same number.
+With `httpsPort: 443`, `agent.publicPort` and the zone's `proxy_port` stay at their default of 443.
+On a NodePort both carry the node port instead, the zone's on direct-connect only.
 
 Installing the charts directly, drop the `kasm-helm:` and `kasm-agent:` keys.
 
 ## Preserving real client IPs
 
-Optional. One mechanism works today:
+Optional. Two mechanisms, for two kinds of front. A load balancer that preserves the source
+address needs only the Service value:
 
 ```yaml
 kasm-agent:
@@ -213,12 +228,36 @@ kasm-agent:
 Verified: with `Local` the session-proxy access log records the client's own address; with the
 default `Cluster` it records the node's SNAT address.
 
-> **Warning.** `agent.sessionProxy.proxyProtocol.enabled` and `trustedCIDRs` are accepted by the
-> chart and written to the `Agent` resource, but they are **not yet honoured by the operator**: the
-> session proxy's nginx keeps a plain `listen 4444 ssl` with no `proxy_protocol` or
-> `set_real_ip_from`, the Deployment is not rolled, and plain connections keep answering. Do not
-> enable PROXY protocol on a load balancer expecting the session proxy to read it; use
-> `externalTrafficPolicy: Local` until the operator implements it.
+A load balancer that SNATs but sends PROXY protocol on every connection needs the listeners told
+to expect the header, and nginx told which sources to trust. The load balancer's own setting lives
+in `agent.sessionProxy.service.annotations` (the chart's values reference carries an AWS NLB
+example):
+
+```yaml
+kasm-agent:
+  agent:
+    sessionProxy:
+      service:
+        type: LoadBalancer
+      proxyProtocol:
+        enabled: true
+        trustedCIDRs:
+          - 10.0.0.0/16                  # the load balancer's own address range
+```
+
+`enabled` renders `listen 4444 ssl proxy_protocol` (and the 4445 listener alike) plus
+`real_ip_header proxy_protocol`; every `trustedCIDRs` entry renders one `set_real_ip_from`. The
+Deployment rolls on its own when either value changes. Two rules:
+
+- **`trustedCIDRs` is what changes the address.** Without it the client address in the access log
+  and in `X-Real-IP` stays the front end's. List the load balancer's own address range.
+- **Every connection must carry the header.** Once enabled, nginx refuses a connection that
+  arrives without a PROXY header: the TLS handshake fails. A browser reaching the NodePort
+  directly, a health check without PROXY protocol and `curl` against the Service all stop
+  answering, so enable it together with the matching setting on the front, never on its own.
+
+Verified: behind a front that sends the header, with its range in `trustedCIDRs`, the access log
+records the client's own address.
 
 ## Idle timeouts
 
@@ -240,9 +279,9 @@ the one table; other pages link here.
 
 ## Decisions
 
-- [ ] `LoadBalancer` with a provider that hands out addresses, or `NodePort` with the range open and the zone's `proxy_port` matched.
+- [ ] `LoadBalancer` with a provider that hands out addresses and `httpsPort: 443`, or `NodePort` with the range open and the zone's `proxy_port` matched.
 - [ ] Not combined with an Ingress, Route or Gateway API route, and not with `kasmZones`.
-- [ ] `agent.publicPort` equals the port the Service exposes (4444, or the pinned node port); on direct-connect the zone's `proxy_port` equals it too.
-- [ ] Client-IP strategy: `externalTrafficPolicy: Local`; `proxyProtocol` left off until the operator honours it.
+- [ ] `agent.publicPort` equals the port the Service exposes: 443 with `httpsPort: 443`, so left at its default, or the pinned node port; on direct-connect the zone's `proxy_port` equals it too.
+- [ ] Client-IP strategy: `externalTrafficPolicy: Local`, or `proxyProtocol` with `trustedCIDRs` behind a front that sends the PROXY header on every connection.
 - [ ] L4 idle timeout raised to 3600s on whatever fronts the Service.
 - [ ] Certificates: the workload's own, publicly trusted where browsers reach it directly.

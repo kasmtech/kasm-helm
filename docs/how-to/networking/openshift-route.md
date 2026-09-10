@@ -10,16 +10,22 @@ termination gives the agent half end-to-end TLS without the Gateway API. Set
 OpenShift assign them from the namespace's range.
 
 ```mermaid
-%%{init: {"theme":"base","themeVariables":{"primaryColor":"#eef3f8","primaryBorderColor":"#5b7a99","primaryTextColor":"#1d2b3a","secondaryColor":"#fbf3e6","secondaryBorderColor":"#b8863b","tertiaryColor":"#eaf5ec","tertiaryBorderColor":"#4f8a5b","lineColor":"#5b7a99","fontFamily":"Inter, Helvetica, Arial, sans-serif","fontSize":"14px"},"flowchart":{"curve":"basis","htmlLabels":true}}}%%
+%%{init: {"theme":"base","themeVariables":{"background":"#ffffff","primaryColor":"#f2f4f7","primaryBorderColor":"#f2f4f7","primaryTextColor":"#0f2a44","lineColor":"#0f2a44","clusterBkg":"#ffffff","clusterBorder":"#4a4a4a","edgeLabelBackground":"#ffffff","fontFamily":"Montserrat, Helvetica, Arial, sans-serif","fontSize":"13px"},"flowchart":{"curve":"linear","htmlLabels":true,"nodeSpacing":36,"rankSpacing":64}}}%%
 flowchart LR
-  browser["Browser"] -->|"HTTPS 443"| route["OpenShift router"]
-  route -->|"HTTP 8080 · edge · kasm.example.com"| cp["Control plane proxy"]
-  route -->|"TCP 4444 · passthrough · sessions.apps.ocp.example.com"| sp["Session proxy"]
-  sp -->|"6901"| ws["Workspace pod"]
-  classDef agent fill:#eaf5ec,stroke:#4f8a5b
-  classDef ext fill:#fbf3e6,stroke:#b8863b
-  class sp,ws agent
-  class browser,route ext
+  browser["Browser"]:::card
+  route["OpenShift router"]:::card
+  cp["Control plane proxy"]:::card
+  sp["Session proxy"]:::card
+  ws["Workspace pod"]:::card
+  browser -->|"HTTPS (443)"| route
+  route -->|"HTTP (8080) · edge · kasm.example.com"| cp
+  route -->|"TCP (4444) · passthrough · sessions.apps.ocp.example.com"| sp
+  sp -->|"6901"| ws
+  classDef card fill:#f2f4f7,stroke:#f2f4f7,color:#0f2a44,font-weight:600
+  linkStyle 0 stroke:#5ec2ef,stroke-width:2px
+  linkStyle 1 stroke:#e0413f,stroke-width:2px
+  linkStyle 2 stroke:#f0b429,stroke-width:2px
+  linkStyle 3 stroke:#b39ddb,stroke-width:2px
 ```
 
 ## Before you start
@@ -98,11 +104,11 @@ flowchart LR
 
    `route.host` defaults to `publicHostname`. `route.backendPort` follows the termination mode when
    left empty: 4444 for `passthrough` and `reencrypt`, 4445 for `edge`. On direct-connect, finish
-   [Switch sessions to direct-connect](direct-connect.md), and read its warning first: a
-   `passthrough` Route routes on SNI, which the session proxy's own hairpin does not send, so
-   expect the known issue there; `edge` and `reencrypt` route on the `Host` header. A relayed
-   agent from another cluster behind a `passthrough` Route is unverified for the same reason. None
-   of this has been exercised on OpenShift itself.
+   [Switch sessions to direct-connect](direct-connect.md). A `passthrough` Route routes on SNI and
+   `edge` and `reencrypt` on the `Host` header; the session proxy serves its own sessions locally,
+   so all three are expected to stream. A relayed agent from another cluster behind a
+   `passthrough` Route is unverified, because the relay sends no SNI. None of this has been
+   exercised on OpenShift itself.
 
 3. **Install or upgrade.**
 

@@ -399,6 +399,35 @@ spec:
                 description: NodeSelector pins the agent (and proxy) pods to matching
                   nodes.
                 type: object
+              persistentProfiles:
+                description: |-
+                  PersistentProfiles sets the cluster-wide defaults applied to every
+                  persistent-profile PVC this agent's workspaces create, since the manager
+                  only ever sends a profile path and never a StorageClass, access mode, or
+                  size. Required to use a non-default StorageClass (e.g. an RWX-capable
+                  class for concurrent multi-node sessions) without making it the cluster
+                  default.
+                properties:
+                  accessModes:
+                    description: |-
+                      AccessModes are the default access modes for persistent profile PVCs.
+                      Empty defaults to ReadWriteOnce. Set to ReadWriteMany with an RWX-capable
+                      StorageClass so one user's profile can be mounted by concurrent sessions
+                      on different nodes.
+                    items:
+                      type: string
+                    type: array
+                  capacity:
+                    default: 10Gi
+                    description: Capacity is the default PVC size (e.g. "10Gi") for
+                      persistent profiles.
+                    type: string
+                  storageClass:
+                    description: |-
+                      StorageClass is the default StorageClass for persistent profile PVCs.
+                      Empty means the cluster's default StorageClass.
+                    type: string
+                type: object
               publicHostname:
                 description: |-
                   PublicHostname is this agent's externally reachable address, advertised to
@@ -575,6 +604,15 @@ spec:
                         maximum: 32767
                         minimum: 30000
                         type: integer
+                      httpPort:
+                        description: |-
+                          HTTPPort overrides the Service port for the HTTP (4445) listener. The
+                          container continues to listen on 4445 regardless; only the
+                          Service-facing port changes. Leave unset to publish 4445.
+                        format: int32
+                        maximum: 65535
+                        minimum: 1
+                        type: integer
                       httpsNodePort:
                         description: |-
                           HTTPSNodePort pins the NodePort assigned to the HTTPS (4444) listener
@@ -583,6 +621,17 @@ spec:
                         format: int32
                         maximum: 32767
                         minimum: 30000
+                        type: integer
+                      httpsPort:
+                        description: |-
+                          HTTPSPort overrides the Service port for the HTTPS (4444) listener.
+                          The container continues to listen on 4444 regardless; only the
+                          Service-facing port changes. Useful with Type LoadBalancer to publish
+                          443 instead of 4444, matching an Ingress and avoiding a zone proxy_port
+                          mismatch. Leave unset to publish 4444.
+                        format: int32
+                        maximum: 65535
+                        minimum: 1
                         type: integer
                       type:
                         default: ClusterIP

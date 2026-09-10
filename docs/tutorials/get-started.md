@@ -7,13 +7,15 @@ values file: the agent finds the control plane installed beside it, both halves 
 certificates, and session traffic is relayed through the control plane.
 
 ```mermaid
-%%{init: {"theme":"base","themeVariables":{"primaryColor":"#eef3f8","primaryBorderColor":"#5b7a99","primaryTextColor":"#1d2b3a","secondaryColor":"#fbf3e6","secondaryBorderColor":"#b8863b","tertiaryColor":"#eaf5ec","tertiaryBorderColor":"#4f8a5b","lineColor":"#5b7a99","fontFamily":"Inter, Helvetica, Arial, sans-serif","fontSize":"14px"},"flowchart":{"curve":"basis","htmlLabels":true}}}%%
+%%{init: {"theme":"base","themeVariables":{"background":"#ffffff","primaryColor":"#f2f4f7","primaryBorderColor":"#f2f4f7","primaryTextColor":"#0f2a44","lineColor":"#0f2a44","clusterBkg":"#ffffff","clusterBorder":"#4a4a4a","edgeLabelBackground":"#ffffff","fontFamily":"Montserrat, Helvetica, Arial, sans-serif","fontSize":"13px"},"flowchart":{"curve":"linear","htmlLabels":true,"nodeSpacing":36,"rankSpacing":64}}}%%
 flowchart LR
-  browser["Browser"] --> cp["Control plane"] --> agent["Agent (sessions)"]
-  classDef agent fill:#eaf5ec,stroke:#4f8a5b
-  classDef ext fill:#fbf3e6,stroke:#b8863b
-  class agent agent
-  class browser ext
+  browser["Browser"]:::card
+  cp["Control plane"]:::card
+  agent["Agent (sessions)"]:::card
+  browser --> cp --> agent
+  classDef card fill:#f2f4f7,stroke:#f2f4f7,color:#0f2a44,font-weight:600
+  linkStyle 0 stroke:#5ec2ef,stroke-width:2px
+  linkStyle 1 stroke:#e0413f,stroke-width:2px
 ```
 
 ## Before you start
@@ -104,11 +106,11 @@ NAME        PHASE   MANAGER                                     AGE
 k8s-agent   Ready   kasm-proxy-default.kasm.svc.cluster.local   6m
 ```
 
-The agent reached the control plane at its in-cluster proxy Service and read the registration
-token from the `kasm-secrets` Secret; both were derived, nothing was typed. In the admin UI,
+`Ready` means the agent registered with the control plane and its heartbeats are arriving. It
+reached the control plane at its in-cluster proxy Service and read the registration token from the
+`kasm-secrets` Secret; both were derived, nothing was typed. In the admin UI,
 **Infrastructure → Agents** now lists the agent under its session-proxy hostname,
-`k8s-agent-session-proxy.kasm.svc.cluster.local`, with a last-reported time that advances. That
-listing, not the `Ready` phase, is what shows the manager accepted it.
+`k8s-agent-session-proxy.kasm.svc.cluster.local`, disabled; the next step enables it.
 
 ## 7. Enable the agent
 

@@ -69,11 +69,18 @@ that owns it, and link to it from everywhere else. The owners today:
 
 ## Diagrams
 
-Inline mermaid only: no SVG exports, no ASCII arrows, no `graph TD`. Every diagram starts with this
-init block on its first line:
+Inline mermaid only: no SVG exports, no ASCII arrows, no `graph TD`. The palette follows the Kasm
+documentation's own architecture drawings: light-grey cards, dashed tiers, and edge colours that say
+what travels on the edge. Every flowchart starts with this init block on its first line:
 
 ```text
-%%{init: {"theme":"base","themeVariables":{"primaryColor":"#eef3f8","primaryBorderColor":"#5b7a99","primaryTextColor":"#1d2b3a","secondaryColor":"#fbf3e6","secondaryBorderColor":"#b8863b","tertiaryColor":"#eaf5ec","tertiaryBorderColor":"#4f8a5b","lineColor":"#5b7a99","fontFamily":"Inter, Helvetica, Arial, sans-serif","fontSize":"14px"},"flowchart":{"curve":"basis","htmlLabels":true}}}%%
+%%{init: {"theme":"base","themeVariables":{"background":"#ffffff","primaryColor":"#f2f4f7","primaryBorderColor":"#f2f4f7","primaryTextColor":"#0f2a44","lineColor":"#0f2a44","clusterBkg":"#ffffff","clusterBorder":"#4a4a4a","edgeLabelBackground":"#ffffff","fontFamily":"Montserrat, Helvetica, Arial, sans-serif","fontSize":"13px"},"flowchart":{"curve":"linear","htmlLabels":true,"nodeSpacing":36,"rankSpacing":64}}}%%
+```
+
+A sequence diagram starts with the plain init instead: no fills, navy lines and text.
+
+```text
+%%{init: {"theme":"base","themeVariables":{"background":"#ffffff","primaryColor":"#ffffff","primaryBorderColor":"#0f2a44","primaryTextColor":"#0f2a44","lineColor":"#0f2a44","actorBkg":"#ffffff","actorBorder":"#0f2a44","actorTextColor":"#0f2a44","signalColor":"#0f2a44","signalTextColor":"#0f2a44","activationBkgColor":"#ffffff","activationBorderColor":"#0f2a44","fontFamily":"Montserrat, Helvetica, Arial, sans-serif","fontSize":"13px"}}}%%
 ```
 
 Three levels, matched to the quadrant:
@@ -91,10 +98,43 @@ browser["Browser"]   cp["Control plane proxy"]   sp["Session proxy"]   ws["Works
 lb["LoadBalancer"]   ing["Ingress controller"]    gw["Gateway"]         route["OpenShift router"]
 ```
 
-Classes, declared with exactly these definitions: control plane nodes take the primary colour by
-default; agent nodes get `classDef agent fill:#eaf5ec,stroke:#4f8a5b`; external things (browsers,
-load balancers, gateways) get `classDef ext fill:#fbf3e6,stroke:#b8863b`. Left to right for
-traffic, top to bottom for trees.
+Every node is a card. Declare the class once per diagram and put `:::card` on every node
+declaration; a node that only appears in an edge gets its own declaration line so the class applies.
+No `classDef agent`, no `classDef ext`, no `class ...` lines.
+
+```text
+classDef card fill:#f2f4f7,stroke:#f2f4f7,color:#0f2a44,font-weight:600
+browser["Browser"]:::card
+```
+
+Every subgraph gets a `style` line: dashed dark grey for a tier, a cluster, a zone or a namespace;
+light blue for the box where sessions run.
+
+```text
+style <id> fill:#ffffff,stroke:#4a4a4a,stroke-dasharray:6 4
+style <id> fill:#ffffff,stroke:#5aa9e6,stroke-width:2px
+```
+
+Every edge gets a `linkStyle` by what travels on it. Indices follow declaration order in the source,
+and edges written inside a subgraph count where they appear; indices that share a style go on one
+line (`linkStyle 0,1,4 stroke:#e0413f,stroke-width:2px`). Every line is `stroke:<hex>,stroke-width:2px`
+plus the dash array where the table names one.
+
+| Colour | Hex | What travels |
+| ------ | --- | ------------ |
+| red | `#e0413f` | HTTPS between tiers (443, 8443, 4444) |
+| light blue | `#5ec2ef` | the browser to the web app or control plane: login, UI |
+| yellow | `#f0b429` | the second path or population: the direct session connection, the other zone |
+| dark blue | `#1a3ec8` | RDP |
+| purple | `#b39ddb` | KasmVNC, session proxy to workspace (6901) |
+| orange | `#e9a53b` | database |
+| green | `#4cc44c` | proxy to endpoints (RDP, VNC, SSH), egress to the internet |
+| dark grey, dashed | `#4a4a4a` + `stroke-dasharray:6 4` | control traffic: register, heartbeat, a user choosing, dependency lines |
+| the path's colour, dotted | `stroke-dasharray:2 4` | launch, "creates" |
+
+Edge labels keep their text; where a label names a protocol and a port, write it as
+`PROTOCOL (port) · detail`, for example `HTTPS (443) · kasm.example.com`. Left to right for traffic,
+top to bottom for trees.
 
 ## Checking links
 

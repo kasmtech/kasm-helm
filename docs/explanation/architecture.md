@@ -29,28 +29,36 @@ installs perfectly well alone.
 ## The chart dependency tree
 
 ```mermaid
-%%{init: {"theme":"base","themeVariables":{"primaryColor":"#eef3f8","primaryBorderColor":"#5b7a99","primaryTextColor":"#1d2b3a","secondaryColor":"#fbf3e6","secondaryBorderColor":"#b8863b","tertiaryColor":"#eaf5ec","tertiaryBorderColor":"#4f8a5b","lineColor":"#5b7a99","fontFamily":"Inter, Helvetica, Arial, sans-serif","fontSize":"14px"},"flowchart":{"curve":"basis","htmlLabels":true}}}%%
+%%{init: {"theme":"base","themeVariables":{"background":"#ffffff","primaryColor":"#f2f4f7","primaryBorderColor":"#f2f4f7","primaryTextColor":"#0f2a44","lineColor":"#0f2a44","clusterBkg":"#ffffff","clusterBorder":"#4a4a4a","edgeLabelBackground":"#ffffff","fontFamily":"Montserrat, Helvetica, Arial, sans-serif","fontSize":"13px"},"flowchart":{"curve":"linear","htmlLabels":true,"nodeSpacing":36,"rankSpacing":64}}}%%
 flowchart TB
-  platform["kasm-platform<br/>top-level umbrella"]
-  helm["kasm-helm<br/>control plane"]
-  umb["kasm-agent<br/>agent umbrella"]
+  platform["kasm-platform<br/>top-level umbrella"]:::card
+  helm["kasm-helm<br/>control plane"]:::card
+  umb["kasm-agent<br/>agent umbrella"]:::card
+  op["kasm-agent-operator<br/>CRDs, RBAC, controller · singleton"]:::card
+  otel["kasm-otel-collector"]:::card
+  inst["kasm-agent-instance<br/>Agent resource + session proxy"]:::card
+  np["kasm-node-prep<br/>privileged, off by default"]:::card
+  vdp["kasm-video-device-plugin<br/>privileged, off by default"]:::card
+  egress["kasm-egress-installer<br/>privileged, off by default"]:::card
+  rclone["csi-driver-rclone<br/>third-party"]:::card
+  gpu["gpu-operator<br/>third-party"]:::card
+  nfs["nfs-server-provisioner<br/>third-party"]:::card
+  crds["kasm-agent-crds<br/>standalone release · Helm-owned CRDs"]:::card
   platform -->|"kasm-helm.enabled"| helm
   platform -->|"kasm-agent.enabled"| umb
-  umb -->|"operator"| op["kasm-agent-operator<br/>CRDs, RBAC, controller · singleton"]
-  umb -->|"otelCollector"| otel["kasm-otel-collector"]
-  umb -->|"agent"| inst["kasm-agent-instance<br/>Agent resource + session proxy"]
-  umb -->|"nodePrep"| np["kasm-node-prep<br/>privileged, off by default"]
-  umb -->|"videoDevicePlugin"| vdp["kasm-video-device-plugin<br/>privileged, off by default"]
-  umb -->|"egressInstaller"| egress["kasm-egress-installer<br/>privileged, off by default"]
-  umb -.->|"csiRclone"| rclone["csi-driver-rclone<br/>third-party"]
-  umb -.->|"gpuOperator"| gpu["gpu-operator<br/>third-party"]
-  umb -.->|"nfs-server-provisioner"| nfs["nfs-server-provisioner<br/>third-party"]
-  crds["kasm-agent-crds<br/>standalone release · Helm-owned CRDs"]
+  umb -->|"operator"| op
+  umb -->|"otelCollector"| otel
+  umb -->|"agent"| inst
+  umb -->|"nodePrep"| np
+  umb -->|"videoDevicePlugin"| vdp
+  umb -->|"egressInstaller"| egress
+  umb -.->|"csiRclone"| rclone
+  umb -.->|"gpuOperator"| gpu
+  umb -.->|"nfs-server-provisioner"| nfs
   op -.->|"the same five CRDs · not a dependency"| crds
-  classDef agent fill:#eaf5ec,stroke:#4f8a5b
-  classDef ext fill:#fbf3e6,stroke:#b8863b
-  class umb,op,otel,inst,np,vdp,egress,crds agent
-  class rclone,gpu,nfs ext
+  classDef card fill:#f2f4f7,stroke:#f2f4f7,color:#0f2a44,font-weight:600
+  linkStyle 0,1,2,3,4,5,6,7 stroke:#4a4a4a,stroke-width:2px,stroke-dasharray:6 4
+  linkStyle 8,9,10,11 stroke:#4a4a4a,stroke-width:2px,stroke-dasharray:2 4
 ```
 
 Grounded in the actual `Chart.yaml` dependency blocks:
