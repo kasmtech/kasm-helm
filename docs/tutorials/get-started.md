@@ -20,14 +20,31 @@ flowchart LR
 
 ## Before you start
 
-- A Kubernetes cluster, 1.26 or newer, with **amd64** nodes. Kasm workspace images are amd64 only,
-  so an Apple Silicon kind or k3d cluster runs the platform but cannot launch the stock workspaces.
+- A Kubernetes cluster, 1.26 or newer
 - `kubectl` and Helm 3.18 or newer, pointed at the cluster.
 - A default StorageClass. `kubectl get storageclass` shows one marked `(default)`.
 - An address for a `LoadBalancer` Service: a cloud provider, MetalLB, or the ServiceLB that ships
   with k3s and k3d. If `EXTERNAL-IP` never leaves `<pending>` on your cluster, step 3 has a
   port-forward alternative.
 - About ten minutes. A first install initializes the database and pulls images.
+
+> **No cluster yet?** [k3d](https://k3d.io) runs k3s inside Docker and gives you both prerequisites
+> at once, on Linux, macOS or Windows: a default StorageClass (local-path) and a `LoadBalancer`
+> provider (ServiceLB). Create one with:
+>
+> ```console
+> k3d cluster create kasm --k3s-arg "--disable=traefik@server:*" -p "443:443@loadbalancer"
+> ```
+>
+> `--disable=traefik` matters: Traefik otherwise holds port 443 and ServiceLB can never bind it, so
+> the proxy Service stays `<pending>`. The `-p` maps host 443 to the load balancer so the browser
+> reaches the proxy on 443, which step 3 explains is the port session URLs are built on; browse to
+> `https://localhost`. On **OrbStack**, drop the `-p` flag: OrbStack holds host 443 for its own
+> proxy, so a mapping there fails the TLS handshake, but it routes container addresses to the host,
+> so browse the Service's `EXTERNAL-IP` from step 3 directly (it already serves on 443). Kasm
+> workspace images are `linux/amd64` only, so a session launched on an arm64 cluster (Apple Silicon,
+> Windows on ARM) fails to pull unless you supply multi-arch images
+> ([Supported platforms](../explanation/supported-platforms.md)).
 
 ## 1. Install
 

@@ -89,12 +89,12 @@ service/kasm-proxy-zonea
 service/kasm-proxy-zoneb
 service/kasm-proxy-zonec
 
-$ kubectl -n kasm get svc -l app.kubernetes.io/component=rdp-gateway -o name
-service/kasm-rdp-gateway-zonea
-service/kasm-rdp-gateway-zoneb
+$ kubectl -n kasm get svc -l app.kubernetes.io/component=connection-proxy -o name
+service/kasm-connection-proxy-zonea
+service/kasm-connection-proxy-zoneb
 ```
 
-Three proxies, two RDP gateways - `zonec` is in another region. If that is not what you expected,
+Three proxies, two connection proxies (Guac and both RDP gateways) - `zonec` is in another region. If that is not what you expected,
 `region_name` is the value to check.
 
 ## Which zone an agent joins

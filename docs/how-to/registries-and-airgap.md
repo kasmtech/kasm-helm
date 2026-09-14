@@ -91,7 +91,7 @@ Work them in that order; each one's failure hides the next.
      components:
        api:
          image:
-           registry: registry.internal.example.com    # one block per component: api, manager, proxy, guac, rdpGateway, rdpHttpsGateway
+           registry: registry.internal.example.com    # one block per component: api, manager, proxy, and under connectionProxy: nginx, guac, rdpGateway, rdpHttpsGateway
      database:
        image:
          registry: registry.internal.example.com      # postgres lives here, not under components (there is no components.db)

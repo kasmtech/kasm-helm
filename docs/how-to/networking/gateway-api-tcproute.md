@@ -4,7 +4,7 @@
 
 ## Why this is needed
 
-`components.rdpGateway` speaks raw RDP on 3389, so it needs a `TCPRoute`: standard-channel `v1`
+`components.connectionProxy.rdpGateway` speaks raw RDP on 3389, so it needs a `TCPRoute`: standard-channel `v1`
 since Gateway API **1.6**, deprecated as `v1alpha2` from that release on. This is the Gateway API
 alternative to `directRdpService`; [Publish the RDP gateway](rdp-gateway.md) compares the two.
 Being in the CRD bundle is not the same as the data plane implementing it: the failure mode is a
@@ -15,7 +15,7 @@ route that reports `Accepted=True` and carries no traffic.
 flowchart LR
   rdp["RDP client"]:::card
   gw["Gateway"]:::card
-  rdpgw["Service kasm-rdp-gateway-default"]:::card
+  rdpgw["Service kasm-connection-proxy-default-rdp-0"]:::card
   host["RDP host outside the cluster"]:::card
   rdp -->|"TCP (3389) · rdp.kasm.example.com"| gw
   gw -->|"TCP (3389)"| rdpgw
@@ -54,9 +54,11 @@ flowchart LR
 
    ```yaml
    kasm-helm:
+     deploymentSize: small          # one connection-proxy replica per zone: a TCPRoute can front one
      components:
-       rdpGateway:
-         enabled: true
+       connectionProxy:
+         rdpGateway:
+           enabled: true
      tcpRoute:
        enabled: true
        rdpAccessURL: rdp.kasm.example.com
@@ -65,6 +67,12 @@ flowchart LR
            namespace: kube-system
            sectionName: rdp
    ```
+
+   The route fronts replica 0's per-pod RDP Service, `kasm-connection-proxy-default-rdp-0`, which the
+   chart renders as `ClusterIP` on this path. Every rdp-gateway replica must advertise its own external
+   address and a TCPRoute cannot tell replicas apart, so the render refuses `medium` or `large` (or
+   `components.connectionProxy.replicas` above 1) with `tcpRoute.enabled`; publish more replicas with
+   `directRdpService.perServiceSettings` instead.
 
    `rdpAccessURL` is required: a TCPRoute carries no hostname, so the gateway cannot infer the name
    it serves under the way an HTTP route's backend can.
@@ -108,15 +116,15 @@ flowchart LR
 
 ```console
 kubectl -n kasm get tcproute
-kubectl -n kasm get tcproute kasm-rdp-gateway-default \
+kubectl -n kasm get tcproute kasm-connection-proxy-default \
     -o jsonpath='{range .status.parents[*]}{.parentRef.sectionName}{" "}{range .conditions[*]}{.type}={.status}{" "}{end}{"\n"}{end}'
 ```
 
 Expected:
 
 ```text
-NAME                       AGE
-kasm-rdp-gateway-default   2m
+NAME                            AGE
+kasm-connection-proxy-default   2m
 rdp Accepted=True ResolvedRefs=True
 ```
 
@@ -127,9 +135,11 @@ prints `succeeded`, and a native RDP client connects through Kasm.
 
 ```yaml
 kasm-helm:
+  deploymentSize: small
   components:
-    rdpGateway:
-      enabled: true
+    connectionProxy:
+      rdpGateway:
+        enabled: true
   directRdpService:
     enabled: false
   tcpRoute:

@@ -37,7 +37,7 @@ OpenShift decide some of the rows for you.
 | **Startup and stop scripts** | ✅ | Nothing | Nothing |
 | **Session sharing and casting** | ✅ | Nothing | Nothing |
 | **Zone pinning** | ✅ | A `kasm-helm.kasmZones` entry per zone (each renders a manager), and the agent registering through that zone's hostname · [how-to](../how-to/multi-zone.md) | `kasm-helm.kasmZones[]`<br>`agent.manager.hostname` = the zone's `proxy_hostname`<br>`agent.zone` = the zone name |
-| **RDP and RemoteApp workspaces** | ✅ | RDP target hosts outside the cluster, reachable on TCP 3389 · [how-to](../how-to/networking/rdp-gateway.md) | `kasm-helm.components.rdpGateway.enabled`<br>`kasm-helm.components.rdpHttpsGateway.enabled` |
+| **RDP and RemoteApp workspaces** | ✅ | RDP target hosts outside the cluster, reachable on TCP 3389 · [how-to](../how-to/networking/rdp-gateway.md) | `kasm-helm.components.connectionProxy.rdpGateway.enabled`<br>`kasm-helm.components.connectionProxy.rdpHttpsGateway.enabled` |
 
 **CPU and memory.** Kasm's **Shares** allocation (and *Inherit* under the default) gives a session
 a CPU request with no ceiling; **Quotas** gives it a request and an equal limit. Memory always sets

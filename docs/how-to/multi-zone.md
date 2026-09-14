@@ -119,7 +119,7 @@ with. Why it is shaped this way, what fans out per zone and what does not, is
 ```console
 kubectl -n kasm get svc -l app.kubernetes.io/component=manager -o name
 kubectl -n kasm get svc -l app.kubernetes.io/component=proxy -o name
-kubectl -n kasm get svc -l app.kubernetes.io/component=rdp-gateway -o name
+kubectl -n kasm get svc -l app.kubernetes.io/component=connection-proxy -o name
 ```
 
 Expected, for the example above:
@@ -131,11 +131,11 @@ service/kasm-manager-zonec
 service/kasm-proxy-zonea
 service/kasm-proxy-zoneb
 service/kasm-proxy-zonec
-service/kasm-rdp-gateway-zonea
-service/kasm-rdp-gateway-zoneb
+service/kasm-connection-proxy-zonea
+service/kasm-connection-proxy-zoneb
 ```
 
-Three managers, three proxies, two RDP gateways: `zonec` is in another region. Then, per agent
+Three managers, three proxies, two connection proxies: `zonec` is in another region. Then, per agent
 release:
 
 ```console

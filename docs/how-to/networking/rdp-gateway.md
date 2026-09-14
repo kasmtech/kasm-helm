@@ -7,16 +7,18 @@
 RDP and RemoteApp workspaces are Windows or Linux hosts **outside** the cluster; the control
 plane's RDP gateway brokers native RDP clients to them. It speaks raw TCP on 3389, so no Ingress,
 HTTPRoute or Route can carry it. Two ways exist to publish it, and the chart refuses both at once.
-The RDP HTTPS gateway (`components.rdpHttpsGateway`) needs nothing on this page; the chart
-publishes nothing extra for it.
+The RDP HTTPS gateway (`components.connectionProxy.rdpHttpsGateway`) needs nothing on this page; the
+chart publishes nothing extra for it. Both gateways and Guac run inside the zone's connection-proxy
+StatefulSet, and every replica of it needs its own external RDP address, which is why the direct
+Service path is per replica.
 
 ```mermaid
 %%{init: {"theme":"base","themeVariables":{"background":"#ffffff","primaryColor":"#f2f4f7","primaryBorderColor":"#f2f4f7","primaryTextColor":"#0f2a44","lineColor":"#0f2a44","clusterBkg":"#ffffff","clusterBorder":"#4a4a4a","edgeLabelBackground":"#ffffff","fontFamily":"Montserrat, Helvetica, Arial, sans-serif","fontSize":"13px"},"flowchart":{"curve":"linear","htmlLabels":true,"nodeSpacing":36,"rankSpacing":64}}}%%
 flowchart LR
   rdp["RDP client"]:::card
   lb["LoadBalancer"]:::card
-  svc["Service kasm-rdp-gateway-default"]:::card
-  gwpod["RDP gateway pod"]:::card
+  svc["Service kasm-connection-proxy-default-rdp-0"]:::card
+  gwpod["connection-proxy pod 0 (rdp-gateway)"]:::card
   host["RDP host outside the cluster"]:::card
   rdp -->|"TCP (3389) · rdp.kasm.example.com"| lb
   lb -->|"TCP (3389)"| svc
@@ -29,7 +31,11 @@ flowchart LR
 
 ## Before you start
 
-- `kasm-helm.components.rdpGateway.enabled: true` (the default).
+- `kasm-helm.components.connectionProxy.rdpGateway.enabled: true` (the default).
+- One external RDP address **per connection-proxy replica**: `deploymentSize: small` runs one replica per
+  zone, `medium` two, `large` three (or set `components.connectionProxy.replicas`). With one replica the
+  legacy `directRdpService.rdpAccessURL` is enough; with more, list one `perServiceSettings` entry per
+  replica. `tcpRoute` supports one replica per zone only.
 - A hostname for RDP clients, `rdp.kasm.example.com` below. It is required on both paths: the
   gateway serves under it and Kasm advertises it to clients.
 - For `directRdpService`: a load balancer that is **Layer 4 / TCP** (an NLB, not an ALB; an HTTP
@@ -71,12 +77,13 @@ flowchart LR
 ## Verify
 
 ```console
-kubectl -n kasm get svc kasm-rdp-gateway-default
+kubectl -n kasm get svc -l app.kubernetes.io/component=connection-proxy-rdp-direct
 ```
 
-Expected on path A: `TYPE LoadBalancer` with an `EXTERNAL-IP` (not `<pending>`) and
-`3389:<nodeport>/TCP` in `PORT(S)`, or `TYPE NodePort` with the node port. On path B the Service
-stays `ClusterIP` and the TCPRoute reports `Accepted=True`.
+Expected on path A: one Service per replica, `kasm-connection-proxy-default-rdp-0` and up, each
+`TYPE LoadBalancer` with an `EXTERNAL-IP` (not `<pending>`) and `3389:<nodeport>/TCP` in `PORT(S)`, or
+`TYPE NodePort` with the node port. On path B the single `-rdp-0` Service stays `ClusterIP` and the
+TCPRoute reports `Accepted=True`.
 
 ```console
 nc -vz rdp.kasm.example.com 3389
@@ -89,12 +96,13 @@ Expected: `succeeded` (or `open`). Then connect a native RDP client through Kasm
 ```yaml
 kasm-helm:
   components:
-    rdpGateway:
-      enabled: true
+    connectionProxy:
+      rdpGateway:
+        enabled: true
   directRdpService:
     enabled: true
     type: LoadBalancer
-    rdpAccessURL: rdp.kasm.example.com
+    rdpAccessURL: rdp.kasm.example.com    # one replica; with more, perServiceSettings instead
     loadBalancerPort: 3389
 ```
 
