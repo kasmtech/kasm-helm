@@ -1,5 +1,9 @@
 {{/*
-Deploy the Kasm ingress if .Values.ingress.enabled set to true
+Deploy the Kasm ingress if .Values.ingress.enabled set to true.
+
+publicAddr is deliberately the only host rule. Zone proxy_hostnames belong to a
+different backend, usually behind a different ingress or load balancer entirely,
+so this chart publishes none of them.
 */}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- $primaryZone := (include "kasm.primaryZone" . | fromYaml) -}}
@@ -19,28 +23,9 @@ spec:
         {{- if eq .Values.certificate.certManager.addWildCard true }}
         - {{ printf "*.%s" $.Values.publicAddr | quote }}
         {{- end }}
-        {{- with .Values.kasmZones }}
-        {{- range $idx, $zone := . }}
-        - {{ include "kasm.zoneProxyHostnameRequired" $zone | quote }}
-        {{- end }}
-        {{- end }}
       secretName: {{ .Values.certificate.secretName | default (include "kasm.name" (list . "cert-manager" "secret")) }}
   {{-  end }}
   rules:
-  {{- with .Values.kasmZones }}
-  {{- range $idx, $zone := . }}
-  - host: {{ include "kasm.zoneProxyHostnameRequired" $zone | quote }}
-    http:
-      paths:
-        - path: /
-          pathType: Prefix
-          backend:
-            service:
-              name: {{ printf "%s-%s" $constants.proxy.svc (include "kasm.zoneName" $zone.name) }}
-              port:
-                number: {{ if eq $.Values.ingress.backendProtocol "https" }}{{ $constants.proxy.https }}{{ else }}{{ $constants.proxy.http }}{{ end }}
-  {{- end }}
-  {{- end }}
   - host: {{ .Values.publicAddr | quote }}
     http:
       paths:

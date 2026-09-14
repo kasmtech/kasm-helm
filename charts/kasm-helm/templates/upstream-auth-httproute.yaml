@@ -1,0 +1,43 @@
+{{/*
+  Gateway API HTTPRoutes for the upstream auth (management) endpoint, when
+  upstreamAuth.httpRoute.enabled.
+
+  One HTTPRoute per deployed zone (an HTTPRoute's hostnames belong to the object,
+  its rules match only on path, header and method), each routing to that zone's
+  own proxy Service. There is no publicAddr route here - management traffic has
+  no shared front door.
+
+  TLS is deliberately absent, as on the front-door httproute: the Gateway's
+  listener carries the certificate, referencing this chart's Secret from its
+  certificateRefs (with a ReferenceGrant when the Gateway lives in another
+  namespace). Attach through an internal Gateway, or a dedicated listener, to
+  keep the endpoint private.
+
+  Every route attaches through upstreamAuth.httpRoute.parentRefs unless
+  upstreamAuth.httpRoute.zones names the zone with its own parentRefs.
+*/}}
+{{- if .Values.upstreamAuth.httpRoute.enabled }}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $zoneRefs := dict -}}
+{{- range $z := .Values.upstreamAuth.httpRoute.zones -}}
+  {{- $zoneRefs = set $zoneRefs $z.name $z.parentRefs -}}
+{{- end -}}
+{{- $backendPort := ternary $constants.proxy.https $constants.proxy.http (eq .Values.upstreamAuth.httpRoute.backendProtocol "https") -}}
+{{- range $idx, $zone := (include "kasm.deployedZones" . | fromYamlArray) }}
+{{- $refs := (get $zoneRefs $zone.name) | default $.Values.upstreamAuth.httpRoute.parentRefs }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  {{- include "kasm.metadata" (dict "context" $ "component" "upstream-auth" "resource" "upstreamAuth-httpRoute" "zone" $zone.name "include" "all") | indent 2 }}
+spec:
+  parentRefs:
+    {{- toYaml $refs | nindent 4 }}
+  hostnames:
+    - {{ include "kasm.zoneUpstreamAuthAddressRequired" (list $ $zone) | quote }}
+  rules:
+    - backendRefs:
+        - name: {{ printf "%s-%s" $constants.proxy.svc (include "kasm.zoneName" $zone.name) }}
+          port: {{ $backendPort }}
+{{- end }}
+{{- end }}

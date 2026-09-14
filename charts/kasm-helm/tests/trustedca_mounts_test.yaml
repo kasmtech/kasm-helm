@@ -2,9 +2,7 @@ suite: Trusted CA volume mounts
 templates:
   - templates/api-deployment.yaml
   - templates/manager-deployment.yaml
-  - templates/guac-statefulset.yaml
-  - templates/rdp-gateway-deployment.yaml
-  - templates/rdp-https-gateway-statefulset.yaml
+  - templates/connection-proxy-statefulset.yaml
   - templates/db-statefulset.yaml
 
 tests:

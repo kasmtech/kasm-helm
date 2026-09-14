@@ -1,0 +1,147 @@
+suite: seedOnly zones — preseeded into the database, deployed from their own cluster
+templates:
+  - templates/api-deployment.yaml
+  - templates/manager-deployment.yaml
+  - templates/proxy-deployment.yaml
+  - templates/api-service.yaml
+  - templates/ingress.yaml
+  - templates/cert-manager-certificate.yaml
+  - templates/db-preseed-secret.yaml
+  - templates/connection-proxy-statefulset.yaml
+  - templates/connection-proxy-configmaps.yaml
+
+# One seeding-cluster shape reused across cases: ashburn deploys here,
+# frankfurt is hosted by another cluster and only preseeded.
+common: &seedOnlyZones
+  publicAddr: kasm.example.com
+  proxyService.type: ClusterIP
+  kasmZones:
+    - name: ashburn
+      proxy_hostname: ashburn.example.com
+      primary: true
+    - name: frankfurt
+      proxy_hostname: frankfurt.example.com
+      seedOnly: true
+
+tests:
+  - it: deploys api, manager, and proxy only for zones not marked seedOnly
+    templates:
+      - templates/api-deployment.yaml
+      - templates/manager-deployment.yaml
+      - templates/proxy-deployment.yaml
+      - templates/api-service.yaml
+    set: *seedOnlyZones
+    asserts:
+      - hasDocuments:
+          count: 1
+      - matchRegex:
+          path: metadata.name
+          pattern: ".*ashburn.*"
+
+  - it: renders an ingress rule for publicAddr only, no zone hostnames
+    template: templates/ingress.yaml
+    set:
+      <<: *seedOnlyZones
+      ingress.enabled: true
+      ingress.tls: true
+      certificate.secretName: kasm-tls
+    asserts:
+      - equal:
+          path: spec.rules[0].host
+          value: kasm.example.com
+      - lengthEqual:
+          path: spec.rules
+          count: 1
+      - notContains:
+          path: spec.tls[0].hosts
+          content: ashburn.example.com
+      - notContains:
+          path: spec.tls[0].hosts
+          content: frankfurt.example.com
+
+  - it: excludes seedOnly zone hostnames from the cert-manager certificate
+    template: templates/cert-manager-certificate.yaml
+    set:
+      <<: *seedOnlyZones
+      certificate.certManager.enabled: true
+      certificate.certManager.addWildCard: false
+      certificate.certManager.issuerName: test-issuer
+    asserts:
+      - contains:
+          path: spec.dnsNames
+          content: ashburn.example.com
+      - notContains:
+          path: spec.dnsNames
+          content: frankfurt.example.com
+
+  - it: preseeds seedOnly zones into the database alongside deployed zones
+    template: templates/db-preseed-secret.yaml
+    set:
+      <<: *seedOnlyZones
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "zone_name: ashburn"
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "zone_name: frankfurt"
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'proxy_hostname: "frankfurt\.example\.com"'
+
+  - it: excludes seedOnly zones from the connection-proxy fan-out
+    template: templates/connection-proxy-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      <<: *seedOnlyZones
+      ingress.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - matchRegex:
+          path: metadata.name
+          pattern: ".*ashburn.*"
+
+  - it: normalizes zone_name-only entries in per-zone service names
+    template: templates/api-service.yaml
+    set:
+      proxyService.type: ClusterIP
+      kasmZones:
+        - zone_name: My_Zone 1
+          proxy_hostname: zonea.example.com
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-api-my-zone-1
+
+  - it: rdp-https-gateway app config names the primary zone even when it is not first
+    template: templates/connection-proxy-configmaps.yaml
+    documentIndex: 3
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      publicAddr: kasm.example.com
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      logFormat: json
+      kasmZones:
+        - name: zonea
+          proxy_hostname: zonea.example.com
+        - name: zoneb
+          proxy_hostname: zoneb.example.com
+          primary: true
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-cpx-rdp-https-gw-app-config
+      - matchRegex:
+          path: data["rdp_https_gateway.app.config.yaml"]
+          pattern: "zone: zoneb"

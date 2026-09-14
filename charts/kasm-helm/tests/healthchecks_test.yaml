@@ -3,8 +3,7 @@ templates:
   - templates/api-deployment.yaml
   - templates/db-statefulset.yaml
   - templates/proxy-deployment.yaml
-  - templates/guac-statefulset.yaml
-  - templates/rdp-gateway-deployment.yaml
+  - templates/connection-proxy-statefulset.yaml
 
 tests:
   - it: adds probes when applyHealthChecks=true
@@ -55,6 +54,37 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.successThreshold
           value: 1
+
+  # This fork pins the 1.19.0 image line, which has no /livez endpoint; the api keeps the
+  # pre-DEV-539 TCP liveness probe on the api port and renders no startup probe or 8081 port.
+  - it: api liveness probe is a TCP socket check on the api port (1.19.0 images have no /livez)
+    template: templates/api-deployment.yaml
+    set:
+      applyHealthChecks: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.tcpSocket.port
+          value: api-pt
+      - notExists:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet
+      - notExists:
+          path: spec.template.spec.containers[0].ports[1]
+
+  - it: api renders no startup probe with the 1.19.0 image line
+    template: templates/api-deployment.yaml
+    set:
+      applyHealthChecks: true
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].startupProbe
+
+  - it: api startup probe omitted when applyHealthChecks=false
+    template: templates/api-deployment.yaml
+    set:
+      applyHealthChecks: false
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].startupProbe
 
   - it: api readiness probe uses default timing when no override is set
     template: templates/api-deployment.yaml
@@ -199,107 +229,110 @@ tests:
           path: spec.template.spec.containers[0].readinessProbe.periodSeconds
           value: 45
 
-  # ---------- nginxSidecar timingScope ----------
-  - it: guac nginxSidecar liveness probe uses default timing when no override is set
-    template: templates/guac-statefulset.yaml
+  # ---------- connection-proxy timingScope (nginx/guac/rdpGateway/rdpHttpsGateway) ----------
+  # Container order in the consolidated pod (confirmed against connection-proxy-statefulset.yaml):
+  # 0 = nginx, 1 = guac, 2 = rdp-gateway, 3 = rdp-https-gateway.
+  - it: connection-proxy nginx liveness probe uses default timing when no override is set
+    template: templates/connection-proxy-statefulset.yaml
     values:
       - ../../../tests/values/components-all.yaml
     set:
       applyHealthChecks: true
     asserts:
       - equal:
-          path: spec.template.spec.containers[1].livenessProbe.timeoutSeconds
+          path: spec.template.spec.containers[0].livenessProbe.timeoutSeconds
           value: 5
       - equal:
-          path: spec.template.spec.containers[1].livenessProbe.periodSeconds
+          path: spec.template.spec.containers[0].livenessProbe.periodSeconds
           value: 30
 
-  - it: guac nginxSidecar liveness probe honors nginxSidecar-scoped override
-    template: templates/guac-statefulset.yaml
+  - it: connection-proxy nginx liveness probe honors nginx-scoped override
+    template: templates/connection-proxy-statefulset.yaml
     values:
       - ../../../tests/values/components-all.yaml
     set:
       applyHealthChecks: true
       components:
-        guac:
-          nginxSidecar:
+        connectionProxy:
+          nginx:
             healthCheckTiming:
               livenessProbe:
                 timeoutSeconds: 15
                 periodSeconds: 60
     asserts:
       - equal:
-          path: spec.template.spec.containers[1].livenessProbe.timeoutSeconds
+          path: spec.template.spec.containers[0].livenessProbe.timeoutSeconds
           value: 15
       - equal:
-          path: spec.template.spec.containers[1].livenessProbe.periodSeconds
+          path: spec.template.spec.containers[0].livenessProbe.periodSeconds
           value: 60
       - equal:
-          path: spec.template.spec.containers[0].livenessProbe.timeoutSeconds
+          path: spec.template.spec.containers[1].livenessProbe.timeoutSeconds
           value: 5
 
-  - it: guac nginxSidecar readiness probe honors nginxSidecar-scoped override
-    template: templates/guac-statefulset.yaml
+  - it: connection-proxy nginx readiness probe honors nginx-scoped override
+    template: templates/connection-proxy-statefulset.yaml
     values:
       - ../../../tests/values/components-all.yaml
     set:
       applyHealthChecks: true
       components:
-        guac:
-          nginxSidecar:
+        connectionProxy:
+          nginx:
             healthCheckTiming:
               readinessProbe:
                 initialDelaySeconds: 20
                 failureThreshold: 6
     asserts:
       - equal:
-          path: spec.template.spec.containers[1].readinessProbe.initialDelaySeconds
+          path: spec.template.spec.containers[0].readinessProbe.initialDelaySeconds
           value: 20
       - equal:
-          path: spec.template.spec.containers[1].readinessProbe.failureThreshold
+          path: spec.template.spec.containers[0].readinessProbe.failureThreshold
           value: 6
       - equal:
           path: spec.template.spec.containers[1].readinessProbe.timeoutSeconds
           value: 5
 
-  - it: guac component-level override does not affect nginxSidecar probe
-    template: templates/guac-statefulset.yaml
+  - it: connection-proxy guac-scoped override does not affect nginx probe
+    template: templates/connection-proxy-statefulset.yaml
     values:
       - ../../../tests/values/components-all.yaml
     set:
       applyHealthChecks: true
       components:
-        guac:
-          healthCheckTiming:
-            livenessProbe:
-              periodSeconds: 90
+        connectionProxy:
+          guac:
+            healthCheckTiming:
+              livenessProbe:
+                periodSeconds: 90
     asserts:
       - equal:
-          path: spec.template.spec.containers[0].livenessProbe.periodSeconds
+          path: spec.template.spec.containers[1].livenessProbe.periodSeconds
           value: 90
       - equal:
-          path: spec.template.spec.containers[1].livenessProbe.periodSeconds
+          path: spec.template.spec.containers[0].livenessProbe.periodSeconds
           value: 30
 
-  - it: rdp-gateway nginxSidecar readiness probe honors nginxSidecar-scoped override
-    template: templates/rdp-gateway-deployment.yaml
+  - it: connection-proxy rdpGateway-scoped override does not affect nginx probe
+    template: templates/connection-proxy-statefulset.yaml
     values:
       - ../../../tests/values/components-all.yaml
     set:
       applyHealthChecks: true
       components:
-        rdpGateway:
-          nginxSidecar:
+        connectionProxy:
+          rdpGateway:
             healthCheckTiming:
               readinessProbe:
                 timeoutSeconds: 10
                 periodSeconds: 45
     asserts:
       - equal:
-          path: spec.template.spec.containers[1].readinessProbe.timeoutSeconds
+          path: spec.template.spec.containers[2].readinessProbe.timeoutSeconds
           value: 10
       - equal:
-          path: spec.template.spec.containers[1].readinessProbe.periodSeconds
+          path: spec.template.spec.containers[2].readinessProbe.periodSeconds
           value: 45
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.timeoutSeconds

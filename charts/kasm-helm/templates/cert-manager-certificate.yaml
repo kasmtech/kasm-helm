@@ -12,14 +12,21 @@ spec:
     {{- include "kasm.metadata" (dict "context" . "component" "cert-manager" "resource" "secret" "include" "la") | indent 4 }}
   secretName: {{ .Values.certificate.secretName | default (include "kasm.name" (list . "cert-manager" "secret")) }}
   commonName: {{ .Values.publicAddr | quote }}
+  {{- $dnsNames := list .Values.publicAddr -}}
+  {{- if .Values.certificate.certManager.addWildCard -}}
+    {{- $dnsNames = append $dnsNames (printf "*.%s" .Values.publicAddr) -}}
+  {{- else -}}
+    {{- range $idx, $zone := (include "kasm.deployedConfiguredZones" . | fromYamlArray) -}}
+      {{- with (include "kasm.zoneProxyHostname" $zone) -}}
+        {{- $dnsNames = append $dnsNames . -}}
+      {{- end -}}
+    {{- end -}}
+  {{- end }}
+  {{- /* Upstream auth (management) addresses are deliberately NOT added: they
+         typically live in a private DNS zone the public issuer cannot validate. */}}
   dnsNames:
-    - {{ .Values.publicAddr | quote }}
-    {{- if .Values.certificate.certManager.addWildCard }}
-    - {{ printf "*.%s" .Values.publicAddr | quote }}
-    {{- else }}
-    {{- range $idx, $zone := (.Values.kasmZones) }}
-    - {{ include "kasm.zoneProxyHostnameRequired" $zone | quote }}
-    {{- end }}
+    {{- range $dnsNames | uniq }}
+    - {{ . | quote }}
     {{- end }}
   issuerRef:
     name: {{ .Values.certificate.certManager.issuerName }}

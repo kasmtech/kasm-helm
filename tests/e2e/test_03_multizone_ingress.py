@@ -20,8 +20,11 @@ def test_multizone_ingress_routes_publicaddr_and_zone_hosts(installer, temp_work
     namespace = installer["namespace"]
 
     # Use HTTP backend for ingress -> proxy to keep this deterministic in KinD.
-    # Lower per-component resource requests so all 11 multizone pods schedule
-    # on a single kind node.  Chart's small preset requests 500m per pod which
+    # Lower per-component resource requests so all multizone pods schedule on
+    # a single kind node. Each zone now runs api, manager, proxy, and ONE
+    # consolidated connection-proxy StatefulSet (nginx plus the guac,
+    # rdp-gateway, and rdp-https-gateway service containers), plus a single
+    # non-zoned db pod. Chart's small preset requests 500m per pod which
     # multiplies across the 2 zones; on CI runners that exceeds allocatable.
     # Tests don't drive real load, so small requests are plenty; limits are
     # intentionally omitted (Burstable QoS, no upper bound).
@@ -36,7 +39,9 @@ def test_multizone_ingress_routes_publicaddr_and_zone_hosts(installer, temp_work
         },
         "proxyService": {"type": "ClusterIP"},
         "kasmZones": [
-            {"name": "zonea", "proxyAddress": "zonea.kasm.example.test"},
+            # Multi-zone requires an explicit primary; the chart no longer
+            # falls back to the first entry. publicAddr routes to zonea.
+            {"name": "zonea", "proxyAddress": "zonea.kasm.example.test", "primary": True},
             {"name": "zoneb", "proxyAddress": "zoneb.kasm.example.test"},
         ],
         "ingress": {
@@ -48,9 +53,12 @@ def test_multizone_ingress_routes_publicaddr_and_zone_hosts(installer, temp_work
             "api": {"resources": low_resources},
             "manager": {"resources": low_resources},
             "proxy": {"resources": low_resources_proxy},
-            "guac": {"resources": low_resources},
-            "rdpGateway": {"resources": low_resources_gw},
-            "rdpHttpsGateway": {"resources": low_resources_gw},
+            "connectionProxy": {
+                "nginx": {"resources": low_resources_proxy},
+                "guac": {"resources": low_resources},
+                "rdpGateway": {"resources": low_resources_gw},
+                "rdpHttpsGateway": {"resources": low_resources_gw},
+            },
         },
     }
     values_path = temp_workdir / "values.yaml"

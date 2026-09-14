@@ -9,6 +9,7 @@ from typing import Iterator
 
 import pytest
 from .helpers import (
+    api_image_override_args,
     ensure_cluster_dns,
     ensure_tls_secret,
     helm,
@@ -108,6 +109,7 @@ def helm_install(
         # Images are pre-loaded into kind via `make kind-load-images`.
         # Never pull from the registry during e2e tests.
         "--set", "imagePullPolicy=Never",
+        *api_image_override_args(),
     ]
     if values_file:
         command_args.extend(["-f", values_file])

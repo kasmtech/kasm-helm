@@ -3,7 +3,7 @@ Deploy Kasm Proxy Service .Values.components.api service definition
 */}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- $serviceKeepalive := 16 -}}
-{{- range $idx, $zone := (.Values.kasmZones | default (list (dict "name" "default"))) }}
+{{- range $idx, $zone := (include "kasm.deployedZones" . | fromYamlArray) }}
 ---
 apiVersion: v1
 kind: ConfigMap

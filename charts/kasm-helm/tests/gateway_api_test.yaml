@@ -61,7 +61,7 @@ tests:
           path: spec.rules[0].backendRefs[0].port
           value: 8443
 
-  - it: httpRoute fans out one route per zone plus one for publicAddr
+  - it: httpRoute publishes only publicAddr in multizone, at the primary zone's proxy Service
     template: templates/httproute.yaml
     values:
       - ../../../tests/values/multizone-config.yaml
@@ -72,27 +72,16 @@ tests:
           - name: kasm-gateway
     asserts:
       - hasDocuments:
-          count: 3
+          count: 1
       - equal:
           path: spec.hostnames[0]
           value: kasm.example.com
-        documentIndex: 0
+      - lengthEqual:
+          path: spec.hostnames
+          count: 1
       - equal:
           path: spec.rules[0].backendRefs[0].name
           value: RELEASE-NAME-proxy-zonea
-        documentIndex: 0
-      - equal:
-          path: spec.hostnames[0]
-          value: zonea.kasm.example.com
-        documentIndex: 1
-      - equal:
-          path: spec.hostnames[0]
-          value: zoneb.kasm.example.com
-        documentIndex: 2
-      - equal:
-          path: spec.rules[0].backendRefs[0].name
-          value: RELEASE-NAME-proxy-zoneb
-        documentIndex: 2
 
   - it: tlsRoute passes through to the proxy's own HTTPS listener
     template: templates/tlsroute.yaml
@@ -153,7 +142,7 @@ tests:
           value: rdp
       - equal:
           path: spec.rules[0].backendRefs[0].name
-          value: RELEASE-NAME-rdp-gateway-default
+          value: RELEASE-NAME-connection-proxy-default-rdp-0
       - equal:
           path: spec.rules[0].backendRefs[0].port
           value: 3389
@@ -204,7 +193,7 @@ tests:
         documentIndex: 0
       - equal:
           path: spec.rules[0].backendRefs[0].name
-          value: RELEASE-NAME-rdp-gateway-zonea
+          value: RELEASE-NAME-connection-proxy-zonea-rdp-0
         documentIndex: 0
       - equal:
           path: spec.parentRefs[0].sectionName
@@ -212,42 +201,27 @@ tests:
         documentIndex: 1
       - equal:
           path: spec.rules[0].backendRefs[0].name
-          value: RELEASE-NAME-rdp-gateway-zoneb
+          value: RELEASE-NAME-connection-proxy-zoneb-rdp-0
         documentIndex: 1
 
-  - it: httpRoute.zones gives a zone its own listener while the others keep httpRoute.parentRefs
-    template: templates/httproute.yaml
+  - it: tlsRoute publishes only publicAddr in multizone
+    template: templates/tlsroute.yaml
     values:
       - ../../../tests/values/multizone-config.yaml
     set:
-      httpRoute:
+      tlsRoute:
         enabled: true
         parentRefs:
           - name: kasm-gateway
-            namespace: kube-system
-            sectionName: kasm-https
-        zones:
-          - name: zoneb
-            parentRefs:
-              - name: kasm-gateway
-                namespace: kube-system
-                sectionName: zoneb-https
     asserts:
       - hasDocuments:
-          count: 3
-      - equal:
-          path: spec.parentRefs[0].sectionName
-          value: kasm-https
-        documentIndex: 0
-      - equal:
-          path: spec.parentRefs[0].sectionName
-          value: kasm-https
-        documentIndex: 1
-      - equal:
-          path: spec.parentRefs[0].sectionName
-          value: zoneb-https
-        documentIndex: 2
+          count: 1
       - equal:
           path: spec.hostnames[0]
-          value: zoneb.kasm.example.com
-        documentIndex: 2
+          value: kasm.example.com
+      - lengthEqual:
+          path: spec.hostnames
+          count: 1
+      - equal:
+          path: spec.rules[0].backendRefs[0].name
+          value: RELEASE-NAME-proxy-zonea

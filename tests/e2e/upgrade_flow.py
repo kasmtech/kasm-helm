@@ -11,6 +11,7 @@ import yaml
 
 from .conftest import E2EConfig
 from .helpers import (
+    api_image_override_args,
     assert_login_page,
     curl_from_pod,
     get_chart_app_version,
@@ -378,6 +379,11 @@ def run_upgrade_flow(
         "certificate": {
             "secretName": "kasm-deployment-tls",
         },
+    }
+    # Phase 1 installs the OLD chart (1.18.1, charts/kasm), which predates the
+    # connection-proxy consolidation and still uses the flat
+    # components.guac / rdpGateway / rdpHttpsGateway shape.
+    old_chart_component_values: dict = {
         "components": {
             "api": {"resources": low_resources},
             "manager": {"resources": low_resources},
@@ -385,6 +391,22 @@ def run_upgrade_flow(
             "guac": {"resources": low_resources},
             "rdpGateway": {"resources": low_resources_gw},
             "rdpHttpsGateway": {"resources": low_resources_gw},
+        },
+    }
+    # Phase 2 upgrades to the CURRENT chart, where guac / rdpGateway /
+    # rdpHttpsGateway are nested under components.connectionProxy (both
+    # schemas are additionalProperties: false, so the shapes are NOT
+    # interchangeable between phases).
+    current_chart_component_values: dict = {
+        "components": {
+            "api": {"resources": low_resources},
+            "manager": {"resources": low_resources},
+            "proxy": {"resources": low_resources_proxy},
+            "connectionProxy": {
+                "guac": {"resources": low_resources},
+                "rdpGateway": {"resources": low_resources_gw},
+                "rdpHttpsGateway": {"resources": low_resources_gw},
+            },
         },
     }
 
@@ -415,6 +437,7 @@ def run_upgrade_flow(
 
     initial_values = {
         **base_values,
+        **old_chart_component_values,
         **db_values,
         "dbManagement": {
             "initialize": True,
@@ -497,6 +520,7 @@ def run_upgrade_flow(
 
     upgrade_values = {
         **base_values,
+        **current_chart_component_values,
         **db_values,
         "dbManagement": {
             "initialize": False,
@@ -524,6 +548,7 @@ def run_upgrade_flow(
         "-n", namespace,
         "--timeout", "15m",
         "--set", "imagePullPolicy=Never",
+        *api_image_override_args(),
         "-f", str(upgrade_values_path),
     ])
 

@@ -12,9 +12,10 @@
   the bundle is not the same as the data plane implementing it - check the
   implementation's conformance before choosing this over a LoadBalancer.
 
-  The backend is the RDP Gateway Service as it already stands: it publishes the
-  RDP port whatever directRdpService.enabled is set to, and stays ClusterIP
-  while the Gateway fronts it, so nothing about the Service changes here.
+  The backend is the per-pod direct RDP Service that connection-proxy-services.yaml
+  renders when tcpRoute is enabled: ClusterIP, ordinal 0. A TCPRoute advertises one
+  hostname, so kasm.validateRdpExposure pins connection-proxy to a single replica in
+  this mode - per-replica fan-out belongs to directRdpService.perServiceSettings.
 */}}
 {{- if .Values.tcpRoute.enabled }}
 {{- $api := .Values.tcpRoute.apiVersion | default "gateway.networking.k8s.io/v1" -}}
@@ -29,13 +30,13 @@
 apiVersion: {{ $api }}
 kind: TCPRoute
 metadata:
-  {{- include "kasm.metadata" (dict "context" $ "component" "rdpGateway" "resource" "tcpRoute" "zone" $zone.name "include" "all") | indent 2 }}
+  {{- include "kasm.metadata" (dict "context" $ "component" "connectionProxy" "resource" "tcpRoute" "zone" $zone.name "include" "all") | indent 2 }}
 spec:
   parentRefs:
     {{- toYaml $refs | nindent 4 }}
   rules:
     - backendRefs:
-        - name: {{ printf "%s-rdp-gateway-%s" $.Release.Name (include "kasm.zoneName" $zone.name) }}
+        - name: {{ printf "%s-connection-proxy-%s-rdp-0" $.Release.Name (include "kasm.zoneName" $zone.name) }}
           port: {{ $backendPort }}
 {{- end }}
 {{- end }}

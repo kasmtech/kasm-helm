@@ -74,8 +74,9 @@ flowchart LR
          insecureEdgeTerminationPolicy: Redirect
    ```
 
-   Multi-zone renders one Route per zone plus one for `publicAddr`, because a Route carries a single
-   host; `route.*` settings apply to all of them and the certificate must cover every zone hostname.
+   Multi-zone still renders a single Route, for `publicAddr`, targeting the primary zone's proxy
+   Service. Zone `proxy_hostname`s are associated with a different backend, usually behind a
+   different router entirely, so the chart renders no Route for them.
    `ingress.enabled` and `route.enabled` are mutually exclusive.
 
 2. **Agent, direct-connect only.**

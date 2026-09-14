@@ -25,22 +25,38 @@ publicAddr: ""
 # [Deployment Zones](https://docs.kasm.com/docs/latest/guide/deployment_zones) documentation for more
 # information on Kasm Zones.
 #
-# The zone marked `primary: true` is treated as the primary zone; if no zone is marked primary,
-# the first zone in the list is used instead. At most one zone may be marked `primary: true`.
-# Traffic to the configured `publicAddr` in the ingress rule will be routed to this primary zone.
+# The zone marked `primary: true` is treated as the primary zone. A single configured zone is
+# implicitly primary; with more than one zone configured, exactly one must be marked
+# `primary: true` (there is no first-zone fallback). Traffic to the configured `publicAddr` in
+# the ingress rule will be routed to this primary zone.
 #
 # Each zone requires a `name` (or the `zone_name` alias, if `name` is not set; `name` wins if both are set).
 #
-# Each zone's `proxy_hostname` is used to build the ingress/route/certificate hostnames for that zone,
-# as well as the zone's preseed `proxy_hostname` value. `proxyAddress` is a deprecated alias for
+# Each zone's `proxy_hostname` is added to the chart-minted certificate's SANs and written to the
+# zone's preseed `proxy_hostname` value. It gets NO ingress/route rule from this chart: the hostname
+# is associated with a different backend, usually behind a different ingress or load balancer
+# entirely, and only `publicAddr` is published here. `proxyAddress` is a deprecated alias for
 # `proxy_hostname`, kept for backwards compatibility; if both are set, `proxy_hostname` wins.
+#
+# A zone marked `seedOnly: true` is written to the database preseed (when
+# `kasmConfig.generatePreseed` is true) but deploys no workloads, Services, routing rules or
+# certificate hostnames in this cluster. Use it for multi-cluster deployments: the cluster that
+# initializes the database lists every zone, marking the zones hosted by other clusters
+# `seedOnly: true`, and each of those clusters installs this chart with a values file listing
+# only its own zone(s), `dbManagement.initialize: false` and the shared external database.
+# The primary zone cannot be `seedOnly`, at least one zone must deploy, and a `seedOnly` zone
+# must not share a `region_name` with a deployed zone (zones in one region deploy to one cluster).
 #
 kasmZones: []
 # Example Kasm Zone configuration:
 #   - name: zonea
 #     proxy_hostname: zonea.kasm.contoso.com
+#     primary: true
 #   - name: zoneb
 #     proxy_hostname: zoneb.kasm.contoso.com
+#   - name: zonec
+#     proxy_hostname: zonec.kasm.contoso.com
+#     seedOnly: true  # preseeded into the database, deployed from its own cluster
 
 # isOpenshift -- Use this flag to remove Pod and Container security ID values and allow OpenShift to dynamically
 # set them in accordance with [OpenShift UIDs](https://www.redhat.com/en/blog/a-guide-to-openshift-and-uids) documentation.
@@ -50,8 +66,8 @@ isOpenshift: false
 #
 logFormat: log
 
-# nginxResolver -- The IP address used by the `resolver` directive in the Kasm nginx configs (proxy, guac,
-# rdp-gateway, and rdp-https-gateway nginx sidecars) for dynamic upstream DNS resolution.
+# nginxResolver -- The IP address used by the `resolver` directive in the Kasm nginx configs (proxy and
+# connection-proxy) for dynamic upstream DNS resolution.
 #
 # Leave empty (the default) to auto-detect the cluster's kube-dns Service ClusterIP at install/upgrade time.
 # Auto-detection requires a live cluster and read access to Services in the kube-system namespace; it silently
@@ -87,37 +103,60 @@ proxyService:
   annotations: {}
   labels: {}
 
-# directRdpService -- Configure the directRdpService settings and service type to use for the Kasm RDP Gateway service.
-# This is only applicable if you have enabled the Kasm RDP Gateway component in `components.rdpGateway.enabled`.
+# directRdpService -- Configure the direct RDP Service for the Kasm RDP Gateway. Only applicable when
+# `components.connectionProxy.rdpGateway.enabled` is true.
+#
+# One Service is created per connection-proxy replica. See [Direct RDP Service](./README.md#direct-rdp-service)
+# for load balancer requirements, per-replica settings, and cost.
 #
 directRdpService:
-  # directRdpService.enabled -- Enable the exposure of the RDP Gateway service via a separate Service of the type defined in
-  # `directRdpService.type`. This is only applicable if you have enabled the Kasm RDP Gateway component in `components.rdpGateway.enabled`.
+  # directRdpService.enabled -- Enable exposure of the RDP Gateway via a separate Service of the type
+  # defined in `directRdpService.type`.
   #
   enabled: false
-  # directRdpService.rdpAccessURL -- If you are exposing the RDP Gateway service via a separate Service, set the access URL
-  # to be used for the RDP Gateway. This is the URL you will use to access the RDP Gateway service and must be resolvable by
-  # your users' systems.
+  # directRdpService.rdpAccessURL -- Legacy single access URL. Only honored with 1 replica and an empty
+  # `perServiceSettings`. Use `perServiceSettings` instead.
   #
   rdpAccessURL: ""
-  # directRdpService.type -- The service type to use for the RDP Gateway service if `directRdpService.enabled` is set to true.
-  # Allowed values are LoadBalancer or NodePort. The RDP Gateway speaks raw TCP, so any cloud load balancer backing this
-  # Service must be a Layer 4 / TCP type (e.g. NLB on AWS, not ALB).
+  # directRdpService.type -- Service type to use. Allowed values: LoadBalancer, NodePort.
+  # RDP is raw TCP, so a LoadBalancer must be a layer 4 / network load balancer, not an HTTP one.
   #
   type: LoadBalancer
-  # directRdpService.loadBalancerPort -- The external port exposed by the directRdpService Service when
-  # `directRdpService.type` is LoadBalancer. Defaults to 3389. Has no effect when `directRdpService.type` is NodePort.
-  # It is also the port on the RDP Gateway Service that `tcpRoute` forwards to, so it applies even when
+  # directRdpService.loadBalancerPort -- External port exposed when `type` is LoadBalancer. Overridden per
+  # Service by `perServiceSettings[i].loadBalancerPort`. No effect when `type` is NodePort.
+  # It is also the port the Gateway API `tcpRoute` forwards to, so it applies even when
   # `directRdpService.enabled` is false.
   #
   loadBalancerPort: 3389
-  # directRdpService.annotations -- Custom annotations to add to the RDP Gateway Service. This only applies if `directRdpService.enabled`
-  # is set to true. If you use the annotations below to deploy a load balancer in your cloud provider, you must ensure the load balancer
-  # type supports RDP. This typically requires using a Network Load Balancer type that supports TCP load balancing, and not a HTTP/HTTPS
-  # load balancer type.
+  # directRdpService.annotations -- Annotations added to every per-replica Service. Values that must be
+  # unique per Service (external-dns hostnames, static IP allocations) belong in `perServiceSettings`.
   #
   annotations: {}
+  # directRdpService.labels -- Labels added to every per-replica Service.
+  #
   labels: {}
+  # directRdpService.perServiceSettings -- Per-replica Service settings. Required with more than one
+  # replica; rendering fails if there are fewer entries than replicas. Entry `annotations`/`labels` override
+  # the shared values above. With exactly one primary-region zone (kasmZones), ordinal is the entry's
+  # position in this list (`zone` may be omitted). With more than one zone, every entry needs a `zone`
+  # field naming which zone it belongs to; ordinal is then the entry's position among that zone's entries.
+  # Example (single zone):
+  #   perServiceSettings:
+  #     - rdpAccessURL: rdp0.kasm.example.com
+  #       loadBalancerPort: 3389
+  #       annotations:
+  #         external-dns.alpha.kubernetes.io/hostname: rdp0.kasm.example.com
+  #     - rdpAccessURL: rdp1.kasm.example.com
+  #       annotations:
+  #         external-dns.alpha.kubernetes.io/hostname: rdp1.kasm.example.com
+  # Example (multiple zones):
+  #   perServiceSettings:
+  #     - zone: zone-a
+  #       rdpAccessURL: rdp0.zone-a.kasm.example.com
+  #     - zone: zone-b
+  #       rdpAccessURL: rdp0.zone-b.kasm.example.com
+  #
+  perServiceSettings: []
 
 # Configure an Ingress for your Kasm deployment. 
 # 
@@ -140,9 +179,8 @@ ingress:
 
 # route -- Configure an OpenShift Route for your Kasm deployment.
 #
-# With kasmZones set, one Route is rendered per zone (plus a primary Route
-# for publicAddr). The TLS cert must cover publicAddr and every zone's
-# proxyAddress; route.* settings apply to all Routes.
+# One Route is rendered, for publicAddr, targeting the primary zone's proxy
+# Service. Zone proxy_hostnames belong to a different backend and get no Route.
 #
 route:
   # route.enabled -- Set the enabled value to `true` to use a pre-defined Route service to expose Kasm
@@ -189,8 +227,9 @@ route:
 # listener's `certificateRefs` yourself, and add a ReferenceGrant when the Gateway is in another
 # namespace.
 #
-# With `kasmZones` set, one HTTPRoute is rendered per zone plus one for `publicAddr`, because an
-# HTTPRoute's hostnames belong to the object while its rules match only on path, header and method.
+# `publicAddr` is the only hostname any of the four publish. Zone `proxy_hostname`s are associated
+# with a different backend, usually behind a different ingress or load balancer entirely, so this
+# chart publishes no routing rules for them.
 #
 httpRoute:
   # httpRoute.enabled -- Set to `true` to publish the Kasm proxy through a Gateway API HTTPRoute.
@@ -207,19 +246,6 @@ httpRoute:
   #       namespace: kube-system
   #
   parentRefs: []
-  # httpRoute.zones -- Per-zone Gateway attachment, for zones that cannot share `httpRoute.parentRefs`:
-  # a `sectionName` that pins the route to a single-hostname listener is right for `publicAddr` and
-  # rejects every other zone's hostname. Each entry names a zone from `kasmZones` and carries its own
-  # `parentRefs`; zones without an entry use `httpRoute.parentRefs`.
-  # Example:
-  #   zones:
-  #     - name: zoneb
-  #       parentRefs:
-  #         - name: kasm-gateway
-  #           namespace: kube-system
-  #           sectionName: zoneb-https
-  #
-  zones: []
   # httpRoute.backendProtocol -- The protocol the Gateway uses to reach the Kasm proxy Service.
   # Valid values: http or https
   #
@@ -301,6 +327,122 @@ tcpRoute:
   zones: []
   annotations: {}
   labels: {}
+
+# Publish a separate, out-of-band URL for Kasm management traffic: the zone's "Upstream Auth
+# Address", used by external Kasm Agents and Windows services to reach the API and manager
+# (`/api/`, `/manager_api/`) without going through the user-facing front door. Typically a
+# private load balancer or an internal ingress class/Gateway, though nothing requires it to
+# be private.
+#
+# The backend is the same per-zone Kasm proxy Service the front door publishes; the proxy's
+# nginx is hostname-agnostic, so no extra workload is deployed. Exactly one of
+# `upstreamAuth.service`, `upstreamAuth.ingress`, `upstreamAuth.route`,
+# `upstreamAuth.httpRoute` or `upstreamAuth.tlsRoute` may be enabled; all of them are
+# independent of the front-door choice, so e.g. `ingress.enabled` for users plus an internal
+# `upstreamAuth.service` LoadBalancer for agents is a valid combination.
+#
+# Per-zone hostnames come from `kasmZones[].upstream_auth_address`; the primary (or implicit
+# default) zone falls back to `upstreamAuth.hostname`. Each zone's hostname routes to that
+# zone's own proxy Service. The resolved hostnames are also written to the database preseed
+# (`kasmConfig.generatePreseed`). They are NOT added to the cert-manager/self-signed
+# certificate SANs; upstream auth addresses typically live in a private DNS zone a public
+# issuer cannot validate, and Kasm agents do not validate the certificate.
+# The preseed only applies when the database is initialized; on an existing deployment set
+# the zone's Upstream Auth Address in the Kasm admin UI (Infrastructure > Zones) as well.
+#
+upstreamAuth:
+  # upstreamAuth.hostname -- The upstream auth hostname for the primary (or implicit default)
+  # zone, e.g. kasm-mgmt.example.com. Zones with `kasmZones[].upstream_auth_address` set keep
+  # their own value. Required by the ingress/route/httpRoute/tlsRoute publishers below; the
+  # service publisher works without it (the preseed then keeps `$request_host$`, and you set
+  # the address in the admin UI once the load balancer has one).
+  #
+  hostname: ""
+  # upstreamAuth.service -- Publish the upstream auth endpoint with one Service per deployed
+  # zone (`<release>-upstream-auth-<zone>`), port 443 to the proxy's HTTPS port. This is raw
+  # L4: it cannot route by hostname, so multi-zone deployments get one load balancer per zone.
+  #
+  service:
+    # upstreamAuth.service.enabled -- Set to `true` to publish the upstream auth endpoint
+    # through a Service of the type below.
+    #
+    enabled: false
+    # upstreamAuth.service.type -- Service type. Allowed values: LoadBalancer, NodePort.
+    # (ClusterIP needs no extra Service - the per-zone proxy Service already exists; its
+    # in-cluster DNS name is printed by NOTES as the KubeVirt Upstream Auth Address.)
+    #
+    type: LoadBalancer
+    # upstreamAuth.service.nodePort -- Pin the node port when `type` is NodePort. Leave empty
+    # to let Kubernetes assign one. Only valid with a single deployed zone, since every zone's
+    # Service would otherwise claim the same port. Agents reach the endpoint on this port, so
+    # include it in the zone's `upstream_auth_address` (host:port).
+    #
+    nodePort: ""
+    # upstreamAuth.service.annotations -- Annotations for the per-zone Services. This is where
+    # a private/internal load balancer scheme is selected, e.g.
+    #   service.beta.kubernetes.io/aws-load-balancer-scheme: internal
+    #
+    annotations: {}
+    labels: {}
+  # upstreamAuth.ingress -- Publish the upstream auth endpoint through an Ingress, one host
+  # rule per deployed zone. Point `ingressClassName` at an internal controller class to keep
+  # the endpoint private while the front-door Ingress stays public.
+  #
+  ingress:
+    enabled: false
+    # upstreamAuth.ingress.tls -- Set to `true` to add a TLS section covering every zone's
+    # upstream auth hostname, using the certificate Secret below.
+    #
+    tls: true
+    # upstreamAuth.ingress.secretName -- Certificate Secret for the upstream auth Ingress.
+    # Empty (the default) uses the front door's chain: `certificate.secretName`, else the
+    # chart-minted Secret. The chart-minted certificates do NOT cover the upstream auth
+    # hostnames (they usually live in a private DNS zone), so set this to a Secret that
+    # does when the front end must present a matching certificate: controllers like
+    # ingress-nginx and Traefik do not reject a non-matching Secret, but they serve their
+    # default certificate for the host instead. Kasm agents do not validate the
+    # certificate, so this is hygiene, not a functional requirement.
+    #
+    secretName: ""
+    # upstreamAuth.ingress.backendProtocol -- Protocol the Ingress uses to reach the Kasm
+    # proxy Service. Valid values: http or https
+    #
+    backendProtocol: http
+    ingressClassName: ""
+    annotations: {}
+    labels: {}
+  # upstreamAuth.route -- Publish the upstream auth endpoint through OpenShift Routes, one per
+  # deployed zone. Same shape as `route`.
+  #
+  route:
+    enabled: false
+    backendProtocol: http
+    wildcardPolicy: None
+    tls: {}
+    annotations: {}
+    labels: {}
+  # upstreamAuth.httpRoute -- Publish the upstream auth endpoint through Gateway API
+  # HTTPRoutes, one per deployed zone. Same shape as `httpRoute`, including per-zone
+  # `zones[].parentRefs` overrides for zones that need their own listener.
+  #
+  httpRoute:
+    enabled: false
+    parentRefs: []
+    zones: []
+    backendProtocol: http
+    annotations: {}
+    labels: {}
+  # upstreamAuth.tlsRoute -- Publish the upstream auth endpoint by SNI passthrough through
+  # Gateway API TLSRoutes, one per deployed zone; the Kasm proxy terminates TLS itself. Same
+  # shape as `tlsRoute`, plus per-zone `zones[].parentRefs` overrides.
+  #
+  tlsRoute:
+    enabled: false
+    apiVersion: gateway.networking.k8s.io/v1
+    parentRefs: []
+    zones: []
+    annotations: {}
+    labels: {}
 
 # Configure certificate settings.
 # You can create your own certificate and upload it to the `secretName` supplied below, or if you have
@@ -850,51 +992,36 @@ components:
     #  Default value is 60s.
     supportBundleTimer: 60
 
-  # Configuration settings for the Kasm Guac RDP service
+  # Configuration settings for the consolidated Kasm Connection Proxy service. This StatefulSet fronts
+  # the Kasm Guac, RDP Gateway, and RDP HTTPS Gateway service containers behind a single nginx container.
   #
-  guac:
-    # components.guac.image -- Configure the image repository where the image is stored. Use this to point to an private hosted
-    # container registry instead of our public DockerHub hosted one.
-    #
-    image:
-      registry: docker.io
-      repository: kasmweb/kasm-guac
-      # components.guac.image.tag -- Tag for this component's image. Leave empty to fall back to the chart-wide `useImageTags`.
-      tag: ""
-    # components.guac.enabled -- Use this setting to enable/disable deployment of the Kasm Guacamole web RDP service - 
-    # [Kasm Guac Service](https://docs.kasm.com/docs/latest/guide/connection_proxies#guacamole-guac).
+  connectionProxy:
+    # components.connectionProxy.enabled -- Use this setting to enable/disable deployment of the entire Kasm
+    # Connection Proxy workload (nginx plus the guac, rdp-gateway, and rdp-https-gateway service containers).
+    # When false, no StatefulSet, Services, or ConfigMaps are rendered for this component.
     #
     enabled: true
-    # components.guac.guacClusterSize -- Override the Cluster Size count set by deploymentSize. Use this value to set the number of `guacd`
-    # processes running in the Guacamole pod. Set to 0 to use deploymentSize preset (default).
-    guacClusterSize: 0
-    # components.guac.replicas -- Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset (default).
+    # components.connectionProxy.replicas -- Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset (default).
     replicas: 0
-    # components.guac.healthCheckTiming -- Override the pod's default healthcheck timing values for liveness and/or readiness probes.
-    #  Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only
-    #  the timeoutSeconds value of the livenessProbe.
-    #  Example:
-    #    healthCheckTiming:
-    #      livenessProbe:
-    #        timeoutSeconds: 10
-    #        initialDelaySeconds: 20
-    #        periodSeconds: 60
-    #        failureThreshold: 5
-    #      readinessProbe:
-    #        periodSeconds: 60
-    #        successThreshold: 3
-    healthCheckTiming:
-      livenessProbe: {}
-      readinessProbe: {}
-    # components.guac.annotations -- Custom annotations to add to the Kasm Guac Deployment
+    # components.connectionProxy.annotations -- Custom annotations to add to the Kasm Connection Proxy StatefulSet
     annotations: {}
-    # components.guac.resources -- Manually configure the Kasm Guac Deployment resources. This overrides the pre-defined `deploymentSize` values.
-    resources: {}
-    # components.guac.nginxSidecar -- Configuration for the nginx sidecar container.
-    nginxSidecar:
-      # components.guac.nginxSidecar.resources -- Manually configure resources for the nginx sidecar container. Leave empty to use the chart default.
+    # components.connectionProxy.labels -- Custom labels to add to the Kasm Connection Proxy StatefulSet
+    labels: {}
+    # components.connectionProxy.nginx -- Configuration for the consolidated nginx container fronting the guac,
+    # rdp-gateway, and rdp-https-gateway service containers.
+    #
+    nginx:
+      # components.connectionProxy.nginx.image -- Configure the image repository where the image is stored. Use this to point to an private hosted
+      # container registry instead of our public DockerHub hosted one.
+      #
+      image:
+        registry: docker.io
+        repository: kasmweb/proxy
+        # components.connectionProxy.nginx.image.tag -- Tag for this component's image. Leave empty to fall back to the chart-wide `useImageTags`.
+        tag: ""
+      # components.connectionProxy.nginx.resources -- Manually configure resources for the nginx container. Leave empty to use the chart default.
       resources: {}
-      # components.guac.nginxSidecar.healthCheckTiming -- Override the pod's default healthcheck timing values for liveness and/or readiness probes.
+      # components.connectionProxy.nginx.healthCheckTiming -- Override the pod's default healthcheck timing values for liveness and/or readiness probes.
       #  Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only
       #  the timeoutSeconds value of the livenessProbe.
       #  Example:
@@ -910,29 +1037,127 @@ components:
       healthCheckTiming:
         livenessProbe: {}
         readinessProbe: {}
-      # components.guac.nginxSidecar.extraVolumes -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
-      #  like custom SSL certificates, config files, or data volumes to the Kasm Guac nginx sidecar container
-      # Example:
-      #   extraVolumes:
-      #     - secret:
-      #         defaultMode: 420
-      #         secretName: kasm-custom-tls
-      #       name: pkichain
-      extraVolumes: []
-      # components.guac.nginxSidecar.extraVolumeMounts -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
-      #  like custom SSL certificates, config files, or data volumes to the Kasm Guac nginx sidecar container
-      # Example:
-      #   extraVolumeMounts:
-      #     - mountPath: /etc/ssl/certs/ca-certificates.crt
-      #       name: pkichain
-      #       readOnly: true
-      #       subPath: ca.crt
-      extraVolumeMounts: []
 
-    # components.guac.labels -- Custom labels to add to the Kasm Guac Deployment
-    labels: {}
-    # components.guac.extraVolumes -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
-    #  like custom SSL certificates, config files, or data volumes to the Kasm Guac container
+    # components.connectionProxy.guac -- Configuration settings for the Kasm Guac service container running inside the Connection Proxy pod.
+    #
+    guac:
+      # components.connectionProxy.guac.enabled -- Use this setting to enable/disable deployment of the Kasm Guacamole web RDP service -
+      # [Kasm Guac Service](https://docs.kasm.com/docs/latest/guide/connection_proxies#guacamole-guac).
+      #
+      enabled: true
+      # components.connectionProxy.guac.image -- Configure the image repository where the image is stored. Use this to point to an private hosted
+      # container registry instead of our public DockerHub hosted one.
+      #
+      image:
+        registry: docker.io
+        repository: kasmweb/kasm-guac
+        # components.connectionProxy.guac.image.tag -- Tag for this component's image. Leave empty to fall back to the chart-wide `useImageTags`.
+        tag: ""
+      # components.connectionProxy.guac.guacClusterSize -- Override the Cluster Size count set by deploymentSize. Use this value to set the number of `guacd`
+      # processes running in the Guacamole pod. Set to 0 to use deploymentSize preset (default).
+      guacClusterSize: 0
+      # components.connectionProxy.guac.resources -- Manually configure the Kasm Guac container resources. This overrides the pre-defined `deploymentSize` values.
+      resources: {}
+      # components.connectionProxy.guac.healthCheckTiming -- Override the pod's default healthcheck timing values for liveness and/or readiness probes.
+      #  Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only
+      #  the timeoutSeconds value of the livenessProbe.
+      #  Example:
+      #    healthCheckTiming:
+      #      livenessProbe:
+      #        timeoutSeconds: 10
+      #        initialDelaySeconds: 20
+      #        periodSeconds: 60
+      #        failureThreshold: 5
+      #      readinessProbe:
+      #        periodSeconds: 60
+      #        successThreshold: 3
+      healthCheckTiming:
+        livenessProbe: {}
+        readinessProbe: {}
+      # components.connectionProxy.guac.recordingData -- PVC backing guac /tmp for session recording segments.
+      # See [Session Recording](https://docs.kasm.com/docs/latest/guide/session_recording) for sizing guidance.
+      recordingData:
+        # components.connectionProxy.guac.recordingData.pvcSize -- PVC size in GiB.
+        pvcSize: 10
+        # components.connectionProxy.guac.recordingData.storageClassName -- StorageClass. Blank uses the cluster default.
+        storageClassName: ""
+
+    # components.connectionProxy.rdpGateway -- Configuration settings for the Kasm RDP Gateway service container running inside the Connection Proxy pod.
+    #
+    rdpGateway:
+      # components.connectionProxy.rdpGateway.enabled -- Use this setting to enable/disable deployment of the Kasm RDP Gateway service -
+      # [Kasm RDP Gateway](https://docs.kasm.com/docs/latest/guide/connection_proxies#rdp-gateway).
+      #
+      enabled: true
+      # components.connectionProxy.rdpGateway.image -- Configure the image repository where the image is stored. Use this to point to an private hosted
+      # container registry instead of our public DockerHub hosted one.
+      #
+      image:
+        registry: docker.io
+        repository: kasmweb/rdp-gateway
+        # components.connectionProxy.rdpGateway.image.tag -- Tag for this component's image. Leave empty to fall back to the chart-wide `useImageTags`.
+        tag: ""
+      # components.connectionProxy.rdpGateway.iniConfigMapName -- Name of a user-created ConfigMap
+      # providing a custom `rdpproxy.ini` for the rdp-gateway pod. See the Kasm
+      # documentation for details.
+      #
+      iniConfigMapName: ""
+      # components.connectionProxy.rdpGateway.resources -- Manually configure the Kasm RDP Gateway container resources. This overrides the pre-defined `deploymentSize` values.
+      resources: {}
+      # components.connectionProxy.rdpGateway.healthCheckTiming -- Override the pod's default healthcheck timing values for liveness and/or readiness probes.
+      #  Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only
+      #  the timeoutSeconds value of the livenessProbe.
+      #  Example:
+      #    healthCheckTiming:
+      #      livenessProbe:
+      #        timeoutSeconds: 10
+      #        initialDelaySeconds: 20
+      #        periodSeconds: 60
+      #        failureThreshold: 5
+      #      readinessProbe:
+      #        periodSeconds: 60
+      #        successThreshold: 3
+      healthCheckTiming:
+        livenessProbe: {}
+        readinessProbe: {}
+
+    # components.connectionProxy.rdpHttpsGateway -- Configuration settings for the Kasm RDP HTTPS Gateway service container running inside the Connection Proxy pod.
+    #
+    rdpHttpsGateway:
+      # components.connectionProxy.rdpHttpsGateway.enabled -- Use this setting to enable/disable deployment of the Kasm RDP HTTPS Gateway service.
+      # This service allows users to use native RDP clients via HTTPS connections rather than exposing 3389 -
+      # [Kasm RDP HTTPS Gateway](https://docs.kasm.com/docs/latest/guide/connection_proxies#rdp-https-gateway).
+      #
+      enabled: true
+      # components.connectionProxy.rdpHttpsGateway.image -- Configure the image repository where the image is stored. Use this to point to an private hosted
+      # container registry instead of our public DockerHub hosted one.
+      #
+      image:
+        registry: docker.io
+        repository: kasmweb/rdp-https-gateway
+        # components.connectionProxy.rdpHttpsGateway.image.tag -- Tag for this component's image. Leave empty to fall back to the chart-wide `useImageTags`.
+        tag: ""
+      # components.connectionProxy.rdpHttpsGateway.resources -- Manually configure the Kasm RDP HTTPS Gateway container resources. This overrides the pre-defined `deploymentSize` values.
+      resources: {}
+      # components.connectionProxy.rdpHttpsGateway.healthCheckTiming -- Override the pod's default healthcheck timing values for liveness and/or readiness probes.
+      #  Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only
+      #  the timeoutSeconds value of the livenessProbe.
+      #  Example:
+      #    healthCheckTiming:
+      #      livenessProbe:
+      #        timeoutSeconds: 10
+      #        initialDelaySeconds: 20
+      #        periodSeconds: 60
+      #        failureThreshold: 5
+      #      readinessProbe:
+      #        periodSeconds: 60
+      #        successThreshold: 3
+      healthCheckTiming:
+        livenessProbe: {}
+        readinessProbe: {}
+
+    # components.connectionProxy.extraVolumes -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
+    #  like custom SSL certificates, config files, or data volumes to the Kasm Connection Proxy pod
     # Example:
     #   extraVolumes:
     #     - secret:
@@ -940,256 +1165,22 @@ components:
     #         secretName: kasm-custom-tls
     #       name: pkichain
     extraVolumes: []
-    # components.guac.extraVolumeMounts -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
-    #  like custom SSL certificates, config files, or data volumes Kasm Guac container
-    # Example: 
+    # components.connectionProxy.extraVolumeMounts -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
+    #  like custom SSL certificates, config files, or data volumes to the Kasm Connection Proxy containers
+    # Example:
     #   extraVolumeMounts:
     #     - mountPath: /etc/ssl/certs/ca-certificates.crt
     #       name: pkichain
     #       readOnly: true
     #       subPath: ca.crt
     extraVolumeMounts: []
-    # components.guac.extraContainers -- Additional sidecar containers to run in the pod
+    # components.connectionProxy.extraContainers -- Additional sidecar containers to run in the pod
     # Example
     #  - name: sidecar-example
     #    image: busybox
     #    command: [/bin/sh, -c, 'echo "Hello world"']
     extraContainers: []
-    # components.guac.extraInitContainers -- Additional sidecar containers to run in the pod
-    # Example
-    #  - name: init-example
-    #    image: busybox
-    #    command: [/bin/sh, -c, 'echo "Hello world"']
-    extraInitContainers: []
-    # components.guac.recordingData -- PVC backing guac /tmp for session recording segments.
-    # See [Session Recording](https://docs.kasm.com/docs/latest/guide/session_recording) for sizing guidance.
-    recordingData:
-      # components.guac.recordingData.pvcSize -- PVC size in GiB.
-      pvcSize: 10
-      # components.guac.recordingData.storageClassName -- StorageClass. Blank uses the cluster default.
-      storageClassName: ""
-
-  # Configuration settings for the Kasm RDP Gateway service
-  #
-  rdpGateway:
-    # components.rdpGateway.image -- Configure the image repository where the image is stored. Use this to point to an private hosted
-    # container registry instead of our public DockerHub hosted one.
-    #
-    image:
-      registry: docker.io
-      repository: kasmweb/rdp-gateway
-      # components.rdpGateway.image.tag -- Tag for this component's image. Leave empty to fall back to the chart-wide `useImageTags`.
-      tag: ""
-    # components.rdpGateway.enabled -- Use this setting to enable/disable deployment of the Kasm RDP Gateway service - 
-    # [Kasm RDP Gateway](https://docs.kasm.com/docs/latest/guide/connection_proxies#rdp-gateway).
-    #
-    enabled: true
-    # components.rdpGateway.replicas -- Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset (default).
-    #
-    # NOTE: must be 0 (preset) or 1. Multi-replica rdp-gateway is not supported
-    # in this release.
-    replicas: 0
-    # components.rdpGateway.healthCheckTiming -- Override the pod's default healthcheck timing values for liveness and/or readiness probes.
-    #  Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only
-    #  the timeoutSeconds value of the livenessProbe.
-    #  Example:
-    #    healthCheckTiming:
-    #      livenessProbe:
-    #        timeoutSeconds: 10
-    #        initialDelaySeconds: 20
-    #        periodSeconds: 60
-    #        failureThreshold: 5
-    #      readinessProbe:
-    #        periodSeconds: 60
-    #        successThreshold: 3
-    healthCheckTiming:
-      livenessProbe: {}
-      readinessProbe: {}
-    # components.rdpGateway.annotations -- Custom annotations to add to the Kasm RDP Gateway Deployment
-    annotations: {}
-    # components.rdpGateway.resources -- Manually configure the Kasm RDP Gateway Deployment resources. This overrides the pre-defined `deploymentSize` values.
-    resources: {}
-    # components.rdpGateway.nginxSidecar -- Configuration for the nginx sidecar container.
-    nginxSidecar:
-      # components.rdpGateway.nginxSidecar.resources -- Manually configure resources for the nginx sidecar container. Leave empty to use the chart default.
-      resources: {}
-      # components.rdpGateway.nginxSidecar.healthCheckTiming -- Override the pod's default healthcheck timing values for liveness and/or readiness probes.
-      #  Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only
-      #  the timeoutSeconds value of the livenessProbe.
-      #  Example:
-      #    healthCheckTiming:
-      #      livenessProbe:
-      #        timeoutSeconds: 10
-      #        initialDelaySeconds: 20
-      #        periodSeconds: 60
-      #        failureThreshold: 5
-      #      readinessProbe:
-      #        periodSeconds: 60
-      #        successThreshold: 3
-      healthCheckTiming:
-        livenessProbe: {}
-        readinessProbe: {}
-      # components.rdpGateway.nginxSidecar.extraVolumes -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
-      #  like custom SSL certificates, config files, or data volumes to the Kasm RDP Gateway nginx sidecar container
-      # Example:
-      #   extraVolumes:
-      #     - secret:
-      #         defaultMode: 420
-      #         secretName: kasm-custom-tls
-      #       name: pkichain
-      extraVolumes: []
-      # components.rdpGateway.nginxSidecar.extraVolumeMounts -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
-      #  like custom SSL certificates, config files, or data volumes to the Kasm RDP Gateway nginx sidecar container
-      # Example:
-      #   extraVolumeMounts:
-      #     - mountPath: /etc/ssl/certs/ca-certificates.crt
-      #       name: pkichain
-      #       readOnly: true
-      #       subPath: ca.crt
-      extraVolumeMounts: []
-
-    # components.rdpGateway.labels -- Custom labels to add to the Kasm RDP Gateway Deployment
-    labels: {}
-    # components.rdpGateway.extraVolumes -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
-    #  like custom SSL certificates, config files, or data volumes to the Kasm RDP Gateway container
-    # Example:
-    #   extraVolumes:
-    #     - secret:
-    #         defaultMode: 420
-    #         secretName: kasm-custom-tls
-    #       name: pkichain
-    extraVolumes: []
-    # components.rdpGateway.extraVolumeMounts -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
-    #  like custom SSL certificates, config files, or data volumes Kasm RDP Gateway container
-    # Example: 
-    #   extraVolumeMounts:
-    #     - mountPath: /etc/ssl/certs/ca-certificates.crt
-    #       name: pkichain
-    #       readOnly: true
-    #       subPath: ca.crt
-    extraVolumeMounts: []
-    # database.extraContainers -- Additional sidecar containers to run in the pod
-    # Example
-    #  - name: sidecar-example
-    #    image: busybox
-    #    command: [/bin/sh, -c, 'echo "Hello world"']
-    extraContainers: []
-    # components.rdpGateway.extraInitContainers -- Additional sidecar containers to run in the pod
-    # Example
-    #  - name: init-example
-    #    image: busybox
-    #    command: [/bin/sh, -c, 'echo "Hello world"']
-    extraInitContainers: []
-    # components.rdpGateway.iniConfigMapName -- Name of a user-created ConfigMap
-    # providing a custom `rdpproxy.ini` for the rdp-gateway pod. See the Kasm
-    # documentation for details.
-    #
-    iniConfigMapName: ""
-
-  # Configuration settings for the Kasm RDP HTTPS Gateway service
-  #
-  rdpHttpsGateway:
-    # components.rdpHttpsGateway.image -- Configure the image repository where the image is stored. Use this to point to an private hosted
-    # container registry instead of our public DockerHub hosted one.
-    #
-    image:
-      registry: docker.io
-      repository: kasmweb/rdp-https-gateway
-      # components.rdpHttpsGateway.image.tag -- Tag for this component's image. Leave empty to fall back to the chart-wide `useImageTags`.
-      tag: ""
-    # components.rdpHttpsGateway.enabled -- Use this setting to enable/disable deployment of the Kasm RDP HTTPS Gateway service.
-    # This service allows users to use native RDP clients via HTTPS connections rather than exposing 3389 - 
-    # [Kasm RDP HTTPS Gateway](https://docs.kasm.com/docs/latest/guide/connection_proxies#rdp-https-gateway).
-    #
-    enabled: true
-    # components.rdpHttpsGateway.replicas -- Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset (default).
-    replicas: 0
-    # components.rdpHttpsGateway.healthCheckTiming -- Override the pod's default healthcheck timing values for liveness and/or readiness probes.
-    #  Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only
-    #  the timeoutSeconds value of the livenessProbe.
-    #  Example:
-    #    healthCheckTiming:
-    #      livenessProbe:
-    #        timeoutSeconds: 10
-    #        initialDelaySeconds: 20
-    #        periodSeconds: 60
-    #        failureThreshold: 5
-    #      readinessProbe:
-    #        periodSeconds: 60
-    #        successThreshold: 3
-    healthCheckTiming:
-      livenessProbe: {}
-      readinessProbe: {}
-    # components.rdpHttpsGateway.annotations -- Custom annotations to add to the Kasm RDP HTTPS Gateway Deployment
-    annotations: {}
-    # components.rdpHttpsGateway.resources -- Manually configure the Kasm RDP HTTPS Gateway Deployment resources. This overrides the pre-defined `deploymentSize` values.
-    resources: {}
-    # components.rdpHttpsGateway.nginxSidecar -- Configuration for the nginx sidecar container.
-    nginxSidecar:
-      # components.rdpHttpsGateway.nginxSidecar.resources -- Manually configure resources for the nginx sidecar container. Leave empty to use the chart default.
-      resources: {}
-      # components.rdpHttpsGateway.nginxSidecar.healthCheckTiming -- Override the pod's default healthcheck timing values for liveness and/or readiness probes.
-      #  Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only
-      #  the timeoutSeconds value of the livenessProbe.
-      #  Example:
-      #    healthCheckTiming:
-      #      livenessProbe:
-      #        timeoutSeconds: 10
-      #        initialDelaySeconds: 20
-      #        periodSeconds: 60
-      #        failureThreshold: 5
-      #      readinessProbe:
-      #        periodSeconds: 60
-      #        successThreshold: 3
-      healthCheckTiming:
-        livenessProbe: {}
-        readinessProbe: {}
-      # components.rdpHttpsGateway.nginxSidecar.extraVolumes -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
-      #  like custom SSL certificates, config files, or data volumes to the Kasm RDP HTTPS Gateway nginx sidecar container
-      # Example:
-      #   extraVolumes:
-      #     - secret:
-      #         defaultMode: 420
-      #         secretName: kasm-custom-tls
-      #       name: pkichain
-      extraVolumes: []
-      # components.rdpHttpsGateway.nginxSidecar.extraVolumeMounts -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
-      #  like custom SSL certificates, config files, or data volumes to the Kasm RDP HTTPS Gateway nginx sidecar container
-      # Example:
-      #   extraVolumeMounts:
-      #     - mountPath: /etc/ssl/certs/ca-certificates.crt
-      #       name: pkichain
-      #       readOnly: true
-      #       subPath: ca.crt
-      extraVolumeMounts: []
-
-    # components.rdpHttpsGateway.labels -- Custom labels to add to the Kasm RDP HTTPS Gateway Deployment
-    labels: {}
-    # components.rdpHttpsGateway.extraVolumes -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
-    #  like custom SSL certificates, config files, or data volumes to the Kasm RDP HTTPS Gateway container
-    # Example:
-    #   extraVolumes:
-    #     - secret:
-    #         defaultMode: 420
-    #         secretName: kasm-custom-tls
-    #       name: pkichain
-    extraVolumes: []
-    # components.rdpHttpsGateway.extraVolumeMounts -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
-    #  like custom SSL certificates, config files, or data volumes Kasm RDP HTTPS Gateway container
-    # Example: 
-    #   extraVolumeMounts:
-    #     - mountPath: /etc/ssl/certs/ca-certificates.crt
-    #       name: pkichain
-    #       readOnly: true
-    #       subPath: ca.crt
-    extraVolumeMounts: []
-    # components.rdpHttpsGateway.extraInitContainers -- Additional sidecar containers to run in the pod
-    # Example
-    #  - name: init-example
-    #    image: busybox
-    #    command: [/bin/sh, -c, 'echo "Hello world"']
-    extraContainers: []
-    # components.rdpHttpsGateway.extraInitContainers -- Additional sidecar containers to run in the pod
+    # components.connectionProxy.extraInitContainers -- Additional sidecar containers to run in the pod
     # Example
     #  - name: init-example
     #    image: busybox

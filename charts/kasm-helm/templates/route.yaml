@@ -1,5 +1,9 @@
 {{/*
-Deploy the Kasm OpenShift Route if .Values.route.enabled set to true
+Deploy the Kasm OpenShift Route if .Values.route.enabled set to true.
+
+publicAddr is deliberately the only Route host. Zone proxy_hostnames belong to a
+different backend, usually behind a different router or load balancer entirely,
+so this chart publishes none of them.
 */}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- $primaryZone := (include "kasm.primaryZone" . | fromYaml) -}}
@@ -37,39 +41,4 @@ spec:
       {{- . | nindent 6 }}
     {{- end }}
     {{- end }}
-{{- range $idx, $zone := .Values.kasmZones }}
----
-apiVersion: route.openshift.io/v1
-kind: Route
-metadata:
-  {{- include "kasm.metadata" (dict "context" $ "component" "proxy" "resource" "route" "zone" $zone.name "include" "all") | indent 2 }}
-spec:
-  host: {{ include "kasm.zoneProxyHostnameRequired" $zone | quote }}
-  to:
-    kind: Service
-    name: {{ printf "%s-%s" $constants.proxy.svc (include "kasm.zoneName" $zone.name) }}
-    weight: 100
-  port:
-    targetPort: {{ if eq $.Values.route.backendProtocol "https" }}{{ $constants.proxy.https }}{{ else }}{{ $constants.proxy.http }}{{ end }}
-  wildcardPolicy: {{ $.Values.route.wildcardPolicy | default "None" }}
-  {{- with $.Values.route.tls }}
-  tls:
-    termination: {{ .termination | default "edge" }}
-    {{- with .insecureEdgeTerminationPolicy }}
-    insecureEdgeTerminationPolicy: {{ . | default "Redirect" }}
-    {{- end }}
-    {{- with .certificate }}
-    certificate: |
-      {{- . | nindent 6 }}
-    {{- end }}
-    {{- with .key }}
-    key: |
-      {{- . | nindent 6 }}
-    {{- end }}
-    {{- with .caCertificate }}
-    caCertificate: |
-      {{- . | nindent 6 }}
-    {{- end }}
-    {{- end }}
-{{- end }}
 {{- end }}

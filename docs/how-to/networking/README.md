@@ -74,6 +74,7 @@ not an Ingress or HTTPRoute; TLS passthrough is unverified there, because the re
 | ---- | ---- |
 | [Certificates](certificates.md) | Which certificate each half needs, and where it comes from |
 | [Switch sessions to direct-connect](direct-connect.md) | Hostname pair, authorization domain, zone routing |
+| [Upstream auth (management) endpoint](upstream-auth.md) | A separate, typically private URL for agent and Windows-service management traffic |
 | [Publish the RDP gateway](rdp-gateway.md) | Raw TCP, so never covered by the mechanisms above |
 | [NetworkPolicy enforcement](network-policies.md) | The agent's namespace baseline, and proving the CNI enforces |
 | [Egress installer: node prerequisites](egress.md) | Per-session VPN egress through a chained CNI shim |

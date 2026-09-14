@@ -43,11 +43,14 @@
 {{- $name := include "kasm.name" (list . "cert-manager" "secret") -}}
 {{- $cn := .Values.publicAddr | default "kasm.local" -}}
 {{- $altNames := list $cn (printf "*.%s" $cn) -}}
-{{- range $zone := .Values.kasmZones -}}
+{{- range $zone := (include "kasm.deployedConfiguredZones" . | fromYamlArray) -}}
   {{- with (include "kasm.zoneProxyHostname" $zone) -}}
     {{- $altNames = append $altNames . -}}
   {{- end -}}
 {{- end -}}
+{{- /* Upstream auth (management) addresses are deliberately NOT added; they live in
+       a private DNS zone, same rule as the cert-manager Certificate. */ -}}
+{{- $altNames = $altNames | uniq -}}
 {{- $existing := lookup "v1" "Secret" .Release.Namespace $name -}}
 {{- $ownerName := dig "metadata" "annotations" "meta.helm.sh/release-name" "" $existing -}}
 {{- $ownerNamespace := dig "metadata" "annotations" "meta.helm.sh/release-namespace" "" $existing -}}

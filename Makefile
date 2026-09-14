@@ -170,6 +170,11 @@ E2E_MARK ?= e2e
 E2E_CLUSTER_WARMUP_SECONDS ?= 10
 E2E_DNS_RETRIES ?= 2
 E2E_DNS_BACKOFF_SECONDS ?= 10
+# Full api image reference (repo[:tag]) to use for e2e runs in place of the
+# chart's values.yaml default. Applied to both kind-load-images (so the image
+# is pulled/loaded into kind) and the helm install/upgrade calls
+# (tests/e2e/helpers.py::api_image_override_args). Leave empty for the default.
+KASM_API_IMAGE ?=
 # Pause between scenarios in `make e2e` to let cluster state settle
 # (CoreDNS, kube-proxy, endpoints controller) before the next install.
 E2E_SCENARIO_SETTLE_SECONDS ?= 30
@@ -963,6 +968,7 @@ pytest-docker:
 	  -e KASM_RELEASE=$(E2E_RELEASE) \
 	  -e E2E_SCENARIO=$(E2E_SCENARIO) \
 	  -e KASM_TAG=$(KASM_TAG) \
+	  -e KASM_API_IMAGE=$(KASM_API_IMAGE) \
 	  -e HOME=/tmp \
 	  -e PYTHONDONTWRITEBYTECODE=1 \
 	  -e E2E_CLUSTER_WARMUP_SECONDS=$(E2E_CLUSTER_WARMUP_SECONDS) \
@@ -987,9 +993,18 @@ pytest-docker:
 kind-load-images: $(CRANE) $(HELM) ## Pull and load current chart images into kind (slow)
 	@$(MAKE) kind-fix-kubeconfig
 	@set -euo pipefail; \
+	api_image_args=""; \
+	api_image="$(KASM_API_IMAGE)"; \
+	if [ -n "$$api_image" ] && [ "$(KIND_LOAD_CHART_DIR)" = "$(CHART_DIR)" ]; then \
+		case "$$api_image" in \
+			*:*) api_image_args="--set components.api.image.repository=$${api_image%:*} --set components.api.image.tag=$${api_image##*:}" ;; \
+			*) api_image_args="--set components.api.image.repository=$$api_image" ;; \
+		esac; \
+	fi; \
 	chart_images=$$($(HELM) template kasm $(KIND_LOAD_CHART_DIR) \
 		--set publicAddr=kind.kasm.local \
 		--set certificate.secretName=kasm-tls \
+		$$api_image_args \
 		| awk '/^[[:space:]]*image:[[:space:]]/{print $$2}' \
 		| sort -u); \
 	images="$$chart_images $(KIND_EXTRA_IMAGES)"; \

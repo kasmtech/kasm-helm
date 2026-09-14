@@ -1,0 +1,15 @@
+suite: seedOnly zones — nothing left to deploy
+templates:
+  - templates/api-deployment.yaml
+
+tests:
+  - it: fails when every zone is marked seedOnly
+    set:
+      proxyService.type: ClusterIP
+      kasmZones:
+        - name: frankfurt
+          proxy_hostname: frankfurt.example.com
+          seedOnly: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "kasmZones: every zone is marked 'seedOnly: true', leaving nothing to deploy in this cluster. Remove 'seedOnly: true' from the zone(s) this cluster hosts."

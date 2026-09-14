@@ -1,0 +1,94 @@
+{{/*
+Headless Service for the Connection Proxy StatefulSet. clusterIP: None provides
+per-pod DNS records. guac and rdp-https-gateway self-register the per-pod FQDN
+(<pod>.<this-service>.<namespace>.svc.cluster.local) as their SERVER_ADDRESS /
+SERVER_HOSTNAME, and sessions pin to that registered instance — this Service
+must stay headless or that registration breaks.
+The service exposes only the consolidated nginx port (8443). The guac, rdp-gateway,
+and rdp-https-gateway app ports are internal to the pod (127.0.0.1 only) and are
+reached through nginx.
+*/}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $cp := .Values.components.connectionProxy -}}
+{{- if and $cp.enabled (or $cp.guac.enabled $cp.rdpGateway.enabled $cp.rdpHttpsGateway.enabled) }}
+{{- range $zone := (include "kasm.primaryRegionZones" $ | fromYamlArray) }}
+---
+{{ $cpSvc := printf "%s-connection-proxy-%s" $.Release.Name (include "kasm.zoneName" $zone.name) -}}
+apiVersion: v1
+kind: Service
+metadata:
+  {{- include "kasm.metadata" (dict "context" $ "component" "connection-proxy" "resource" "service" "zone" $zone.name "include" "all") | indent 2 }}
+spec:
+  clusterIP: None
+  selector:
+    {{- include "kasm.metadata" (dict "context" $ "component" "connection-proxy" "resource" "service" "zone" $zone.name "include" "match") | indent 4 }}
+  ports:
+    - name: {{ $constants.connectionProxy.portName }}
+      protocol: TCP
+      port: {{ $constants.connectionProxy.nginxPort }}
+{{- end }}
+{{- end }}
+
+{{/*
+Per-pod direct RDP Services. connection-proxy scales to N replicas (unlike the old
+single-replica rdp-gateway Deployment), so each rdp-gateway app instance needs its own
+externally reachable RDP address. Kubernetes automatically sets the
+statefulset.kubernetes.io/pod-name label on every StatefulSet pod, so each Service here
+targets exactly one pod ordinal by adding that label to the standard selector.
+
+Cloud LB annotations/labels are identity-bearing (external-dns hostname, aws-load-balancer-name,
+static-IP allocation, etc), so a single shared map cannot be merged as-is into every per-ordinal
+Service without every replica claiming the same identity. Precedence here is deliberately
+"most specific wins", which inverts kasm.metadata's usual global-wins convention for every OTHER
+resource in this chart -- do not "fix" it back:
+  perServiceSettings[i].annotations/labels  >  directRdpService.annotations/labels (shared)  >  global/kasm.metadata
+*/}}
+{{- $type := "ClusterIP" -}}
+{{- if and .Values.directRdpService.enabled (or (eq .Values.directRdpService.type "NodePort") (eq .Values.directRdpService.type "LoadBalancer")) -}}
+  {{- $type = .Values.directRdpService.type -}}
+{{- else if .Values.directRdpService.enabled -}}
+  {{- fail "The RDP service type is not valid. Please set it to either NodePort or LoadBalancer." -}}
+{{- end -}}
+{{- $defaultPort := .Values.directRdpService.loadBalancerPort | default 3389 -}}
+{{- $rdpPort := 3389 -}}
+{{/* tcpRoute also renders these Services: it needs a ClusterIP backend exposing the raw
+     RDP port ($type stays ClusterIP because directRdpService.enabled is false then, and
+     kasm.validateRdpExposure caps tcpRoute at one replica, so this renders one Service). */}}
+{{- if and (or .Values.directRdpService.enabled .Values.tcpRoute.enabled) $cp.rdpGateway.enabled }}
+{{- $cpReplicas := ternary .Values.components.connectionProxy.replicas (include "replicas.preset" (dict "node" $constants.connectionProxy.component "size" .Values.deploymentSize)) (gt (int .Values.components.connectionProxy.replicas) 0) -}}
+{{- range $zone := (include "kasm.primaryRegionZones" $ | fromYamlArray) }}
+{{- $cpSts := printf "%s-connection-proxy-%s" $.Release.Name (include "kasm.zoneName" $zone.name) -}}
+{{/* Validation (all `fail` calls) lives here, not in the shared resolver -- see kasm.directRdpEntriesForZone. */}}
+{{- include "kasm.directRdpServiceValidateZone" (list $ $zone.name) -}}
+{{- $perService := include "kasm.directRdpEntriesForZone" (list $ $zone.name) | fromYamlArray -}}
+{{- range $i := until (int $cpReplicas) }}
+---
+{{ $svcName := printf "%s-rdp-%d" $cpSts $i -}}
+{{- $entry := default (dict) (index $perService $i) -}}
+{{- $port := $entry.loadBalancerPort | default $defaultPort -}}
+apiVersion: v1
+kind: Service
+metadata:
+  {{- $meta := include "kasm.metadata" (dict "context" $ "component" "connection-proxy-rdp-direct" "resource" "service" "zone" $zone.name "include" "la" "name" $svcName) | fromYaml }}
+  name: {{ $svcName }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- merge (default (dict) $entry.labels) $.Values.directRdpService.labels $meta.labels | toYaml | nindent 4 }}
+  {{- $annotations := merge (default (dict) $entry.annotations) (default (dict) $.Values.directRdpService.annotations) (default (dict) $meta.annotations) }}
+  {{- with $annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ $type }}
+  selector:
+    {{- include "kasm.metadata" (dict "context" $ "component" "connection-proxy" "resource" "service" "zone" $zone.name "include" "match") | indent 4 }}
+    statefulset.kubernetes.io/pod-name: {{ printf "%s-%d" $cpSts $i }}
+  ports:
+    - name: {{ printf "%s-svc-%s" $svcName ($port | toString) }}
+      protocol: TCP
+      port: {{ $port }}
+      targetPort: {{ $rdpPort }}
+{{- end }}
+{{- end }}
+{{- end }}

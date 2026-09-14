@@ -1,9 +1,9 @@
-suite: zone primary validation — first-zone fallback and exactly-one-primary enforcement
+suite: zone primary validation — explicit primary required for multi-zone, exactly-one-primary enforcement
 templates:
   - templates/proxy-service-external.yaml
 
 tests:
-  - it: falls back to the first zone as primary when kasmZones is set but no zone has primary true
+  - it: fails when kasmZones has multiple zones and none marked primary true
     template: templates/proxy-service-external.yaml
     set:
       proxyService.type: ClusterIP
@@ -12,6 +12,17 @@ tests:
           proxyAddress: zonea.example.com
         - name: zoneb
           proxyAddress: zoneb.example.com
+    asserts:
+      - failedTemplate:
+          errorMessage: "kasmZones has 2 zones and none marked 'primary: true'. With more than one zone configured, mark exactly one deployed zone 'primary: true'."
+
+  - it: treats a single configured zone as implicitly primary
+    template: templates/proxy-service-external.yaml
+    set:
+      proxyService.type: ClusterIP
+      kasmZones:
+        - name: zonea
+          proxyAddress: zonea.example.com
     asserts:
       - hasDocuments:
           count: 0
@@ -30,3 +41,18 @@ tests:
     asserts:
       - failedTemplate:
           errorMessage: "kasmZones has 2 zones marked 'primary: true'; at most one zone may be primary. Remove 'primary: true' from all but one zone."
+
+  - it: fails when the primary zone is marked seedOnly
+    template: templates/proxy-service-external.yaml
+    set:
+      proxyService.type: ClusterIP
+      kasmZones:
+        - name: zonea
+          primary: true
+          seedOnly: true
+          proxyAddress: zonea.example.com
+        - name: zoneb
+          proxyAddress: zoneb.example.com
+    asserts:
+      - failedTemplate:
+          errorMessage: "kasmZones[zonea] is marked both 'primary: true' and 'seedOnly: true'. The primary zone backs publicAddr routing in this cluster, so it must deploy here: remove one of the two flags."
