@@ -52,7 +52,7 @@ tests:
           of: kmm.sigs.x-k8s.io/v1beta1
       - equal:
           path: metadata.name
-          value: RELEASE-NAME-kasm-node-prep-v4l2loopback
+          value: RELEASE-NAME-v4l2
       - equal:
           path: spec.moduleLoader.container.modprobe.moduleName
           value: v4l2loopback
@@ -66,7 +66,7 @@ tests:
           value: ^.*$
       - equal:
           path: spec.moduleLoader.container.kernelMappings[0].build.dockerfileConfigMap.name
-          value: RELEASE-NAME-kasm-node-prep-v4l2loopback-dockerfile
+          value: RELEASE-NAME-v4l2-dockerfile
       # Not configured, so neither block is present.
       - isNull:
           path: spec.moduleLoader.container.kernelMappings[0].sign
@@ -228,11 +228,11 @@ tests:
     asserts:
       - equal:
           path: metadata.name
-          value: node-prep-v4l2loopback
+          value: node-prep-v4l2
         template: templates/kmm-module.yaml
       - equal:
           path: metadata.name
-          value: node-prep-v4l2loopback-dockerfile
+          value: node-prep-v4l2-dockerfile
         template: templates/kmm-dockerfile-configmap.yaml
 
   # --- The Dockerfile ConfigMap ------------------------------------------------------------------
@@ -254,7 +254,7 @@ tests:
           of: ConfigMap
       - equal:
           path: metadata.name
-          value: RELEASE-NAME-kasm-node-prep-v4l2loopback-dockerfile
+          value: RELEASE-NAME-v4l2-dockerfile
       - exists:
           path: data.dockerfile
       # KMM passes KERNEL_FULL_VERSION as a build arg, once per kernel release it finds.
@@ -276,7 +276,7 @@ tests:
           pattern: 'libelf1'
       - matchRegex:
           path: data.dockerfile
-          pattern: 'git clone --depth 1 --branch ''v0\.13\.2'' ''https://github\.com/umlaeute/v4l2loopback\.git'' v4l2loopback'
+          pattern: 'git clone --depth 1 --branch ''v0\.15\.4'' ''https://github\.com/umlaeute/v4l2loopback\.git'' v4l2loopback'
       - matchRegex:
           path: data.dockerfile
           pattern: 'make -C /usr/src/v4l2loopback KERNELRELEASE="\$\{KERNEL_FULL_VERSION\}"'
@@ -287,6 +287,218 @@ tests:
       - matchRegex:
           path: data.dockerfile
           pattern: 'depmod -b /opt "\$\{KERNEL_FULL_VERSION\}"'
+
+  # One Dockerfile for every builder family: each RUN asks the image which package manager it has,
+  # in the order the reconcile script tries them on the node, so image.* can point at a Debian,
+  # RHEL-family, Amazon Linux, Azure Linux or SUSE image without any other value changing.
+  - it: detects the builder's package manager at build time instead of assuming apt-get
+    template: templates/kmm-dockerfile-configmap.yaml
+    set:
+      modules:
+        v4l2loopback:
+          method: kmm
+          kmm:
+            image:
+              registry: registry.contoso.com
+              repository: kasm/v4l2loopback
+    asserts:
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'if command -v apt-get >/dev/null 2>&1; then'
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'elif command -v dnf >/dev/null 2>&1; then'
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'elif command -v microdnf >/dev/null 2>&1; then'
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'elif command -v yum >/dev/null 2>&1; then'
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'elif command -v tdnf >/dev/null 2>&1; then'
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'elif command -v zypper >/dev/null 2>&1; then'
+      # Tried in this order: dnf before its microdnf and yum stand-ins, the two RPM outliers last.
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'command -v apt-get[\s\S]*command -v dnf[\s\S]*command -v microdnf[\s\S]*command -v yum[\s\S]*command -v tdnf[\s\S]*command -v zypper'
+      # None of the six: the build fails naming all of them and the image it looked in.
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'echo "kasm-node-prep: builder image" ''docker\.io/library/ubuntu:22\.04'' "has none of apt-get, dnf, microdnf, yum, tdnf or zypper, so the kernel headers and toolchain cannot be installed\.[^"]*" >&2; \\\n\s+exit 1;'
+      # Every branch cleans its package cache, as the apt-get one always did.
+      - matchRegex:
+          path: data.dockerfile
+          pattern: '&& rm -rf /var/lib/apt/lists/\*;'
+      - matchRegex:
+          path: data.dockerfile
+          pattern: '&& dnf clean all;'
+      - matchRegex:
+          path: data.dockerfile
+          pattern: '&& microdnf clean all;'
+      - matchRegex:
+          path: data.dockerfile
+          pattern: '&& yum clean all;'
+      - matchRegex:
+          path: data.dockerfile
+          pattern: '&& tdnf clean all;'
+      - matchRegex:
+          path: data.dockerfile
+          pattern: '&& zypper --non-interactive clean --all;'
+
+  # The headers package is spelled differently by every family. The dnf families are given the
+  # *path* of the build tree, which dnf resolves to whichever -devel package owns it -- kernel-devel,
+  # kernel6.12-devel on Amazon Linux 2023, kernel-uek-devel on Oracle UEK -- rather than a package
+  # name the chart would have to guess.
+  - it: asks each package manager for the target kernel's headers in the form it resolves
+    template: templates/kmm-dockerfile-configmap.yaml
+    set:
+      modules:
+        v4l2loopback:
+          method: kmm
+          kmm:
+            image:
+              registry: registry.contoso.com
+              repository: kasm/v4l2loopback
+    asserts:
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'apt-get install -y --no-install-recommends \\\n\s+build-essential git ca-certificates libelf1 \\\n\s+"linux-headers-\$\{KERNEL_FULL_VERSION\}"'
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'dnf install -y --setopt=install_weak_deps=False \\\n\s+gcc make git ca-certificates elfutils-libelf-devel \\\n\s+"/usr/src/kernels/\$\{KERNEL_FULL_VERSION\}"'
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'microdnf install -y \\\n\s+gcc make git ca-certificates elfutils-libelf-devel \\\n\s+"/usr/src/kernels/\$\{KERNEL_FULL_VERSION\}"'
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'yum install -y \\\n\s+gcc make git ca-certificates elfutils-libelf-devel \\\n\s+"/usr/src/kernels/\$\{KERNEL_FULL_VERSION\}"'
+      # tdnf cannot resolve a path, so Azure Linux gets the package by name and release.
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'tdnf install -y \\\n\s+gcc make binutils git ca-certificates elfutils-libelf-devel \\\n\s+"kernel-devel-\$\{KERNEL_FULL_VERSION\}"'
+      # zypper: the release's flavor suffix picks the -devel package and the rest pins its version,
+      # as one "name = version" argument; a release without a suffix falls back to kernel-default.
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'flavor="\$\{KERNEL_FULL_VERSION##\*-\}"'
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'headers="kernel-default-devel = \$\{KERNEL_FULL_VERSION\}"'
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'headers="kernel-\$\{flavor\}-devel = \$\{KERNEL_FULL_VERSION%-\*\}"'
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'zypper --non-interactive install --no-recommends \\\n\s+gcc make git ca-certificates libelf-devel "\$\{headers\}"'
+      # Ubuntu HWE headers pin the gcc the kernel was built with (gcc-12 for 6.8 on 22.04), which
+      # build-essential does not provide: the apt-get branch reads it from the kernel's config and
+      # installs it when it is not already on the PATH.
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'CONFIG_CC_VERSION_TEXT[^\n]*"/lib/modules/\$\{KERNEL_FULL_VERSION\}/build/\.config"'
+      - matchRegex:
+          path: data.dockerfile
+          pattern: '\*gcc-\[0-9\]\*\) command -v "gcc-\$\{cc##\*gcc-\}" >/dev/null 2>&1 \\\n\s+\|\| apt-get install -y --no-install-recommends "gcc-\$\{cc##\*gcc-\}" ;;'
+
+  # Oracle's UEK R8 is built with gcc 14 from gcc-toolset-14 while the el9 userland has gcc 11: the
+  # toolset matching the kernel's CONFIG_CC_VERSION_TEXT is installed on the RPM families when it
+  # is missing, and put first on PATH for the make step.
+  - it: switches to the gcc-toolset the kernel was built with on the RPM families
+    template: templates/kmm-dockerfile-configmap.yaml
+    set:
+      modules:
+        v4l2loopback:
+          method: kmm
+          kmm:
+            image:
+              registry: registry.contoso.com
+              repository: kasm/v4l2loopback
+    asserts:
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'want="\$\(sed -nE ''s/\^CONFIG_CC_VERSION_TEXT="\[\^ \]\*gcc \\\(\[\^\)\]\*\\\) \(\[0-9\]\+\)\\\.\.\*/\\1/p'' "\$\{cfg\}"'
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'if command -v dnf >/dev/null 2>&1; then dnf install -y --setopt=install_weak_deps=False "gcc-toolset-\$\{want\}" && dnf clean all;'
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'microdnf install -y "gcc-toolset-\$\{want\}"'
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'yum install -y "gcc-toolset-\$\{want\}"'
+      - matchRegex:
+          path: data.dockerfile
+          pattern: '(?s)export PATH="/opt/rh/gcc-toolset-\$\{want\}/root/usr/bin:\$\{PATH\}"; \\\n\s+fi; \\\n\s+make -C /usr/src/v4l2loopback KERNELRELEASE="\$\{KERNEL_FULL_VERSION\}" KERNEL_DIR="\$\{kernel_dir\}" v4l2loopback\.ko'
+
+  # v4l2loopback's Makefile defaults KERNEL_DIR to /lib/modules/<release>/build, a symlink the Debian
+  # headers package creates but the RPM -devel packages do not (kernel-core owns it there), so the
+  # build tree is resolved first and handed to make explicitly, next to KERNELRELEASE.
+  - it: resolves the kernel build tree and passes it to make as KERNEL_DIR
+    template: templates/kmm-dockerfile-configmap.yaml
+    set:
+      modules:
+        v4l2loopback:
+          method: kmm
+          kmm:
+            image:
+              registry: registry.contoso.com
+              repository: kasm/v4l2loopback
+    asserts:
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'kernel_dir="/lib/modules/\$\{KERNEL_FULL_VERSION\}/build"; \\\n\s+\[ -d "\$\{kernel_dir\}" \] \|\| kernel_dir="/usr/src/kernels/\$\{KERNEL_FULL_VERSION\}";'
+      # Only the .ko target: the default target also builds v4l2loopback-ctl, which is not shipped
+      # and needs libc headers a minimal builder image may not carry.
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'make -C /usr/src/v4l2loopback KERNELRELEASE="\$\{KERNEL_FULL_VERSION\}" KERNEL_DIR="\$\{kernel_dir\}" v4l2loopback\.ko'
+      # Neither candidate present: a message naming both, not make's "No such file or directory".
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'no kernel build tree for \$\{KERNEL_FULL_VERSION\} at /lib/modules/\$\{KERNEL_FULL_VERSION\}/build or /usr/src/kernels/\$\{KERNEL_FULL_VERSION\}'
+
+  # Stage 2 starts from the builder image again and needs kmod for depmod, so it goes through the
+  # same detection. Everything asserted here sits after the second FROM -- the one without
+  # "AS builder".
+  - it: installs kmod in the second stage through the same package manager detection
+    template: templates/kmm-dockerfile-configmap.yaml
+    set:
+      modules:
+        v4l2loopback:
+          method: kmm
+          kmm:
+            image:
+              registry: registry.contoso.com
+              repository: kasm/v4l2loopback
+    asserts:
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'FROM docker\.io/library/ubuntu:22\.04\n[\s\S]*if command -v apt-get >/dev/null 2>&1; then \\\n\s+apt-get update \\\n\s+&& apt-get install -y --no-install-recommends kmod \\\n\s+&& rm -rf /var/lib/apt/lists/\*;'
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'FROM docker\.io/library/ubuntu:22\.04\n[\s\S]*elif command -v dnf >/dev/null 2>&1; then \\\n\s+dnf install -y --setopt=install_weak_deps=False kmod \\\n\s+&& dnf clean all;'
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'FROM docker\.io/library/ubuntu:22\.04\n[\s\S]*elif command -v microdnf >/dev/null 2>&1; then \\\n\s+microdnf install -y kmod \\\n\s+&& microdnf clean all;'
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'FROM docker\.io/library/ubuntu:22\.04\n[\s\S]*elif command -v yum >/dev/null 2>&1; then \\\n\s+yum install -y kmod \\\n\s+&& yum clean all;'
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'FROM docker\.io/library/ubuntu:22\.04\n[\s\S]*elif command -v tdnf >/dev/null 2>&1; then \\\n\s+tdnf install -y kmod \\\n\s+&& tdnf clean all;'
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'FROM docker\.io/library/ubuntu:22\.04\n[\s\S]*elif command -v zypper >/dev/null 2>&1; then \\\n\s+zypper --non-interactive install --no-recommends kmod \\\n\s+&& zypper --non-interactive clean --all;'
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'FROM docker\.io/library/ubuntu:22\.04\n[\s\S]*"has none of apt-get, dnf, microdnf, yum, tdnf or zypper, so kmod \(for depmod\) cannot be installed\.[^"]*" >&2; \\\n\s+exit 1;'
+      # ...and depmod only runs once kmod is in place.
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'FROM docker\.io/library/ubuntu:22\.04\n[\s\S]*command -v zypper[\s\S]*depmod -b /opt "\$\{KERNEL_FULL_VERSION\}"'
 
   - it: clones the configured mirror and ref, and follows a custom builder image
     template: templates/kmm-dockerfile-configmap.yaml
@@ -308,6 +520,13 @@ tests:
       - matchRegex:
           path: data.dockerfile
           pattern: 'FROM registry\.contoso\.com/kasm/builder:24\.04 AS builder'
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'FROM registry\.contoso\.com/kasm/builder:24\.04\n'
+      # The same reference is what the no-package-manager message names.
+      - matchRegex:
+          path: data.dockerfile
+          pattern: 'echo "kasm-node-prep: builder image" ''registry\.contoso\.com/kasm/builder:24\.04'' "has none of'
       - matchRegex:
           path: data.dockerfile
           pattern: 'git clone --depth 1 --branch ''v0\.13\.1'' ''https://git\.contoso\.com/mirrors/v4l2loopback\.git'' v4l2loopback'
@@ -461,9 +680,11 @@ tests:
       - failedTemplate:
           errorMessage: "kasm-node-prep: wireguard via KMM is not supported: kernels >= 5.6 ship WireGuard in-tree; use method: build for older kernels."
 
-  - it: single-quotes the clone url and ref inside the Dockerfile so shell metacharacters stay literal
+  - it: single-quotes the clone url, ref and builder image inside the Dockerfile so shell metacharacters stay literal
     template: templates/kmm-dockerfile-configmap.yaml
     set:
+      image:
+        repository: kasm/x$(id)
       modules:
         v4l2loopback:
           method: kmm
@@ -475,7 +696,11 @@ tests:
     asserts:
       - matchRegex:
           path: data.dockerfile
-          pattern: "git clone --depth 1 --branch 'v0\\.13\\.2' 'https://example\\.com/x\\$\\(id\\)\\.git' v4l2loopback"
+          pattern: "git clone --depth 1 --branch 'v0\\.15\\.4' 'https://example\\.com/x\\$\\(id\\)\\.git' v4l2loopback"
+      # The builder reference reaches the shell only inside the failure message, and only quoted.
+      - matchRegex:
+          path: data.dockerfile
+          pattern: "echo \"kasm-node-prep: builder image\" 'docker\\.io/kasm/x\\$\\(id\\):22\\.04' \"has none of"
 
   - it: refuses a source repository secret together with a kmm build
     template: templates/kmm-module.yaml
@@ -492,3 +717,45 @@ tests:
       - failedTemplate:
           errorPattern: 'sourceRepoSecret applies to method=build only'
 
+
+  # --- Naming against KMM's webhook limit --------------------------------------------------------
+
+  - it: keeps the Module name short enough for an umbrella release in a long namespace
+    template: templates/kmm-module.yaml
+    release:
+      name: kasm-agent
+      namespace: kasm-agent
+    set:
+      nameOverride: kasm-node-prep
+      modules:
+        v4l2loopback:
+          method: kmm
+          kmm:
+            image:
+              registry: registry.contoso.com
+              repository: kasm/v4l2loopback
+    asserts:
+      # 15 + 10 = 25 characters; the chart-name form would have been 48 and refused by KMM.
+      - equal:
+          path: metadata.name
+          value: kasm-agent-v4l2
+      - equal:
+          path: spec.moduleLoader.container.kernelMappings[0].build.dockerfileConfigMap.name
+          value: kasm-agent-v4l2-dockerfile
+
+  - it: fails the render when the Module name and namespace together exceed KMM's 41 characters
+    template: templates/kmm-module.yaml
+    release:
+      name: a-release-name-that-is-far-too-long-for-kmm
+      namespace: kasm-node-prep
+    set:
+      modules:
+        v4l2loopback:
+          method: kmm
+          kmm:
+            image:
+              registry: registry.contoso.com
+              repository: kasm/v4l2loopback
+    asserts:
+      - failedTemplate:
+          errorPattern: 'combined length of 62 characters, and KMM.s admission webhook refuses more than 41'

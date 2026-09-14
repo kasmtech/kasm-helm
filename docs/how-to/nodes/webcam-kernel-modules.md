@@ -1,6 +1,6 @@
 # Kernel modules and webcam passthrough
 
-> **Applies to:** agent · **Charts/values:** `nodePrep.modules.v4l2loopback.enabled`, `nodePrep.modules.v4l2loopback.method`, `nodePrep.modules.v4l2loopback.videoDevices`, `nodePrep.modules.v4l2loopback.kmm.image.registry`, `nodePrep.modules.v4l2loopback.kmm.imageRepoSecret`, `nodePrep.modules.v4l2loopback.kmm.build.enabled`, `nodePrep.modules.wireguard.enabled`, `videoDevicePlugin.enabled`
+> **Applies to:** agent · **Charts/values:** `nodePrep.modules.v4l2loopback.enabled`, `nodePrep.modules.v4l2loopback.method`, `nodePrep.image.registry`, `nodePrep.image.repository`, `nodePrep.image.tag`, `nodePrep.modules.v4l2loopback.videoDevices`, `nodePrep.modules.v4l2loopback.kmm.image.registry`, `nodePrep.modules.v4l2loopback.kmm.imageRepoSecret`, `nodePrep.modules.v4l2loopback.kmm.build.enabled`, `nodePrep.modules.wireguard.enabled`, `videoDevicePlugin.enabled`
 
 ## Why this is needed
 
@@ -22,7 +22,7 @@ Enable one without the other and the feature fails quietly.
   modinfo videodev >/dev/null && echo "V4L2 core present"
   ```
 
-  On Ubuntu generic, also install `linux-modules-extra-$(uname -r)`.
+  `videodev` is usually a separately packaged module - if `modinfo` fails, install the one for the node's family: Ubuntu `linux-modules-extra-$(uname -r)` (the `-generic`, `-aws`, `-gke` and `-azure` flavors all have one in the 22.04 and 24.04 archives); RHEL 8/9, Rocky and Alma `kernel-modules` (the `kernel` metapackage installs it by default); Amazon Linux 2023 `kernel-modules-extra`; Oracle Linux UEK `kernel-uek-modules` (UEK R7) or `kernel-uek-modules-desktop` (UEK R8). When the core is missing the node-prep log names the package for the builder image's family.
 - **Loadable modules permitted.** A node with `kernel.modules_disabled=1` or an immutable/hardened image cannot be prepared this way.
 - **The namespace must permit the `privileged` PSS** - do [privileged workloads and cluster policy](privileged-workloads.md) first.
 - **Pick a mode:**
@@ -30,24 +30,42 @@ Enable one without the other and the feature fails quietly.
   | | `method: build` (default) | `method: kmm` |
   | --- | --- | --- |
   | Compiles | on every node, every time the module is missing | once per kernel release, into an image |
-  | Node needs | `linux-headers-$(uname -r)` resolvable + a toolchain (or a pre-baked builder image) | nothing but an image pull |
+  | Node needs | the node kernel's headers package resolvable from a builder image of the node's own family and release (`nodePrep.image.*` - `linux-headers-$(uname -r)` on Ubuntu/Debian, `kernel-devel` and its variants on the RPM families) + a toolchain, or a pre-baked builder image | nothing but an image pull |
   | Also needs | - | the KMM operator, cluster-wide, and a container **registry** |
   | Failures show up in | the node-prep pod log, with a diagnosis | the `Module` status and KMM build pod logs |
 
   Full comparison: [kasm-node-prep § Which one to choose](../../../charts/kasm-node-prep/README.md#which-one-to-choose).
-- Distro variants: **k3s / kubeadm / managed (EKS, AKS, GKE)** behave identically for this chart - what differs is the node image (headers availability, kernel flavor), not the distribution. **OpenShift**: RHCOS ships no `apt`, so `method: build` needs a pre-baked builder image or `method: kmm`; KMM is also the RHEL-native answer there.
+- Distro variants: **k3s / kubeadm / managed (EKS, AKS, GKE)** behave identically for this chart - what differs is the node image, not the distribution. The rule for build mode: **`nodePrep.image.*` must name a builder image of the node's own distribution family and release.** The container shares the node's kernel but not its userland, and the kernel headers are installed from the builder image's repositories, never the node's; the default `ubuntu:22.04` fits Ubuntu 22.04 nodes only. The reconcile script detects the image's package manager (`apt-get`, `dnf`/`yum`/`microdnf`, `tdnf`, `zypper`) and branches on it. One DaemonSet has one builder image, so a fleet mixing families needs one `kasm-node-prep` release per family, each with its own `nodeSelector`. The full table, with the packages each family installs, is [kasm-node-prep § Builder image per node image](../../../charts/kasm-node-prep/README.md#builder-image-per-node-image); the short version:
+
+  | Node image | `nodePrep.image.*` | Build mode |
+  | --- | --- | --- |
+  | Ubuntu 22.04 / 24.04 (self-managed, EKS Ubuntu AMI, GKE Ubuntu, AKS Ubuntu) | `docker.io/library/ubuntu:22.04` / `:24.04`, matching the node release | yes - `-generic`, `-aws`, `-gke` and `-azure` all have headers and modules-extra; never `-kvm` |
+  | Debian 12 | `docker.io/library/debian:12` | yes |
+  | EKS Amazon Linux 2023 (the default AMI) | `public.ecr.aws/amazonlinux/amazonlinux:2023` | yes - both kernel lines (6.1, 6.12) resolve; V4L2 core in `kernel-modules-extra` |
+  | Rocky / Alma / CentOS Stream 9 (or 8) | `docker.io/library/rockylinux:9` or `almalinux:9` (`:8`), matching the major | yes |
+  | RHEL (subscription) | `registry.access.redhat.com/ubi9/ubi`, or Rocky/Alma of the same major | partial - UBI repositories have no `kernel-devel`; pre-install `kernel-devel-$(uname -r)` in the node image and the bind-mounted `/usr/src` lets the container find it |
+  | Oracle Linux 9 | RHCK nodes: `docker.io/library/oraclelinux:9`. UEK nodes (the default): a builder with the UEK repository enabled, which the stock image ships disabled - `FROM oraclelinux:9` plus `RUN dnf config-manager --set-enabled ol9_UEKR8` (6.12) or `ol9_UEKR7` (5.15); UEK R8's gcc-toolset-14 is picked up automatically | yes - both UEK lines compiled in Docker, not on a live node |
+  | AKS Azure Linux 3 | `mcr.microsoft.com/azurelinux/base/core:3.0` | yes, the `tdnf` path - not yet verified on a live node |
+  | openSUSE Leap / SLES | `registry.opensuse.org/opensuse/leap:15.6`, or the SLES BCI of the release | expected - verified only as a `zypper` dry run |
+  | EKS Bottlerocket | none | no - no shell, no headers, immutable. `method: kmm` with `kmm.build.enabled: false` and per-kernel images built out of band (Bottlerocket publishes a kmod-kit); module loading policy there is unverified |
+  | GKE Container-Optimized OS | none | no - use the Ubuntu node image for the workspace pool, or prebuilt KMM images |
+  | OpenShift RHCOS | none | no - `method: kmm`, the RHEL-native answer |
 
 ## Steps
 
 ### A. Build mode (default)
 
-1. Confirm the headers package resolves on a node:
+1. Confirm the node kernel's headers package resolves. Run on the node; it stands in for the builder image's repositories, so it only means something when `nodePrep.image.*` is the node's own family and release (table above):
 
    ```console
+   # Ubuntu / Debian node
    apt-get -s install "linux-headers-$(uname -r)" >/dev/null && echo "headers available"
+   # RHEL-family node (Rocky, Alma, CentOS Stream, Oracle, Amazon Linux 2023): the transaction summary must
+   # name kernel-devel, kernel6.12-devel or kernel-uek-devel; "no match" means it does not resolve
+   dnf install --assumeno "/usr/src/kernels/$(uname -r)"
    ```
 
-   If it does not, either pre-install headers in the node image or use the airgap builder-image path in [kasm-node-prep § Airgapped / offline nodes](../../../charts/kasm-node-prep/README.md#airgapped-and-offline-nodes) with `nodePrep.modules.v4l2loopback.sourcePath`.
+   Or ask the builder image itself, with the node's kernel release substituted: `docker run --rm rockylinux:9 dnf repoquery --whatprovides /usr/src/kernels/<kernel release>` (on Debian/Ubuntu images, `apt-get update && apt-get -s install linux-headers-<kernel release>`). If it does not resolve, check the builder image release against the node first - a GKE Ubuntu 24.04 node runs a 6.8 `-gke` kernel whose headers are only in the 24.04 archive. If the headers genuinely are not published (RHEL, whose UBI repositories carry no `kernel-devel`; some cloud-vendor kernels), either pre-install them in the node image (`/usr/src` is bind-mounted, so the container then finds them) or use the airgap builder-image path in [kasm-node-prep § Airgapped / offline nodes](../../../charts/kasm-node-prep/README.md#airgapped-and-offline-nodes) with `nodePrep.modules.v4l2loopback.sourcePath`.
 
 2. Enable both halves and install:
 
@@ -59,6 +77,8 @@ Enable one without the other and the feature fails quietly.
      --set nodePrep.modules.v4l2loopback.videoDevices=4 \
      --set videoDevicePlugin.enabled=true
    ```
+
+   The default builder image is `ubuntu:22.04`, right for Ubuntu 22.04 nodes only. On any other node image add `nodePrep.image.registry`, `nodePrep.image.repository` and `nodePrep.image.tag` from the table in Before you start - for GKE Ubuntu 24.04 nodes `--set nodePrep.image.tag=24.04` is enough; for EKS Amazon Linux 2023, `--set nodePrep.image.registry=public.ecr.aws --set nodePrep.image.repository=amazonlinux/amazonlinux --set nodePrep.image.tag=2023`.
 
 3. Watch the first pass. A cold node compiles the module; expect a minute or two under the default `nodePrep.resources.limits.cpu` of `1000m`:
 
@@ -77,7 +97,7 @@ Enable one without the other and the feature fails quietly.
    make kmm-install-mirrored KMM_IMAGE_REGISTRY=registry.example.internal   # airgap
    ```
 
-   `make images-agent` prints the five KMM images to mirror under its `# KMM mode` section. KMM reuses cert-manager if it is already installed. `make kmm-uninstall` removes the operator - delete the `Module` first if you want the modules unloaded, because KMM unloads on delete.
+   `make images-agent` prints the five KMM images to mirror under its `# KMM mode` section. KMM's manifests need cert-manager already installed (they create an `Issuer` and a `Certificate` for the admission webhook); `make kmm-install` also pins the operator's images to the release tag, because the upstream overlay references rolling `:latest` builds. `make kmm-uninstall` removes the operator - delete the `Module` first if you want the modules unloaded, because KMM unloads on delete.
 
 2. **Create the registry secret** (needed to pull the kmod image, and to *push* when in-cluster builds are on):
 
@@ -163,8 +183,8 @@ The result is identical in both modes.
 
    ```console
    kubectl get modules.kmm.sigs.x-k8s.io
-   kubectl describe module kasm-agent-kasm-node-prep-v4l2loopback
-   kubectl get pods -l kmm.node.kubernetes.io/module.name=kasm-agent-kasm-node-prep-v4l2loopback
+   kubectl describe module kasm-agent-v4l2
+   kubectl get pods -l kmm.node.kubernetes.io/module.name=kasm-agent-v4l2
    ```
 
 5. WireGuard on a modern kernel - the expected outcome is a skip, not a build:
@@ -209,15 +229,16 @@ Under [kasm-platform](../../../charts/kasm-platform/README.md) the same block ne
 
 | Symptom | Cause | Fix |
 | ------- | ----- | --- |
-| Pod log: `Kernel <rel> has no V4L2 core (videodev): CONFIG_MEDIA_SUPPORT/CONFIG_VIDEO_DEV are not enabled in this kernel flavor` and no build is attempted | Minimal kernel flavor - Ubuntu `-kvm`, some cloud kernels. `v4l2loopback` can **never** link here | Move the node to the `-generic` flavor with `linux-modules-extra-$(uname -r)`, or rebuild the node image. No chart value works around it |
-| Build mode: pass fails and the log names `linux-headers-$(uname -r)` | The exact headers package is not published by the distro repos (common on cloud-vendor kernels) | Pre-install headers in the node image, or switch to a pre-baked builder image with `nodePrep.modules.v4l2loopback.sourcePath`, or use `method: kmm` |
+| Pod log: `Kernel <rel> has no V4L2 core (videodev): CONFIG_MEDIA_SUPPORT/CONFIG_VIDEO_DEV are not enabled in this kernel flavor` and no build is attempted | Either the V4L2 core is a package the node image left out, or the kernel flavor has no V4L2 at all (Ubuntu `-kvm`, some cloud kernels), where `v4l2loopback` can **never** link | Install the package the log names for the family - Ubuntu `linux-modules-extra-$(uname -r)`, RHEL/Rocky/Alma `kernel-modules`, Amazon Linux 2023 `kernel-modules-extra`, Oracle Linux UEK `kernel-uek-modules` (UEK R7) or `kernel-uek-modules-desktop` (UEK R8) - or, on `-kvm`, move the node to `-generic` or rebuild the node image. No chart value works around it |
+| Build mode: pass fails and the log names the kernel headers package - `linux-headers-$(uname -r)`, `/usr/src/kernels/$(uname -r)`, `kernel-devel-$(uname -r)` or `kernel-<flavor>-devel` | The builder image's repositories do not carry headers for the node kernel. Almost always a builder image of the wrong family or release (`ubuntu:22.04` against Ubuntu 24.04 nodes, whose 6.8 `-gke`/`-aws` headers are only in the 24.04 archive); otherwise a cloud-vendor kernel the distro never published headers for, or RHEL, whose UBI repositories carry no `kernel-devel` | Set `nodePrep.image.*` to the node's own family and release (table in Before you start). If the headers genuinely are not published, pre-install them in the node image, or switch to a pre-baked builder image with `nodePrep.modules.v4l2loopback.sourcePath`, or use `method: kmm` |
 | `kubectl get node ... allocatable.kasm\.com/video` returns `0` or nothing, while `nodePrep` looks healthy | The device plugin runs on a node where the module was never loaded - mismatched `nodeSelector`s | Give `videoDevicePlugin.nodeSelector` and `nodePrep.nodeSelector` the same value; check the node-prep log on that specific node |
 | `helm install` fails to render: `sourcePath` combined with `method: kmm` | `sourcePath` names a directory inside *this chart's* builder image, which a KMM build pod never runs. Rejected deliberately | Drop `sourcePath`, or go back to `method: build` |
 | `helm install` fails to render with an empty KMM registry/repository | Both are required whenever `method: kmm` - KMM loads the module from an image | Set `nodePrep.modules.v4l2loopback.kmm.image.registry` and `nodePrep.modules.v4l2loopback.kmm.image.repository` |
 | KMM in-cluster build pod cannot push; DNS lookup of the registry hostname fails from the pod | The kaniko pod runs on the **pod network**; the registry hostname resolves only via the node's resolver (tailnet/MagicDNS, split-horizon DNS) | Add a CoreDNS forward for that zone (k3s: a `coredns-custom` ConfigMap `<zone>.server` stanza) and restart CoreDNS |
 | `Module` exists but a node's kernel is never prepared, in airgap Mode A | No `<registry>/<repository>:<kernel release>` image was built for that kernel; KMM cannot pull what does not exist | Build and push that kernel's image before the node joins. `kubectl describe module ...` names the unmatched kernel |
 | Install fails: the `Module` CRD does not exist | `method: kmm` without the KMM operator installed | `make kmm-install` (or `make kmm-install-mirrored KMM_IMAGE_REGISTRY=<mirror>`) |
-| Airgapped build mode still hits `apt-get` | The pre-baked builder image is missing a prerequisite, so the presence check fell through | Look for `build prerequisites already present; skipping package installation` in the pod log; if absent, add `build-essential kmod openssl libelf1` to the image |
+| Airgapped build mode still runs the builder image's package manager (`apt-get`, `dnf`, `tdnf` or `zypper`) | The pre-baked builder image is missing a prerequisite, so the presence check fell through | Look for `build prerequisites already present; skipping package installation` in the pod log; if absent, add the missing piece to the image - the toolchain for its family (`build-essential kmod openssl libelf1` on Debian/Ubuntu, `gcc make kmod openssl elfutils-libelf-devel` on the RPM families) and the kernel build tree |
+| Pod log: an error that the builder image has no supported package manager, listing `apt-get`, `dnf`, `microdnf`, `yum`, `tdnf` and `zypper` | `nodePrep.image.*` names an image that is neither pre-baked nor from a supported family (a distroless, Alpine or scratch-based image, for example), so nothing can install the toolchain | Use a builder image of the node's own family and release from the table in Before you start, or pre-bake everything so the presence check skips package installation |
 | Build is OOMKilled and retried every `reconcileIntervalSeconds` without finishing | `nodePrep.resources.limits.memory` too low to hold headers + sources + gcc | Raise it above the `1Gi` default |
 
 ## Decisions
@@ -225,6 +246,7 @@ Under [kasm-platform](../../../charts/kasm-platform/README.md) the same block ne
 - [ ] Node kernel ships the V4L2 core (`modinfo videodev` succeeds); not a `-kvm`/minimal cloud flavor.
 - [ ] Namespace labelled `pod-security.kubernetes.io/enforce=privileged`.
 - [ ] Mode chosen: `build` (headers + toolchain per node) or `kmm` (operator + registry).
+- [ ] Build mode only: `nodePrep.image.*` names a builder image of the node's own distribution family and release (the default `ubuntu:22.04` is for Ubuntu 22.04 nodes); one release per family in a mixed fleet.
 - [ ] KMM mode only: `make kmm-install` / `make kmm-install-mirrored` run; `kubernetes.io/dockerconfigjson` secret created and named in `nodePrep.modules.v4l2loopback.kmm.imageRepoSecret`.
 - [ ] KMM in-cluster builds only: the registry hostname resolves **from a pod** (CoreDNS forward added if it does not).
 - [ ] `nodePrep.enabled=true` **and** `videoDevicePlugin.enabled=true`.

@@ -29,7 +29,7 @@ tests:
           pattern: 'V4L2_SOURCE_REPO=''https://github.com/umlaeute/v4l2loopback.git'''
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'V4L2_SOURCE_REF=''v0\.13\.2'''
+          pattern: 'V4L2_SOURCE_REF=''v0\.15\.4'''
       - matchRegex:
           path: data["ensure-modules.sh"]
           pattern: 'RECONCILE_INTERVAL=''300'''
@@ -135,7 +135,7 @@ tests:
 
   # --- Airgapped / offline support -------------------------------------------------------------
 
-  - it: leaves the airgap source paths empty by default and keeps the git clone and apt fallback
+  - it: leaves the airgap source paths empty by default and keeps the git clone and package install fallback
     asserts:
       - matchRegex:
           path: data["ensure-modules.sh"]
@@ -145,7 +145,10 @@ tests:
           pattern: 'clone --quiet --depth 1 --branch "\$ref" "\$repo" "\$dest"'
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'apt-get install -y --no-install-recommends build-essential git kmod ca-certificates'
+          pattern: 'toolchain=\(build-essential git kmod ca-certificates libelf1\)'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "\$@"'
 
   - it: checks for pre-baked build prerequisites before doing any package installation
     asserts:
@@ -170,11 +173,202 @@ tests:
       - matchRegex:
           path: data["ensure-modules.sh"]
           pattern: 'build prerequisites already present; skipping package installation'
-      # The presence check and the "no apt-get here" guard both come before any apt-get call, so a
-      # pre-baked builder image from a non-Debian distro is never hard-failed on missing apt.
+      # The presence check comes before the package manager is even looked for, and that lookup
+      # before any install, so a pre-baked builder image with no package manager at all is never
+      # hard-failed on the missing tool.
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: '(?s)if build_deps_present; then.*command -v apt-get >/dev/null 2>&1.*apt-get update -qq'
+          pattern: '(?s)if build_deps_present; then.*if ! detect_pkg_manager; then.*pkg_install "\$\{toolchain\[@\]\}"'
+
+  # --- Multi-family package layer --------------------------------------------------------------
+  #
+  # The container shares the node kernel but not its userland: the headers come from the BUILDER
+  # IMAGE's repositories, so the script has to speak every package manager a matching image might
+  # carry. One detector, one installer, and a per-family toolchain and headers spec.
+
+  - it: detects the builder image's package manager and maps every supported family
+    asserts:
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'detect_pkg_manager\(\) \{'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'for tool in apt-get dnf microdnf yum tdnf zypper; do'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'pkg_install\(\) \{'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'apt-get update -qq'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "\$@"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'dnf install -y --setopt=install_weak_deps=False "\$@"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'microdnf install -y "\$@"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'yum install -y "\$@"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'tdnf install -y "\$@"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'zypper --non-interactive install --no-recommends "\$@"'
+      # The log names the manager in use, and the no-manager error names all six.
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'Installing build dependencies for kernel \$\{KERNEL_RELEASE\} with \$\{PKG_MANAGER\}'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'has none of apt-get, dnf, microdnf, yum, tdnf or zypper to install them'
+
+  - it: installs the kernel headers with the spec each family resolves
+    asserts:
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'headers_spec="linux-headers-\$\{KERNEL_RELEASE\}"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'toolchain=\(gcc make kmod git ca-certificates elfutils-libelf-devel\)'
+      # dnf, microdnf and yum resolve the build tree's path to the package owning it (kernel-devel,
+      # kernel6.12-devel or kernel-uek-devel), never /lib/modules/<ver>/build, which kernel-core owns.
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'headers_spec="/usr/src/kernels/\$\{KERNEL_RELEASE\}"'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'pkg_install "/lib/modules'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'toolchain=\(gcc make binutils kmod git ca-certificates elfutils-libelf-devel\)'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'headers_spec="kernel-devel-\$\{KERNEL_RELEASE\}"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'toolchain=\(gcc make kmod git ca-certificates libelf-devel\)'
+      # zypper: the capability form, one argument, version without the rpm release suffix.
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'headers_spec="kernel-\$\{KERNEL_RELEASE##\*-\}-devel = \$\{KERNEL_RELEASE%-\*\}"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'headers_spec="kernel-default-devel = \$\{KERNEL_RELEASE\}"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'pkg_install "\$headers_spec"'
+      # The headers error says what was tried and that the builder image has to match the node.
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: "found nothing for '\\$\\{headers_spec\\}'"
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'same distribution family AND release as the node'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'image\.registry/image\.repository/image\.tag'
+
+  # Two distributions ship kernels ahead of their default compiler: Ubuntu's HWE headers pin
+  # CC = gcc-<N> in their Makefile without depending on it, and Oracle's UEK R8 is built with gcc 14
+  # from gcc-toolset-14 while the el9 userland has gcc 11. The compiler the kernel was built with is
+  # read from its .config; apt installs gcc-<N>, the RPM families switch to gcc-toolset-<N> on PATH.
+  - it: installs or switches to the gcc the kernel was built with, from CONFIG_CC_VERSION_TEXT
+    asserts:
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'kernel_gcc_major\(\) \{'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'CONFIG_CC_VERSION_TEXT="\(\[\^"\]\*\)"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: '"\$\{KERNEL_BUILD\}/\.config"'
+      # Both spellings of the compiler line are parsed: "gcc-12 (...)" and "gcc (GCC) 14.2.1 ...".
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: "-e 's/\\^\\[\\^ \\]\\*gcc-\\(\\[0-9\\]\\+\\)"
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: "-e 's/\\^\\[\\^ \\]\\*gcc \\\\\\(\\[\\^\\)\\]\\*\\\\\\) \\(\\[0-9\\]\\+\\)"
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'ensure_kernel_compiler\(\) \{'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'pkg_install "gcc-\$\{want\}"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'toolset="/opt/rh/gcc-toolset-\$\{want\}/root/usr/bin"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'pkg_install "gcc-toolset-\$\{want\}"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'export PATH="\$\{toolset\}:\$\{PATH\}"'
+      # No longer gated on apt; placed after the headers are in place (the .config comes with them),
+      # and also run on the pre-baked path so a baked-in toolset is picked up without any install.
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: '(?s)pkg_install "\$headers_spec".*if ! ensure_kernel_compiler; then'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: '\[ "\$PKG_MANAGER" = apt \] && ! ensure_kernel_compiler'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: '(?s)if build_deps_present; then.*if ! ensure_kernel_compiler; then.*DEPS_READY=1'
+
+  - it: resolves the kernel build tree and hands it to every make invocation explicitly
+    set:
+      modules:
+        wireguard:
+          enabled: true
+    asserts:
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'resolve_kernel_build\(\) \{'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'KERNEL_BUILD="/usr/src/kernels/\$\{KERNEL_RELEASE\}"'
+      # Resolved before the presence check and again after the headers land.
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: '(?s)resolve_kernel_build\n  if build_deps_present; then.*pkg_install "\$headers_spec".*resolve_kernel_build'
+      # v4l2loopback's Makefile calls the tree KERNEL_DIR, wireguard-linux-compat's KERNELDIR.
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'make -C "\$src" KERNEL_DIR="\$KERNEL_BUILD"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'make -C "\$src" KERNEL_DIR="\$KERNEL_BUILD" install-module'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'make -C "\$\{src\}/src" KERNELDIR="\$KERNEL_BUILD" module'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'make -C "\$\{src\}/src" KERNELDIR="\$KERNEL_BUILD" module-install'
+
+  - it: names the package that ships the V4L2 core on every family in the videodev diagnosis
+    asserts:
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'linux-modules-extra-\$\{KERNEL_RELEASE\} on Ubuntu'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'kernel-modules on RHEL, Rocky Linux and AlmaLinux'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'kernel-modules-extra on Amazon Linux 2023'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'kernel-uek-modules \(UEK R7\) or kernel-uek-modules-desktop \(UEK R8\) on Oracle Linux'
+      # The Ubuntu -kvm/cloud case is a kernel that can never work, not a missing package.
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: '-kvm and cloud flavors are built without media support and can never work'
 
   - it: builds from the baked-in source trees and drops the clone path when both sourcePaths are set
     set:
@@ -266,14 +460,96 @@ tests:
           pattern: 'apply_sysctl ''fs\.inotify\.max_user_watches'' ''524288'''
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'sysctl -w "\$\{key\}=\$\{value\}"'
-      - matchRegex:
-          path: data["ensure-modules.sh"]
           pattern: 'ensure_sysctls \|\| pass_status=1'
       # sysctl tuning alone pulls in none of the swap machinery.
       - notMatchRegex:
           path: data["ensure-modules.sh"]
           pattern: 'ensure_swap'
+
+  # apply_sysctl writes /proc/sys itself, the way sysctl(8) does, so the builder image needs no
+  # procps: several RPM base images ship without it.
+  - it: writes sysctls to /proc/sys directly instead of shelling out to sysctl
+    set:
+      tuning:
+        sysctls:
+          enabled: true
+    asserts:
+      # Dotted keys become a path; a key carrying "/" is used as-is (net/ipv4/conf/eth0.1/rp_filter).
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'path="/proc/sys/\$\{key//\./\/\}"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'path="/proc/sys/\$\{key\}"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'current="\$\(cat "\$path" 2>/dev/null \|\| true\)"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'printf ''%s\\n'' "\$value" >"\$path"'
+      # /proc/sys renders tuples with tabs, so both sides are whitespace-normalized before comparing.
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'sysctl_normalize\(\) \{'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'if \[ "\$\(sysctl_normalize "\$current"\)" = "\$\(sysctl_normalize "\$value"\)" \]; then'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'log "sysctl \$\{key\}: \$\{current:-unset\} -> \$\{value\}"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'not sharing the node''s sysctl namespace'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'sysctl -w'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'sysctl -n'
+
+  # Only the sysctl reconciler is on: nothing here ever installs a package, so the package layer
+  # is not rendered at all.
+  - it: keeps the whole package layer out of a sysctls-only script
+    set:
+      modules:
+        v4l2loopback:
+          enabled: false
+        wireguard:
+          enabled: false
+      tuning:
+        sysctls:
+          enabled: true
+    asserts:
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'ensure_sysctls \|\| pass_status=1'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'pkg_install'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'detect_pkg_manager'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'PKG_MANAGER'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'ensure_build_deps'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'apt-get'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'linux-headers'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: '/usr/src/kernels'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'kernel-devel'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'headers_spec'
 
   # Extra entries merge into the defaults, the way Helm merges any map. 4194304 is the regression
   # case: a YAML number arrives as a float64, and unguarded formatting would emit "4.194304e+06",
@@ -382,6 +658,20 @@ tests:
       - matchRegex:
           path: data["ensure-modules.sh"]
           pattern: 'ensure_swap \|\| pass_status=1'
+      # swapon and mkswap come from util-linux, which not every base image ships; the swap pass
+      # starts by making sure they exist and installs the package only when one is missing.
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'ensure_swap_tools\(\) \{'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'if command -v swapon >/dev/null 2>&1 && command -v mkswap >/dev/null 2>&1; then'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'pkg_install util-linux'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: '(?s)ensure_swap\(\) \{.*if ! ensure_swap_tools; then.*if swap_active; then'
       # /etc/fstab is never written: the reconcile loop is what re-activates swap after a reboot.
       - matchRegex:
           path: data["ensure-modules.sh"]
@@ -393,6 +683,19 @@ tests:
       - notMatchRegex:
           path: data["ensure-modules.sh"]
           pattern: 'ensure_sysctls'
+
+  - it: detects an active swapfile from /proc/swaps by full path or chart-owned file name, never through swapon
+    set:
+      tuning:
+        swap:
+          enabled: true
+    asserts:
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: '(?s)swap_active\(\) \{.*while read -r name type _; do.*\[ "\$type" = file \].*\[ "\$name" = "\$SWAP_FILE" \].*\[ "\$\{name##\*/\}" = "\$\{SWAP_FILE##\*/\}" \].*done </proc/swaps'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'swapon --show'
 
   - it: honours a custom swapfile size, path and swappiness
     set:
@@ -470,11 +773,21 @@ tests:
           pattern: 'MOK_DIR'
       - notMatchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'apt-get'
+          pattern: 'KERNEL_BUILD'
       - notMatchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'KERNEL_BUILD'
-      # ...while the reconcile loop and both tuning reconcilers are still there.
+          pattern: 'linux-headers'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: '/usr/src/kernels'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'kernel-devel'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'headers_spec'
+      # ...while the reconcile loop and both tuning reconcilers are still there, and with them the
+      # package installer, which swap keeps for util-linux.
       - matchRegex:
           path: data["ensure-modules.sh"]
           pattern: 'ensure_sysctls \|\| pass_status=1'
@@ -483,7 +796,53 @@ tests:
           pattern: 'ensure_swap \|\| pass_status=1'
       - matchRegex:
           path: data["ensure-modules.sh"]
+          pattern: 'pkg_install util-linux'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
           pattern: 'while true; do'
+
+  # Swap alone: the installer stays (util-linux), the build machinery and every headers spec go.
+  - it: keeps pkg_install but no build machinery in a swap-only tuning script
+    set:
+      modules:
+        v4l2loopback:
+          enabled: false
+        wireguard:
+          enabled: false
+      tuning:
+        swap:
+          enabled: true
+    asserts:
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'pkg_install\(\) \{'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'detect_pkg_manager\(\) \{'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'ensure_swap_tools\(\) \{'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'ensure_build_deps'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'KERNEL_BUILD'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'linux-headers'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: '/usr/src/kernels'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'kernel-devel'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'headers_spec'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'ensure_sysctls'
 
   # --- KMM mode ---------------------------------------------------------------------------------
   #
@@ -534,6 +893,9 @@ tests:
       - notMatchRegex:
           path: data["ensure-modules.sh"]
           pattern: 'apt-get'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'pkg_install'
       # The tuning the DaemonSet is still there for renders unchanged.
       - matchRegex:
           path: data["ensure-modules.sh"]
@@ -572,8 +934,9 @@ tests:
           path: data["ensure-modules.sh"]
           pattern: 'command -v git >/dev/null 2>&1'
 
-  # No module built here and no tuning: nothing for the reconcile loop to do, so there is no script
-  # and no ConfigMap to hold it. The Module CR is the whole install.
+  # No module built here (wireguard off, v4l2loopback on KMM) and no tuning: nothing for the
+  # reconcile loop to do, so there is no script and no ConfigMap to hold it. The Module CR is the
+  # whole install.
   - it: renders no configmap at all for a kmm-only install with tuning off
     set:
       modules:
@@ -583,6 +946,13 @@ tests:
             image:
               registry: registry.contoso.com
               repository: kasm/v4l2loopback
+        wireguard:
+          enabled: false
+      tuning:
+        sysctls:
+          enabled: false
+        swap:
+          enabled: false
     asserts:
       - hasDocuments:
           count: 0

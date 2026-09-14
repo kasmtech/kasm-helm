@@ -10,8 +10,9 @@ are on, and the same values file installs on k3s, kubeadm, EKS, AKS, GKE or Open
 What is *not* provider-agnostic is the cluster underneath. A managed Kubernetes service fixes three
 things you would otherwise have chosen for yourself:
 
-1. **The node OS.** Which image the kubelet runs on, whether it ships kernel headers and a
-   compiler, whether its root filesystem is writable at all, and how often its kernel changes.
+1. **The node OS.** Which image the kubelet runs on, which distribution family and release it is
+   (the node-prep builder image has to match it to find the kernel headers), whether its root
+   filesystem is writable at all, and how often its kernel changes.
 2. **The load balancer and ingress path.** What fronts the session proxy, what its idle timeout
    is, and whether the client's real IP survives the trip.
 3. **The security baseline.** Whether Pod Security Admission enforces anything, whether a cloud
@@ -46,7 +47,7 @@ says whether the chart's default path works there.
 | [GPU nodes (CUDA and EGL/DRI)](../how-to/nodes/gpu.md) | Accelerated AMIs ship drivers → `gpuOperator.driver.enabled=false`. | GPU node pools ship drivers by default → `gpuOperator.driver.enabled=false`. | GKE installs drivers with its **own** DaemonSet → prefer `gpuOperator.enabled=false`. | Use Red Hat's certified NVIDIA GPU Operator from OperatorHub, not the `gpuOperator` subchart. | Never install drivers twice. `agent.gpu.enabled=true` is required on every path, including EGL/DRI. |
 | [Networking](../how-to/networking/README.md) | AWS Load Balancer Controller: ALB → `agent.ingress`, NLB → `agent.sessionProxy.service.type=LoadBalancer`. | App Gateway for Containers, ingress-nginx, or Azure LB straight onto the Service. | GKE Gateway controller is Gateway API native → `agent.httpRoute`. | `agent.route.enabled=true`, `passthrough` termination. | Every path needs a **≥ 3600s** websocket/idle timeout, and every provider's default is far below it. |
 | [Registries and airgap](../how-to/registries-and-airgap.md) | ECR via the node role or IRSA; a static Secret expires every 12h. | ACR attached with `az aks update --attach-acr`. | Artifact Registry via Workload Identity or the node service account. | A `dockerconfigjson` Secret linked to the ServiceAccount. | `agent.imagePuller.enabled=true` needs the CRI socket from a DaemonSet - impossible on serverless node pools. |
-| [Webcam and kernel modules](../how-to/nodes/webcam-kernel-modules.md) | AL2023 needs the matching `kernel-devel`. **Bottlerocket cannot build.** | Ubuntu node images ship headers. **Azure Linux: verify.** | Ubuntu node images work. **COS cannot build**; auto-upgrade churns kernels. | RHCOS ships no `apt` and no toolchain - KMM is the native answer. | Where `method: build` cannot work, use `nodePrep.modules.v4l2loopback.method=kmm` with `nodePrep.modules.v4l2loopback.kmm.build.enabled=false` and prebuilt per-kernel images. |
+| [Webcam and kernel modules](../how-to/nodes/webcam-kernel-modules.md) | AL2023 (the default AMI) builds with `nodePrep.image.*` on `amazonlinux:2023` - headers resolve by path on both AL2023 kernel lines, V4L2 core in `kernel-modules-extra`. Ubuntu AMIs build with `ubuntu:22.04`/`:24.04` matching the release. **Bottlerocket cannot build** (no shell, no headers, immutable): KMM with prebuilt per-kernel images; module loading policy there unverified. | Ubuntu node pools build with `ubuntu:22.04`/`:24.04` matching the node release (`-azure` headers and modules-extra exist). **Azure Linux 3** builds through `tdnf` with `mcr.microsoft.com/azurelinux/base/core:3.0` - **not yet verified on a live node.** | Ubuntu node pools build with `ubuntu:24.04` - a GKE Ubuntu 24.04 node runs a 6.8 `-gke` kernel whose headers are not in the 22.04 archive, so the builder must match the release. **COS cannot build**: Ubuntu node image for the workspace pool, or prebuilt KMM images; auto-upgrade churns kernels. | RHCOS is immutable and ships neither headers nor a toolchain - KMM is the native answer. | `nodePrep.image.*` must be the node's own distribution family and release; one DaemonSet has one builder image. Where `method: build` cannot work, use `nodePrep.modules.v4l2loopback.method=kmm` with `nodePrep.modules.v4l2loopback.kmm.build.enabled=false` and prebuilt per-kernel images. |
 | [Secure Boot](../how-to/nodes/secure-boot.md) | Off on the default AMIs. | Off unless a Trusted Launch node pool enables it - **verify.** | Off unless Shielded VM Secure Boot is on - **verify.** | Bare-metal and private-cloud concern; KMM signing is the native path. | MOK enrolment is a **firmware** step. On a managed node image you generally cannot reach the firmware - bake a signed module into a custom image, or leave Secure Boot off. |
 | [Node tuning and swap](../how-to/nodes/tuning-and-swap.md) | kubelet config via the node-pool bootstrap / launch template - **verify** what is exposed. | `kubeletConfig` on the node pool exposes a subset - **verify.** | Node system config exposes a subset. **Autopilot: none.** | `KubeletConfig` MachineConfig; the node reboots to apply it. | `nodePrep.tuning.sysctls.enabled=true` is safe everywhere. Leave `nodePrep.tuning.swap.enabled=false` unless you can prove `failSwapOn: false` is live. |
 | [Egress installer node prerequisites](../how-to/networking/egress.md) | The default `distro: vanilla`. Chaining onto VPC CNI **unverified**; impossible on Fargate. | The default `distro: vanilla`. Chaining onto Azure CNI **unverified**. | The default `distro: vanilla`. Chaining onto Dataplane V2 **unverified**; impossible on Autopilot. | Multus/OVN-Kubernetes layout - set `egressInstaller.cniBinDir` explicitly. | The chained-CNI shim fails *every* pod sandbox on a node when it misbehaves. Prove it with the test pod in [Verify](../how-to/networking/egress.md#verify) before relying on it anywhere. |
@@ -60,8 +61,13 @@ Distilled from the above. Answer these before the cluster exists, because severa
 changed afterwards.
 
 - [ ] **Node image chosen with kernel modules in mind.** If webcam (`v4l2loopback`) or WireGuard on
-      a pre-5.6 kernel is in scope, the node image ships headers *and* a toolchain - or you have
-      committed to KMM with prebuilt per-kernel images. Bottlerocket and COS cannot build.
+      a pre-5.6 kernel is in scope, the node image is one `nodePrep.image.*` can match - the same
+      distribution family and release, so the builder image's repositories carry the node kernel's
+      headers: Ubuntu 22.04/24.04, Debian 12, Amazon Linux 2023, Rocky/Alma/CentOS Stream, Oracle
+      Linux, Azure Linux 3 (unverified on a live node), openSUSE/SLES (dry run only), or RHEL with
+      `kernel-devel` pre-installed in the node image - or you have committed to KMM with prebuilt
+      per-kernel images. Bottlerocket, COS and RHCOS cannot build. One DaemonSet has one builder
+      image, so a fleet mixing families needs a `kasm-node-prep` release per family.
 - [ ] **If KMM with prebuilt images: a plan for kernel churn.** Node auto-upgrade changes kernels;
       an image tag must exist for every kernel release in the fleet, before the node joins.
 - [ ] **An RWX StorageClass identified** - EFS, Azure Files/ANF, Filestore, or ODF/CephFS - with

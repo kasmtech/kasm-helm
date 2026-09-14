@@ -29,6 +29,13 @@
 */}}
 {{- $anyModule := include "kasmNodePrep.anyBuildModuleEnabled" . -}}
 {{/*
+  True when the script may have to install a package: a module built here needs the toolchain and
+  the kernel headers, and swap needs util-linux in a builder image that lacks it. The package
+  manager detection and the generic installer are rendered only when this holds, so a sysctls-only
+  or KMM-only script carries no package manager at all.
+*/}}
+{{- $needsPackages := or $anyModule $swap.enabled -}}
+{{/*
   True when at least one module built here still has to be fetched over the network, i.e. it has no
   modules.<name>.sourcePath pointing at a source tree baked into the builder image. Everything that
   needs git -- the presence check, the clone helper -- is rendered only when this holds, so a fully
@@ -49,10 +56,18 @@ set -euo pipefail
 RECONCILE_INTERVAL={{ include "kasmNodePrep.shq" (int .Values.reconcileIntervalSeconds) }}
 KERNEL_RELEASE="$(uname -r)"
 {{- if $anyModule }}
+# The kernel build tree the modules are compiled against. Re-pointed by resolve_kernel_build when
+# the tree exists but this symlink does not (see there).
 KERNEL_BUILD="/lib/modules/${KERNEL_RELEASE}/build"
 BUILD_ROOT="/tmp/kasm-node-prep"
 MOK_DIR="/etc/kasm-mok"
 DEPS_READY=""
+{{- end }}
+{{- if $needsPackages }}
+# The package manager this builder image carries (see detect_pkg_manager) and whether apt's package
+# index has been refreshed yet. Both are remembered for the container's lifetime.
+PKG_MANAGER=""
+APT_UPDATED=""
 {{- end }}
 {{- if $swap.enabled }}
 SWAP_DIR={{ include "kasmNodePrep.shq" ($swap.hostPath) }}
@@ -91,6 +106,66 @@ err() {
 scrub_url() {
   printf '%s' "$1" | sed -E 's#(://)[^/@]*@#\1#'
 }
+{{- if $needsPackages }}
+
+# Find the package manager this builder image carries and record it in PKG_MANAGER: apt, dnf,
+# microdnf, yum, tdnf or zypper, checked in that order, or empty when there is none, in which case
+# this returns 1. The lookup runs once per container lifetime.
+detect_pkg_manager() {
+  local tool
+
+  if [ -z "$PKG_MANAGER" ]; then
+    for tool in apt-get dnf microdnf yum tdnf zypper; do
+      if command -v "$tool" >/dev/null 2>&1; then
+        # Keyed on the family name, so apt-get is recorded as apt.
+        PKG_MANAGER="${tool%-get}"
+        break
+      fi
+    done
+  fi
+
+  [ -n "$PKG_MANAGER" ]
+}
+
+# Install the named packages with the builder image's package manager, non-interactively and
+# without recommended or weak dependencies, so only what is asked for lands in the container. apt
+# refreshes its package index once per container lifetime first; the RPM-based managers fetch
+# repository metadata on their own.
+pkg_install() {
+  if ! detect_pkg_manager; then
+    err "No supported package manager (apt-get, dnf, microdnf, yum, tdnf or zypper) was found in this builder image, so $* cannot be installed."
+    return 1
+  fi
+
+  case "$PKG_MANAGER" in
+    apt)
+      if [ -z "$APT_UPDATED" ]; then
+        if ! apt-get update -qq; then
+          err "apt-get update failed. The builder image needs access to its package repositories (or a local mirror)."
+          return 1
+        fi
+        APT_UPDATED=1
+      fi
+      DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$@"
+      ;;
+    dnf)
+      dnf install -y --setopt=install_weak_deps=False "$@"
+      ;;
+    microdnf)
+      microdnf install -y "$@"
+      ;;
+    yum)
+      yum install -y "$@"
+      ;;
+    tdnf)
+      tdnf install -y "$@"
+      ;;
+    zypper)
+      zypper --non-interactive install --no-recommends "$@"
+      ;;
+  esac
+}
+{{- end }}
 {{- if $anyModule }}
 
 # Return 0 when the named module is present in the running kernel. Reads /proc/modules
@@ -116,9 +191,90 @@ module_loaded_wait() {
   return 1
 }
 
+# Point KERNEL_BUILD at the build tree of the running kernel. Every distribution links
+# /lib/modules/<release>/build to it, but on the RPM families that symlink belongs to the kernel
+# package rather than to the headers, so a builder image that installed only kernel-devel has the
+# tree at /usr/src/kernels/<release> and no link to it. Called before the presence check and again
+# after the headers are installed; every make invocation is handed the result explicitly.
+resolve_kernel_build() {
+  if [ -d "/lib/modules/${KERNEL_RELEASE}/build" ]; then
+    KERNEL_BUILD="/lib/modules/${KERNEL_RELEASE}/build"
+  elif [ -d "/usr/src/kernels/${KERNEL_RELEASE}" ]; then
+    KERNEL_BUILD="/usr/src/kernels/${KERNEL_RELEASE}"
+  fi
+}
+
+# The major version of the compiler the kernel was built with, read from CONFIG_CC_VERSION_TEXT in
+# its .config: "aarch64-linux-gnu-gcc-12 (Ubuntu 12.3.0-1ubuntu1~22.04.3) 12.3.0" (Ubuntu names the
+# versioned binary) or "gcc (GCC) 14.2.1 20250110 (Red Hat 14.2.1-13)" (the RPM families name plain
+# gcc and give the version after the vendor). Empty when the build tree carries no .config.
+kernel_gcc_major() {
+  sed -nE 's/^CONFIG_CC_VERSION_TEXT="([^"]*)".*/\1/p' "${KERNEL_BUILD}/.config" 2>/dev/null \
+    | sed -nE -e 's/^[^ ]*gcc-([0-9]+)([^0-9].*)?$/\1/p' -e 's/^[^ ]*gcc \([^)]*\) ([0-9]+)\..*/\1/p' \
+    | head -1
+}
+
+# Make the compiler the kernel was built with the one kbuild finds, when it is not the builder
+# image's default gcc. Two distributions ship kernels ahead of their default compiler:
+#   - Ubuntu's HWE headers pin the exact binary in their Makefile (CC = gcc-12 for the 6.8 kernels
+#     on 22.04) without depending on it, while build-essential brings gcc-11, so every module
+#     compile there fails with "gcc-12: not found". Installing gcc-<N> is enough: the pinned CC
+#     finds it by itself.
+#   - Oracle's UEK R8 (a 6.12 kernel on the el9 userland) is built with gcc 14 from gcc-toolset-14,
+#     which its kernel-uek-devel pulls in, and its Makefile passes flags the system gcc 11 rejects
+#     ("-fmin-function-alignment=8"). kbuild resolves gcc, ld and objcopy through PATH, so the
+#     toolset's bin directory goes first on PATH for the rest of this container's life. The same
+#     mechanism covers any RHEL 9 rebuild whose repositories carry gcc-toolset-<N>.
+# Families with no gcc-toolset (Amazon Linux, Azure Linux, SUSE) build their kernels with their own
+# default gcc, so a mismatch there can only mean a builder image that does not match the node; it
+# is logged and the compile is left to speak for itself.
+ensure_kernel_compiler() {
+  local want have toolset
+
+  want="$(kernel_gcc_major)"
+  if [ -z "$want" ] || command -v "gcc-${want}" >/dev/null 2>&1; then
+    return 0
+  fi
+  have="$(gcc -dumpversion 2>/dev/null | cut -d. -f1)"
+
+  case "$PKG_MANAGER" in
+    apt)
+      log "Kernel ${KERNEL_RELEASE} was built with gcc-${want}, which is not installed; installing it with ${PKG_MANAGER}"
+      if ! pkg_install "gcc-${want}"; then
+        err "Failed to install gcc-${want}, the compiler kernel ${KERNEL_RELEASE} was built with and its build tree requires. Skipping this pass."
+        return 1
+      fi
+      log "Installed gcc-${want}"
+      ;;
+    *)
+      if [ "$want" = "${have:-}" ]; then
+        return 0
+      fi
+      toolset="/opt/rh/gcc-toolset-${want}/root/usr/bin"
+      if [ ! -x "${toolset}/gcc" ]; then
+        case "$PKG_MANAGER" in
+          dnf|microdnf|yum)
+            log "Kernel ${KERNEL_RELEASE} was built with gcc ${want} and this builder image has gcc ${have:-none}; installing gcc-toolset-${want} with ${PKG_MANAGER}"
+            if ! pkg_install "gcc-toolset-${want}" || [ ! -x "${toolset}/gcc" ]; then
+              err "Kernel ${KERNEL_RELEASE} was built with gcc ${want}, this builder image has gcc ${have:-none}, and gcc-toolset-${want} could not be installed. Use a builder image whose repositories carry gcc-toolset-${want} (RHEL 9 and its rebuilds, Oracle Linux 9), or bake it into the image configured by image.registry/image.repository/image.tag. Skipping this pass."
+              return 1
+            fi
+            ;;
+          *)
+            log "Kernel ${KERNEL_RELEASE} was built with gcc ${want} but this builder image has gcc ${have:-none} and no gcc-toolset to switch to; the compile may fail if the kernel's Makefile needs newer compiler flags"
+            return 0
+            ;;
+        esac
+      fi
+      export PATH="${toolset}:${PATH}"
+      log "Using gcc-toolset-${want} (${toolset}) for kernel ${KERNEL_RELEASE}: built with gcc ${want}, builder image has gcc ${have:-none}"
+      ;;
+  esac
+}
+
 # Return 0 when everything this pass needs to build a module is already in the builder image. This
-# runs before any distro-specific logic, so a pre-baked image from any OS family -- not just
-# Debian/Ubuntu -- satisfies it and the script never touches the network.
+# runs before any package manager is even looked for, so a pre-baked image from any OS family
+# satisfies it and the script never touches the network.
 build_deps_present() {
   local tool
 
@@ -151,51 +307,104 @@ build_deps_present() {
 #
 # A builder image that already carries everything short-circuits on build_deps_present and performs
 # no package operations at all -- see the "Airgapped / offline nodes" section of this chart's README.
-# Otherwise the packages are installed from the node OS repositories with apt-get.
+# Otherwise the packages come from the BUILDER IMAGE's own repositories, through whichever package
+# manager it carries. The container shares the node's kernel but not its userland, so this only
+# works when that image is the same distribution family and release as the node: that is the only
+# place the headers package for the node's kernel exists.
 ensure_build_deps() {
+  local -a toolchain
+  local headers_spec
+
   if [ -n "$DEPS_READY" ]; then
     return 0
   fi
 
+  resolve_kernel_build
   if build_deps_present; then
+    # No package manager has been looked up, so this can only switch to a gcc-toolset that is
+    # already baked into the image; it never installs one here.
+    if ! ensure_kernel_compiler; then
+      return 1
+    fi
     DEPS_READY=1
     log "build prerequisites already present; skipping package installation"
     return 0
   fi
 
-  if ! command -v apt-get >/dev/null 2>&1; then
-    err "Build prerequisites are missing and this builder image has no apt-get to install them. Either use a Debian/Ubuntu builder image with access to the node OS package repositories, or pre-bake gcc, make, kmod and the kernel build tree at ${KERNEL_BUILD} into the image configured by image.registry/image.repository. Skipping this pass."
+  if ! detect_pkg_manager; then
+    err "Build prerequisites are missing and this builder image has none of apt-get, dnf, microdnf, yum, tdnf or zypper to install them. Either use a builder image of the node's own distribution family and release (Debian/Ubuntu, RHEL and its rebuilds, Fedora, Amazon Linux, Azure Linux, or openSUSE/SLES) with access to its package repositories, or pre-bake gcc, make, kmod and the kernel build tree at ${KERNEL_BUILD} into the image configured by image.registry/image.repository/image.tag. Skipping this pass."
     return 1
   fi
 
-  log "Installing build dependencies for kernel ${KERNEL_RELEASE}"
-  export DEBIAN_FRONTEND=noninteractive
+  # Per family: the toolchain, and the argument that installs the headers of the running kernel.
+  case "$PKG_MANAGER" in
+    apt)
+      # ca-certificates: the module sources are cloned over HTTPS, and the slim base image
+      # ships no CA bundle, so TLS verification fails without it.
+      # libelf1: kbuild's objtool is dynamically linked against libelf.so.1; without it every
+      # module compile fails with "Error 127" even though gcc and the headers are fine.
+      toolchain=(build-essential git kmod ca-certificates libelf1)
+      headers_spec="linux-headers-${KERNEL_RELEASE}"
+      ;;
+    dnf|microdnf|yum)
+      # RHEL and its rebuilds, Fedora, Amazon Linux. The headers are requested by the path of the
+      # build tree, which these resolve to the package owning it -- kernel-devel, or the variant
+      # matching the running kernel line (kernel6.12-devel on Amazon Linux 2023, kernel-uek-devel
+      # on Oracle UEK). Not /lib/modules/<release>/build, which kernel-core owns and would drag a
+      # whole kernel in, and not a kernel*-devel glob, which also matches kernel-debug-devel.
+      toolchain=(gcc make kmod git ca-certificates elfutils-libelf-devel)
+      headers_spec="/usr/src/kernels/${KERNEL_RELEASE}"
+      ;;
+    tdnf)
+      # Azure Linux. tdnf cannot resolve a path, but accepts the name-version-release form.
+      toolchain=(gcc make binutils kmod git ca-certificates elfutils-libelf-devel)
+      headers_spec="kernel-devel-${KERNEL_RELEASE}"
+      ;;
+    zypper)
+      # openSUSE Leap and SLES. The release is <version>-<flavor> (6.4.0-150600.23.17-default) and
+      # the headers package is kernel-<flavor>-devel, which provides the version without the rpm
+      # release suffix, so the capability form "kernel-default-devel = 6.4.0-150600.23.17" selects
+      # the exact build as one argument. A release without a flavor suffix means the default one.
+      toolchain=(gcc make kmod git ca-certificates libelf-devel)
+      if [[ "$KERNEL_RELEASE" == *-* ]]; then
+        headers_spec="kernel-${KERNEL_RELEASE##*-}-devel = ${KERNEL_RELEASE%-*}"
+      else
+        headers_spec="kernel-default-devel = ${KERNEL_RELEASE}"
+      fi
+      ;;
+    *)
+      err "Package manager ${PKG_MANAGER} has no toolchain mapping in this script. Skipping this pass."
+      return 1
+      ;;
+  esac
 
-  if ! apt-get update -qq; then
-    err "apt-get update failed. The node needs access to its OS package repositories (or a local mirror) to build kernel modules. Skipping this pass."
-    return 1
-  fi
-
-  # ca-certificates: the module sources are cloned over HTTPS, and the slim base image
-  # ships no CA bundle, so TLS verification fails without it.
-  # libelf1: kbuild's objtool is dynamically linked against libelf.so.1; without it every
-  # module compile fails with "Error 127" even though gcc and the headers are fine.
-  if ! apt-get install -y --no-install-recommends build-essential git kmod ca-certificates libelf1; then
-    err "Failed to install build-essential, git, kmod, ca-certificates and libelf1. Skipping this pass."
+  log "Installing build dependencies for kernel ${KERNEL_RELEASE} with ${PKG_MANAGER}"
+  if ! pkg_install "${toolchain[@]}"; then
+    err "Failed to install ${toolchain[*]} with ${PKG_MANAGER}. The builder image needs access to its package repositories (or a local mirror) to build kernel modules. Skipping this pass."
     return 1
   fi
 
   if [ ! -d "$KERNEL_BUILD" ]; then
-    log "No kernel build tree at ${KERNEL_BUILD}; installing linux-headers-${KERNEL_RELEASE}"
-    if ! apt-get install -y --no-install-recommends "linux-headers-${KERNEL_RELEASE}"; then
-      err "Kernel headers package linux-headers-${KERNEL_RELEASE} is not available from the configured apt repositories. Pre-install the matching headers on the node (or use a builder image whose distro ships them) and this pass will succeed on the next reconcile. Skipping this pass."
+    log "No kernel build tree at ${KERNEL_BUILD}; installing ${headers_spec} with ${PKG_MANAGER}"
+    if ! pkg_install "$headers_spec"; then
+      err "Kernel headers for ${KERNEL_RELEASE} could not be installed: ${PKG_MANAGER} found nothing for '${headers_spec}'. The headers come from the builder image's repositories, so image.registry/image.repository/image.tag must name an image of the same distribution family AND release as the node (a Rocky Linux 9 node needs a Rocky Linux 9 builder image, an Ubuntu 22.04 node needs ubuntu:22.04, and so on). Alternatively pre-install the matching headers on the node, pre-bake them into the builder image, or hand the module to KMM (modules.v4l2loopback.method=kmm); this pass will succeed on the next reconcile once the build tree exists. Skipping this pass."
       return 1
     fi
+    resolve_kernel_build
+    if [ ! -d "$KERNEL_BUILD" ]; then
+      err "Installed ${headers_spec}, but no kernel build tree appeared at /lib/modules/${KERNEL_RELEASE}/build or /usr/src/kernels/${KERNEL_RELEASE}. The package that resolved does not match the running kernel; check that the builder image release matches the node's. Skipping this pass."
+      return 1
+    fi
+    log "Kernel build tree for ${KERNEL_RELEASE} is at ${KERNEL_BUILD}"
   else
     log "Kernel build tree already present at ${KERNEL_BUILD}"
   fi
 
-  if [ -d "$MOK_DIR" ] && ! apt-get install -y --no-install-recommends openssl; then
+  if ! ensure_kernel_compiler; then
+    return 1
+  fi
+
+  if [ -d "$MOK_DIR" ] && ! pkg_install openssl; then
     err "Failed to install openssl, which Secure Boot module signing needs. Skipping this pass."
     return 1
   fi
@@ -309,10 +518,11 @@ ensure_v4l2loopback() {
 
   # v4l2loopback links against the kernel's V4L2 core (the videodev module). Minimal kernel
   # flavors -- Ubuntu's -kvm and some cloud kernels -- are built with CONFIG_MEDIA_SUPPORT
-  # unset and ship no videodev at all, so the build can never succeed there. Fail with the
-  # real reason instead of a wall of undefined-symbol modpost errors every pass.
+  # unset and ship no videodev at all, so the build can never succeed there; on other
+  # distributions the core is a module in a package the node may simply not have installed.
+  # Fail with the real reason instead of a wall of undefined-symbol modpost errors every pass.
   if ! modinfo videodev >/dev/null 2>&1 && ! grep -qE '^CONFIG_VIDEO_DEV=(m|y)' "${KERNEL_BUILD}/.config" 2>/dev/null; then
-    err "Kernel ${KERNEL_RELEASE} has no V4L2 core (videodev): CONFIG_MEDIA_SUPPORT/CONFIG_VIDEO_DEV are not enabled in this kernel flavor. Webcam support needs a kernel that ships the V4L2 core -- on Ubuntu, the generic flavor with linux-modules-extra, not the -kvm/cloud flavor. Install such a kernel on the node; skipping v4l2loopback until then."
+    err "Kernel ${KERNEL_RELEASE} has no V4L2 core (videodev): CONFIG_MEDIA_SUPPORT/CONFIG_VIDEO_DEV are not enabled in this kernel flavor, or the package carrying videodev.ko is not installed on the node. Webcam support needs a kernel that ships the V4L2 core. It lives in linux-modules-extra-${KERNEL_RELEASE} on Ubuntu (generic flavor only: the -kvm and cloud flavors are built without media support and can never work, so install the generic kernel there), in kernel-modules on RHEL, Rocky Linux and AlmaLinux (installed by the kernel metapackage), in kernel-modules-extra on Amazon Linux 2023, and in kernel-uek-modules (UEK R7) or kernel-uek-modules-desktop (UEK R8) on Oracle Linux. Install it on the node; skipping v4l2loopback until then."
     return 1
   fi
   # The V4L2 core may exist as a module but not be loaded yet; v4l2loopback needs it present
@@ -328,7 +538,9 @@ ensure_v4l2loopback() {
     return 1
   fi
 
-  if ! make -C "$src"; then
+  # KERNEL_DIR is the v4l2loopback Makefile's name for the kernel tree; passing it keeps the build
+  # off the /lib/modules/<release>/build default, which the RPM families may not have.
+  if ! make -C "$src" KERNEL_DIR="$KERNEL_BUILD"; then
     err "Failed to build v4l2loopback against kernel ${KERNEL_RELEASE}. Skipping this pass."
     return 1
   fi
@@ -337,7 +549,7 @@ ensure_v4l2loopback() {
     return 1
   fi
 
-  if ! make -C "$src" install-module && ! make -C "$KERNEL_BUILD" M="$src" modules_install; then
+  if ! make -C "$src" KERNEL_DIR="$KERNEL_BUILD" install-module && ! make -C "$KERNEL_BUILD" M="$src" modules_install; then
     log "Could not install v4l2loopback into /lib/modules; falling back to inserting the built module directly"
     if ! insmod "${src}/v4l2loopback.ko" "devices=${V4L2_DEVICES}" "exclusive_caps=${V4L2_EXCLUSIVE_CAPS}"; then
       err "insmod of ${src}/v4l2loopback.ko failed. Skipping this pass."
@@ -396,7 +608,9 @@ ensure_wireguard() {
     return 1
   fi
 
-  if ! make -C "${src}/src" module; then
+  # KERNELDIR is wireguard-linux-compat's name for the kernel tree; passing it keeps the build off
+  # the /lib/modules/<release>/build default, which the RPM families may not have.
+  if ! make -C "${src}/src" KERNELDIR="$KERNEL_BUILD" module; then
     err "Failed to build the WireGuard module against kernel ${KERNEL_RELEASE}. Skipping this pass."
     return 1
   fi
@@ -405,7 +619,7 @@ ensure_wireguard() {
     return 1
   fi
 
-  if ! make -C "${src}/src" module-install && ! make -C "$KERNEL_BUILD" M="${src}/src" modules_install; then
+  if ! make -C "${src}/src" KERNELDIR="$KERNEL_BUILD" module-install && ! make -C "$KERNEL_BUILD" M="${src}/src" modules_install; then
     log "Could not install wireguard into /lib/modules; falling back to inserting the built module directly"
     if ! insmod "${src}/src/wireguard.ko"; then
       err "insmod of ${src}/src/wireguard.ko failed. Skipping this pass."
@@ -431,20 +645,37 @@ ensure_wireguard() {
 
 {{- if or $sysctls.enabled $swap.enabled }}
 
-# Set one kernel tunable on the node. "sysctl -w" is idempotent, so this runs every pass; the
-# current value is read first so an already-correct setting stays silent and only real changes
-# reach the log.
+# Collapse runs of tabs and spaces to one space and trim the ends, so a tuple that /proc/sys renders
+# with tabs ("4096<tab>87380<tab>6291456") compares equal to the space-separated value in the chart.
+sysctl_normalize() {
+  printf '%s' "$1" | sed -E 's/[[:blank:]]+/ /g; s/^ //; s/ $//'
+}
+
+# Set one kernel tunable on the node by writing /proc/sys directly, exactly as sysctl(8) would,
+# which spares the builder image from carrying procps. Writing is idempotent, so this runs every
+# pass; the current value is read first so an already-correct setting stays silent and only real
+# changes reach the log.
 apply_sysctl() {
   local key="$1"
   local value="$2"
+  local path
   local current
 
-  current="$(sysctl -n "$key" 2>/dev/null || true)"
-  if [ "$current" = "$value" ]; then
+  # sysctl(8) naming: a key carrying "/" is already a path below /proc/sys, otherwise every "."
+  # separates a path component (so a "." inside an interface name is written as a path key,
+  # net/ipv4/conf/eth0.1/rp_filter).
+  if [[ "$key" == */* ]]; then
+    path="/proc/sys/${key}"
+  else
+    path="/proc/sys/${key//.//}"
+  fi
+
+  current="$(cat "$path" 2>/dev/null || true)"
+  if [ "$(sysctl_normalize "$current")" = "$(sysctl_normalize "$value")" ]; then
     return 0
   fi
 
-  if ! sysctl -w "${key}=${value}" >/dev/null 2>&1; then
+  if ! printf '%s\n' "$value" >"$path" 2>/dev/null; then
     err "Failed to set ${key}=${value}. Either the node kernel does not expose that tunable, or this container is not sharing the node's sysctl namespace. Skipping it this pass."
     return 1
   fi
@@ -468,14 +699,44 @@ ensure_sysctls() {
 {{- end }}
 {{- if $swap.enabled }}
 
-# Return 0 when our swapfile is already active on this node. The host directory is mounted at the
-# same path inside the container, so the name /proc/swaps reports is identical on both sides. The
-# here-string (rather than a pipe into grep -q) keeps "set -o pipefail" out of the picture.
-swap_active() {
-  local active
+# Make sure swapon and mkswap are available. Both ship in util-linux, which the Debian and Ubuntu
+# base images carry but the Amazon Linux and Azure Linux ones do not. A builder image that already
+# has them is left untouched: no package operation, nothing logged.
+ensure_swap_tools() {
+  if command -v swapon >/dev/null 2>&1 && command -v mkswap >/dev/null 2>&1; then
+    return 0
+  fi
 
-  active="$(swapon --show=NAME --noheadings 2>/dev/null || true)"
-  grep -qxF "$SWAP_FILE" <<<"$active"
+  if ! detect_pkg_manager; then
+    err "swapon or mkswap is missing from this builder image, and it has none of apt-get, dnf, microdnf, yum, tdnf or zypper to install util-linux with. Use a builder image that ships util-linux, or bake it into the image configured by image.registry/image.repository/image.tag. Skipping swap this pass."
+    return 1
+  fi
+
+  log "swapon or mkswap is missing from this builder image; installing util-linux with ${PKG_MANAGER}"
+  if ! pkg_install util-linux; then
+    err "Failed to install util-linux with ${PKG_MANAGER}, which provides swapon and mkswap. The builder image needs access to its package repositories (or a local mirror), or util-linux baked in. Skipping swap this pass."
+    return 1
+  fi
+}
+
+# Return 0 when our swapfile is already active on this node, read straight from /proc/swaps. The
+# host directory is mounted at the same path inside the container, so the entry normally reads
+# identically on both sides -- but the kernel renders each entry's path relative to the mount the
+# file was activated through, and a replacement pod (an upgrade, a crash, a new builder image) holds
+# a different mount of the same directory, from which that path is unreachable and collapses to a
+# bare "/kasm.swap". Matching the chart-owned file name as well as the full path keeps a pod restart
+# from taking an active swapfile for a missing one and failing mkswap on it every pass. Only entries
+# of type "file" count, so a swap partition of the same name elsewhere cannot satisfy this.
+swap_active() {
+  local name type
+
+  while read -r name type _; do
+    if [ "$type" = file ] && { [ "$name" = "$SWAP_FILE" ] || [ "${name##*/}" = "${SWAP_FILE##*/}" ]; }; then
+      return 0
+    fi
+  done </proc/swaps
+
+  return 1
 }
 {{- if not $swap.force }}
 
@@ -536,6 +797,10 @@ swap_size_mib() {
 ensure_swap() {
   local size
   local existing_bytes
+
+  if ! ensure_swap_tools; then
+    return 1
+  fi
 
   if swap_active; then
     log "swapfile ${SWAP_FILE} is already active"

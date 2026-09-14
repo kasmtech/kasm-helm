@@ -8,12 +8,20 @@ nameOverride: ""
 #
 fullnameOverride: ""
 
-# Configure the builder image used by the node prep DaemonSet. The container shares the node's kernel, so
-# `uname -r` inside it reports the node kernel and the matching kernel headers package can be installed at
-# runtime. When packages have to be installed the image must be Debian/Ubuntu based (the reconcile script
-# uses `apt-get`); a pre-baked builder image that already carries the toolchain, `kmod`, the kernel build
-# tree, and the module sources (`modules.*.sourcePath`) skips package installation entirely and may be
-# built on any OS family. See "Airgapped / offline nodes" in this chart's README.
+# Configure the builder image used by the node prep DaemonSet. The container shares the node's kernel but
+# not its userland: `uname -r` inside it reports the node kernel, and the matching kernel headers are
+# installed at runtime from the builder image's own package repositories, never the node's. So when
+# packages have to be installed, the image must be the same distribution family AND release as the node —
+# the default `ubuntu:22.04` matches Ubuntu 22.04 nodes, an Ubuntu 24.04 node needs `ubuntu:24.04`, an
+# Amazon Linux 2023 node needs `amazonlinux:2023`. The reconcile script detects the package manager the
+# image carries and branches on it: `apt-get` (Debian, Ubuntu), `dnf`/`yum`/`microdnf` (RHEL 8/9, Rocky,
+# Alma, Oracle, CentOS Stream, Fedora, Amazon Linux 2023), `tdnf` (Azure Linux 3) and `zypper` (openSUSE
+# Leap, SLES); an image with none of them logs an error naming all six. A pre-baked builder image that
+# already carries the toolchain, `kmod`, the kernel build tree, and the module sources
+# (`modules.*.sourcePath`) skips package installation entirely and may be built on any OS family. One
+# DaemonSet has one builder image, so a fleet mixing node families needs one release per family. See
+# "Builder image per node image" (the table under Node prerequisites) and "Airgapped / offline nodes" in
+# this chart's README.
 #
 image:
   # image.registry -- Container registry that hosts the builder image. Point this at a private registry or a
@@ -72,9 +80,13 @@ modules:
     #
     sourceRepo: https://github.com/umlaeute/v4l2loopback.git
     # modules.v4l2loopback.sourceRef -- Git tag, branch, or commit to build. Pinning a released tag keeps
-    # builds reproducible across nodes.
+    # builds reproducible across nodes. Do not pin below v0.15: RHEL 9.8's 5.14.0-687 kernel dropped the
+    # `from_timer` helper that v0.13's timer-API probe relies on, so v0.13.2 fails there with `implicit
+    # declaration of function 'setup_timer'`; v0.15.4 compiles against every kernel this chart was tested
+    # on (Ubuntu 22.04 5.15 and 6.8, RHEL 9.8 5.14, Amazon Linux 2023 6.12, openSUSE Leap 15.6 6.4, Azure
+    # Linux 3 6.6).
     #
-    sourceRef: v0.13.2
+    sourceRef: v0.15.4
     # modules.v4l2loopback.sourceRepoSecret -- Name of an existing Secret in the release namespace holding the
     # HTTPS login for `modules.v4l2loopback.sourceRepo`, with keys `username` and `password` (a read-only
     # deploy token works). The reconcile script hands them to git through a credential helper, so they never
@@ -143,11 +155,12 @@ modules:
       #
       build:
         # modules.v4l2loopback.kmm.build.enabled -- Let KMM build the kmod image in the cluster. The build
-        # pod needs to reach the distribution's `linux-headers-<kernel>` package, the module source in
-        # `modules.v4l2loopback.sourceRepo`, and the registry above (to push). Set to `false` for the
-        # airgapped path: no Dockerfile ConfigMap is rendered and no `build` block appears on the `Module`,
-        # so KMM only ever *pulls* images you built in connected CI and mirrored, one
-        # `<registry>/<repository>:<kernel release>` tag per kernel in the fleet.
+        # pod needs to reach the distribution's kernel headers package for that kernel (the builder image's
+        # family decides which one — `image.*` must match the node family and release, exactly as for the
+        # DaemonSet), the module source in `modules.v4l2loopback.sourceRepo`, and the registry above (to
+        # push). Set to `false` for the airgapped path: no Dockerfile ConfigMap is rendered and no `build`
+        # block appears on the `Module`, so KMM only ever *pulls* images you built in connected CI and
+        # mirrored, one `<registry>/<repository>:<kernel release>` tag per kernel in the fleet.
         #
         enabled: true
       # Configure Secure Boot signing of the built module. KMM signs inside the cluster, after the build
@@ -207,15 +220,16 @@ modules:
 # the reconcile loop re-asserts the state every pass, which is what makes it survive a node reboot.
 #
 tuning:
-  # Kernel tunables re-applied with `sysctl -w` on every reconcile pass.
+  # Kernel tunables re-applied on every reconcile pass by writing the node's `/proc/sys` directly.
   #
   sysctls:
     # tuning.sysctls.enabled -- Apply `tuning.sysctls.values` on every matching node. The DaemonSet is
     # already privileged, so it can write the node's `/proc/sys`; no extra host mount is needed.
     #
     enabled: false
-    # tuning.sysctls.values -- Kernel tunables to set, as `key: value` pairs, applied with `sysctl -w` once
-    # per reconcile pass. Setting an already-correct value is a no-op, and because nothing is persisted to
+    # tuning.sysctls.values -- Kernel tunables to set, as `key: value` pairs, written straight to the node's
+    # `/proc/sys` once per reconcile pass (no `sysctl` binary is needed in the builder image). Setting an
+    # already-correct value is a no-op, and because nothing is persisted to
     # `/etc/sysctl.d` the loop is also what re-applies them after a node reboot. The defaults raise the
     # inotify limits for desktop-session density: every session runs a desktop environment, a file manager
     # and a browser, each of which consumes inotify instances and watches. The kernel's limit of 128

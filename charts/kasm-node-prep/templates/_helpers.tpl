@@ -148,13 +148,28 @@ app.kubernetes.io/part-of: kasm-ai
   Name of the KMM Module custom resource, and of the ConfigMap holding the Dockerfile it is built
   from. Both are suffixed with the module name so a second module delegated to KMM later does not
   collide with this one.
+
+  Deliberately much shorter than the chart's other resources: <release>-v4l2 rather than
+  <release>-kasm-node-prep-v4l2loopback. KMM's admission webhook (v2.7.0) refuses a Module whose
+  name and namespace together exceed 41 characters, because it has to fit both into one 63-character
+  label value. The chart name pushes every realistic umbrella install past that
+  (kasm-agent-kasm-node-prep-v4l2loopback in namespace kasm-agent is 48), and even the bare module
+  name is too long for ordinary pairs such as kasm-agent-prod in kasm-agent-prod (43). The
+  four-character suffix leaves 37 for release name plus namespace; the module it stands for is
+  spelled out in spec.moduleLoader.container.modprobe.moduleName. fullnameOverride still wins when
+  set, so an operator who needs a specific prefix keeps it; validateMethods then applies the same
+  41-character rule at render time, so the limit surfaces from Helm rather than from the webhook.
 */}}
+{{- define "kasmNodePrep.kmmNameBase" -}}
+{{- default .Release.Name .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
 {{- define "kasmNodePrep.kmmModuleName" -}}
-{{- printf "%s-v4l2loopback" (include "kasmNodePrep.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- printf "%s-v4l2" (include "kasmNodePrep.kmmNameBase" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{- define "kasmNodePrep.kmmDockerfileConfigMapName" -}}
-{{- printf "%s-v4l2loopback-dockerfile" (include "kasmNodePrep.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- printf "%s-v4l2-dockerfile" (include "kasmNodePrep.kmmNameBase" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{/*
@@ -216,6 +231,11 @@ app.kubernetes.io/part-of: kasm-ai
 {{- end -}}
 {{- if not $kmm.image.repository -}}
 {{- fail "kasm-node-prep: modules.v4l2loopback.kmm.image.repository must be set when modules.v4l2loopback.method=kmm. KMM loads the module from a container image, so it needs a repository to pull it from (and, with kmm.build.enabled, to push the built image to)." -}}
+{{- end -}}
+{{- $moduleName := include "kasmNodePrep.kmmModuleName" . -}}
+{{- $combined := add (len $moduleName) (len .Release.Namespace) -}}
+{{- if gt $combined 41 -}}
+{{- fail (printf "kasm-node-prep: the KMM Module name %q and its namespace %q have a combined length of %d characters, and KMM's admission webhook refuses more than 41 (it has to fit both into one label value). Use a shorter release name or namespace, or set fullnameOverride to something shorter." $moduleName .Release.Namespace $combined) -}}
 {{- end -}}
 {{- if $v4l2.sourcePath -}}
 {{- fail "kasm-node-prep: modules.v4l2loopback.sourcePath applies to method=build only -- it points at a source tree inside this chart's builder image, which a KMM build pod never runs. A KMM in-cluster build clones modules.v4l2loopback.sourceRepo; for an airgapped fleet set modules.v4l2loopback.kmm.build.enabled=false and pull prebuilt per-kernel images instead." -}}

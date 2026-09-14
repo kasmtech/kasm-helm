@@ -27,7 +27,7 @@ Both need the **same** thing out of band: the public key enrolled in each node's
 - Distro variants: this is overwhelmingly a **bare-metal and private-cloud** concern. **EKS, GKE and AKS** leave Secure Boot off on their default node images (GCE Shielded VMs can enable it; if you did, you own this page). **k3s / kubeadm** make no difference here - the gate is the node's firmware, not the distribution. **OpenShift**: KMM is the native path; the signing values below are the same.
 - Console or out-of-band access to every node: MOK enrolment is confirmed in the **UEFI MOK Manager at boot**, not from `kubectl` or SSH.
 - `openssl` and `mokutil` available on a workstation and on the nodes respectively.
-- Build mode only: the builder image must carry `openssl` - the kernel's `sign-file` helper needs it. The stock `ubuntu:22.04` builder installs it at runtime; a pre-baked airgap image must include it (see [kasm-node-prep § Build and push the builder image](../../../charts/kasm-node-prep/README.md#build-and-push-the-builder-image)).
+- Build mode only: the builder image must carry `openssl` - the kernel's `sign-file` helper needs it. A stock distribution builder image (the default `ubuntu:22.04`, or whichever image of the node's own family and release `nodePrep.image.*` names) installs it at runtime through its package manager; a pre-baked airgap image must include it (see [kasm-node-prep § Build and push the builder image](../../../charts/kasm-node-prep/README.md#build-and-push-the-builder-image)). RHEL 8 is a concrete reason the builder must match the node family: its `sign-file` links OpenSSL 1.1, which `ubuntu:22.04` does not ship.
 - KMM mode + airgap only: mirror the KMM **sign** image too - `make images-agent` lists it under `# KMM mode`, flagged as Secure Boot only.
 - The namespace must already permit the `privileged` PSS: [privileged workloads and cluster policy](privileged-workloads.md).
 
@@ -157,7 +157,7 @@ Both need the **same** thing out of band: the public key enrolled in each node's
 5. KMM mode: signing is a KMM stage, so read it there  - 
 
    ```console
-   kubectl describe module kasm-agent-kasm-node-prep-v4l2loopback
+   kubectl describe module kasm-agent-v4l2
    kubectl logs -n kmm-operator-system deploy/kmm-operator-controller
    ```
 

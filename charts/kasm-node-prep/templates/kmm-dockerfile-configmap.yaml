@@ -20,23 +20,105 @@
 # dirName defaulting to /opt -- plus a depmod index rooted at that prefix.
 #
 # KERNEL_FULL_VERSION is supplied by KMM, once per kernel release it finds on a selected node.
+#
+# The builder image (image.registry/image.repository/image.tag) may be Debian or RPM based. Rather
+# than a chart value naming the family, each RUN below asks the image which package manager it
+# has -- apt-get, then dnf, microdnf, yum, tdnf, zypper -- the same way the reconcile script does
+# on the node, and fails the build with a message naming all six when it finds none.
 ARG KERNEL_FULL_VERSION
 
 FROM {{ $builder }} AS builder
 
 ARG KERNEL_FULL_VERSION
 
-# libelf1: kbuild's objtool is dynamically linked against libelf.so.1, and without it every module
-# compile fails with "Error 127" even though gcc and the headers are fine. ca-certificates: the
-# module source is cloned over HTTPS.
-RUN apt-get update \
- && apt-get install -y --no-install-recommends \
-      build-essential \
-      git \
-      ca-certificates \
-      libelf1 \
-      "linux-headers-${KERNEL_FULL_VERSION}" \
- && rm -rf /var/lib/apt/lists/*
+# libelf: kbuild's objtool is dynamically linked against libelf.so.1, and without it every module
+# compile fails with "Error 127" even though gcc and the headers are fine -- libelf1 on Debian,
+# elfutils-libelf-devel or libelf-devel on the RPM families. ca-certificates: the module source is
+# cloned over HTTPS.
+#
+# The headers package is named differently by every family, and the target kernel is not the one
+# the build pod runs on, so the release has to be spelled into the request:
+#   apt-get            linux-headers-<release>.
+#   dnf/microdnf/yum   the *path* /usr/src/kernels/<release>. dnf resolves a path to the package
+#                      owning it, which is exactly the -devel package of that release -- kernel-devel,
+#                      kernel6.12-devel (Amazon Linux 2023's second kernel line) or kernel-uek-devel
+#                      (Oracle UEK) -- without this file having to know its name. Neither
+#                      /lib/modules/<release>/build (kernel-core owns that symlink, so dnf would
+#                      install a whole kernel) nor a kernel*-devel-<release> glob (it matches
+#                      kernel-debug-devel too) would do.
+#   tdnf               kernel-devel-<release>; tdnf cannot resolve a path.
+#   zypper             one -devel package per kernel flavor (kernel-default-devel, kernel-64kb-devel,
+#                      ...), and the flavor is the last dash-separated word of the release, e.g.
+#                      6.4.0-150600.23.17-default: that word picks the package, the rest pins its
+#                      version. A release with no flavor suffix falls back to kernel-default-devel.
+#
+# Ubuntu's HWE kernels are built with a newer gcc than the release's build-essential provides, and
+# their headers pin it (CC = gcc-12 in the 6.8 HWE Makefile on 22.04), so on the apt-get family the
+# compiler the kernel's own config names is installed too when it is not already present.
+RUN set -eu; \
+    if command -v apt-get >/dev/null 2>&1; then \
+      apt-get update \
+      && apt-get install -y --no-install-recommends \
+           build-essential git ca-certificates libelf1 \
+           "linux-headers-${KERNEL_FULL_VERSION}" \
+      && cc="$(sed -n 's/^CONFIG_CC_VERSION_TEXT="\([^ ]*\).*/\1/p' "/lib/modules/${KERNEL_FULL_VERSION}/build/.config" 2>/dev/null || true)" \
+      && case "${cc}" in \
+           *gcc-[0-9]*) command -v "gcc-${cc##*gcc-}" >/dev/null 2>&1 \
+             || apt-get install -y --no-install-recommends "gcc-${cc##*gcc-}" ;; \
+         esac \
+      && rm -rf /var/lib/apt/lists/*; \
+    elif command -v dnf >/dev/null 2>&1; then \
+      dnf install -y --setopt=install_weak_deps=False \
+           gcc make git ca-certificates elfutils-libelf-devel \
+           "/usr/src/kernels/${KERNEL_FULL_VERSION}" \
+      && dnf clean all; \
+    elif command -v microdnf >/dev/null 2>&1; then \
+      microdnf install -y \
+           gcc make git ca-certificates elfutils-libelf-devel \
+           "/usr/src/kernels/${KERNEL_FULL_VERSION}" \
+      && microdnf clean all; \
+    elif command -v yum >/dev/null 2>&1; then \
+      yum install -y \
+           gcc make git ca-certificates elfutils-libelf-devel \
+           "/usr/src/kernels/${KERNEL_FULL_VERSION}" \
+      && yum clean all; \
+    elif command -v tdnf >/dev/null 2>&1; then \
+      tdnf install -y \
+           gcc make binutils git ca-certificates elfutils-libelf-devel \
+           "kernel-devel-${KERNEL_FULL_VERSION}" \
+      && tdnf clean all; \
+    elif command -v zypper >/dev/null 2>&1; then \
+      flavor="${KERNEL_FULL_VERSION##*-}"; \
+      if [ "${flavor}" = "${KERNEL_FULL_VERSION}" ]; then \
+        headers="kernel-default-devel = ${KERNEL_FULL_VERSION}"; \
+      else \
+        headers="kernel-${flavor}-devel = ${KERNEL_FULL_VERSION%-*}"; \
+      fi; \
+      zypper --non-interactive install --no-recommends \
+           gcc make git ca-certificates libelf-devel "${headers}" \
+      && zypper --non-interactive clean --all; \
+    else \
+      echo "kasm-node-prep: builder image" {{ include "kasmNodePrep.shq" $builder }} "has none of apt-get, dnf, microdnf, yum, tdnf or zypper, so the kernel headers and toolchain cannot be installed. Point image.registry/image.repository/image.tag at a Debian, Ubuntu, RHEL-family, Amazon Linux, Azure Linux or SUSE image." >&2; \
+      exit 1; \
+    fi
+
+# The compiler the kernel was built with, when it is newer than the image's default gcc. The
+# apt-get branch above handles Ubuntu's pinned gcc-<N>; on the RPM families the mechanism is a
+# gcc-toolset: Oracle's UEK R8 (6.12 on el9) is built with gcc 14 from gcc-toolset-14, which its
+# kernel-uek-devel already pulls in, and its Makefile passes flags the system gcc 11 rejects. The
+# major version comes from the kernel's own .config; a missing toolset is installed when the
+# package manager knows one, and the make step below puts it first on PATH.
+RUN set -eu; \
+    cfg="/lib/modules/${KERNEL_FULL_VERSION}/build/.config"; \
+    [ -f "${cfg}" ] || cfg="/usr/src/kernels/${KERNEL_FULL_VERSION}/.config"; \
+    want="$(sed -nE 's/^CONFIG_CC_VERSION_TEXT="[^ ]*gcc \([^)]*\) ([0-9]+)\..*/\1/p' "${cfg}" 2>/dev/null || true)"; \
+    have="$(gcc -dumpversion 2>/dev/null | cut -d. -f1 || true)"; \
+    if [ -n "${want}" ] && [ "${want}" != "${have}" ] && [ ! -x "/opt/rh/gcc-toolset-${want}/root/usr/bin/gcc" ]; then \
+      if command -v dnf >/dev/null 2>&1; then dnf install -y --setopt=install_weak_deps=False "gcc-toolset-${want}" && dnf clean all; \
+      elif command -v microdnf >/dev/null 2>&1; then microdnf install -y "gcc-toolset-${want}" && microdnf clean all; \
+      elif command -v yum >/dev/null 2>&1; then yum install -y "gcc-toolset-${want}" && yum clean all; \
+      else echo "kasm-node-prep: kernel ${KERNEL_FULL_VERSION} was built with gcc ${want}, this image has gcc ${have:-none}, and it has no gcc-toolset to switch to; the compile may fail" >&2; fi; \
+    fi
 
 WORKDIR /usr/src
 {{- if $v4l2.sourceRef }}
@@ -47,16 +129,60 @@ RUN git clone --depth 1 {{ include "kasmNodePrep.shq" $v4l2.sourceRepo }} v4l2lo
 
 # KERNELRELEASE rather than the default `uname -r`: this build runs in a pod on some cluster node
 # whose own kernel has nothing to do with the kernel this image is being built for.
-RUN make -C /usr/src/v4l2loopback KERNELRELEASE="${KERNEL_FULL_VERSION}"
+#
+# KERNEL_DIR rather than the Makefile's default of /lib/modules/<release>/build: that symlink is
+# created by the Debian headers package, but on the RPM families it belongs to the kernel package
+# itself, which is not installed here -- only the -devel package is, and it puts the build tree at
+# /usr/src/kernels/<release>. The symlink is used when it exists, the tree directly otherwise.
+#
+# Only the v4l2loopback.ko target: the default target also builds the userspace v4l2loopback-ctl,
+# which nothing here ships and which needs libc headers a minimal builder image may not carry.
+#
+# A gcc-toolset matching the kernel's compiler (see the RUN above) goes first on PATH, where kbuild
+# looks up gcc, ld and objcopy.
+RUN set -eu; \
+    kernel_dir="/lib/modules/${KERNEL_FULL_VERSION}/build"; \
+    [ -d "${kernel_dir}" ] || kernel_dir="/usr/src/kernels/${KERNEL_FULL_VERSION}"; \
+    if [ ! -d "${kernel_dir}" ]; then \
+      echo "kasm-node-prep: no kernel build tree for ${KERNEL_FULL_VERSION} at /lib/modules/${KERNEL_FULL_VERSION}/build or /usr/src/kernels/${KERNEL_FULL_VERSION}; the headers package installed above did not provide one." >&2; \
+      exit 1; \
+    fi; \
+    want="$(sed -nE 's/^CONFIG_CC_VERSION_TEXT="[^ ]*gcc \([^)]*\) ([0-9]+)\..*/\1/p' "${kernel_dir}/.config" 2>/dev/null || true)"; \
+    if [ -n "${want}" ] && [ -x "/opt/rh/gcc-toolset-${want}/root/usr/bin/gcc" ]; then \
+      export PATH="/opt/rh/gcc-toolset-${want}/root/usr/bin:${PATH}"; \
+    fi; \
+    make -C /usr/src/v4l2loopback KERNELRELEASE="${KERNEL_FULL_VERSION}" KERNEL_DIR="${kernel_dir}" v4l2loopback.ko
 
 FROM {{ $builder }}
 
 ARG KERNEL_FULL_VERSION
 
-# kmod, for the depmod below. Nothing else from the build stage is carried over.
-RUN apt-get update \
- && apt-get install -y --no-install-recommends kmod \
- && rm -rf /var/lib/apt/lists/*
+# kmod, for the depmod below, found through the same package manager detection as the build stage.
+# Nothing else from the build stage is carried over.
+RUN set -eu; \
+    if command -v apt-get >/dev/null 2>&1; then \
+      apt-get update \
+      && apt-get install -y --no-install-recommends kmod \
+      && rm -rf /var/lib/apt/lists/*; \
+    elif command -v dnf >/dev/null 2>&1; then \
+      dnf install -y --setopt=install_weak_deps=False kmod \
+      && dnf clean all; \
+    elif command -v microdnf >/dev/null 2>&1; then \
+      microdnf install -y kmod \
+      && microdnf clean all; \
+    elif command -v yum >/dev/null 2>&1; then \
+      yum install -y kmod \
+      && yum clean all; \
+    elif command -v tdnf >/dev/null 2>&1; then \
+      tdnf install -y kmod \
+      && tdnf clean all; \
+    elif command -v zypper >/dev/null 2>&1; then \
+      zypper --non-interactive install --no-recommends kmod \
+      && zypper --non-interactive clean --all; \
+    else \
+      echo "kasm-node-prep: builder image" {{ include "kasmNodePrep.shq" $builder }} "has none of apt-get, dnf, microdnf, yum, tdnf or zypper, so kmod (for depmod) cannot be installed. Point image.registry/image.repository/image.tag at a Debian, Ubuntu, RHEL-family, Amazon Linux, Azure Linux or SUSE image." >&2; \
+      exit 1; \
+    fi
 
 RUN mkdir -p /opt/lib/modules/${KERNEL_FULL_VERSION}/extra
 COPY --from=builder /usr/src/v4l2loopback/v4l2loopback.ko /opt/lib/modules/${KERNEL_FULL_VERSION}/extra/

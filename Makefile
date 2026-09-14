@@ -134,7 +134,14 @@ KMM_KUSTOMIZE_URL := https://github.com/kubernetes-sigs/kernel-module-management
 # charts/kasm-node-prep/README.md.
 KMM_IMAGE_REGISTRY ?=
 # The upstream image paths (registry stripped) the mirror substitution and images-agent both build on.
-# Pinned to $(KMM_VERSION) here; kaniko is versioned independently (see KMM_KANIKO_IMAGE).
+# Pinned to $(KMM_IMAGE_TAG) here; kaniko is versioned independently (see KMM_KANIKO_IMAGE).
+#
+# KMM publishes its images to a *staging* registry that tags release builds v<build date>-<version>;
+# there is no bare v2.7.0 tag, and :latest (which the kustomize overlay references) is a rolling CI
+# build. Verified 2026-09-14: the operator, webhook-server, worker and signimage images all exist at
+# this tag (linux/amd64), while :latest webhook-server failed on an x86_64 node with "exec format
+# error" and a bare :v2.7.0 was NotFound. Bump this together with KMM_VERSION.
+KMM_IMAGE_TAG := v20260812-v2.7.0
 KMM_UPSTREAM_REGISTRY := gcr.io
 KMM_OPERATOR_PATH := k8s-staging-kmm/kernel-module-management-operator
 KMM_WEBHOOK_PATH := k8s-staging-kmm/kernel-module-management-webhook-server
@@ -150,10 +157,10 @@ KMM_KANIKO_VERSION := v1.23.2
 # applies (`kubectl set image` for operator+webhook, `kubectl set env` for the operator's RELATED_IMAGE_*
 # variables). The mirror keeps the upstream path suffix, so only the leading registry changes.
 KMM_IMAGE_PREFIX := $(if $(strip $(KMM_IMAGE_REGISTRY)),$(strip $(KMM_IMAGE_REGISTRY)),$(KMM_UPSTREAM_REGISTRY))
-KMM_OPERATOR_IMAGE := $(KMM_IMAGE_PREFIX)/$(KMM_OPERATOR_PATH):$(KMM_VERSION)
-KMM_WEBHOOK_IMAGE := $(KMM_IMAGE_PREFIX)/$(KMM_WEBHOOK_PATH):$(KMM_VERSION)
-KMM_WORKER_IMAGE := $(KMM_IMAGE_PREFIX)/$(KMM_WORKER_PATH):$(KMM_VERSION)
-KMM_SIGN_IMAGE := $(KMM_IMAGE_PREFIX)/$(KMM_SIGN_PATH):$(KMM_VERSION)
+KMM_OPERATOR_IMAGE := $(KMM_IMAGE_PREFIX)/$(KMM_OPERATOR_PATH):$(KMM_IMAGE_TAG)
+KMM_WEBHOOK_IMAGE := $(KMM_IMAGE_PREFIX)/$(KMM_WEBHOOK_PATH):$(KMM_IMAGE_TAG)
+KMM_WORKER_IMAGE := $(KMM_IMAGE_PREFIX)/$(KMM_WORKER_PATH):$(KMM_IMAGE_TAG)
+KMM_SIGN_IMAGE := $(KMM_IMAGE_PREFIX)/$(KMM_SIGN_PATH):$(KMM_IMAGE_TAG)
 KMM_BUILD_IMAGE := $(KMM_IMAGE_PREFIX)/$(KMM_KANIKO_PATH):$(KMM_KANIKO_VERSION)
 # The kustomize default overlay deploys into this namespace with these Deployment/container names (KMM
 # v2.7.0). kmm-install-mirrored targets them directly, so a rename upstream would need updating here.
@@ -649,11 +656,11 @@ images-agent: render-agent ## List every container image the kasm-agent manifest
 	      echo "# delegates a module to KMM. Shown at their upstream $(KMM_UPSTREAM_REGISTRY) paths;"; \
 	      echo "# kmm-install-mirrored repoints them at <mirror>/<same-path>. See the KMM offline runbook"; \
 	      echo "# in charts/kasm-node-prep/README.md."; \
-	      echo "$(KMM_UPSTREAM_REGISTRY)/$(KMM_OPERATOR_PATH):$(KMM_VERSION)   # operator (always)"; \
-	      echo "$(KMM_UPSTREAM_REGISTRY)/$(KMM_WEBHOOK_PATH):$(KMM_VERSION)   # webhook (always)"; \
-	      echo "$(KMM_UPSTREAM_REGISTRY)/$(KMM_WORKER_PATH):$(KMM_VERSION)   # worker (always; operator env RELATED_IMAGE_WORKER)"; \
+	      echo "$(KMM_UPSTREAM_REGISTRY)/$(KMM_OPERATOR_PATH):$(KMM_IMAGE_TAG)   # operator (always)"; \
+	      echo "$(KMM_UPSTREAM_REGISTRY)/$(KMM_WEBHOOK_PATH):$(KMM_IMAGE_TAG)   # webhook (always)"; \
+	      echo "$(KMM_UPSTREAM_REGISTRY)/$(KMM_WORKER_PATH):$(KMM_IMAGE_TAG)   # worker (always; operator env RELATED_IMAGE_WORKER)"; \
 	      echo "$(KMM_UPSTREAM_REGISTRY)/$(KMM_KANIKO_PATH):$(KMM_KANIKO_VERSION)   # build/kaniko -- only in-cluster build mode (kmm.build.enabled=true; RELATED_IMAGE_BUILD; pin at your discretion)"; \
-	      echo "$(KMM_UPSTREAM_REGISTRY)/$(KMM_SIGN_PATH):$(KMM_VERSION)   # sign -- only Secure Boot (kmm.sign.enabled=true; RELATED_IMAGE_SIGN)"; \
+	      echo "$(KMM_UPSTREAM_REGISTRY)/$(KMM_SIGN_PATH):$(KMM_IMAGE_TAG)   # sign -- only Secure Boot (kmm.sign.enabled=true; RELATED_IMAGE_SIGN)"; \
 	      echo "# Per-kernel prebuilt module images (Mode A, kmm.build.enabled=false) -- you build and mirror these:"; \
 	      echo "<your-registry>/<repo>:<kernel-version>  # one per fleet kernel, see KMM offline runbook"; \
 	    } >> dist/kasm-agent-images.txt; \
@@ -667,24 +674,38 @@ images-agent: render-agent ## List every container image the kasm-agent manifest
 # KMM is installed once per cluster, out of band from any Helm release: it owns the Module CRD and
 # runs the controller that builds the kmod image and loads the module on each node. Applying the
 # chart's Module CR without it leaves a resource nothing reconciles.
-kmm-install: $(KUBECTL) ## Install the Kernel Module Management operator at the pinned KMM_VERSION -- the cluster prerequisite for nodePrep.modules.v4l2loopback.method=kmm
+# The online install. `kubectl apply -k` at the pinned ref, then the operator's five images are
+# repinned from the overlay's :latest to $(KMM_IMAGE_TAG) (kaniko to $(KMM_KANIKO_VERSION)) -- see
+# kmm-install-mirrored for why that is `kubectl set image` for operator+webhook and `kubectl set env`
+# for worker/build/sign. The pinning is not optional: :latest is a rolling CI build of the staging
+# registry, and on 2026-09-14 its webhook-server image did not even run on x86_64. The overlay also
+# creates a cert-manager Issuer and Certificate for the webhook, so cert-manager must already be
+# installed in the cluster; without it the apply fails on those two kinds and the webhook never gets a
+# certificate.
+kmm-install: $(KUBECTL) ## Install the Kernel Module Management operator at the pinned KMM_VERSION (needs cert-manager) -- the cluster prerequisite for nodePrep.modules.v4l2loopback.method=kmm
 	$(KUBECTL) apply -k "$(KMM_KUSTOMIZE_URL)"
+	$(KUBECTL) -n $(KMM_NAMESPACE) set image deployment/$(KMM_CONTROLLER_DEPLOY) $(KMM_CONTROLLER_CONTAINER)=$(KMM_UPSTREAM_REGISTRY)/$(KMM_OPERATOR_PATH):$(KMM_IMAGE_TAG)
+	$(KUBECTL) -n $(KMM_NAMESPACE) set image deployment/$(KMM_WEBHOOK_DEPLOY) $(KMM_WEBHOOK_CONTAINER)=$(KMM_UPSTREAM_REGISTRY)/$(KMM_WEBHOOK_PATH):$(KMM_IMAGE_TAG)
+	$(KUBECTL) -n $(KMM_NAMESPACE) set env deployment/$(KMM_CONTROLLER_DEPLOY) \
+	  RELATED_IMAGE_WORKER=$(KMM_UPSTREAM_REGISTRY)/$(KMM_WORKER_PATH):$(KMM_IMAGE_TAG) \
+	  RELATED_IMAGE_BUILD=$(KMM_UPSTREAM_REGISTRY)/$(KMM_KANIKO_PATH):$(KMM_KANIKO_VERSION) \
+	  RELATED_IMAGE_SIGN=$(KMM_UPSTREAM_REGISTRY)/$(KMM_SIGN_PATH):$(KMM_IMAGE_TAG)
 
 # The airgap-ready install. Same `kubectl apply -k` at the pinned ref as kmm-install, then it rewrites
 # the operator's images so nothing points at :latest or (with KMM_IMAGE_REGISTRY set) at an unreachable
 # upstream registry. The kustomize overlay tags operator+webhook :latest and sets the operator's
-# RELATED_IMAGE_WORKER/BUILD/SIGN env to :latest images; all five are repinned to $(KMM_VERSION) (kaniko
+# RELATED_IMAGE_WORKER/BUILD/SIGN env to :latest images; all five are repinned to $(KMM_IMAGE_TAG) (kaniko
 # to $(KMM_KANIKO_VERSION)) and, when KMM_IMAGE_REGISTRY is set, repointed at that mirror keeping each
 # upstream path suffix (e.g. .../kernel-module-management-worker -> $(KMM_IMAGE_PREFIX)/$(KMM_WORKER_PATH)).
 # operator+webhook are container images on the Deployments (kubectl set image); worker/build/sign are
 # only ever named by the operator's env, so they are set there (kubectl set env). Mirror the exact set
 # `make images-agent` prints under "KMM mode" first. With KMM_IMAGE_REGISTRY unset it still does the
-# :latest->$(KMM_VERSION) pinning but leaves every image on upstream $(KMM_UPSTREAM_REGISTRY) and warns,
+# :latest->$(KMM_IMAGE_TAG) pinning but leaves every image on upstream $(KMM_UPSTREAM_REGISTRY) and warns,
 # because that is not enough for a true airgap. See the KMM offline runbook in charts/kasm-node-prep/README.md.
-kmm-install-mirrored: $(KUBECTL) ## Install KMM and pin/repoint its 5 images for airgap -- set KMM_IMAGE_REGISTRY=<mirror> (unset: only pins :latest->KMM_VERSION, leaves them upstream)
+kmm-install-mirrored: $(KUBECTL) ## Install KMM and pin/repoint its 5 images for airgap (needs cert-manager) -- set KMM_IMAGE_REGISTRY=<mirror> (unset: same pinning as kmm-install, images left upstream)
 	$(KUBECTL) apply -k "$(KMM_KUSTOMIZE_URL)"
 	@if [ -z "$(strip $(KMM_IMAGE_REGISTRY))" ]; then \
-	  echo "WARNING: KMM_IMAGE_REGISTRY is unset -- pinning operator/webhook/worker/build/sign off :latest to $(KMM_VERSION) but leaving them on upstream $(KMM_UPSTREAM_REGISTRY). This is NOT airgap-ready; mirror the images ('make images-agent') and re-run with KMM_IMAGE_REGISTRY=<mirror>."; \
+	  echo "WARNING: KMM_IMAGE_REGISTRY is unset -- pinning operator/webhook/worker/build/sign off :latest to $(KMM_IMAGE_TAG) but leaving them on upstream $(KMM_UPSTREAM_REGISTRY). This is NOT airgap-ready; mirror the images ('make images-agent') and re-run with KMM_IMAGE_REGISTRY=<mirror>."; \
 	fi
 	$(KUBECTL) -n $(KMM_NAMESPACE) set image deployment/$(KMM_CONTROLLER_DEPLOY) $(KMM_CONTROLLER_CONTAINER)=$(KMM_OPERATOR_IMAGE)
 	$(KUBECTL) -n $(KMM_NAMESPACE) set image deployment/$(KMM_WEBHOOK_DEPLOY) $(KMM_WEBHOOK_CONTAINER)=$(KMM_WEBHOOK_IMAGE)
