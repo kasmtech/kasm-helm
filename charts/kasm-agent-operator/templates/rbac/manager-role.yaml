@@ -5,10 +5,11 @@
 
   These are cluster-scoped, so only one release of this chart can own them per cluster.
 
-  Synced 2026-09-08 with the operator build that stops caching Secrets, and one deliberate difference
-  from the generated role: no secrets rule at all (see the comment on that rule below). Requires that
-  operator build or newer; an older operator's Secret informer needs cluster-wide list/watch and will
-  fail its cache sync under this role. Rule order is otherwise the generator's.
+  Synced 2026-09-14 with the operator build that adds the node-exhaustion eviction/OOM backoff
+  (nodes: get) and one deliberate difference: no secrets rule at all (see the comment on that rule
+  below). Requires that operator build or newer; an older operator's Secret informer needs
+  cluster-wide list/watch and will fail its cache sync under this role. Rule order is otherwise the
+  generator's.
 */}}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -33,6 +34,15 @@ rules:
   - patch
   - update
   - watch
+# Read-only: checked when a per-node eviction/OOM backoff window closes, before re-including the
+# node in a workspace/image-puller pod's affinity, so a replacement pod isn't scheduled back onto a
+# node still under DiskPressure/MemoryPressure/PIDPressure (see internal/scheduling).
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - get
 # PersistentVolumes are created and deleted by name and never watched, so the operator carries no
 # list/watch on them. Cluster-scoped by nature, so this rule cannot move to a namespaced Role.
 - apiGroups:
