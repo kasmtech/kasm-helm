@@ -139,9 +139,11 @@ tolerations:
 ```
 
 There is **no equivalent chart value for the session pods** - `kasm-agent-instance` has no
-tolerations key, and `agent.workspacesNodeSelector` is label-based placement only. If you taint the
-workspace pool, prove a session still schedules onto it before relying on the taint to keep other
-workloads off.
+tolerations key, and `agent.workspacesNodeSelector` is label-based placement only, so a `NoSchedule`
+taint on the pool keeps sessions off it. The operator does add placement of its own: after an eviction
+or OOM it excludes that node from the replacement pod's affinity until a back-off passes and the
+node's pressure conditions clear. The full procedure is [Scope workspaces to specific
+nodes](../how-to/nodes/scope-workspaces-to-nodes.md).
 
 **Decisions**
 

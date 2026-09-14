@@ -8,6 +8,7 @@ to the control plane, which runs as ordinary workloads on any node.
 
 | Page | Task | Key values |
 | ---- | ---- | ---------- |
+| [Scope workspaces to specific nodes](scope-workspaces-to-nodes.md) | Pin sessions and the node-level DaemonSets to a labelled pool, taints included | `agent.workspacesNodeSelector`<br>`nodePrep.nodeSelector` |
 | [Privileged workloads and cluster policy](privileged-workloads.md) | Label the namespace, clear the policy engine; do this first | `nodePrep.enabled`<br>`egressInstaller.enabled` |
 | [GPU nodes](gpu.md) | CUDA workspaces and EGL/DRI graphics acceleration | `gpuOperator.enabled`<br>`agent.gpu.enabled` |
 | [Webcam and kernel modules](webcam-kernel-modules.md) | Webcam passthrough (`v4l2loopback`), WireGuard on older kernels | `nodePrep.modules.v4l2loopback.*`<br>`videoDevicePlugin.enabled` |
@@ -16,7 +17,8 @@ to the control plane, which runs as ordinary workloads on any node.
 
 Two decisions come before any of them. **Which nodes run sessions:** `agent.workspacesNodeSelector`
 pins sessions, and the module installer and device plugin that follow them, to a labelled pool;
-without it everything here applies to every node ([Capacity](../../explanation/capacity.md)).
+without it everything here applies to every node ([Scope workspaces to specific
+nodes](scope-workspaces-to-nodes.md), [Capacity](../../explanation/capacity.md)).
 **What the namespace permits:** `nodePrep`, `videoDevicePlugin` and `egressInstaller` run
 privileged, and the label that admits them covers the whole namespace
 ([Security posture](../../explanation/security-posture.md)). On a managed service, node images,

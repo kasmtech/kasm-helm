@@ -235,7 +235,7 @@ releases per tenant, and the two-namespace layout in
 | ------- | ------ | ------------- | ---------- |
 | **Telemetry (traces, metrics, logs, events)** | 🔧 | An OTLP-speaking backend and/or a ClickHouse instance · [values](../../charts/kasm-otel-collector/README.md) | `otelCollector.enabled=true`<br>`otelCollector.exporters.otlp.enabled=true`<br>`otelCollector.exporters.otlp.endpoint`<br>and/or<br>`otelCollector.exporters.clickhouse.enabled=true`<br>`otelCollector.exporters.clickhouse.endpoint`<br>`otelCollector.receivers.k8sEvents.enabled=true` |
 | **Image pre-pulling** | 🔧 | The container runtime socket reachable from DaemonSet pods, and registry access or a mirror from every node · [how-to](../how-to/registries-and-airgap.md) | `agent.imagePuller.enabled=true`<br>`agent.imagePuller.images`<br>`agent.imageAvailabilityPolicy` |
-| **Node targeting and pools** | ✅ | A consistent node-labelling strategy · [how-to](../how-to/nodes/gpu.md) | Nothing per workspace.<br>`agent.workspacesNodeSelector` sets a fleet-wide default |
+| **Node targeting and pools** | ✅ | A consistent node-labelling strategy · [how-to](../how-to/nodes/scope-workspaces-to-nodes.md) | Nothing per workspace.<br>`agent.workspacesNodeSelector` sets a fleet-wide default |
 | **Node tuning and swap** | 🔧 | The node's kubelet configured for swap **first** · [how-to](../how-to/nodes/tuning-and-swap.md) | `nodePrep.tuning.swap.enabled=true`<br>`nodePrep.tuning.sysctls.enabled=true` |
 | **Autoscaling** | ⚠️ | Cluster Autoscaler or Karpenter, against node groups that match workspace pod requests | `operator.enabled=true` |
 | **Airgapped installation** | ✅ | A registry you mirror the images into · [how-to](../how-to/registries-and-airgap.md) | Nothing |
