@@ -377,6 +377,18 @@ imagePuller:
   # imagePuller.resources -- Compute resources for the image-puller DaemonSet's containers, passed through
   # verbatim. Omitted from the resource when empty.
   resources: {}
+  # imagePuller.nodeSelector -- Node labels the puller pods must match, passed through to the resource
+  # verbatim. Give it the session pool's selector (the same map as `agent.workspacesNodeSelector`) so
+  # images are staged where sessions can run and nowhere else; empty, the puller DaemonSet runs on
+  # every schedulable node.
+  nodeSelector: {}
+  # imagePuller.tolerations -- Tolerations for the puller pods, so a tainted pool node is staged too.
+  # Passed through verbatim.
+  tolerations: []
+  # imagePuller.affinity -- Node affinity for the puller pods, passed through verbatim. The resource
+  # takes a node affinity directly (`requiredDuringSchedulingIgnoredDuringExecution` right under
+  # `affinity`, no `nodeAffinity` wrapper); the operator merges its per-node back-off exclusions into it.
+  affinity: {}
 
 # httpRoute -- Optionally expose the operator-created session-proxy Service through a Gateway API Gateway.
 #

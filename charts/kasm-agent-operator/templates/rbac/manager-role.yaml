@@ -6,7 +6,7 @@
   These are cluster-scoped, so only one release of this chart can own them per cluster.
 
   Synced 2026-09-14 with the operator build that adds the node-exhaustion eviction/OOM backoff
-  (nodes: get) and one deliberate difference: no secrets rule at all (see the comment on that rule
+  (nodes: get, widened here to get/list/watch for the cached client, see the rule) and one deliberate difference: no secrets rule at all (see the comment on that rule
   below). Requires that operator build or newer; an older operator's Secret informer needs
   cluster-wide list/watch and will fail its cache sync under this role. Rule order is otherwise the
   generator's.
@@ -36,13 +36,20 @@ rules:
   - watch
 # Read-only: checked when a per-node eviction/OOM backoff window closes, before re-including the
 # node in a workspace/image-puller pod's affinity, so a replacement pod isn't scheduled back onto a
-# node still under DiskPressure/MemoryPressure/PIDPressure (see internal/scheduling).
+# node still under DiskPressure/MemoryPressure/PIDPressure (see internal/scheduling). The operator
+# reads the Node through controller-runtime's cached client, which starts a Node informer on first
+# use, so list and watch are needed alongside get: with get alone the informer's list is forbidden,
+# the read blocks on a cache that never syncs, and every reconcile of a workspace whose backoff
+# window just closed hangs (seen live 2026-09-14 on a CRI-O lab: status stuck at Pending with the
+# replacement pod Running until the operator was restarted).
 - apiGroups:
   - ""
   resources:
   - nodes
   verbs:
   - get
+  - list
+  - watch
 # PersistentVolumes are created and deleted by name and never watched, so the operator carries no
 # list/watch on them. Cluster-scoped by nature, so this rule cannot move to a namespaced Role.
 - apiGroups:

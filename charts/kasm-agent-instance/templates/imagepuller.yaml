@@ -28,4 +28,16 @@ spec:
   resources:
     {{- toYaml . | nindent 4 }}
   {{- end }}
+  {{- with .Values.imagePuller.nodeSelector }}
+  nodeSelector:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.imagePuller.tolerations }}
+  tolerations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.imagePuller.affinity }}
+  affinity:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 {{- end }}

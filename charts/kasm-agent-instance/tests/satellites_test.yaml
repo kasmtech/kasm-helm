@@ -194,6 +194,49 @@ tests:
       - isNull:
           path: spec.images
 
+  - it: passes puller placement (nodeSelector, tolerations, affinity) through to the KasmImagePuller
+    template: templates/imagepuller.yaml
+    set:
+      imagePuller:
+        enabled: true
+        nodeSelector:
+          kasm.com/workspaces: "true"
+        tolerations:
+          - key: kasm.com/workspaces
+            operator: Exists
+            effect: NoSchedule
+        affinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kasm.com/pool
+                    operator: In
+                    values: ["a"]
+    asserts:
+      - equal:
+          path: spec.nodeSelector
+          value:
+            kasm.com/workspaces: "true"
+      - equal:
+          path: spec.tolerations[0].key
+          value: kasm.com/workspaces
+      - equal:
+          path: spec.affinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].key
+          value: kasm.com/pool
+
+  - it: omits puller placement fields when unset
+    template: templates/imagepuller.yaml
+    set:
+      imagePuller:
+        enabled: true
+    asserts:
+      - isNull:
+          path: spec.nodeSelector
+      - isNull:
+          path: spec.tolerations
+      - isNull:
+          path: spec.affinity
+
   - it: renders no http route by default
     template: templates/httproute.yaml
     asserts:

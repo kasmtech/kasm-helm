@@ -446,6 +446,8 @@ tests:
               - nodes
             verbs:
               - get
+              - list
+              - watch
       - contains:
           path: rules
           content:

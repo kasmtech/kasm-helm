@@ -13,7 +13,7 @@
 Two node facts decide whether that works, and neither is a chart concern:
 
 - **The bin dir must be the one your runtime actually loads plugins from.** Install it anywhere else and the runtime never invokes the shim - nothing errors, the DaemonSet stays `Running`, the conflists still look patched, and sessions get no egress tunnel. This is the chart's one silent-failure knob.
-- **The runtime must honour chained CNI plugins.** Verified live on k3s, and on containerd 2.2 under kubeadm with Cilium 1.20 (after the Cilium preparation below); RKE2's containerd is the other known-good runtime.
+- **The runtime must honour chained CNI plugins.** Verified live on k3s, and on containerd 2.2 under kubeadm with Cilium 1.20 (after the Cilium preparation below); RKE2's containerd is the other known-good runtime. **CRI-O is known-bad** (1.32, Cilium 1.20): when it loads a conflist it probes every plugin with the CNI `VERSION` command, the shim forwards that probe to its daemon, the daemon rejects it (`missing CNI_CONTAINERID`), and CRI-O drops the whole conflist. From then on every pod sandbox on that node fails with `no CNI configuration file in /etc/cni/net.d/`, not only Kasm's. Leave `egressInstaller.enabled=false` on CRI-O nodes until the shim answers `VERSION` itself; the installer's cleanup restores the conflist when it is disabled again.
 
 Read [kasm-egress-installer § Read this before installing](../../../charts/kasm-egress-installer/README.md#read-this-before-installing) before going further - the no-daemon failure window described there is a real operational decision, not boilerplate.
 
@@ -189,6 +189,7 @@ Under [kasm-platform](../../../charts/kasm-platform/README.md), nest the block u
 
 | Symptom | Cause | Fix |
 | ------- | ----- | --- |
+| All pods on a node fail with `no CNI configuration file in /etc/cni/net.d/` as soon as the shim is chained (CRI-O) | CRI-O validates each plugin with a `VERSION` probe and discards a conflist whose plugin fails it; the shim forwards the probe to the daemon | Disable `egressInstaller` on CRI-O nodes; the cleanup restores the conflist, or restore it from `.kasm-egress.bak` |
 | Conflist is patched, then reverts to stock a second later (Cilium) | The Cilium agent rewrites `05-cilium.conflist` whenever `/etc/cni/net.d` changes | Set `cni.customConf=true` and `cni.exclusive=false` on the Cilium install, then `kubectl -n kube-system rollout restart ds/cilium` |
 | DaemonSet is `Running`, conflists look patched, sessions get **no** egress tunnel and nothing errors anywhere | The shim was installed into a directory the runtime does not read plugins from - the chart's silent-failure mode | Compare the `installed CNI shim at …` log line against the containerd `bin_dir` from step 1; set `egressInstaller.distro` correctly or override `egressInstaller.cniBinDir` |
 | `helm install`/`template` fails: unrecognized `distro` with no `cniBinDir` | Deliberate - the chart refuses to guess a path whose wrongness would be silent | Set `egressInstaller.cniBinDir` explicitly |
@@ -205,7 +206,7 @@ Under [kasm-platform](../../../charts/kasm-platform/README.md), nest the block u
 
 - [ ] Namespace permits `privileged` **and** host namespaces (`hostPID`, `hostNetwork`) - policy exception decided and recorded.
 - [ ] The no-daemon failure window explicitly accepted; `priorityClassName: system-node-critical` left in place.
-- [ ] Runtime honours chained CNI plugins (k3s/RKE2 containerd verified; anything else proven with a test pod).
+- [ ] Runtime honours chained CNI plugins (k3s/RKE2 containerd verified; CRI-O known-bad; anything else proven with a test pod).
 - [ ] On Cilium: `cni.customConf=true`, `cni.exclusive=false`, and the Cilium agents restarted after setting them.
 - [ ] CNI bin dir determined from the runtime's containerd config, not guessed.
 - [ ] `egressInstaller.distro` set (`k3s` / `vanilla`) or `egressInstaller.cniBinDir` overridden.
