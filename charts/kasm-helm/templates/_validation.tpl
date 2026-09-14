@@ -63,30 +63,39 @@
 
 
 {{/*
-  RDP Gateway publication. A TCPRoute matches on neither hostname nor SNI, so
-  unlike the proxy's HTTPRoute it cannot multiplex zones onto one listener:
-  every zone needs a Gateway listener of its own, selected per zone with
-  parentRefs[].sectionName.
+  RDP Gateway publication. The rdp-gateway app runs inside the connection-proxy
+  StatefulSet, and every replica has to advertise its own externally reachable
+  address: directRdpService does that with one Service per replica. A TCPRoute
+  matches on neither hostname nor SNI, so it cannot tell replicas apart, and
+  unlike the proxy's HTTPRoute it cannot multiplex zones onto one listener
+  either: tcpRoute therefore requires exactly one connection-proxy replica per
+  zone, targets that replica's per-pod RDP Service, and needs a Gateway
+  listener of its own per zone, selected with parentRefs[].sectionName.
+  directRdpService's own checks (entry count versus replicas, the legacy
+  singular URL) live in connection-proxy-services.yaml.
 */}}
 {{- define "kasm.validateRdpExposure" -}}
 {{- $v := .Values -}}
 
-{{- if and $v.directRdpService.enabled (not $v.directRdpService.rdpAccessURL) -}}
-  {{- fail "directRdpService.rdpAccessURL must be set if directRdpService.enabled is true." -}}
-{{- end -}}
-
 {{- if $v.tcpRoute.enabled -}}
 
-  {{- if not $v.components.rdpGateway.enabled -}}
-    {{- fail "tcpRoute.enabled publishes the RDP Gateway, but components.rdpGateway.enabled is false. Enable the component, or disable tcpRoute." -}}
+  {{- $cp := $v.components.connectionProxy -}}
+  {{- if not (and $cp.enabled $cp.rdpGateway.enabled) -}}
+    {{- fail "tcpRoute.enabled publishes the RDP Gateway, but components.connectionProxy.rdpGateway.enabled (or components.connectionProxy.enabled) is false. Enable the component, or disable tcpRoute." -}}
   {{- end -}}
 
   {{- if $v.directRdpService.enabled -}}
-    {{- fail "tcpRoute.enabled and directRdpService.enabled both publish the RDP Gateway externally. Set directRdpService.enabled=false: the RDP Gateway Service stays ClusterIP and the Gateway fronts it through the TCPRoute." -}}
+    {{- fail "tcpRoute.enabled and directRdpService.enabled both publish the RDP Gateway externally. Set directRdpService.enabled=false: the per-replica RDP Service stays ClusterIP and the Gateway fronts it through the TCPRoute." -}}
   {{- end -}}
 
   {{- if not $v.tcpRoute.rdpAccessURL -}}
     {{- fail "tcpRoute.rdpAccessURL must be set if tcpRoute.enabled is true - it is the hostname Kasm advertises to RDP clients, and the RDP Gateway has no way to infer it from the Gateway." -}}
+  {{- end -}}
+
+  {{- $constants := include "kasm.constants" . | fromYaml -}}
+  {{- $cpReplicas := ternary $cp.replicas (include "replicas.preset" (dict "node" $constants.connectionProxy.component "size" $v.deploymentSize)) (gt (int $cp.replicas) 0) -}}
+  {{- if gt (int $cpReplicas) 1 -}}
+    {{- fail (printf "tcpRoute.enabled requires exactly one connection-proxy replica per zone, but components.connectionProxy resolves to %d (deploymentSize %s). A TCPRoute matches on neither hostname nor SNI, so it cannot give each rdp-gateway replica the distinct external address it must advertise. Set components.connectionProxy.replicas=1, or publish the replicas with directRdpService.perServiceSettings instead of tcpRoute." (int $cpReplicas) $v.deploymentSize) -}}
   {{- end -}}
 
   {{- $zones := (include "kasm.primaryRegionZones" . | fromYamlArray) -}}
@@ -108,19 +117,5 @@
     {{- fail "tcpRoute.enabled is set but neither tcpRoute.parentRefs nor tcpRoute.zones is populated - the route would attach to no Gateway." -}}
   {{- end -}}
 
-{{- end -}}
-{{- end -}}
-
-
-{{/*
-  The hostname the RDP Gateway advertises to clients, whichever way it is
-  published. Empty when the gateway is only reachable in-cluster, in which case
-  the caller falls back to the Service name.
-*/}}
-{{- define "kasm.rdpAccessURL" -}}
-{{- if .Values.directRdpService.enabled -}}
-  {{- .Values.directRdpService.rdpAccessURL -}}
-{{- else if .Values.tcpRoute.enabled -}}
-  {{- .Values.tcpRoute.rdpAccessURL -}}
 {{- end -}}
 {{- end -}}

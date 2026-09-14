@@ -1,0 +1,435 @@
+{{/*
+Nginx configuration ConfigMaps for the consolidated connection-proxy StatefulSet nginx
+container, which fronts the guac, rdp-gateway, and rdp-https-gateway service containers
+(each listening on localhost only) on a single port, 8443.
+
+connection-proxy-nginx-settings — mounted at /etc/nginx/conf.d/ — contains:
+  resolver.conf, upstreams.conf, connection-proxy.conf (the server {} block)
+
+connection-proxy-services — mounted at /etc/nginx/conf.d/services.d/ — contains:
+  connection_proxy.conf with all guac/rdp-gateway/rdp-https-gateway location blocks
+
+connection-proxy-rdp-gateway-app-config — the rdp-gateway app's own config.
+
+connection-proxy-rdp-https-gateway-app-config — the rdp-https-gateway app's own config,
+  only rendered when logFormat is "json" (matches existing rdp-https-gateway-app-configmap
+  behavior).
+*/}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $serviceKeepalive := 16 -}}
+{{- $cp := .Values.components.connectionProxy }}
+{{- if and $cp.enabled (or $cp.guac.enabled $cp.rdpGateway.enabled $cp.rdpHttpsGateway.enabled) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  {{- include "kasm.metadata" (dict "context" . "component" "cpx-nginx-settings" "resource" "configMap" "include" "all") | indent 2 }}
+data:
+  resolver.conf: |
+    resolver {{ include "kasm.nginxResolver" . }} valid=10s ipv6=off;
+
+  upstreams.conf: |
+    {{- if $cp.guac.enabled }}
+    upstream kasm_guac {
+      keepalive {{ $serviceKeepalive }};
+      server 127.0.0.1:{{ $constants.connectionProxy.guac.port }};
+    }
+
+    upstream kasm_guac_backend {
+      zone kasm_guac_zone 512k;
+      {{- range $port := $constants.connectionProxy.guac.ports }}
+      {{ printf "server 127.0.0.1:%d;" (int $port) }}
+      {{- end }}
+    }
+    {{- end }}
+    {{- if $cp.rdpGateway.enabled }}
+
+    upstream rdp_gateway {
+      keepalive {{ $serviceKeepalive }};
+      server 127.0.0.1:{{ $constants.connectionProxy.rdpGateway.port }};
+    }
+    {{- end }}
+    {{- if $cp.rdpHttpsGateway.enabled }}
+
+    upstream kasm_rdp_https_gateway {
+      keepalive {{ $serviceKeepalive }};
+      server 127.0.0.1:{{ $constants.connectionProxy.rdpHttpsGateway.port }};
+    }
+    {{- end }}
+
+  connection-proxy.conf: |
+    server {
+      listen {{ $constants.connectionProxy.nginxPort }} ssl;
+      server_name ubuntu-base;
+
+      ssl_certificate     /etc/nginx/ssl/tls.crt;
+      ssl_certificate_key /etc/nginx/ssl/tls.key;
+      ssl_protocols TLSv1.2 TLSv1.3;
+      ssl_prefer_server_ciphers   off;
+      ssl_ciphers "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384";
+      include /etc/nginx/conf.d/services.d/*.conf;
+
+      client_max_body_size 1G;
+      server_tokens off;
+
+      proxy_intercept_errors on;
+      error_page 500 = @internal_error;
+      location @internal_error {
+        default_type "text/html";
+        return 500 "<H1>Internal Error</H1>";
+      }
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  {{- include "kasm.metadata" (dict "context" . "component" "cpx-services" "resource" "configMap" "include" "all") | indent 2 }}
+data:
+  connection_proxy.conf: |
+    location = /__healthcheck {
+      access_log off;
+      return 200 "OK\n";
+    }
+    {{- if $cp.rdpGateway.enabled }}
+
+    # In-cluster readiness probe entry point, namespaced under /rdp-gateway/ to avoid
+    # colliding with the rdp-https-gateway and nginx's own /__healthcheck endpoints.
+    # The app's own /__healthcheck on :5555 is reached via the rdp_gateway upstream
+    # defined in the settings configmap — keeping :5555 strictly intra-pod.
+    location = /rdp-gateway/__healthcheck {
+      access_log off;
+      proxy_pass http://rdp_gateway/__healthcheck;
+    }
+    {{- end }}
+    {{- if $cp.rdpHttpsGateway.enabled }}
+
+    location = /rdp-https-gateway/__healthcheck {
+      access_log off;
+      proxy_pass https://kasm_rdp_https_gateway/__healthcheck;
+      proxy_ssl_verify off;
+    }
+    {{- end }}
+    {{- if or $cp.rdpGateway.enabled $cp.rdpHttpsGateway.enabled }}
+
+    location /guac/vm_disconnect {
+      return 200;
+    }
+    {{- end }}
+    {{- if $cp.guac.enabled }}
+
+    location /guac_connect/vnc/ {
+      proxy_http_version      1.1;
+      proxy_set_header        Host $host;
+      proxy_set_header        Upgrade $http_upgrade;
+      proxy_set_header        Connection "upgrade";
+      proxy_set_header        X-Real-IP $remote_addr;
+      proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header        X-Forwarded-Proto $scheme;
+      proxy_pass              http://kasm_guac/;
+      proxy_read_timeout      1800s;
+      proxy_send_timeout      1800s;
+      proxy_connect_timeout   1800s;
+      proxy_buffering         off;
+      client_max_body_size    1G;
+      expires                 4h;
+      add_header              Strict-Transport-Security "max-age=63072000" always;
+      add_header              Cache-Control "private";
+    }
+
+    location /guac_connect/vnc/vnc.htmlguaclite {
+      proxy_http_version      1.1;
+      proxy_set_header        Host $host;
+      proxy_set_header        Upgrade $http_upgrade;
+      proxy_set_header        Connection "upgrade";
+      proxy_set_header        X-Real-IP $remote_addr;
+      proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header        X-Forwarded-Proto $scheme;
+      proxy_pass              http://kasm_guac_backend/vnc.htmlguaclite$is_args$args;
+      proxy_read_timeout      1800s;
+      proxy_send_timeout      1800s;
+      proxy_connect_timeout   1800s;
+      proxy_buffering         off;
+      client_max_body_size    1G;
+      expires                 4h;
+      add_header              Cache-Control "private";
+      add_header              Strict-Transport-Security "max-age=63072000" always;
+      add_header              X-Content-Type-Options 'nosniff';
+    }
+
+    location /vm_connect {
+      internal;
+      proxy_pass              http://kasm_guac/vm_connect;
+      proxy_pass_request_body off;
+      proxy_set_header        Content-Length '';
+      proxy_set_header        X-Original-URI $request_uri;
+      proxy_http_version      1.1;
+      proxy_set_header        Connection "";
+    }
+
+    location /guac_connect/uploads/ {
+      auth_request            /vm_connect;
+      auth_request_set        $connect_hostname     $upstream_http_connect_hostname;
+      auth_request_set        $connect_port         $upstream_http_connect_port;
+      auth_request_set        $connect_path         $upstream_http_connect_path;
+      auth_request_set        $connect_auth         $upstream_http_connect_auth;
+      proxy_http_version      1.1;
+      proxy_set_header        Host $host;
+      proxy_set_header        Upgrade $http_upgrade;
+      proxy_set_header        Connection "upgrade";
+      proxy_set_header        X-Real-IP $remote_addr;
+      proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header        X-Forwarded-Proto $scheme;
+      proxy_set_header        Authorization "Bearer ${connect_auth}";
+      rewrite                 ^/guac_connect/uploads/(.*) /$1 break;
+      proxy_pass              https://$connect_hostname:$connect_port;
+      proxy_read_timeout      1800s;
+      proxy_send_timeout      1800s;
+      proxy_connect_timeout   1800s;
+      proxy_buffering         off;
+      client_max_body_size    1G;
+      expires                 4h;
+      add_header              Cache-Control "private";
+      add_header              Strict-Transport-Security "max-age=63072000" always;
+    }
+
+    location /guac_connect/downloads/ {
+      auth_request            /vm_connect;
+      auth_request_set        $connect_hostname     $upstream_http_connect_hostname;
+      auth_request_set        $connect_port         $upstream_http_connect_port;
+      auth_request_set        $connect_path         $upstream_http_connect_path;
+      auth_request_set        $connect_auth         $upstream_http_connect_auth;
+      proxy_http_version      1.1;
+      proxy_set_header        Host $host;
+      proxy_set_header        Upgrade $http_upgrade;
+      proxy_set_header        Connection "upgrade";
+      proxy_set_header        X-Real-IP $remote_addr;
+      proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header        X-Forwarded-Proto $scheme;
+      proxy_set_header        Authorization "Bearer ${connect_auth}";
+      rewrite                 ^/guac_connect/downloads/(.*) /$1 break;
+      proxy_pass              https://$connect_hostname:$connect_port;
+      proxy_read_timeout      1800s;
+      proxy_send_timeout      1800s;
+      proxy_connect_timeout   1800s;
+      proxy_buffering         off;
+      client_max_body_size    1G;
+      expires                 4h;
+      add_header              Strict-Transport-Security "max-age=63072000" always;
+      add_header              Cache-Control "private";
+    }
+
+    location /guac_connect/api/ {
+      auth_request            /vm_connect;
+      auth_request_set        $connect_hostname     $upstream_http_connect_hostname;
+      auth_request_set        $connect_port         $upstream_http_connect_port;
+      auth_request_set        $connect_path         $upstream_http_connect_path;
+      auth_request_set        $connect_auth         $upstream_http_connect_auth;
+      proxy_http_version      1.1;
+      proxy_set_header        Host $host;
+      proxy_set_header        Upgrade $http_upgrade;
+      proxy_set_header        Connection "upgrade";
+      proxy_set_header        X-Real-IP $remote_addr;
+      proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header        X-Forwarded-Proto $scheme;
+      proxy_set_header        Authorization "Bearer ${connect_auth}";
+      rewrite                 ^/guac_connect/api/(.*) /$1 break;
+      proxy_pass              https://$connect_hostname:$connect_port;
+      proxy_read_timeout      1800s;
+      proxy_send_timeout      1800s;
+      proxy_connect_timeout   1800s;
+      proxy_buffering         off;
+      client_max_body_size    1G;
+      expires                 4h;
+      add_header              Strict-Transport-Security "max-age=63072000" always;
+      add_header              Cache-Control "private";
+    }
+
+    location /guac_login {
+      proxy_pass http://kasm_guac/guac_login;
+    }
+
+    # Wildcard for control-plane calls the manager makes to the guac app under
+    # the /guac/ prefix (e.g. /guac/__healthcheck, /guac/vm_disconnect, and the
+    # support-bundle collect endpoint /guac/api/v1/support_bundle_request). The
+    # trailing slash on proxy_pass strips the /guac/ prefix so the app sees the
+    # route it registered (server.js registers /api/v1/support_bundle_request).
+    location /guac/ {
+      proxy_pass http://kasm_guac/;
+    }
+    {{- end }}
+    {{- if $cp.rdpGateway.enabled }}
+
+    location /rdp-gateway/ {
+      proxy_http_version      1.1;
+      proxy_set_header        Host $host;
+      proxy_set_header        Upgrade $http_upgrade;
+      proxy_set_header        Connection "upgrade";
+      proxy_set_header        X-Real-IP $remote_addr;
+      proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header        X-Forwarded-Proto $scheme;
+
+      proxy_pass      http://rdp_gateway/;
+    }
+    {{- end }}
+    {{- if $cp.rdpHttpsGateway.enabled }}
+
+    location /rdp-https-gateway/ {
+      proxy_http_version      1.1;
+      proxy_set_header        Host $host;
+      proxy_set_header        Upgrade $http_upgrade;
+      proxy_set_header        Connection "upgrade";
+      proxy_set_header        X-Real-IP $remote_addr;
+      proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header        X-Forwarded-Proto $scheme;
+
+      proxy_pass          https://kasm_rdp_https_gateway;
+      proxy_ssl_verify    off;
+    }
+
+    location /remoteDesktopGateway {
+      proxy_http_version 1.1;
+      proxy_set_header Connection "upgrade";
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header Host $host;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_pass          https://kasm_rdp_https_gateway;
+      proxy_ssl_verify    off;
+    }
+
+    # Route for MS RDP Gateway
+    location /rpc {
+      proxy_buffers 4 256k;
+      proxy_buffer_size 128k;
+      proxy_busy_buffers_size 256k;
+
+      proxy_pass          https://kasm_rdp_https_gateway;
+      proxy_ssl_verify    off;
+      proxy_set_header Host $http_host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto $scheme;
+
+      # WebSocket support
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+
+      # Timeout settings
+      proxy_read_timeout 3600s;
+      proxy_send_timeout 3600s;
+    }
+    {{- end }}
+{{- if $cp.rdpGateway.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  {{- include "kasm.metadata" (dict "context" . "component" "cpx-rdp-gw-app-config" "resource" "configMap" "include" "all") | indent 2 }}
+data:
+  passthrough.app.config.yaml: |
+    rdp-gateway:
+      id: 00000000-0000-0000-0000-000000000000
+      server_address: SERVER_ADDRESS
+      server_port: SERVER_PORT
+      proxy_port: 3389
+      zone: ZONE
+      registration_token: REGISTRATION_TOKEN
+      number_of_threads: 10
+      kasm_delete_session_watch_interval: 60
+      forward_logs_to_manager: true
+      keepalive_loop_interval: 30
+    api:
+      auth_token: JWTTOKEN
+      public_jwt_cert: PUBLICCERT
+      hostnames: [ 'APIHOSTNAME' ]
+      port: SERVER_PORT
+      hostname_refresh_interval: 30
+      schema: http
+    logging:
+      rdp-gateway:
+        formatters:
+          pythonjsonlogger:
+            (): pythonjsonlogger.jsonlogger.JsonFormatter
+            fmt: '%(asctime) %(name) %(processName) %(filename)  %(funcName) %(levelname) %(lineno) %(module) %(threadName) %(message)'
+            timestamp: true
+          standard:
+            format: '%(asctime)s [%(levelname)s] %(name)s: %(message)s'
+        handlers:
+          file_handler:
+            backupCount: 5
+            class: logging.handlers.RotatingFileHandler
+            encoding: utf8
+            filename: /opt/kasm/current/log/rdp_gateway.log
+            formatter: standard
+            level: DEBUG
+            maxBytes: 10485760
+          file_handler_json:
+            backupCount: 5
+            class: logging.handlers.RotatingFileHandler
+            encoding: utf8
+            filename: /opt/kasm/current/log/rdp_gateway_json.log
+            formatter: pythonjsonlogger
+            level: DEBUG
+            maxBytes: 10485760
+          stream:
+            class: logging.StreamHandler
+            formatter: {{ ternary "pythonjsonlogger" "standard" (eq .Values.logFormat "json") }}
+            level: DEBUG
+          syslog:
+            class: logging.handlers.SysLogHandler
+            formatter: pythonjsonlogger
+            level: DEBUG
+        loggers:
+          ? ''
+          : handlers:
+            - stream
+            - syslog
+            level: DEBUG
+            propagate: true
+          tornado:
+            level: INFO
+        version: 1
+{{- end }}
+---
+{{- $zoneName := "default" -}}
+{{- if .Values.kasmZones }}
+  {{- $zoneName = (index .Values.kasmZones 0).name -}}
+{{- end }}
+{{- if and $cp.rdpHttpsGateway.enabled (eq .Values.logFormat "json") }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  {{- include "kasm.metadata" (dict "context" . "component" "cpx-rdp-https-gw-app-config" "resource" "configMap" "include" "all") | indent 2 }}
+data:
+  rdp_https_gateway.app.config.yaml: |
+    api:
+      auth_token: JWTTOKEN
+      public_jwt_cert: PUBLICCERT
+      hostnames: [ {{ printf "%s-%s" $constants.proxy.svc $zoneName | quote }} ]
+      port: {{ $constants.proxy.http }}
+      hostname_refresh_interval: 30
+      schema: http
+    rdp-gateway:
+      id: auto
+      registration_token: REGISTRATION_TOKEN
+      server_address: {{ .Values.publicAddr }}
+      server_port: {{ $constants.connectionProxy.rdpHttpsGateway.port }}
+      zone: {{ $zoneName }}
+      keepalive_loop_interval: 30
+      ephemeral: true
+      kasm_delete_session_watch_interval: 60
+    logging:
+      console_level: "ERROR"
+      file_logging:
+        filename: "/dev/null"
+        level: "DEBUG"
+        backupCount: 20
+        maxMegaBytes: 10
+      json_file_logging:
+        filename: "/dev/stdout"
+        level: "DEBUG"
+        backupCount: 20
+        maxMegaBytes: 10
+      network_logging:
+        level: "DEBUG"
+{{- end }}
+{{- end }}

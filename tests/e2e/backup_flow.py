@@ -42,8 +42,9 @@ def run_backup_upgrade_and_cron_flow(
 
     # Lower per-component resource requests so all pods (api, manager, proxy,
     # bundled db, db-init job, manual db-backup job) fit on the single-node
-    # kind cluster in gitlab runner. guac / rdpGateway / rdpHttpsGateway are
-    # disabled below so they don't render and don't need overrides.
+    # kind cluster in gitlab runner. The connection-proxy StatefulSet (guac /
+    # rdpGateway / rdpHttpsGateway) is disabled below so it doesn't render and
+    # doesn't need overrides.
     low_resources = {"requests": {"cpu": "50m", "memory": "256Mi"}}
     low_resources_proxy = {"requests": {"cpu": "50m", "memory": "128Mi"}}
     base_values = {
@@ -65,14 +66,16 @@ def run_backup_upgrade_and_cron_flow(
             "api": {"resources": low_resources},
             "manager": {"resources": low_resources},
             "proxy": {"resources": low_resources_proxy},
-            "guac": {
-                "enabled": False,
-            },
-            "rdpGateway": {
-                "enabled": False,
-            },
-            "rdpHttpsGateway": {
-                "enabled": False,
+            "connectionProxy": {
+                "guac": {
+                    "enabled": False,
+                },
+                "rdpGateway": {
+                    "enabled": False,
+                },
+                "rdpHttpsGateway": {
+                    "enabled": False,
+                },
             },
         },
     }

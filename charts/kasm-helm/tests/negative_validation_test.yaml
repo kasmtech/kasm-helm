@@ -2,6 +2,7 @@ suite: negative path / explicit fail messages
 
 templates:
   - templates/validation.yaml
+  - templates/connection-proxy-services.yaml
 
 tests:
   - it: ingress + route both enabled fails with a clear message
@@ -39,15 +40,20 @@ tests:
       - failedTemplate:
           errorMessage: "The service.type must not be LoadBalancer when using a Multi-Zone Kasm deployment - any load balancer or Route should be provisioned using the Ingress/Route settings. Set service.type=ClusterIP or remove your kasmZones settings."
 
-  - it: directRdpService.enabled=true without rdpAccessURL fails
-    template: templates/validation.yaml
+  # The old `components.rdpGateway.replicas must be 1` fail is gone entirely: connection-proxy
+  # now scales 1/2/3 like every other component, and each replica gets its own direct RDP
+  # Service/access URL instead of being capped at a single instance.
+
+  - it: directRdpService.enabled=true with fewer perServiceSettings entries than the connection-proxy replica count fails
+    template: templates/connection-proxy-services.yaml
     set:
       directRdpService:
         enabled: true
+        perServiceSettings: []
         rdpAccessURL: ""
     asserts:
       - failedTemplate:
-          errorMessage: "directRdpService.rdpAccessURL must be set if directRdpService.enabled is true."
+          errorPattern: 'directRdpService\.enabled is true but only 0 entr\(y/ies\) are configured in directRdpService\.perServiceSettings .* while components\.connectionProxy has 1 replica\(s\)'
 
   - it: two proxy exposure methods fails, naming both
     template: templates/validation.yaml
@@ -112,7 +118,22 @@ tests:
           - name: kasm-gateway
     asserts:
       - failedTemplate:
-          errorMessage: "tcpRoute.enabled and directRdpService.enabled both publish the RDP Gateway externally. Set directRdpService.enabled=false: the RDP Gateway Service stays ClusterIP and the Gateway fronts it through the TCPRoute."
+          errorMessage: "tcpRoute.enabled and directRdpService.enabled both publish the RDP Gateway externally. Set directRdpService.enabled=false: the per-replica RDP Service stays ClusterIP and the Gateway fronts it through the TCPRoute."
+
+  # Every rdp-gateway replica must advertise its own external address, and a TCPRoute matches on
+  # neither hostname nor SNI, so it can only ever front one replica per zone.
+  - it: tcpRoute with more than one connection-proxy replica fails, naming the count
+    template: templates/validation.yaml
+    set:
+      deploymentSize: medium
+      tcpRoute:
+        enabled: true
+        rdpAccessURL: rdp.kasm.example.com
+        parentRefs:
+          - name: kasm-gateway
+    asserts:
+      - failedTemplate:
+          errorPattern: 'tcpRoute\.enabled requires exactly one connection-proxy replica per zone, but components\.connectionProxy resolves to 2 \(deploymentSize medium\)'
 
   - it: tcpRoute without rdpAccessURL fails
     template: templates/validation.yaml
@@ -148,8 +169,9 @@ tests:
       proxyService:
         type: ClusterIP
       components:
-        rdpGateway:
-          enabled: false
+        connectionProxy:
+          rdpGateway:
+            enabled: false
       tcpRoute:
         enabled: true
         rdpAccessURL: rdp.kasm.example.com
@@ -157,4 +179,145 @@ tests:
           - name: kasm-gateway
     asserts:
       - failedTemplate:
-          errorMessage: "tcpRoute.enabled publishes the RDP Gateway, but components.rdpGateway.enabled is false. Enable the component, or disable tcpRoute."
+          errorMessage: "tcpRoute.enabled publishes the RDP Gateway, but components.connectionProxy.rdpGateway.enabled (or components.connectionProxy.enabled) is false. Enable the component, or disable tcpRoute."
+
+
+  - it: directRdpService.enabled=true with the legacy singular rdpAccessURL used with more than 1 replica fails
+    template: templates/connection-proxy-services.yaml
+    set:
+      deploymentSize: medium
+      directRdpService:
+        enabled: true
+        rdpAccessURL: "rdp.example.com"
+    asserts:
+      - failedTemplate:
+          errorPattern: 'directRdpService\.rdpAccessURL \(legacy singular\) is set but components\.connectionProxy has 2 replica\(s\)'
+
+  - it: directRdpService.rdpAccessURL (legacy) set together with a non-empty perServiceSettings fails
+    template: templates/connection-proxy-services.yaml
+    set:
+      directRdpService:
+        enabled: true
+        rdpAccessURL: "rdp.example.com"
+        perServiceSettings:
+          - rdpAccessURL: rdp0.example.com
+    asserts:
+      - failedTemplate:
+          errorMessage: "directRdpService.rdpAccessURL (legacy singular) and directRdpService.perServiceSettings are both set. This is ambiguous: remove rdpAccessURL and configure every replica via perServiceSettings instead."
+
+  # NOTE: directRdpService.type is constrained to an enum (NodePort, LoadBalancer), and each
+  # directRdpService.perServiceSettings[] entry requires rdpAccessURL, both enforced in
+  # values.schema.json. So `helm template`/helm-unittest reject an invalid type, or a
+  # perServiceSettings entry missing rdpAccessURL, at schema-validation time, before
+  # templates/connection-proxy-services.yaml's own `fail` guards for those two cases ever run.
+  # Those template fails are unreachable through this harness (they would only fire with
+  # --skip-schema-validation or if the schema and template guards ever drift out of sync) so
+  # there is no meaningful helm-unittest case for either of them here.
+
+  - it: a perServiceSettings entry with an empty rdpAccessURL fails, even though the key is present
+    template: templates/connection-proxy-services.yaml
+    set:
+      directRdpService:
+        enabled: true
+        perServiceSettings:
+          - rdpAccessURL: ""
+    asserts:
+      - failedTemplate:
+          errorMessage: "directRdpService.perServiceSettings[0].rdpAccessURL is empty. Each connection-proxy replica needs its own non-empty externally reachable RDP address."
+
+  # ---------------------------------------------------------------------------
+  # Multi-zone directRdpService: a flat list without a zone per entry can't express distinct
+  # addresses per zone, so these are rejected outright rather than silently reused across zones.
+  # ---------------------------------------------------------------------------
+
+  - it: multi-zone directRdpService with the legacy singular rdpAccessURL fails
+    template: templates/connection-proxy-services.yaml
+    set:
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      kasmZones:
+        - name: zonea
+          proxyAddress: zonea.example.com
+          primary: true
+          region_name: us-east
+        - name: zoneb
+          proxyAddress: zoneb.example.com
+          region_name: us-east
+      directRdpService:
+        enabled: true
+        rdpAccessURL: rdp.example.com
+    asserts:
+      - failedTemplate:
+          errorMessage: "directRdpService.rdpAccessURL (legacy singular) cannot be used with more than one primary-region zone (2 configured): set a zone field on every directRdpService.perServiceSettings entry instead."
+
+  - it: multi-zone directRdpService with a perServiceSettings entry missing zone fails
+    template: templates/connection-proxy-services.yaml
+    set:
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      kasmZones:
+        - name: zonea
+          proxyAddress: zonea.example.com
+          primary: true
+          region_name: us-east
+        - name: zoneb
+          proxyAddress: zoneb.example.com
+          region_name: us-east
+      directRdpService:
+        enabled: true
+        perServiceSettings:
+          - rdpAccessURL: rdp0.example.com
+    asserts:
+      - failedTemplate:
+          errorMessage: "directRdpService.perServiceSettings[0] has no zone set, but 2 primary-region zones are configured. Every entry needs a zone field naming which zone it belongs to."
+
+  - it: multi-zone directRdpService with a perServiceSettings entry naming an unconfigured zone fails
+    template: templates/connection-proxy-services.yaml
+    set:
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      kasmZones:
+        - name: zonea
+          proxyAddress: zonea.example.com
+          primary: true
+          region_name: us-east
+        - name: zoneb
+          proxyAddress: zoneb.example.com
+          region_name: us-east
+      directRdpService:
+        enabled: true
+        perServiceSettings:
+          - zone: zonea
+            rdpAccessURL: rdp0.zonea.example.com
+          - zone: zone-typo
+            rdpAccessURL: rdp0.zoneb.example.com
+    asserts:
+      - failedTemplate:
+          errorMessage: 'directRdpService.perServiceSettings[1].zone "zone-typo" does not match any configured primary-region zone.'
+
+  - it: multi-zone directRdpService with fewer entries for one zone than the replica count fails
+    template: templates/connection-proxy-services.yaml
+    set:
+      deploymentSize: medium
+      proxyService.type: ClusterIP
+      ingress.enabled: true
+      kasmZones:
+        - name: zonea
+          proxyAddress: zonea.example.com
+          primary: true
+          region_name: us-east
+        - name: zoneb
+          proxyAddress: zoneb.example.com
+          region_name: us-east
+      directRdpService:
+        enabled: true
+        perServiceSettings:
+          - zone: zonea
+            rdpAccessURL: rdp0.zonea.example.com
+          - zone: zoneb
+            rdpAccessURL: rdp0.zoneb.example.com
+          - zone: zoneb
+            rdpAccessURL: rdp1.zoneb.example.com
+    asserts:
+      - failedTemplate:
+          errorMessage: "directRdpService.enabled is true but only 1 entr(y/ies) are configured for zone \"zonea\" while components.connectionProxy has 2 replica(s). Each connection-proxy replica needs its own externally reachable RDP address: add more directRdpService.perServiceSettings entries with zone: zonea."

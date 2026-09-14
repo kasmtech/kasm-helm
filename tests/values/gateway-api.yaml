@@ -4,8 +4,9 @@ publicAddr: kasm.example.com
 proxyService:
   type: ClusterIP
 components:
-  rdpGateway:
-    enabled: true
+  connectionProxy:
+    rdpGateway:
+      enabled: true
 httpRoute:
   enabled: true
   parentRefs:
