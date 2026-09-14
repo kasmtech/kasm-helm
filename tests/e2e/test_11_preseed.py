@@ -81,9 +81,11 @@ preseed_values = {
         "api": {"resources": {"requests": {"cpu": "50m", "memory": "256Mi"}}},
         "manager": {"resources": {"requests": {"cpu": "50m", "memory": "256Mi"}}},
         "proxy": {"resources": {"requests": {"cpu": "50m", "memory": "128Mi"}}},
-        "guac": {"resources": {"requests": {"cpu": "50m", "memory": "256Mi"}}},
-        "rdpGateway": {"resources": {"requests": {"cpu": "25m", "memory": "128Mi"}}},
-        "rdpHttpsGateway": {"resources": {"requests": {"cpu": "25m", "memory": "128Mi"}}},
+        "connectionProxy": {
+            "guac": {"resources": {"requests": {"cpu": "50m", "memory": "256Mi"}}},
+            "rdpGateway": {"resources": {"requests": {"cpu": "25m", "memory": "128Mi"}}},
+            "rdpHttpsGateway": {"resources": {"requests": {"cpu": "25m", "memory": "128Mi"}}},
+        },
     },
     "dbManagement": {
         "initialize": True,

@@ -6,6 +6,13 @@ These tests install the chart with various kasmZones configurations and verify
 that Kubernetes creates the correct set of resources (StatefulSets, Deployments,
 Services) with zone-specific names. Pod readiness is not required; the tests
 only verify that the Kubernetes API reflects the expected resource topology.
+
+Post connection-proxy-consolidation: guac, rdp-gateway, and rdp-https-gateway
+are no longer separate workloads. They are three service containers inside a
+single zone-scoped `connection-proxy` StatefulSet
+(`<release>-connection-proxy-<zone>`). There is no longer a separate
+`rdp-gateway` Deployment. api, manager, and proxy remain separate zone-scoped
+Deployments.
 """
 
 from __future__ import annotations
@@ -85,9 +92,11 @@ _COMPONENT_RESOURCES = {
         "api": {"resources": LOW},
         "manager": {"resources": LOW},
         "proxy": {"resources": LOW_PROXY},
-        "guac": {"resources": LOW},
-        "rdpGateway": {"resources": LOW_GW},
-        "rdpHttpsGateway": {"resources": LOW_GW},
+        "connectionProxy": {
+            "guac": {"resources": LOW},
+            "rdpGateway": {"resources": LOW_GW},
+            "rdpHttpsGateway": {"resources": LOW_GW},
+        },
     },
 }
 
@@ -95,13 +104,13 @@ _COMPONENT_RESOURCES = {
 @pytest.mark.e2e
 def test_primary_zone_at_non_zero_index(installer, temp_workdir: Path) -> None:
     """
-    When primary: true is on the second zone (index 1), guac, rdp-gateway, and
-    rdp-https-gateway resources must carry that zone's name, not the first zone's.
-    API, Manager, and Proxy deploy for both zones.
+    When primary: true is on the second zone (index 1), the connection-proxy
+    StatefulSet (housing guac, rdp-gateway, and rdp-https-gateway) must carry
+    that zone's name, not the first zone's. API, Manager, and Proxy deploy for
+    both zones.
     """
     e2e_config = installer["config"]
     namespace = installer["namespace"]
-    release = e2e_config.release_name
 
     values_obj = {
         "deploymentSize": "small",
@@ -124,31 +133,33 @@ def test_primary_zone_at_non_zero_index(installer, temp_workdir: Path) -> None:
         values_file=str(values_path),
     )
 
-    # Both zones get an API deployment.
-    api_names = _wait_for_resource_count(namespace, "deployments", 5)
+    # Both zones get api, manager, and proxy deployments (2 zones x 3 = 6).
+    api_names = _wait_for_resource_count(namespace, "deployments", 6)
     assert any("api-zonea" in n for n in api_names), f"No api-zonea deployment: {api_names}"
     assert any("api-zoneb" in n for n in api_names), f"No api-zoneb deployment: {api_names}"
+    assert any("manager-zonea" in n for n in api_names), f"No manager-zonea deployment: {api_names}"
+    assert any("manager-zoneb" in n for n in api_names), f"No manager-zoneb deployment: {api_names}"
+    assert any("proxy-zonea" in n for n in api_names), f"No proxy-zonea deployment: {api_names}"
+    assert any("proxy-zoneb" in n for n in api_names), f"No proxy-zoneb deployment: {api_names}"
 
-    # Guac, rdp-gateway, rdp-https-gateway are created for the primary zone (zonea), not zoneb.
+    # The connection-proxy StatefulSet (guac + rdp-gateway + rdp-https-gateway
+    # containers) is created only for the primary zone (zonea), plus the db
+    # StatefulSet (not zone-scoped).
     sts_names = _wait_for_resource_count(namespace, "statefulsets", 2)
-    assert any("guac-zonea" in n for n in sts_names), f"Expected guac-zonea statefulset: {sts_names}"
-    assert not any("guac-zoneb" in n for n in sts_names), f"Unexpected guac-zoneb statefulset: {sts_names}"
-    assert any("rdp-https-gateway-zonea" in n for n in sts_names), (
-        f"Expected rdp-https-gateway-zonea statefulset: {sts_names}"
+    assert any("connection-proxy-zonea" in n for n in sts_names), (
+        f"Expected connection-proxy-zonea statefulset: {sts_names}"
     )
-
-    rdp_gw_deploys = [n for n in _get_resource_names(namespace, "deployments") if "rdp-gateway" in n and "https" not in n]
-    assert any("rdp-gateway-zonea" in n for n in rdp_gw_deploys), f"Expected rdp-gateway-zonea: {rdp_gw_deploys}"
-    assert not any("rdp-gateway-zoneb" in n for n in rdp_gw_deploys), (
-        f"Unexpected rdp-gateway-zoneb: {rdp_gw_deploys}"
+    assert not any("connection-proxy-zoneb" in n for n in sts_names), (
+        f"Unexpected connection-proxy-zoneb statefulset: {sts_names}"
     )
 
 
 @pytest.mark.e2e
 def test_same_region_name_full_stack_per_zone(installer, temp_workdir: Path) -> None:
     """
-    When two zones share the same region_name as the primary zone, guac,
-    rdp-gateway, and rdp-https-gateway each deploy once per zone in that region.
+    When two zones share the same region_name as the primary zone, the
+    connection-proxy StatefulSet (housing guac, rdp-gateway, and
+    rdp-https-gateway) deploys once per zone in that region.
     """
     e2e_config = installer["config"]
     namespace = installer["namespace"]
@@ -183,35 +194,30 @@ def test_same_region_name_full_stack_per_zone(installer, temp_workdir: Path) -> 
         values_file=str(values_path),
     )
 
-    # With 2 same-region zones: db + api-zonea + api-zoneb + manager-zonea + manager-zoneb
-    # + proxy-zonea + proxy-zoneb + rdp-gateway-zonea + rdp-gateway-zoneb = deployments
-    all_deploys = _wait_for_resource_count(namespace, "deployments", 7)
+    # With 2 same-region zones: api-zonea + api-zoneb + manager-zonea +
+    # manager-zoneb + proxy-zonea + proxy-zoneb = 6 deployments (guac,
+    # rdp-gateway, rdp-https-gateway no longer add separate Deployments; they
+    # are containers inside the connection-proxy StatefulSet).
+    all_deploys = _wait_for_resource_count(namespace, "deployments", 6)
 
-    api_deploys = [n for n in all_deploys if "api" in n and "manager" not in n and "rdp" not in n]
+    api_deploys = [n for n in all_deploys if "api" in n and "manager" not in n]
     assert len(api_deploys) == 2, f"Expected 2 api deployments, got: {api_deploys}"
 
-    rdp_gw_deploys = [n for n in all_deploys if "rdp-gateway" in n and "https" not in n]
-    assert len(rdp_gw_deploys) == 2, f"Expected 2 rdp-gateway deployments: {rdp_gw_deploys}"
-    assert any("zonea" in n for n in rdp_gw_deploys)
-    assert any("zoneb" in n for n in rdp_gw_deploys)
-
-    # Guac and rdp-https-gateway each produce 2 StatefulSets.
+    # connection-proxy produces one StatefulSet per zone in the primary
+    # region, plus the (non-zoned) db StatefulSet = 3 total.
     sts_names = _wait_for_resource_count(namespace, "statefulsets", 3)
-    guac_sts = [n for n in sts_names if "guac" in n]
-    assert len(guac_sts) == 2, f"Expected 2 guac statefulsets: {sts_names}"
-    assert any("zonea" in n for n in guac_sts)
-    assert any("zoneb" in n for n in guac_sts)
-
-    rdp_https_sts = [n for n in sts_names if "rdp-https-gateway" in n]
-    assert len(rdp_https_sts) == 2, f"Expected 2 rdp-https-gateway statefulsets: {sts_names}"
+    cp_sts = [n for n in sts_names if "connection-proxy" in n]
+    assert len(cp_sts) == 2, f"Expected 2 connection-proxy statefulsets: {sts_names}"
+    assert any("zonea" in n for n in cp_sts)
+    assert any("zoneb" in n for n in cp_sts)
 
 
 @pytest.mark.e2e
 def test_cross_region_limits_full_stack_to_primary(installer, temp_workdir: Path) -> None:
     """
-    When two zones have different region_names, guac/rdp-gateway/rdp-https-gateway
-    deploy only for the primary region zone. API, Manager, and Proxy deploy for
-    both zones.
+    When two zones have different region_names, the connection-proxy
+    StatefulSet (guac/rdp-gateway/rdp-https-gateway) deploys only for the
+    primary region zone. API, Manager, and Proxy deploy for both zones.
     """
     e2e_config = installer["config"]
     namespace = installer["namespace"]
@@ -246,9 +252,10 @@ def test_cross_region_limits_full_stack_to_primary(installer, temp_workdir: Path
         values_file=str(values_path),
     )
 
-    # 2 zones → 2 api + 2 manager + 2 proxy + 1 rdp-gateway-zonea = 7 deployments total
-    # (db is a StatefulSet, not a Deployment)
-    all_deploys = _wait_for_resource_count(namespace, "deployments", 7)
+    # 2 zones → 2 api + 2 manager + 2 proxy = 6 deployments total. connection-proxy
+    # is a StatefulSet (housing guac/rdp-gateway/rdp-https-gateway), not a
+    # Deployment, so it does not appear here.
+    all_deploys = _wait_for_resource_count(namespace, "deployments", 6)
 
     api_deploys = [n for n in all_deploys if "-api-" in n]
     assert len(api_deploys) == 2, f"Expected 2 api deployments: {api_deploys}"
@@ -258,17 +265,9 @@ def test_cross_region_limits_full_stack_to_primary(installer, temp_workdir: Path
     proxy_deploys = [n for n in all_deploys if "-proxy-" in n]
     assert len(proxy_deploys) == 2, f"Expected 2 proxy deployments: {proxy_deploys}"
 
-    # Only primary region (zonea) gets rdp-gateway.
-    rdp_gw_deploys = [n for n in all_deploys if "rdp-gateway" in n and "https" not in n]
-    assert len(rdp_gw_deploys) == 1, f"Expected 1 rdp-gateway deployment: {rdp_gw_deploys}"
-    assert "zonea" in rdp_gw_deploys[0], f"Expected zonea in rdp-gateway name: {rdp_gw_deploys}"
-
-    # Only primary region (zonea) gets guac and rdp-https-gateway StatefulSets.
+    # Only primary region (zonea) gets the connection-proxy StatefulSet, plus
+    # the (non-zoned) db StatefulSet = 2 total.
     sts_names = _wait_for_resource_count(namespace, "statefulsets", 2)
-    guac_sts = [n for n in sts_names if "guac" in n]
-    assert len(guac_sts) == 1, f"Expected 1 guac statefulset: {sts_names}"
-    assert "zonea" in guac_sts[0]
-
-    rdp_https_sts = [n for n in sts_names if "rdp-https-gateway" in n]
-    assert len(rdp_https_sts) == 1, f"Expected 1 rdp-https-gateway statefulset: {sts_names}"
-    assert "zonea" in rdp_https_sts[0]
+    cp_sts = [n for n in sts_names if "connection-proxy" in n]
+    assert len(cp_sts) == 1, f"Expected 1 connection-proxy statefulset: {sts_names}"
+    assert "zonea" in cp_sts[0]
