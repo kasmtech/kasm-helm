@@ -207,7 +207,7 @@ See [Publish the charts](../../docs/how-to/publish-charts.md).
 | Repository | Name | Version |
 |------------|------|---------|
 | file://../kasm-agent | kasm-agent | 0.1.0 |
-| file://../kasm-helm | kasm-helm | 1.1190.7 |
+| file://../kasm-helm | kasm-helm | 1.1200.0-develop |
 
 ## Values
 

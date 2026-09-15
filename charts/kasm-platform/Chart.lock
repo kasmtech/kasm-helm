@@ -1,9 +1,9 @@
 dependencies:
 - name: kasm-helm
   repository: file://../kasm-helm
-  version: 1.1190.7
+  version: 1.1200.0-develop
 - name: kasm-agent
   repository: file://../kasm-agent
   version: 0.1.0
-digest: sha256:51f5b68da9efc5b42d62f883bc87d05256f497b03d8aeb5add226ccadd4dff63
-generated: "2026-09-14T07:26:32.13097924-04:00"
+digest: sha256:ddf8b8277b9a73646f98794853359490a9d770494fd201c2cbf11161d6edc3f7
+generated: "2026-09-15T07:21:57.036809-05:00"

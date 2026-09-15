@@ -570,7 +570,7 @@ kasmSecrets:
 #   "1.19.0"                     frozen point-in-time tag
 #   "1.19.0-rolling-2026-06-02"  date-locked rolling tag, pins a specific rolling build
 #
-useImageTags: "1.19.0-rolling"
+useImageTags: "develop"
 
 # Kasm DB settings and configuration options
 #
