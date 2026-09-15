@@ -90,10 +90,6 @@ spec:
               mountPath: /run
             - name: kasm-connection-proxy-nginx-log-tmp
               mountPath: /var/log/nginx
-            {{- if $.Values.observability.enabled }}
-            - name: kasm-connection-proxy-otel-logs
-              mountPath: /var/log/nginx/otel
-            {{- end }}
             - name: kasm-connection-proxy-cert
               mountPath: /etc/nginx/ssl/tls.crt
               subPath: tls.crt
@@ -390,11 +386,12 @@ spec:
         {{- end }}
         {{- if $.Values.observability.enabled }}
         {{- /*
-          One Collector sidecar per pod. It tails this pod's nginx log files, scrapes stub_status
-          over loopback, and receives OTLP from the guac / rdp-gateway / rdp-https-gateway
-          containers on 127.0.0.1, so the pod has a single egress point to the forwarder.
+          One Collector sidecar per pod. It receives this pod's nginx logs over loopback syslog,
+          scrapes stub_status over loopback, and receives OTLP from the guac / rdp-gateway /
+          rdp-https-gateway containers on 127.0.0.1, so the pod has a single egress point to the
+          forwarder.
         */}}
-        {{- include "kasm.otelSidecar" (dict "context" $ "zone" $zone.name "configMap" (include "kasm.name" (list $ "otel-nginx-sidecar-connection-proxy" "configmap")) "volumeName" "kasm-connection-proxy-otel-logs" "mountPath" "/var/log/nginx/otel") | nindent 8 }}
+        {{- include "kasm.otelSidecar" (dict "context" $ "zone" $zone.name "configMap" (include "kasm.name" (list $ "otel-nginx-sidecar-connection-proxy" "configmap"))) | nindent 8 }}
         {{- end }}
         {{- with $merged.extraContainers }}
           {{- toYaml . | nindent 8 }}
@@ -419,9 +416,6 @@ spec:
           emptyDir:
             sizeLimit: 1Gi
         {{- if $.Values.observability.enabled }}
-        - name: kasm-connection-proxy-otel-logs
-          emptyDir:
-            sizeLimit: {{ $.Values.components.otelSidecar.logSizeLimit }}
         - name: otel-sidecar-config
           configMap:
             name: {{ include "kasm.name" (list $ "otel-nginx-sidecar-connection-proxy" "configmap") }}

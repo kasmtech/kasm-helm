@@ -1,14 +1,14 @@
 {{/*
 Collector config for the nginx pods' sidecar. Rendered once per consumer (Kasm Proxy Deployment,
 Kasm Connection Proxy StatefulSet) because each needs its own resource["service.name"]/
-attributes["application"] baked into the filelog operator chains (kasm.otelNginxAccessLogOperators,
+attributes["application"] baked into the syslog receiver operator chains (kasm.otelNginxAccessLogOperators,
 kasm.otelNginxErrorLogOperators) so their logs are distinguishable in ClickHouse. Everything else is
 identical between the two; the forwarder endpoint is supplied per-pod through
 OTEL_EXPORTER_OTLP_ENDPOINT by kasm.otelSidecar.
 
 The sidecar is the pod's single egress point. It:
-  - tails the two log files nginx writes to the shared emptyDir (a sidecar cannot read another
-    container's stdout, which is why nginx writes files at all)
+  - receives nginx's access and error logs over loopback syslog UDP (a sidecar cannot read another
+    container's stdout, which is why nginx sends them out-of-band at all)
   - scrapes nginx connection metrics from stub_status over the pod's loopback interface
   - receives OTLP/gRPC from ngx_otel_module on 127.0.0.1:4316 (the module is gRPC-only and cannot
     present a bearer token, so it gets an unauthenticated receiver; binding loopback keeps it
@@ -16,8 +16,9 @@ The sidecar is the pod's single egress point. It:
   - receives OTLP/HTTP from the co-located Kasm services on 127.0.0.1:4318 (Connection Proxy only;
     the listener is idle in the Proxy pod)
 
-None of these listeners is published as a containerPort or a Service. filelog offsets are
-checkpointed into the sidecar's own emptyDir so a sidecar restart neither loses nor repeats lines.
+None of these listeners is published as a containerPort or a Service. Syslog/UDP is fire-and-forget:
+a sidecar restart drops in-flight datagrams instead of replaying or losing checkpointed offsets (see
+observability.md's transport caveat).
 */}}
 {{- $obs := .Values.observability -}}
 {{- if $obs.enabled }}
@@ -37,28 +38,22 @@ data:
       health_check:
         endpoint: "0.0.0.0:{{ $constants.otel.health }}"
 
-      # Offsets survive a sidecar restart. The checkpoint directory is on the same emptyDir as /tmp,
-      # so a pod restart clears both the offsets and the log files they refer to.
-      file_storage/checkpoints:
-        directory: /tmp/otel-checkpoints
-        create_directory: true
-
     receivers:
       nginx/metrics:
         endpoint: "http://localhost:{{ $constants.proxyStubStatus }}/stub_status"
         collection_interval: 30s
 
-      filelog/nginx_access:
-        include: [/var/log/nginx/otel/access_json.log]
-        start_at: end
-        storage: file_storage/checkpoints
+      syslog/nginx_access:
+        protocol: rfc3164
+        udp:
+          listen_address: "127.0.0.1:{{ $constants.otel.syslogAccess }}"
         operators:
           {{- include "kasm.otelNginxAccessLogOperators" (dict "context" $ "serviceName" $v.serviceName) | nindent 10 }}
 
-      filelog/nginx_error:
-        include: [/var/log/nginx/otel/error.log]
-        start_at: end
-        storage: file_storage/checkpoints
+      syslog/nginx_error:
+        protocol: rfc3164
+        udp:
+          listen_address: "127.0.0.1:{{ $constants.otel.syslogError }}"
         operators:
           {{- include "kasm.otelNginxErrorLogOperators" (dict "context" $ "serviceName" $v.serviceName) | nindent 10 }}
 
@@ -98,11 +93,11 @@ data:
           queue_size: 500
 
     service:
-      extensions: [health_check, file_storage/checkpoints]
+      extensions: [health_check]
 
       pipelines:
         logs:
-          receivers: [filelog/nginx_access, filelog/nginx_error, otlp/local]
+          receivers: [syslog/nginx_access, syslog/nginx_error, otlp/local]
           processors: [memory_limiter, batch]
           exporters: [otlphttp]
 

@@ -82,10 +82,6 @@ spec:
               mountPath: /run
             - name: kasm-proxy-log-tmp
               mountPath: /var/log/nginx
-            {{- if $.Values.observability.enabled }}
-            - name: kasm-proxy-otel-logs
-              mountPath: /var/log/nginx/otel
-            {{- end }}
             {{- with $merged.containerMounts }}
               {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -109,7 +105,7 @@ spec:
             {{- include "health.probe" (dict "root" $ "component" "proxy" "probeType" "readinessProbe" "type" "command" "command" "nginx -t") | nindent 12 }}
           {{- end }}
         {{- if $.Values.observability.enabled }}
-        {{- include "kasm.otelSidecar" (dict "context" $ "zone" $zone.name "configMap" (include "kasm.name" (list $ "otel-nginx-sidecar" "configmap")) "volumeName" "kasm-proxy-otel-logs" "mountPath" "/var/log/nginx/otel") | nindent 8 }}
+        {{- include "kasm.otelSidecar" (dict "context" $ "zone" $zone.name "configMap" (include "kasm.name" (list $ "otel-nginx-sidecar" "configmap"))) | nindent 8 }}
         {{- end }}
         {{- with $merged.extraContainers }}
           {{- toYaml . | nindent 8 }}
@@ -134,9 +130,6 @@ spec:
           emptyDir:
             sizeLimit: 1Gi
         {{- if $.Values.observability.enabled }}
-        - name: kasm-proxy-otel-logs
-          emptyDir:
-            sizeLimit: {{ $.Values.components.otelSidecar.logSizeLimit }}
         - name: otel-sidecar-config
           configMap:
             name: {{ include "kasm.name" (list $ "otel-nginx-sidecar" "configmap") }}

@@ -43,7 +43,7 @@ data:
                         '$status $body_bytes_sent "$http_referer" '
                         '"$http_user_agent" "$http_x_forwarded_for"';
 
-      access_log  /var/log/nginx/access.log  main;
+      access_log  /dev/stdout  main;
 
       sendfile        on;
 
@@ -102,13 +102,13 @@ data:
         '"upstream_header_time": "$upstream_header_time"'
       '}';
       # The console always gets the human-readable format. Structured logs are the sidecar's job:
-      # a sidecar cannot read another container's stdout, so nginx additionally writes JSON access
-      # logs and its error log to files on the shared emptyDir for the sidecar to tail.
+      # a sidecar cannot read another container's stdout, so nginx additionally sends JSON access
+      # logs and its error log over loopback syslog UDP to the in-pod otel sidecar collector.
       access_log /dev/stdout main;
       error_log  /dev/stderr warn;
       {{- if .Values.observability.enabled }}
-      access_log /var/log/nginx/otel/access_json.log json_combined;
-      error_log  /var/log/nginx/otel/error.log warn;
+      access_log syslog:server=127.0.0.1:{{ $constants.otel.syslogAccess }},tag=nginx json_combined;
+      error_log  syslog:server=127.0.0.1:{{ $constants.otel.syslogError }} warn;
       {{- end }}
 
 

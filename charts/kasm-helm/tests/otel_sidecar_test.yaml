@@ -133,21 +133,24 @@ tests:
       - notExists:
           path: spec.template.spec.containers[1].ports
 
-  - it: nginx sidecar tails both log files, scrapes stub_status, and checkpoints offsets
+  - it: nginx sidecar receives both logs over loopback syslog and scrapes stub_status
     template: templates/otel-nginx-sidecar-configmap.yaml
     asserts:
       - matchRegex:
           path: data["config.yaml"]
-          pattern: "/var/log/nginx/otel/access_json.log"
+          pattern: 'syslog/nginx_access:\s+protocol: rfc3164\s+udp:\s+listen_address: "127\.0\.0\.1:5140"'
       - matchRegex:
           path: data["config.yaml"]
-          pattern: "/var/log/nginx/otel/error.log"
+          pattern: 'syslog/nginx_error:\s+protocol: rfc3164\s+udp:\s+listen_address: "127\.0\.0\.1:5141"'
       - matchRegex:
           path: data["config.yaml"]
           pattern: "http://localhost:8090/stub_status"
-      - matchRegex:
+      - notMatchRegex:
           path: data["config.yaml"]
-          pattern: "storage: file_storage/checkpoints"
+          pattern: "filelog/nginx"
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "file_storage/checkpoints"
 
   # ---------- per-consumer service name ----------
   # Proxy and Connection Proxy share the nginx sidecar's collector config, but each gets its own
@@ -244,15 +247,25 @@ tests:
           path: spec.template.spec.containers[1].resources.limits.memory
           value: 256Mi
 
-  - it: nginx log volume size honours components.otelSidecar.logSizeLimit
+  - it: proxy pod has no nginx log emptyDir, because logs go out over loopback syslog
     template: templates/proxy-deployment.yaml
     documentIndex: 0
-    set:
-      components.otelSidecar.logSizeLimit: 2Gi
     asserts:
-      - equal:
-          path: spec.template.spec.volumes[?(@.name=="kasm-proxy-otel-logs")].emptyDir.sizeLimit
-          value: 2Gi
+      - notExists:
+          path: spec.template.spec.volumes[?(@.name=="kasm-proxy-otel-logs")]
+      - notExists:
+          path: spec.template.spec.containers[0].volumeMounts[?(@.mountPath=="/var/log/nginx/otel")]
+
+  - it: connection-proxy pod has no nginx log emptyDir, because logs go out over loopback syslog
+    template: templates/connection-proxy-statefulset.yaml
+    documentIndex: 0
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.volumes[?(@.name=="kasm-connection-proxy-otel-logs")]
+      - notExists:
+          path: spec.template.spec.containers[0].volumeMounts[?(@.mountPath=="/var/log/nginx/otel")]
 
   # ---------- disabled ----------
   - it: observability.enabled=false removes every sidecar and its config

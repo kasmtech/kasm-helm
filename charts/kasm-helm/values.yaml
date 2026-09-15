@@ -1009,10 +1009,6 @@ components:
     # `deploymentSize` values. Applied to every sidecar; note that a large deployment runs one per Proxy replica, one per
     # Connection Proxy replica, and one in the DB pod.
     resources: {}
-    # components.otelSidecar.logSizeLimit -- Size limit of the emptyDir volume nginx writes its log files to and the
-    # sidecar reads them from. nginx does not rotate these files, so a pod that exceeds this limit is evicted and
-    # restarted with an empty volume.
-    logSizeLimit: 512Mi
 
   # Configuration settings for ClickHouse, the telemetry store that backs Kasm reporting. Behaviour,
   # including the database identity and retention windows, is configured under

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+import uuid
 from pathlib import Path
 
 import pytest
@@ -199,6 +200,43 @@ def _drive_traffic(namespace: str) -> None:
     curl_from_pod(namespace, proxy_pod, "https://localhost:8443/api/public/get_token", insecure=True)
 
 
+def _assert_no_syslog_loss(namespace: str, database: str) -> None:
+    """Loopback syslog UDP is fire-and-forget (no ack, no retry, no checkpoint), unlike the
+    filelog approach it replaced. Drive a known number of requests to a unique path and require
+    ClickHouse to end up with exactly that many kasm-proxy access rows for it — on idle loopback we
+    expect zero loss, and an exact-match assertion (not just "some rows arrived") is the only way
+    to catch silent drops.
+    """
+    unique_path = f"/otel-loss-check-{uuid.uuid4().hex}"
+    request_count = 50
+    proxy_pod = get_first_pod_by_selector(namespace, "app.kubernetes.io/component=proxy")
+    for _ in range(request_count):
+        curl_from_pod(namespace, proxy_pod, f"https://localhost:8443{unique_path}", insecure=True)
+
+    sql = (
+        "SELECT count() FROM otel_logs WHERE ServiceName = 'kasm-proxy' "
+        f"AND JSONExtractString(LogAttributes['url'], 'path') = '{unique_path}'"
+    )
+
+    def _check() -> bool:
+        try:
+            return int(_clickhouse_query(namespace, database, sql).splitlines()[0] or "0") >= request_count
+        except (ValueError, IndexError):
+            return False
+
+    wait_for_condition(
+        f"{request_count} kasm-proxy access rows for {unique_path}",
+        _check,
+        timeout_seconds=_TELEMETRY_FLUSH_TIMEOUT_SECONDS,
+        poll_seconds=_TELEMETRY_POLL_SECONDS,
+    )
+    final_count = int(_clickhouse_query(namespace, database, sql).splitlines()[0] or "0")
+    assert final_count == request_count, (
+        f"expected exactly {request_count} kasm-proxy access rows for {unique_path}, got "
+        f"{final_count} — loopback syslog UDP dropped datagrams"
+    )
+
+
 def _assert_core_telemetry(namespace: str, database: str) -> None:
     _wait_for_query_nonzero(
         namespace,
@@ -230,8 +268,8 @@ def _assert_core_telemetry(namespace: str, database: str) -> None:
         namespace, database, "SELECT count() FROM otel_logs WHERE ServiceName = 'kasm-proxy'"
     )
     assert int(proxy_log_count.splitlines()[0] or "0") > 0, (
-        "no kasm-proxy log rows — the unconditional nginx otel sidecar did not tail "
-        "/var/log/nginx/otel/access_json.log, or its filelog receiver did not match"
+        "no kasm-proxy log rows — the unconditional nginx otel sidecar received nothing on its "
+        "loopback syslog receiver, or the receiver's operator chain did not match"
     )
 
     # The filelog operators move fields to semconv names via dotted paths
@@ -298,6 +336,9 @@ def test_observability_default_install_end_to_end(installer, temp_workdir: Path)
     time.sleep(15)
 
     _assert_core_telemetry(namespace, "kasm_otel")
+
+    LOGGER.info("[observability] checking for syslog UDP loss on idle loopback")
+    _assert_no_syslog_loss(namespace, "kasm_otel")
 
     # /otel-config.js reflects the enabled browser telemetry stub.
     proxy_pod = get_first_pod_by_selector(namespace, "app.kubernetes.io/component=proxy")

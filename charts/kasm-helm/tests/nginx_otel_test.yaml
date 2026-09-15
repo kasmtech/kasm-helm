@@ -119,7 +119,7 @@ tests:
 
   # ---------- stdout access_log format ----------
   # The console is always human-readable now. Structured logs are the sidecar's job, and a sidecar
-  # cannot read another container's stdout, so nginx writes them to files on the shared volume.
+  # cannot read another container's stdout, so nginx sends them out over loopback syslog UDP.
   - it: stdout access_log is always the human-readable format
     template: templates/nginx-shared-configmap.yaml
     asserts:
@@ -146,24 +146,24 @@ tests:
           path: data["logging.conf"]
           pattern: "error_log  /dev/stderr warn;"
 
-  - it: JSON access log and error log are written to the sidecar volume when telemetry is on
+  - it: JSON access log and error log go to the sidecar over loopback syslog when telemetry is on
     template: templates/nginx-shared-configmap.yaml
     asserts:
       - matchRegex:
           path: data["logging.conf"]
-          pattern: "access_log /var/log/nginx/otel/access_json\\.log json_combined;"
+          pattern: "access_log syslog:server=127\\.0\\.0\\.1:5140,tag=nginx json_combined;"
       - matchRegex:
           path: data["logging.conf"]
-          pattern: "error_log  /var/log/nginx/otel/error\\.log warn;"
+          pattern: "error_log  syslog:server=127\\.0\\.0\\.1:5141 warn;"
 
-  - it: no file destinations when telemetry is off
+  - it: no syslog destinations when telemetry is off
     template: templates/nginx-shared-configmap.yaml
     values:
       - ../../../tests/values/observability-disabled.yaml
     asserts:
       - notMatchRegex:
           path: data["logging.conf"]
-          pattern: "/var/log/nginx/otel/"
+          pattern: "syslog:server="
 
   - it: zero otel_ directives (not counting load_module's filename) when observability.enabled=false
     template: templates/nginx-shared-configmap.yaml

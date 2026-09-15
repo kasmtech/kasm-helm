@@ -127,6 +127,8 @@ otel:
   otlpHttp: 4318
   otlpGrpc: 4317
   otlpNginx: 4316
+  syslogAccess: 5140
+  syslogError: 5141
   health: 13133
   selfMetrics: 8888
 clickhouse:
@@ -1797,11 +1799,11 @@ Dedup rules:
 {{- end -}}
 
 {{/*
-  filelog operator chain for the nginx JSON access log, ported verbatim (including
-  overwrite_text: true) from kasm_backend/install/conf/otel/otel-collector-local.yaml. Used
-  directly as the `operators:` list of the unconditional otel-sidecar's filelog/nginx_access
-  receiver (otel-nginx-sidecar-configmap.yaml) — the sidecar reads a plain file, so no
-  container/router unwrapping is needed here.
+  Operator chain for the nginx JSON access log, ported (including overwrite_text: true) from
+  kasm_backend/install/conf/otel/otel-collector-local.yaml. Used directly as the `operators:` list
+  of the otel-sidecar's syslog/nginx_access receiver (otel-nginx-sidecar-configmap.yaml). nginx
+  sends the JSON payload as the syslog message; the syslog receiver already lands it in
+  attributes.message, so the chain's json_parser reads from there instead of body.
   Args (dict):
     context     = root context (.)
     serviceName = resource["service.name"]/attributes["application"] to stamp on every record
@@ -1813,6 +1815,7 @@ Dedup rules:
 {{- define "kasm.otelNginxAccessLogOperators" -}}
 {{- $serviceName := .serviceName -}}
 - type: json_parser
+  parse_from: attributes.message
   timestamp:
     parse_from: attributes.time_iso8601
     layout: "%Y-%m-%dT%H:%M:%S%z"
@@ -1845,9 +1848,11 @@ Dedup rules:
 {{- end -}}
 
 {{/*
-  filelog operator chain for the nginx error log, ported verbatim from
+  Operator chain for the nginx error log, ported from
   kasm_backend/install/conf/otel/otel-collector-local.yaml. See kasm.otelNginxAccessLogOperators
-  for the serviceName arg this define shares.
+  for the serviceName arg this define shares and why parse_from targets attributes.message: nginx's
+  syslog error_log keeps its own "date [level] pid#tid: message" text as the syslog message body, so
+  the regex still matches, just against attributes.message instead of the file line.
   Args (dict):
     context     = root context (.)
     serviceName = resource["service.name"] to stamp on every record (e.g. "kasm-proxy",
@@ -1859,6 +1864,7 @@ Dedup rules:
 {{- define "kasm.otelNginxErrorLogOperators" -}}
 {{- $serviceName := .serviceName -}}
 - type: regex_parser
+  parse_from: attributes.message
   regex: '^(?P<timestamp>\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}) \[(?P<level>\w+)\] (?P<pid>\d+)#\d+: (?:\*\d+ )?(?P<message>.+)$'
   timestamp:
     parse_from: attributes.timestamp
@@ -1880,12 +1886,14 @@ Dedup rules:
 {{/*
   Shared OTel Collector sidecar container. A sidecar runs in every pod whose telemetry can only be
   read from inside the pod, and is that pod's single egress point to the forwarder:
-    - Kasm Proxy and Connection Proxy (nginx log files on a shared emptyDir, plus stub_status metrics)
+    - Kasm Proxy and Connection Proxy (loopback syslog for nginx logs, plus stub_status metrics)
     - Kasm DB (PostgreSQL JSON log files on the data PVC)
   The caller is responsible for adding matching volumes to the pod spec:
     - a ConfigMap volume named "otel-sidecar-config" (the same name passed as .configMap)
-    - an emptyDir volume named "otel-sidecar-tmp" (also holds the filelog offset checkpoints)
-    - the log volume named .volumeName, already mounted (read-write) into the primary container
+    - an emptyDir volume named "otel-sidecar-tmp"
+    - if volumeName/mountPath are given, that log volume already mounted (read-write) into the
+      primary container — omit both for callers with no file-based logs to read (the nginx sidecars,
+      which receive everything over loopback syslog/OTLP)
   Optional args:
     uid         = uid/gid to run as (default 10001, the collector image's user). The DB sidecar must
                   run as 70: PostgreSQL writes its log files 0600 owned by the postgres user, so any
@@ -1894,17 +1902,19 @@ Dedup rules:
     serviceName = OTEL_SERVICE_NAME to report resource attributes under (e.g. "kasm-db"). Omit for
                   callers whose collector config already hardcodes the service name (the nginx
                   operator chains set resource["service.name"]=kasm-proxy themselves).
+    volumeName/mountPath = a file-based log volume to mount read-only into the sidecar. Omit both
+                  if the sidecar has no files to read (see above).
     subPath     = (optional) subPath for the log volume mount, for callers whose logs live inside a
                   larger volume (the DB PVC).
     extraVolumeMounts = (optional) YAML list of additional mounts, e.g. the DB sidecar's checkpoint
                   directory on the data PVC.
   Usage:
-    {{- include "kasm.otelSidecar" (dict "context" $ "configMap" "my-cm" "volumeName" "my-logs" "mountPath" "/var/log/nginx/otel") | nindent 8 }}
+    {{- include "kasm.otelSidecar" (dict "context" $ "configMap" "my-cm" "volumeName" "my-logs" "mountPath" "/var/log/postgres") | nindent 8 }}
 */}}
 {{- define "kasm.otelSidecar" -}}
 {{- $ctx := .context -}}
-{{- $volumeName := required "kasm.otelSidecar requires volumeName" .volumeName -}}
-{{- $mountPath := required "kasm.otelSidecar requires mountPath" .mountPath -}}
+{{- $volumeName := .volumeName -}}
+{{- $mountPath := .mountPath -}}
 {{- $constants := include "kasm.constants" $ctx | fromYaml -}}
 {{- $zone := .zone | default "" -}}
 {{- $uid := .uid | default 10001 -}}
@@ -1935,12 +1945,14 @@ Dedup rules:
   resources: {{- include "resources.preset" (dict "node" "otel-sidecar" "size" $ctx.Values.deploymentSize) | nindent 4 }}
   {{- end }}
   volumeMounts:
+    {{- if $volumeName }}
     - name: {{ $volumeName }}
       mountPath: {{ $mountPath }}
       {{- with .subPath }}
       subPath: {{ . }}
       {{- end }}
       readOnly: true
+    {{- end }}
     - name: otel-sidecar-config
       mountPath: /etc/otelcol-contrib/config.yaml
       subPath: config.yaml

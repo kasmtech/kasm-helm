@@ -83,26 +83,33 @@ ServiceAccount and no cluster RBAC.
 
 Each sidecar is that pod's single egress point to the forwarder:
 
-- The nginx sidecar tails the access and error log files nginx writes to a shared `emptyDir`,
-  scrapes nginx connection metrics from `stub_status` over the pod's own loopback interface, and
-  receives nginx's OTLP traces on a loopback-only gRPC listener. Because it scrapes loopback
-  directly (not a Service), nginx connection metrics are collected correctly regardless of
-  replica count — the round-robin/DaemonSet problem that ruled out per-node metrics scraping in an
-  earlier design does not apply to a per-pod sidecar.
+- The nginx sidecar receives nginx's access and error logs over loopback syslog UDP (nginx sends
+  them directly; there is no shared log volume between the containers), scrapes nginx connection
+  metrics from `stub_status` over the pod's own loopback interface, and receives nginx's OTLP
+  traces on a loopback-only gRPC listener. Because it scrapes loopback directly (not a Service),
+  nginx connection metrics are collected correctly regardless of replica count — the
+  round-robin/DaemonSet problem that ruled out per-node metrics scraping in an earlier design does
+  not apply to a per-pod sidecar.
 - The DB sidecar tails PostgreSQL's JSON log file from the data PVC. **It does not collect
   PostgreSQL metrics** — a `postgresql` receiver would need database credentials inside the DB
   pod, and that is deliberately deferred until there is a concrete need for it. Request rate,
   error, and query-log visibility for the DB come from these logs and from the API/Manager's own
   traces of their DB calls, not from DB-side metrics.
 
-**Known early-startup caveat.** nginx (and PostgreSQL) start writing to their log files as soon as
-their container starts, which can be before the sidecar container in the same pod is ready. The
-sidecar's `filelog` receivers use `start_at: end`: on first boot, the sidecar begins reading from
-whatever the end of the file is *at the moment it starts*, not from the beginning. Any log lines
-written between the primary container's start and the sidecar's readiness are therefore **not**
-collected — they are silently skipped, not duplicated or replayed later. This is a narrow,
-one-time gap at pod startup; it does not recur on ordinary log rotation or on Collector restarts
-after the checkpoint file exists (`file_storage` offsets survive a sidecar restart).
+**Known early-startup caveat.** PostgreSQL starts writing to its log file as soon as its container
+starts, which can be before the sidecar container in the same pod is ready. The DB sidecar's
+`filelog` receiver uses `start_at: end`: on first boot, the sidecar begins reading from whatever
+the end of the file is *at the moment it starts*, not from the beginning. Any log lines written
+between the primary container's start and the sidecar's readiness are therefore **not** collected
+— they are silently skipped, not duplicated or replayed later. This is a narrow, one-time gap at
+pod startup; it does not recur on ordinary log rotation or on Collector restarts after the
+checkpoint file exists (`file_storage` offsets survive a sidecar restart).
+
+nginx's access and error logs go out over loopback syslog UDP instead: fire-and-forget, no
+checkpoint, no replay. If the sidecar container isn't yet listening on the syslog port — pod
+startup, or a sidecar restart — nginx's UDP datagrams for that window are simply dropped by the
+kernel; nginx does not block or retry. This is a similarly narrow gap, but unlike the DB's
+file-based caveat it can also recur on every sidecar restart, not just pod startup.
 
 nginx **traces** are unaffected by any of this — `ngx_otel_module` talks to the sidecar directly
 over the network as spans are emitted, with nothing to tail from a file.

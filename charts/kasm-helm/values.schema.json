@@ -1455,12 +1455,6 @@
               "description": "Manually configure the Collector sidecar resources. This overrides the pre-defined `deploymentSize` values. Applied to every sidecar.",
               "title": "resources",
               "type": "object"
-            },
-            "logSizeLimit": {
-              "default": "512Mi",
-              "description": "Size limit of the emptyDir volume nginx writes its log files to and the sidecar reads them from. nginx does not rotate these files, so a pod that exceeds this limit is evicted and restarted with an empty volume.",
-              "title": "logSizeLimit",
-              "type": "string"
             }
           }
         },
