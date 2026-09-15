@@ -25,7 +25,7 @@ Distro / cloud variants:
 
 | Platform | RWX option that already exists |
 | -------- | ------------------------------ |
-| k3s | None by default - `local-path` is RWO. Use the bundled NFS provisioner (verified on k3s, backed by `local-path`) or an external NFS appliance. |
+| k3s | None by default - `local-path` is RWO. Use the bundled NFS provisioner (backed by `local-path`) or an external NFS appliance. |
 | kubeadm / vanilla | Whatever CSI driver you installed. CephFS/Rook and NFS-CSI are the common RWX ones. |
 | EKS | Amazon EFS CSI driver (`efs.csi.aws.com`). EBS is RWO only. |
 | AKS | Azure Files (`file.csi.azure.com`), class `azurefile-csi`. Azure Disk is RWO only. |

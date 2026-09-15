@@ -15,7 +15,7 @@ control plane can pass through too, with `kasm-helm.tlsRoute`.
 > the Gateway routes is the browser's, which carries SNI
 > ([Switch sessions to direct-connect](direct-connect.md#why-this-is-needed)). On a **relayed** zone
 > with the agent in another cluster, the control-plane proxy's upstream connection to the agent
-> carries no SNI; that path remains unverified through a passthrough listener, so use a published
+> carries no SNI, so a passthrough listener cannot route it; use a published
 > Service there ([LoadBalancer and NodePort](loadbalancer-nodeport.md)).
 
 ```mermaid
@@ -56,9 +56,8 @@ apply. On top of them:
 
 2. **A `Passthrough` listener.** A terminating HTTPS listener will not serve a `TLSRoute`; sessions
    fail at the handshake with no useful error on either side. Expected from the listener check:
-   `sessions-passthrough  TLS  8443  sessions.example.com  Passthrough`. The listener verified with
-   Traefik 3.7 and Gateway API 1.5.1, sharing port 8443 with the terminated listener
-   because the hostnames differ:
+   `sessions-passthrough  TLS  8443  sessions.example.com  Passthrough`. With Traefik the listener
+   shares port 8443 with the terminated listener because the hostnames differ:
 
    ```yaml
    - name: sessions-passthrough
@@ -232,7 +231,7 @@ Installing the charts directly, drop the `kasm-helm:` and `kasm-agent:` keys.
 
 - [ ] Gateway API 1.5+; `TLSRoute` served as `v1`.
 - [ ] A `protocol: TLS`, `tls.mode: Passthrough` listener carrying the hostname and admitting the release namespaces.
-- [ ] `gatewayRoute` (operator-managed) chosen; `tlsRoute` only for older operator builds.
+- [ ] `gatewayRoute` (operator-managed) or `tlsRoute` (chart-managed) chosen, not both.
 - [ ] A session-level check planned, not only the route and certificate checks.
 - [ ] Session-proxy certificate publicly trusted, covering the hostname and `*.<hostname>`.
 - [ ] L4 idle timeout raised on the Gateway and anything in front.

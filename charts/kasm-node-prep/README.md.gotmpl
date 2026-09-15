@@ -175,10 +175,10 @@ Which builder image to point `image.*` at, per node image:
 | Amazon Linux 2023 (EKS default) | `public.ecr.aws/amazonlinux/amazonlinux:2023` (or `docker.io/library/amazonlinux:2023`) | yes | V4L2 core is in `kernel-modules-extra`; confirm with `modinfo videodev` on a node. Both AL2023 kernel lines (6.1 and 6.12) resolve. |
 | Rocky / Alma / CentOS Stream 9 (and 8) | `docker.io/library/rockylinux:9`, `almalinux:9` (or `:8`), matching the major | yes | V4L2 core in `kernel-modules`, present by default. |
 | RHEL (subscription) | `registry.access.redhat.com/ubi9/ubi` (or Rocky/Alma of the same major) | partial | UBI repositories carry the toolchain but **not** `kernel-devel`: pre-install `kernel-devel-$(uname -r)` in the node image; `/usr/src` is bind-mounted, so the container then finds it. |
-| Oracle Linux 9 | `docker.io/library/oraclelinux:9` as is, RHCK or UEK nodes. The stock image ships its UEK repositories disabled; under a UEK kernel (release ending in `.el9uek.x86_64`) the script and the KMM Dockerfile enable the matching one (`ol9_UEKR8` for 6.12 kernels, `ol9_UEKR7` for 5.15) for the headers install, so the headers-by-path lookup resolves `kernel-uek-devel`. UEK R8 is built with gcc 14 from `gcc-toolset-14`, which the headers pull in and the script switches to on its own. | yes | Both kernel lines compiled in Docker against their real headers; the UEK R8 build path is also exercised on OKE worker nodes (Oracle Linux 9.8, CRI-O). |
-| Azure Linux 3 (AKS) | `mcr.microsoft.com/azurelinux/base/core:3.0` | yes, the `tdnf` path | Not yet verified on a live node. |
-| openSUSE Leap / SLES | `registry.opensuse.org/opensuse/leap:15.6`, or the SLES BCI matching the release | expected | Verified only as a `zypper` dry run. |
-| EKS Bottlerocket | none | no | No shell, no headers, immutable. `method: kmm` with `kmm.build.enabled: false` and per-kernel images built out of band (Bottlerocket publishes a kmod-kit for that). Module loading policy on Bottlerocket is not verified. |
+| Oracle Linux 9 | `docker.io/library/oraclelinux:9` as is, RHCK or UEK nodes. The stock image ships its UEK repositories disabled; under a UEK kernel (release ending in `.el9uek.x86_64`) the script and the KMM Dockerfile enable the matching one (`ol9_UEKR8` for 6.12 kernels, `ol9_UEKR7` for 5.15) for the headers install, so the headers-by-path lookup resolves `kernel-uek-devel`. UEK R8 is built with gcc 14 from `gcc-toolset-14`, which the headers pull in and the script switches to on its own. | yes | |
+| Azure Linux 3 (AKS) | `mcr.microsoft.com/azurelinux/base/core:3.0` | yes, the `tdnf` path | |
+| openSUSE Leap / SLES | `registry.opensuse.org/opensuse/leap:15.6`, or the SLES BCI matching the release | expected | |
+| EKS Bottlerocket | none | no | No shell, no headers, immutable. `method: kmm` with `kmm.build.enabled: false` and per-kernel images built out of band (Bottlerocket publishes a kmod-kit for that). Module loading policy is Bottlerocket's own. |
 | GKE Container-Optimized OS | none | no | Unchanged: use the Ubuntu node image for the workspace pool, or prebuilt KMM images. |
 | OpenShift RHCOS | none | no | Unchanged: KMM. |
 
@@ -376,8 +376,7 @@ next pass — a swapfile of the wrong size that is not currently active is repla
 A container with request equal to limit gets exactly zero, whatever its QoS class or CPU allocation
 method; *BestEffort* and fully *Guaranteed* pods get zero too. This is the important part: the Kasm
 operator derives a workspace's memory request **and** limit from the same `memory_bytes`, so every
-session container runs with request = limit and therefore **gets no swap** — verified on k3s 1.36 and
-kubeadm 1.34. The swapfile this chart creates is still worth having: the agent, the session-proxy
+session container runs with request = limit and therefore **gets no swap**. The swapfile this chart creates is still worth having: the agent, the session-proxy
 sidecar, CSI plugins and system pods are Burstable with memory headroom and do draw on it, which is what
 keeps the node itself off the OOM edge. But do not size a node expecting *sessions* to spill into swap,
 and do not read the formula below as a per-session allowance — it is the allowance for a Burstable pod

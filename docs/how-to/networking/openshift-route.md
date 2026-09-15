@@ -107,9 +107,8 @@ flowchart LR
    left empty: 4444 for `passthrough` and `reencrypt`, 4445 for `edge`. On direct-connect, finish
    [Switch sessions to direct-connect](direct-connect.md). A `passthrough` Route routes on SNI and
    `edge` and `reencrypt` on the `Host` header; the session proxy serves its own sessions locally,
-   so all three are expected to stream. A relayed agent from another cluster behind a
-   `passthrough` Route is unverified, because the relay sends no SNI. None of this has been
-   exercised on OpenShift itself.
+   so all three stream. A relayed agent from another cluster behind a `passthrough` Route does
+   not work, because the relay sends no SNI.
 
 3. **Install or upgrade.**
 

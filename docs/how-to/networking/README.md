@@ -64,7 +64,7 @@ on port 443. [LoadBalancer and NodePort](loadbalancer-nodeport.md) has the detai
 **On the relayed default the agent needs no mechanism at all** on one cluster: the control plane's
 proxy reaches `<agent>-session-proxy.<ns>.svc.cluster.local:4444` directly. An agent in another
 cluster on a relayed zone needs a mechanism that does no `Host` routing, so a published Service,
-not an Ingress or HTTPRoute; TLS passthrough is unverified there, because the relay sends no SNI.
+not an Ingress or HTTPRoute; TLS passthrough does not work there, because the relay sends no SNI.
 [Deployment topologies](../../explanation/topologies.md) explains the constraint;
 [Switch sessions to direct-connect](direct-connect.md) is the other topology.
 

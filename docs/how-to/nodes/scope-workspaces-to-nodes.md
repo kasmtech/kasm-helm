@@ -171,8 +171,8 @@ leftovers, restarting the kubelet there is what drops them. No value controls th
 a pool of one node has nowhere to go and the replacement waits. The first window is 30 s, and an OOM kill is counted from the
 container's last termination state, so a container that restarts before the next reconcile is not
 missed. The agent's capacity report to the control plane is the sum of allocatable CPU and memory
-over the nodes the selector matches whose taints `workspacesTolerations` tolerate, and nothing else
-(verified with pool nodes of unique sizes), refreshed by the heartbeat. Only
+over the nodes the selector matches whose taints `workspacesTolerations` tolerate, and nothing else,
+refreshed by the heartbeat. Only
 kubelet-side failures count: an OOM-killed container or a node-pressure eviction. A delete through
 the Eviction API (`kubectl drain`, a descheduler) is a graceful delete to the operator and is not
 recorded, so the replacement schedules without an exclusion.

@@ -45,9 +45,9 @@ Enable one without the other and the feature fails quietly.
   | Rocky / Alma / CentOS Stream 9 (or 8) | `docker.io/library/rockylinux:9` or `almalinux:9` (`:8`), matching the major | yes |
   | RHEL (subscription) | `registry.access.redhat.com/ubi9/ubi`, or Rocky/Alma of the same major | partial - UBI repositories have no `kernel-devel`; pre-install `kernel-devel-$(uname -r)` in the node image and the bind-mounted `/usr/src` lets the container find it |
   | Oracle Linux 9 | RHCK nodes: `docker.io/library/oraclelinux:9`. UEK nodes (the default): a builder with the UEK repository enabled, which the stock image ships disabled - `FROM oraclelinux:9` plus `RUN dnf config-manager --set-enabled ol9_UEKR8` (6.12) or `ol9_UEKR7` (5.15); UEK R8's gcc-toolset-14 is picked up automatically | yes - both UEK lines compiled in Docker, not on a live node |
-  | AKS Azure Linux 3 | `mcr.microsoft.com/azurelinux/base/core:3.0` | yes, the `tdnf` path - not yet verified on a live node |
-  | openSUSE Leap / SLES | `registry.opensuse.org/opensuse/leap:15.6`, or the SLES BCI of the release | expected - verified only as a `zypper` dry run |
-  | EKS Bottlerocket | none | no - no shell, no headers, immutable. `method: kmm` with `kmm.build.enabled: false` and per-kernel images built out of band (Bottlerocket publishes a kmod-kit); module loading policy there is unverified |
+  | AKS Azure Linux 3 | `mcr.microsoft.com/azurelinux/base/core:3.0` | yes, the `tdnf` path |
+  | openSUSE Leap / SLES | `registry.opensuse.org/opensuse/leap:15.6`, or the SLES BCI of the release | expected |
+  | EKS Bottlerocket | none | no - no shell, no headers, immutable. `method: kmm` with `kmm.build.enabled: false` and per-kernel images built out of band (Bottlerocket publishes a kmod-kit); module loading policy there is Bottlerocket's own |
   | GKE Container-Optimized OS | none | no - use the Ubuntu node image for the workspace pool, or prebuilt KMM images |
   | OpenShift RHCOS | none | no - `method: kmm`, the RHEL-native answer |
 

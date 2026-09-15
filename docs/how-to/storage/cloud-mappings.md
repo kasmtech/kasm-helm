@@ -30,7 +30,7 @@ Distro / cloud variants for FUSE:
 
 | Platform | Notes |
 | -------- | ----- |
-| k3s | `fuse` is in-tree on the usual host distros; `/dev/fuse` is present. Verified. |
+| k3s | `fuse` is in-tree on the usual host distros; `/dev/fuse` is present. |
 | kubeadm / vanilla | `modprobe fuse` on each node, and persist it (`/etc/modules-load.d/fuse.conf`). |
 | EKS (AL2023 / Bottlerocket) | AL2023 has `fuse`. Bottlerocket is locked down - verify before committing. |
 | AKS (Ubuntu) / GKE (COS, Ubuntu) | `/dev/fuse` present by default. |

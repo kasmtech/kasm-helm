@@ -32,7 +32,7 @@ three flows that cross a cluster boundary.
   and so must browsers if the zone is direct-connect. Pick one exposure mechanism from
   [Networking](../networking/README.md). On a relayed zone (Kasm's default), nothing between the
   control plane's proxy and the session proxy may route on the `Host` header, so use a
-  `LoadBalancer`/`NodePort` Service, not an Ingress or HTTPRoute (TLS passthrough is unverified
+  `LoadBalancer`/`NodePort` Service, not an Ingress or HTTPRoute (TLS passthrough does not work
   there); [Deployment topologies](../../explanation/topologies.md) explains why. A published
   Service exposes the session proxy's own ports, 4444 and 4445, unless
   `agent.sessionProxy.service.httpsPort` and `httpPort` map them elsewhere; the values below map

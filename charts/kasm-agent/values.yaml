@@ -171,7 +171,7 @@ videoDevicePlugin:
 # PolicyException mechanism). See docs/egress-installer-port-notes.md in kasm-monorepo for the
 # reviewed risk profile.
 #
-# Lifecycle (verified live on k3s): a graceful shutdown -- disabling this in a `helm upgrade`, or
+# Lifecycle: a graceful shutdown -- disabling this in a `helm upgrade`, or
 # `helm uninstall` -- restores every patched conflist from its backup and removes the shim, leaving
 # the node's CNI chain as it was found. A hard crash leaves the chain patched; the replacement pod
 # re-installs and re-verifies it on start. The residual risk is the window with no daemon running:
@@ -351,7 +351,7 @@ networkPolicies:
     # hostname and that resolves to a node running hostPort/ServiceLB-style ingress (k3s +
     # Traefik), the connection's effective destination is the ingress controller's backend pod
     # port — add it here (Traefik's websecure is 8443) or agent heartbeats fail with
-    # "connection refused" and the manager reports no agent slots. Verified live.
+    # "connection refused" and the manager reports no agent slots.
     #
     ports:
       - 443

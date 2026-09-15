@@ -3,7 +3,7 @@
 > **Applies to:** both halves · node sizing for the agent; the control plane sizes with `kasm-helm.deploymentSize` · **Charts/values:** `agent.workspacesNodeSelector`, `nodePrep.tuning.*`, `kasm-helm.deploymentSize`
 
 Everything below is a **planning estimate to validate with a load test**, not a guarantee. The
-per-session numbers are Kasm's defaults as observed on a fresh control plane; yours come from your own workspace
+per-session numbers are Kasm's defaults; yours come from your own workspace
 images. Measure before you commit hardware.
 
 ## What one session costs
@@ -52,8 +52,7 @@ A node runs out of one of these first. Find which.
 Swap is a fifth, softer one - and for **workspace sessions it currently does nothing**.
 `LimitedSwap` grants a container swap only when its **memory request is strictly less than its
 memory limit**; a container with request = limit gets none, whatever its QoS class or CPU
-allocation method (this was verified on k3s 1.36 and kubeadm 1.34, not only derived from the QoS
-class). Kasm sets a workspace's memory request *and* limit from the same `memory_bytes`, so every
+allocation method. Kasm sets a workspace's memory request *and* limit from the same `memory_bytes`, so every
 session container has request = limit and no swap. The node's swapfile still helps other Burstable
 pods with headroom - the agent, the sidecars, system pods - so it is not wasted, but do not size a
 node expecting sessions to spill into it. The worked example, the rationale and the node-side procedure, including the kubelet

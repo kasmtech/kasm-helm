@@ -111,8 +111,8 @@ flowchart LR
    values, and the zone's *Proxy Port* as `kasm-helm.kasmZones[].proxy_port` at database
    initialization or **Infrastructure → Zones** on a running deployment
    ([Kasm docs: Deployment Zones](https://www.kasmweb.com/docs/latest/guide/zones/deployment_zones.html)).
-   Verified on Kasm 1.19: with `publicPort: 30443` and the zone at 443, the API reached the agent
-   on 30443 and the browser was sent to `:443`. On the relayed default the zone's `proxy_port` is
+   With `publicPort: 30443` and the zone at 443, the API reaches the agent on 30443 and the
+   browser is sent to `:443`. On the relayed default the zone's `proxy_port` is
    the control plane's published port instead, and `publicPort` is the only port that matters for
    the agent.
 
@@ -225,8 +225,8 @@ kasm-agent:
         externalTrafficPolicy: Local     # L4: no SNAT, but only routes via nodes running a proxy pod
 ```
 
-Verified: with `Local` the session-proxy access log records the client's own address; with the
-default `Cluster` it records the node's SNAT address.
+With `Local` the session-proxy access log records the client's own address; with the default
+`Cluster` it records the node's SNAT address.
 
 A load balancer that SNATs but sends PROXY protocol on every connection needs the listeners told
 to expect the header, and nginx told which sources to trust. The load balancer's own setting lives
@@ -256,8 +256,8 @@ Deployment rolls on its own when either value changes. Two rules:
   directly, a health check without PROXY protocol and `curl` against the Service all stop
   answering, so enable it together with the matching setting on the front, never on its own.
 
-Verified: behind a front that sends the header, with its range in `trustedCIDRs`, the access log
-records the client's own address.
+Behind a front that sends the header, with its range in `trustedCIDRs`, the access log records
+the client's own address.
 
 ## Idle timeouts
 
@@ -269,7 +269,7 @@ the one table; other pages link here.
 | `kasm-agent.agent.ingress` (ingress-nginx) | `nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"` and `proxy-send-timeout` in `agent.ingress.annotations`; the default is 60s |
 | `kasm-agent.agent.route` (OpenShift) | `haproxy.router.openshift.io/timeout: "3600s"` in `agent.route.annotations`; the default is 30s |
 | `kasm-agent.agent.httpRoute` | the Gateway data plane's own idle timeout; not a Kasm value |
-| `kasm-agent.agent.httpRoute` on Envoy Gateway | a `ClientTrafficPolicy` targeting the Gateway, with `spec.timeout.tcp.idleTimeout` and `spec.timeout.http.idleTimeout` at `3600s`; the defaults are one hour for the connection and five minutes for a stream. Verified on Envoy Gateway 1.6 |
+| `kasm-agent.agent.httpRoute` on Envoy Gateway | a `ClientTrafficPolicy` targeting the Gateway, with `spec.timeout.tcp.idleTimeout` and `spec.timeout.http.idleTimeout` at `3600s`; the defaults are one hour for the connection and five minutes for a stream. |
 | passthrough and published Service | no HTTP knob exists; raise the **L4 idle timeout** on the Gateway's data plane or the load balancer (an AWS NLB defaults to 350s) |
 | the relayed default | fixed at 1800s (30 minutes) in the control-plane proxy ConfigMap; not a value. Switch to direct-connect to go past it |
 

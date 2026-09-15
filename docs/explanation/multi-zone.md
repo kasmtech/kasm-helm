@@ -111,8 +111,8 @@ Infrastructure → Agents is undone by the next heartbeat.
 The same rule is why a zone created only in the admin UI cannot take a Kubernetes agent: it has a
 record in the database and no manager on the control plane. Add it to `kasmZones` without `seedOnly` (which renders
 the manager) and, on an existing database where the preseed no longer runs, create the zone in
-the admin UI with the same name and hostname. Verified on Kasm 1.19: an agent with `agent.zone`
-naming a UI-created zone registered into `default`.
+the admin UI with the same name and hostname. An agent whose `agent.zone` names a zone that exists
+only in the admin UI registers into `default` instead.
 
 ## The RDP gateway is the awkward one
 

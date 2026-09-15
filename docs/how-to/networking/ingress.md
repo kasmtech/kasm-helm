@@ -6,8 +6,8 @@
 
 The classic path: a `networking.k8s.io/v1` Ingress on an existing controller terminates TLS and
 forwards plain HTTP to the workload. It is available for both halves, and the only mechanism where
-the control plane's certificate is wired in by the chart itself. On direct-connect it is verified
-end to end (Traefik 3.7 on k3s): the controller routes by `Host` header to the session proxy,
+the control plane's certificate is wired in by the chart itself. On direct-connect the controller
+routes by `Host` header to the session proxy,
 which answers the browser for its own sessions itself
 ([Switch sessions to direct-connect](direct-connect.md#why-this-is-needed)). It cannot carry the
 RDP gateway, which is raw TCP: [Publish the RDP gateway](rdp-gateway.md).

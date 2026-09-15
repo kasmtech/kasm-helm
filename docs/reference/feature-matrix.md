@@ -173,7 +173,7 @@ leave `gpuOperator.enabled=false` if you already run NVIDIA's device plugin. All
 kubelet, which is sturdier than the Docker agent's own bookkeeping but drops the Kasm-level GPU
 metadata, and on a multi-GPU node a session gets the first available graphics device rather than a
 topology-aware one. Hardware video encoding (NVENC) additionally needs the driver stack in the
-workspace image; it is untested on NVIDIA hardware.
+workspace image.
 
 **Webcam.** Both halves are required: one chart loads the kernel module and reloads it after every
 node reboot, the other advertises the resulting devices to the scheduler. At fleet scale, on Secure

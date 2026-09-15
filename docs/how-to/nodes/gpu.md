@@ -2,9 +2,8 @@
 
 > **Applies to:** agent · **Charts/values:** `gpuOperator.enabled`, `agent.gpu.enabled`, `gpuOperator.driver.enabled`, `gpuOperator.toolkit.enabled`, `gpuOperator.devicePlugin.enabled`, `gpuOperator.nfd.enabled`, `agent.workspacesNodeSelector`, `agent.nodeSelector`
 
-> **Scope note.** The chart path below is render-validated (the `infra` test scenario exercises it)
-> but has not been run against NVIDIA hardware. Treat the NVIDIA-side steps as pointers to NVIDIA's own procedure, not
-> as live-verified output.
+> **Scope note.** The NVIDIA-side steps are pointers to NVIDIA's own procedure; follow NVIDIA's
+> current documentation for the driver and device-plugin install.
 
 ## Why this is needed
 

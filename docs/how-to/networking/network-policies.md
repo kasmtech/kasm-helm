@@ -23,9 +23,9 @@ Two separate mechanisms exist here, and they are often confused:
 
   | Platform | Enforcement |
   | -------- | ----------- |
-  | k3s (default) | **Yes** - the embedded network-policy controller enforces alongside flannel. Verified live. |
+  | k3s (default) | **Yes** - the embedded network-policy controller enforces alongside flannel. |
   | Plain flannel, standalone | **No.** Policies are accepted and ignored. |
-  | Cilium | **Yes, with two extra values.** On Cilium an `ipBlock` matches world traffic only, never a pod and never the node that hosts the API server (unless Cilium runs with `policyCIDRMatchMode: nodes`). The baseline's manager and API-server allows are `ipBlock` rules, so an in-cluster manager needs `networkPolicies.manager.inCluster.namespace` and a node-hosted API server (kubeadm, RKE2, k3s with Cilium) needs `networkPolicies.cilium.enabled`; step 4. Verified on Cilium 1.20 on kubeadm 1.34. |
+  | Cilium | **Yes, with two extra values.** On Cilium an `ipBlock` matches world traffic only, never a pod and never the node that hosts the API server (unless Cilium runs with `policyCIDRMatchMode: nodes`). The baseline's manager and API-server allows are `ipBlock` rules, so an in-cluster manager needs `networkPolicies.manager.inCluster.namespace` and a node-hosted API server (kubeadm, RKE2, k3s with Cilium) needs `networkPolicies.cilium.enabled`; step 4. |
   | Calico, Antrea, kube-router, Weave | Yes |
   | EKS | VPC CNI alone does **not** enforce - add Calico policy, or run Cilium |
   | AKS | Enable a network policy engine (Azure NPM or Calico) at cluster creation |

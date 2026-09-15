@@ -25,7 +25,7 @@ See [kasm-node-prep, Security posture](../../../charts/kasm-node-prep/README.md#
   - **k3s** - ships **no** `PodSecurity` admission configuration by default, so the label is a no-op here. Apply it anyway: it is free, and it makes the same values file portable to a cluster that does enforce.
   - **kubeadm / vanilla** - PSA is compiled in and commonly configured to enforce `baseline` cluster-wide via an `AdmissionConfiguration` file. Those clusters reject the DaemonSet pods outright.
   - **Managed (EKS / AKS / GKE)** - PSA is available and often pre-configured (GKE Autopilot forbids privileged pods altogether and cannot run these charts). Cloud policy add-ons (GKE Policy Controller, AKS Azure Policy) apply on top.
-  - **OpenShift** - SecurityContextConstraints gate privileged pods in addition to PSA, so the namespace label alone is not sufficient there. These DaemonSets have not been validated on OpenShift in this repo; treat SCC binding as unverified work you own.
+  - **OpenShift** - SecurityContextConstraints gate privileged pods in addition to PSA, so the namespace label alone is not sufficient there. Binding the SCC is yours to set up.
 - `kubectl` with permission to label namespaces, and to read your policy engine's `ClusterPolicy` / `ConstraintTemplate` objects.
 
 ## Steps
@@ -65,7 +65,7 @@ See [kasm-node-prep, Security posture](../../../charts/kasm-node-prep/README.md#
 
    This repo does the second thing for its own CI: the `infra` and `kmm` scenarios in `tests/values-agent/` render to `.rendered-infra/` instead of `.rendered/`, and only `.rendered/` is swept by the Kyverno PSS gate (see `AGENT_SCENARIOS` and `render-agent` in the `Makefile`). The exclusion is by design and documented in `tests/values-agent/infra.yaml`.
 
-4. **Do not label the manager namespace `kasm.com/role=manager`.** It is *not* required for sessions: the operator's per-workspace NetworkPolicy admits the session proxy **by podSelector** (verified against the stamped policy on a live deployment), and all session and manager traffic flows through that proxy. Add it only where something genuinely needs *direct* ingress to workspace pods. See [kasm-agent, Running alongside the kasm-helm control plane](../../../charts/kasm-agent/README.md#running-alongside-the-kasm-helm-control-plane).
+4. **Do not label the manager namespace `kasm.com/role=manager`.** It is *not* required for sessions: the operator's per-workspace NetworkPolicy admits the session proxy **by podSelector**, and all session and manager traffic flows through that proxy. Add it only where something genuinely needs *direct* ingress to workspace pods. See [kasm-agent, Running alongside the kasm-helm control plane](../../../charts/kasm-agent/README.md#running-alongside-the-kasm-helm-control-plane).
 
 5. **Install the release**, then confirm the pods were admitted (next section). Whether the agent's baseline NetworkPolicies may be on in this namespace is settled by the layout: [Deployment topologies](../../explanation/topologies.md#one-release-or-two-namespaces).
 

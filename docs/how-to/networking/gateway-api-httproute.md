@@ -136,7 +136,7 @@ These checks serve all three Gateway API pages; the other two link here.
 >             - name: kasm-agent-public-tls
 > ```
 >
-> This is the shape verified with Traefik 3.7 on k3s; check `helm show values traefik/traefik` against
+> This is the shape for Traefik 3.7; check `helm show values traefik/traefik` against
 > your Traefik version. Validate a new listener by patching the live Gateway first and move it into
 > the `HelmChartConfig` once it serves traffic: a listener the Traefik chart rejects fails its
 > upgrade job and briefly removes the Gateway.
@@ -199,9 +199,7 @@ These checks serve all three Gateway API pages; the other two link here.
    > **Note.** Direct-connect sessions stream through an `HTTPRoute` on any data plane: the session
    > proxy serves its own sessions locally, so the Gateway routes only the browser's requests,
    > whether it selects the listener by `Host` header or by SNI
-   > ([Switch sessions to direct-connect](direct-connect.md#why-this-is-needed)). Verified live on
-   > Traefik 3.7, and the SNI-selected case through an SNI-only passthrough front; Envoy Gateway 1.6
-   > has not been re-run since the session proxy changed.
+   > ([Switch sessions to direct-connect](direct-connect.md#why-this-is-needed)).
 
 3. **Install or upgrade.**
 

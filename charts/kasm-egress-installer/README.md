@@ -22,8 +22,8 @@ here:
    DaemonSet chains a CNI plugin (`kasm-egress-cni`) into every node's active CNI conflist. On a graceful
    termination — disabling it in a `helm upgrade`, `helm uninstall`, a rolling update, or a plain pod
    delete — the daemon restores each patched `.conflist` from the `.kasm-egress.bak` backup it wrote on
-   first modification and removes the shim binary, leaving the node's CNI chain exactly as it found it
-   (verified live on k3s: pods kept getting IPs after uninstall). The default 30s termination grace
+   first modification and removes the shim binary, leaving the node's CNI chain exactly as it found it.
+   The default 30s termination grace
    period is ample; the cleanup takes well under a second. A **hard crash** skips that path: the chain
    stays patched, and the replacement pod re-installs and re-verifies it on start.
 

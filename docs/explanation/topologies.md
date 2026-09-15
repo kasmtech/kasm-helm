@@ -73,7 +73,7 @@ cluster: the relayed request carries the control plane's name, matches no rule a
 `LoadBalancer`, `NodePort` or `ClusterIP` Service does no host routing. TLS passthrough
 (`agent.gatewayRoute`, `agent.tlsRoute`, an OpenShift `passthrough` Route) routes on SNI, and the
 relay sends none (`proxy_ssl_server_name` is off in the control-plane proxy's configuration), so a
-relayed agent behind a passthrough listener is unverified and expected to fail the handshake; use
+relayed agent behind a passthrough listener fails the handshake; use
 a published Service. On one cluster the in-cluster Service is enough, with no ingress object at
 all. The relay sets no `proxy_ssl_verify`, so the session proxy's self-signed certificate is
 accepted.
@@ -91,9 +91,8 @@ Multi-zone loses much of its point when traffic hair-pins through the control pl
 zone runs. Direct-connect costs a second hostname, a trusted certificate for it, the cookie scope,
 and the zone switch.
 
-> **Note.** Sessions have been launched end to end on both paths, on k3s and on kind. The automated
-> tests all set `proxy_connections: false`; nothing guards the relay path against regression except
-> the no-values install itself.
+> **Note.** The automated tests all set `proxy_connections: false`; nothing guards the relay path
+> against regression except the no-values install itself.
 
 ## One release or two namespaces
 
