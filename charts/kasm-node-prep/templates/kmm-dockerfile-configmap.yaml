@@ -40,6 +40,8 @@ ARG KERNEL_FULL_VERSION
 # the build pod runs on, so the release has to be spelled into the request:
 #   apt-get            linux-headers-<release>.
 #   dnf/microdnf/yum   the *path* /usr/src/kernels/<release>. dnf resolves a path to the package
+#                      (on an Oracle Linux image under a UEK kernel the matching ol<N>_UEKR<R>
+#                      repository, which the stock image ships disabled, is enabled for the install)
 #                      owning it, which is exactly the -devel package of that release -- kernel-devel,
 #                      kernel6.12-devel (Amazon Linux 2023's second kernel line) or kernel-uek-devel
 #                      (Oracle UEK) -- without this file having to know its name. Neither
@@ -67,21 +69,20 @@ RUN set -eu; \
              || apt-get install -y --no-install-recommends "gcc-${cc##*gcc-}" ;; \
          esac \
       && rm -rf /var/lib/apt/lists/*; \
-    elif command -v dnf >/dev/null 2>&1; then \
-      dnf install -y --setopt=install_weak_deps=False \
+    elif command -v dnf >/dev/null 2>&1 || command -v microdnf >/dev/null 2>&1 || command -v yum >/dev/null 2>&1; then \
+      repo=""; \
+      case "${KERNEL_FULL_VERSION}" in \
+        *uek*) . /etc/os-release; \
+          case "${KERNEL_FULL_VERSION}" in 5.4.*) r=6 ;; 5.15.*) r=7 ;; 6.12.*) r=8 ;; *) r="" ;; esac; \
+          if [ "${ID:-}" = "ol" ] && [ -n "${r}" ]; then repo="--enablerepo=ol${VERSION_ID%%.*}_UEKR${r}"; fi ;; \
+      esac; \
+      if command -v dnf >/dev/null 2>&1; then pm=dnf; opts="--setopt=install_weak_deps=False"; \
+      elif command -v microdnf >/dev/null 2>&1; then pm=microdnf; opts=""; \
+      else pm=yum; opts=""; fi; \
+      "${pm}" install -y ${opts} ${repo} \
            gcc make git ca-certificates elfutils-libelf-devel \
            "/usr/src/kernels/${KERNEL_FULL_VERSION}" \
-      && dnf clean all; \
-    elif command -v microdnf >/dev/null 2>&1; then \
-      microdnf install -y \
-           gcc make git ca-certificates elfutils-libelf-devel \
-           "/usr/src/kernels/${KERNEL_FULL_VERSION}" \
-      && microdnf clean all; \
-    elif command -v yum >/dev/null 2>&1; then \
-      yum install -y \
-           gcc make git ca-certificates elfutils-libelf-devel \
-           "/usr/src/kernels/${KERNEL_FULL_VERSION}" \
-      && yum clean all; \
+      && "${pm}" clean all; \
     elif command -v tdnf >/dev/null 2>&1; then \
       tdnf install -y \
            gcc make binutils git ca-certificates elfutils-libelf-devel \

@@ -301,6 +301,26 @@ build_deps_present() {
   [ -d "$KERNEL_BUILD" ]
 }
 
+# Oracle Linux ships its UEK repositories disabled in the oraclelinux:<N> images, so a builder
+# running under a UEK kernel (release ends in .el<N>uek.<arch>) would find no kernel-uek-devel
+# for the headers-by-path install. Print the dnf flag that enables the matching repository,
+# ol<N>_UEKR<R> (UEK R6 is 5.4, R7 is 5.15, R8 is 6.12), or nothing on any other kernel or family.
+uek_repo_args() {
+  local id="" major="" r=""
+  case "$KERNEL_RELEASE" in *uek*) ;; *) return 0 ;; esac
+  [ -r /etc/os-release ] || return 0
+  id=$(. /etc/os-release; printf '%s' "${ID:-}")
+  major=$(. /etc/os-release; printf '%s' "${VERSION_ID%%.*}")
+  [ "$id" = "ol" ] && [ -n "$major" ] || return 0
+  case "$KERNEL_RELEASE" in
+    5.4.*)  r=6 ;;
+    5.15.*) r=7 ;;
+    6.12.*) r=8 ;;
+    *) return 0 ;;
+  esac
+  printf '%s' "--enablerepo=ol${major}_UEKR${r}"
+}
+
 # Make the toolchain and the kernel headers matching the node kernel available. The container shares
 # the node kernel, so "uname -r" here is the node's kernel release. Runs at most once per container
 # lifetime.
@@ -312,6 +332,7 @@ build_deps_present() {
 # works when that image is the same distribution family and release as the node: that is the only
 # place the headers package for the node's kernel exists.
 ensure_build_deps() {
+  local headers_args=""
   local -a toolchain
   local headers_spec
 
@@ -352,8 +373,11 @@ ensure_build_deps() {
       # matching the running kernel line (kernel6.12-devel on Amazon Linux 2023, kernel-uek-devel
       # on Oracle UEK). Not /lib/modules/<release>/build, which kernel-core owns and would drag a
       # whole kernel in, and not a kernel*-devel glob, which also matches kernel-debug-devel.
+      # On an Oracle Linux builder under a UEK kernel, uek_repo_args enables the UEK repository the
+      # stock image ships disabled, without which the path resolves to nothing.
       toolchain=(gcc make kmod git ca-certificates elfutils-libelf-devel)
       headers_spec="/usr/src/kernels/${KERNEL_RELEASE}"
+      headers_args=$(uek_repo_args)
       ;;
     tdnf)
       # Azure Linux. tdnf cannot resolve a path, but accepts the name-version-release form.
@@ -385,8 +409,9 @@ ensure_build_deps() {
   fi
 
   if [ ! -d "$KERNEL_BUILD" ]; then
-    log "No kernel build tree at ${KERNEL_BUILD}; installing ${headers_spec} with ${PKG_MANAGER}"
-    if ! pkg_install "$headers_spec"; then
+    log "No kernel build tree at ${KERNEL_BUILD}; installing ${headers_spec} with ${PKG_MANAGER}${headers_args:+ ($headers_args)}"
+    # shellcheck disable=SC2086 -- headers_args is a single flag or empty, never a path
+    if ! pkg_install $headers_args "$headers_spec"; then
       err "Kernel headers for ${KERNEL_RELEASE} could not be installed: ${PKG_MANAGER} found nothing for '${headers_spec}'. The headers come from the builder image's repositories, so image.registry/image.repository/image.tag must name an image of the same distribution family AND release as the node (a Rocky Linux 9 node needs a Rocky Linux 9 builder image, an Ubuntu 22.04 node needs ubuntu:22.04, and so on). Alternatively pre-install the matching headers on the node, pre-bake them into the builder image, or hand the module to KMM (modules.v4l2loopback.method=kmm); this pass will succeed on the next reconcile once the build tree exists. Skipping this pass."
       return 1
     fi

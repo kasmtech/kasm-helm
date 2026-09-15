@@ -366,15 +366,18 @@ tests:
       - matchRegex:
           path: data.dockerfile
           pattern: 'apt-get install -y --no-install-recommends \\\n\s+build-essential git ca-certificates libelf1 \\\n\s+"linux-headers-\$\{KERNEL_FULL_VERSION\}"'
+      # dnf, microdnf and yum share one branch: the tool found first is $pm, dnf alone gets the
+      # weak-deps option, and an Oracle Linux image under a UEK kernel adds --enablerepo for the
+      # matching ol<N>_UEKR<R> repository, which the stock image ships disabled.
       - matchRegex:
           path: data.dockerfile
-          pattern: 'dnf install -y --setopt=install_weak_deps=False \\\n\s+gcc make git ca-certificates elfutils-libelf-devel \\\n\s+"/usr/src/kernels/\$\{KERNEL_FULL_VERSION\}"'
+          pattern: 'if command -v dnf >/dev/null 2>&1; then pm=dnf; opts="--setopt=install_weak_deps=False"; \\\n\s+elif command -v microdnf >/dev/null 2>&1; then pm=microdnf; opts=""; \\\n\s+else pm=yum; opts=""; fi; \\\n\s+"\$\{pm\}" install -y \$\{opts\} \$\{repo\} \\\n\s+gcc make git ca-certificates elfutils-libelf-devel \\\n\s+"/usr/src/kernels/\$\{KERNEL_FULL_VERSION\}"'
       - matchRegex:
           path: data.dockerfile
-          pattern: 'microdnf install -y \\\n\s+gcc make git ca-certificates elfutils-libelf-devel \\\n\s+"/usr/src/kernels/\$\{KERNEL_FULL_VERSION\}"'
+          pattern: '6\.12\.\*\) r=8'
       - matchRegex:
           path: data.dockerfile
-          pattern: 'yum install -y \\\n\s+gcc make git ca-certificates elfutils-libelf-devel \\\n\s+"/usr/src/kernels/\$\{KERNEL_FULL_VERSION\}"'
+          pattern: 'repo="--enablerepo=ol\$\{VERSION_ID%%\.\*\}_UEKR\$\{r\}"'
       # tdnf cannot resolve a path, so Azure Linux gets the package by name and release.
       - matchRegex:
           path: data.dockerfile

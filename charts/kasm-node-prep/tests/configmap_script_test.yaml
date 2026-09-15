@@ -260,7 +260,7 @@ tests:
           pattern: 'headers_spec="kernel-default-devel = \$\{KERNEL_RELEASE\}"'
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'pkg_install "\$headers_spec"'
+          pattern: 'pkg_install \$headers_args "\$headers_spec"'
       # The headers error says what was tried and that the builder image has to match the node.
       - matchRegex:
           path: data["ensure-modules.sh"]
@@ -313,7 +313,7 @@ tests:
       # and also run on the pre-baked path so a baked-in toolset is picked up without any install.
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: '(?s)pkg_install "\$headers_spec".*if ! ensure_kernel_compiler; then'
+          pattern: '(?s)pkg_install \$headers_args "\$headers_spec".*if ! ensure_kernel_compiler; then'
       - notMatchRegex:
           path: data["ensure-modules.sh"]
           pattern: '\[ "\$PKG_MANAGER" = apt \] && ! ensure_kernel_compiler'
@@ -336,7 +336,7 @@ tests:
       # Resolved before the presence check and again after the headers land.
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: '(?s)resolve_kernel_build\n  if build_deps_present; then.*pkg_install "\$headers_spec".*resolve_kernel_build'
+          pattern: '(?s)resolve_kernel_build\n  if build_deps_present; then.*pkg_install \$headers_args "\$headers_spec".*resolve_kernel_build'
       # v4l2loopback's Makefile calls the tree KERNEL_DIR, wireguard-linux-compat's KERNELDIR.
       - matchRegex:
           path: data["ensure-modules.sh"]
@@ -1059,3 +1059,17 @@ tests:
           path: data["ensure-modules.sh"]
           pattern: 'v4l2loopback-git'
 
+  - it: enables the matching Oracle UEK repository for the headers install on an Oracle Linux builder
+    asserts:
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'uek_repo_args\(\) \{'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: '6\.12\.\*\) r=8'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: '--enablerepo=ol\$\{major\}_UEKR\$\{r\}'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'pkg_install \$headers_args "\$headers_spec"'
