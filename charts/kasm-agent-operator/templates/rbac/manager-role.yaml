@@ -40,7 +40,7 @@ rules:
 # reads the Node through controller-runtime's cached client, which starts a Node informer on first
 # use, so list and watch are needed alongside get: with get alone the informer's list is forbidden,
 # the read blocks on a cache that never syncs, and every reconcile of a workspace whose backoff
-# window just closed hangs (seen live 2026-09-14 on a CRI-O lab: status stuck at Pending with the
+# window just closed hangs (seen live 2026-09-14 on a CRI-O cluster: status stuck at Pending with the
 # replacement pod Running until the operator was restarted).
 - apiGroups:
   - ""
