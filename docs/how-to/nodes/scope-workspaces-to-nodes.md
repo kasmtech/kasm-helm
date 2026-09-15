@@ -148,7 +148,11 @@ an exhausted node. Before letting the node back in it reads the node's `MemoryPr
 access to nodes (`get`, `list` and `watch`: the read goes through a cached client, and with `get`
 alone the reconcile hangs at the end of the window). The image puller keeps the same bookkeeping per
 node in `status.nodeBackoffs`. No value controls this; it works within whatever selector you set, so
-a pool of one node has nowhere to go and the replacement waits. The first window is 30 s. Only
+a pool of one node has nowhere to go and the replacement waits. The first window is 30 s. The agent's capacity report to the control plane is the
+sum of allocatable CPU and memory over the nodes the selector matches and nothing else (verified
+with pool nodes of unique sizes), refreshed by the heartbeat; it counts tainted pool nodes too, so
+with a tainted node in the pool the control plane can hand the agent sessions the pool cannot
+schedule, and those pods stay `Pending` rather than being refused. Only
 kubelet-side failures count: an OOM-killed container or a node-pressure eviction. A delete through
 the Eviction API (`kubectl drain`, a descheduler) is a graceful delete to the operator and is not
 recorded, so the replacement schedules without an exclusion.
