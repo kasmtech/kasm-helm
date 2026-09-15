@@ -85,8 +85,10 @@ publicHostname: ""
 # a session. Empty (the default) derives it: 4444 while the hostname is derived in-cluster, the pinned
 # `sessionProxy.service.httpsNodePort` when the proxy Service is a `NodePort`, 443 otherwise. Set it
 # explicitly when something in front of the proxy owns the port (an ingress or load balancer on 443, a
-# firewall forwarding 443 to the node port). A wrong value fails silently at install time and loudly at the
-# first launch: the Hello is refused and every session request answers "No Agent slots available".
+# firewall forwarding 443 to the node port). A `LoadBalancer` Service publishes the proxy's own port,
+# 4444, unless the load balancer remaps it (an OCI load balancer does not), so set `publicPort: 4444`
+# there. A wrong value fails silently at install time and loudly at the first launch: the Hello is
+# refused and every session request answers "No Agent slots available".
 #
 publicPort: ""
 
