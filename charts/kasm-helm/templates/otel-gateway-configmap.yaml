@@ -28,6 +28,7 @@ receivers (those live in H5's host-log DaemonSet / nginx sidecar, not the centra
 {{- else -}}
   {{- $dsn = printf "%s?dial_timeout=10s" $dsn -}}
 {{- end -}}
+{{- $gwTuning := include "resources.preset" (dict "node" "otel-gateway-tuning" "size" $.Values.deploymentSize) | fromYaml -}}
 {{- $forwardEnabled := ne $obs.collector.gateway.forward.endpoint "" -}}
 {{- $forwardHasToken := or (ne $obs.collector.gateway.forward.token "") (ne $obs.collector.gateway.forward.existingSecret.name "") -}}
 {{- $logsExporter := ternary "clickhouse/logs" "debug" $useClickhouse -}}
@@ -63,8 +64,8 @@ data:
 
       memory_limiter:
         check_interval: 5s
-        limit_mib: 512
-        spike_limit_mib: 128
+        limit_mib: {{ $gwTuning.limit_mib }}
+        spike_limit_mib: {{ $gwTuning.spike_limit_mib }}
 
       # Tail sampling is applied to the traces pipeline only. The collector
       # buffers spans per trace for decision_wait before making a keep/drop
@@ -76,7 +77,7 @@ data:
       # increases the memory held in num_traces × span data.
       tail_sampling:
         decision_wait: 30s
-        num_traces: 50000
+        num_traces: {{ $gwTuning.num_traces }}
         expected_new_traces_per_sec: 100
         policies:
           # Always keep traces that contain at least one ERROR-status span.

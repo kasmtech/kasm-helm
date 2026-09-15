@@ -972,6 +972,9 @@ components:
     # components.otelGateway.annotations -- Custom annotations to add to the gateway Collector Deployment
     annotations: {}
     # components.otelGateway.resources -- Manually configure the gateway Collector Deployment resources. This overrides the pre-defined `deploymentSize` values.
+    # The memory_limiter and num_traces settings baked into the gateway config are sized from the
+    # deploymentSize preset, not from this value, so a manual memory limit set below the preset can
+    # let the container OOM before memory_limiter has a chance to shed load.
     resources: {}
     # components.otelGateway.labels -- Custom labels to add to the gateway Collector Deployment
     labels: {}

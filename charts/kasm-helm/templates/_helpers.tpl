@@ -1361,6 +1361,11 @@ successThreshold: {{ $successThreshold }}
         "limits" (dict "cpu" "200m" "memory" "256Mi" "ephemeral-storage" "2Gi")
       )
     )
+    "otel-gateway-tuning" (dict
+      "small" (dict "limit_mib" 800 "spike_limit_mib" 200 "num_traces" 25000)
+      "medium" (dict "limit_mib" 1600 "spike_limit_mib" 400 "num_traces" 50000)
+      "large" (dict "limit_mib" 3200 "spike_limit_mib" 800 "num_traces" 100000)
+    )
   }}
 
 {{- if not (hasKey $presetSizes .node) -}}
@@ -1794,11 +1799,9 @@ Dedup rules:
 {{/*
   filelog operator chain for the nginx JSON access log, ported verbatim (including
   overwrite_text: true) from kasm_backend/install/conf/otel/otel-collector-local.yaml. Used
-  directly as the `operators:` list of a dedicated filelog/nginx_access receiver — the sidecar
-  fallback (§7) reads a plain file, so no container/router unwrapping is needed here. The
-  hostLogs DaemonSet reads the same backend source but must merge access+error handling into one
-  CRI-wrapped receiver, so it reimplements this chain inline with explicit operator ids instead of
-  including this define (a shared router target can't safely reuse bare, non-namespaced ids).
+  directly as the `operators:` list of the unconditional otel-sidecar's filelog/nginx_access
+  receiver (otel-nginx-sidecar-configmap.yaml) — the sidecar reads a plain file, so no
+  container/router unwrapping is needed here.
   Usage:
     operators:
       {{- include "kasm.otelNginxAccessLogOperators" . | nindent 8 }}
