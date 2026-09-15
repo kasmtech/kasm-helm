@@ -80,7 +80,7 @@ data:
         resolver:
           dns:
             hostname: "{{ $constants.otel.gatewayHeadlessFqdn }}"
-            port: {{ $constants.otel.otlpGrpc }}
+            port: "{{ $constants.otel.otlpGrpc }}"
         protocol:
           otlp:
             headers:
@@ -103,7 +103,7 @@ data:
         resolver:
           dns:
             hostname: "{{ $constants.otel.gatewayHeadlessFqdn }}"
-            port: {{ $constants.otel.otlpGrpc }}
+            port: "{{ $constants.otel.otlpGrpc }}"
         protocol:
           otlp:
             headers:
@@ -125,7 +125,7 @@ data:
         resolver:
           dns:
             hostname: "{{ $constants.otel.gatewayHeadlessFqdn }}"
-            port: {{ $constants.otel.otlpGrpc }}
+            port: "{{ $constants.otel.otlpGrpc }}"
         protocol:
           otlp:
             headers:
