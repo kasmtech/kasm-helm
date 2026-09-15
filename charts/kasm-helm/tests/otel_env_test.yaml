@@ -62,6 +62,23 @@ tests:
           path: spec.template.spec.containers[0].env[?(@.name=="OTEL_RESOURCE_ATTRIBUTES")].value
           pattern: "kasm\\.zone=zonea"
 
+  - it: connection-proxy app containers carry kasm.zone in a multi-zone install
+    template: templates/connection-proxy-statefulset.yaml
+    values:
+      - ../../../tests/values/multizone-config.yaml
+      - ../../../tests/values/components-all.yaml
+    documentIndex: 0
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[1].env[?(@.name=="OTEL_RESOURCE_ATTRIBUTES")].value
+          pattern: "kasm\\.zone=zonea"
+      - matchRegex:
+          path: spec.template.spec.containers[2].env[?(@.name=="OTEL_RESOURCE_ATTRIBUTES")].value
+          pattern: "kasm\\.zone=zonea"
+      - matchRegex:
+          path: spec.template.spec.containers[3].env[?(@.name=="OTEL_RESOURCE_ATTRIBUTES")].value
+          pattern: "kasm\\.zone=zonea"
+
   - it: api endpoint follows forwarder.externalEndpoint when set
     template: templates/api-deployment.yaml
     set:

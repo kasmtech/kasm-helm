@@ -164,6 +164,41 @@ tests:
           path: spec.template.spec.containers[1].volumeMounts[?(@.mountPath=="/var/lib/otelcol/checkpoints")]
         template: templates/db-statefulset.yaml
 
+  # ---------- kasm.zone resource attribute ----------
+  # Proxy and connection-proxy are zone-scoped; their sidecars record kasm.zone so telemetry
+  # can be attributed back to a zone. The DB is global (no zone dimension), so its sidecar
+  # deliberately carries no kasm.zone attribute.
+  - it: proxy sidecar carries kasm.zone in a multi-zone install
+    template: templates/proxy-deployment.yaml
+    values:
+      - ../../../tests/values/multizone-config.yaml
+    documentIndex: 0
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[1].env[?(@.name=="OTEL_RESOURCE_ATTRIBUTES")].value
+          pattern: "kasm\\.zone=zonea"
+
+  - it: connection-proxy sidecar carries kasm.zone in a multi-zone install
+    template: templates/connection-proxy-statefulset.yaml
+    values:
+      - ../../../tests/values/multizone-config.yaml
+      - ../../../tests/values/components-all.yaml
+    documentIndex: 0
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[4].env[?(@.name=="OTEL_RESOURCE_ATTRIBUTES")].value
+          pattern: "kasm\\.zone=zonea"
+
+  - it: db sidecar carries no kasm.zone attribute, because the DB has no zone dimension
+    template: templates/db-statefulset.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[1].env[?(@.name=="OTEL_RESOURCE_ATTRIBUTES")].value
+          pattern: "deployment\\.environment=kubernetes"
+      - notMatchRegex:
+          path: spec.template.spec.containers[1].env[?(@.name=="OTEL_RESOURCE_ATTRIBUTES")].value
+          pattern: "kasm\\.zone"
+
   - it: sidecar resources honour components.otelSidecar.resources
     template: templates/proxy-deployment.yaml
     documentIndex: 0

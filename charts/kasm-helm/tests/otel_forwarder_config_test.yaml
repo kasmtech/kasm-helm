@@ -263,6 +263,52 @@ tests:
           path: data["config.yaml"]
           pattern: 'endpoint: "tcp://ch\.example\.test:9440\?secure=true&skip_verify=true"'
 
+  # ---------- D003: memory_limiter/tail_sampling scale with deploymentSize ----------
+  - it: gateway memory_limiter and num_traces scale with deploymentSize=small
+    template: templates/otel-gateway-configmap.yaml
+    set:
+      deploymentSize: small
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "limit_mib: 800"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "spike_limit_mib: 200"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "num_traces: 25000"
+
+  - it: gateway memory_limiter and num_traces scale with deploymentSize=medium
+    template: templates/otel-gateway-configmap.yaml
+    set:
+      deploymentSize: medium
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "limit_mib: 1600"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "spike_limit_mib: 400"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "num_traces: 50000"
+
+  - it: gateway memory_limiter and num_traces scale with deploymentSize=large
+    template: templates/otel-gateway-configmap.yaml
+    set:
+      deploymentSize: large
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "limit_mib: 3200"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "spike_limit_mib: 800"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "num_traces: 100000"
+
   # ---------- H0b: non-default database templates into all three exporters ----------
   - it: a non-default clickhouse database is templated into all three exporters, never left as kasm_otel
     template: templates/otel-gateway-configmap.yaml

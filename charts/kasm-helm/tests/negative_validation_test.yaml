@@ -268,3 +268,37 @@ tests:
     asserts:
       - failedTemplate:
           errorMessage: "observability.collector.gateway.tailSamplePercentage must be between 0 and 100, got -1."
+
+  # D004: these keys were removed from the OTel restructure (H5's DaemonSet/nginx sidecar
+  # replaced fileLogs/hostLogs/nginxLogs, and logFormat no longer exists). The schema's
+  # additionalProperties: false on observability rejects them at the values interface.
+  # Unlike the template `fail` calls above, this is a values-schema validation error raised
+  # before any template renders; helm-unittest's failedTemplate.errorMessage exact-match
+  # does not attribute it to a template, so only failure (not message text) is asserted here.
+  - it: observability.fileLogs is rejected as an unknown key
+    template: templates/otel-forwarder-configmap.yaml
+    set:
+      observability.fileLogs.enabled: true
+    asserts:
+      - failedTemplate: {}
+
+  - it: observability.hostLogs is rejected as an unknown key
+    template: templates/otel-forwarder-configmap.yaml
+    set:
+      observability.hostLogs.enabled: true
+    asserts:
+      - failedTemplate: {}
+
+  - it: observability.nginxLogs is rejected as an unknown key
+    template: templates/otel-forwarder-configmap.yaml
+    set:
+      observability.nginxLogs.enabled: true
+    asserts:
+      - failedTemplate: {}
+
+  - it: observability.logFormat is rejected as an unknown key
+    template: templates/otel-forwarder-configmap.yaml
+    set:
+      observability.logFormat: json
+    asserts:
+      - failedTemplate: {}

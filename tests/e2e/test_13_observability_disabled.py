@@ -43,9 +43,12 @@ def test_observability_disabled_stays_deployable(installer, temp_workdir: Path) 
             "api": {"resources": low_resources},
             "manager": {"resources": low_resources},
             "proxy": {"resources": low_resources_proxy},
-            "guac": {"resources": low_resources},
-            "rdpGateway": {"resources": low_resources_gw},
-            "rdpHttpsGateway": {"resources": low_resources_gw},
+            "connectionProxy": {
+                "nginx": {"resources": low_resources_proxy},
+                "guac": {"resources": low_resources},
+                "rdpGateway": {"resources": low_resources_gw},
+                "rdpHttpsGateway": {"resources": low_resources_gw},
+            },
         },
         "observability": {
             "enabled": False,

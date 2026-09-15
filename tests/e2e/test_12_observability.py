@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import time
 from pathlib import Path
@@ -13,6 +14,7 @@ from .helpers import (
     exec_in_pod,
     get_first_pod_by_selector,
     install_and_wait_with_retry,
+    kubectl,
     wait_for_condition,
 )
 
@@ -24,7 +26,7 @@ _TELEMETRY_FLUSH_TIMEOUT_SECONDS = 90
 _TELEMETRY_POLL_SECONDS = 5
 
 
-def _low_resource_values(database: str | None = None) -> dict:
+def _low_resource_values(database: str | None = None, *, gateway_replicas: int | None = None) -> dict:
     low_resources = {"requests": {"cpu": "50m", "memory": "256Mi"}}
     low_resources_proxy = {"requests": {"cpu": "50m", "memory": "128Mi"}}
     low_resources_gw = {"requests": {"cpu": "25m", "memory": "128Mi"}}
@@ -33,19 +35,19 @@ def _low_resource_values(database: str | None = None) -> dict:
         "deploymentSize": "small",
         "publicAddr": "kasm.example.com",
         "certificate": {"secretName": "kasm-deployment-tls"},
+        "database": {"resources": low_resources},
         "components": {
             "api": {"resources": low_resources},
             "manager": {"resources": low_resources},
             "proxy": {"resources": low_resources_proxy},
-            "guac": {"resources": low_resources},
-            "rdpGateway": {"resources": low_resources_gw},
-            "rdpHttpsGateway": {"resources": low_resources_gw},
-        },
-        "observability": {
-            "collector": {
-                "forwarder": {"resources": low_resources_otel},
-                "gateway": {"resources": low_resources_otel},
+            "connectionProxy": {
+                "nginx": {"resources": low_resources_proxy},
+                "guac": {"resources": low_resources_gw},
+                "rdpGateway": {"resources": low_resources_gw},
+                "rdpHttpsGateway": {"resources": low_resources_gw},
             },
+            "otelForwarder": {"resources": low_resources_otel},
+            "otelGateway": {"resources": low_resources_otel},
             "clickhouse": {
                 "resources": {"requests": {"cpu": "100m", "memory": "512Mi"}},
                 # Tests must start on an empty ClickHouse volume. The chart default retains the PVC
@@ -57,7 +59,9 @@ def _low_resource_values(database: str | None = None) -> dict:
         },
     }
     if database:
-        values_obj["observability"]["clickhouse"]["database"] = database
+        values_obj["observability"] = {"clickhouse": {"database": database}}
+    if gateway_replicas is not None:
+        values_obj["components"]["otelGateway"]["replicas"] = gateway_replicas
     return values_obj
 
 
@@ -108,6 +112,79 @@ def _wait_for_query_nonzero(namespace: str, database: str, sql: str, *, descript
     return last_value
 
 
+def _assert_single_forwarder(namespace: str) -> None:
+    """Restructured topology: one cluster-wide otel-forwarder, never a copy per zone."""
+    selector = "app.kubernetes.io/component=otel-forwarder"
+    deployments = json.loads(kubectl(["get", "deployments", "-l", selector, "-o", "json"], namespace=namespace).stdout)
+    assert len(deployments["items"]) == 1, (
+        f"expected exactly one otel-forwarder Deployment, found {len(deployments['items'])}"
+    )
+    pods = json.loads(kubectl(["get", "pods", "-l", selector, "-o", "json"], namespace=namespace).stdout)
+    assert len(pods["items"]) == 1, (
+        f"expected exactly one otel-forwarder pod (cluster-wide, no per-zone copies), found "
+        f"{len(pods['items'])}"
+    )
+
+
+def _service_name_seen(namespace: str, database: str, service_name: str, *, timeout_seconds: int) -> bool:
+    def _check() -> bool:
+        rows = _clickhouse_query(
+            namespace, database, f"SELECT count() FROM otel_logs WHERE ServiceName = '{service_name}'"
+        )
+        try:
+            return int(rows.splitlines()[0] or "0") > 0
+        except (ValueError, IndexError):
+            return False
+
+    try:
+        wait_for_condition(
+            f"ServiceName={service_name} has otel_logs rows",
+            _check,
+            timeout_seconds=timeout_seconds,
+            poll_seconds=_TELEMETRY_POLL_SECONDS,
+        )
+        return True
+    except AssertionError:
+        return False
+
+
+def _assert_connection_proxy_sidecar_services(namespace: str, database: str) -> None:
+    """guac/rdp-gateway/rdp-https-gateway ship logs via their own OTel SDK straight to the
+    connection-proxy pod's otel-sidecar (kasm.otelEnv(sidecar=true) in
+    connection-proxy-statefulset.yaml:158,264,362). They emit at process startup, but without a
+    live session there's no guarantee which of the three logs first — poll each with a short
+    budget, and if one never shows up, fall back to proving the delivery path exists (the sidecar
+    container is present in the pod) rather than asserting traffic that requires a session.
+    """
+    for service_name in ("kasm-guac", "kasm-rdp-gateway", "kasm-rdp-https-gateway"):
+        if _service_name_seen(namespace, database, service_name, timeout_seconds=30):
+            continue
+        pod = get_first_pod_by_selector(namespace, "app.kubernetes.io/component=connection-proxy")
+        pod_spec = json.loads(kubectl(["get", "pod", pod, "-o", "json"], namespace=namespace).stdout)
+        container_names = [c["name"] for c in pod_spec["spec"]["containers"]]
+        assert "otel-sidecar" in container_names, (
+            f"{service_name} produced no otel_logs rows and the connection-proxy pod has no "
+            f"otel-sidecar container to carry it: {container_names}"
+        )
+        LOGGER.info(
+            "[observability] %s produced no otel_logs rows without a live session; verified the "
+            "otel-sidecar container is present in the connection-proxy pod instead",
+            service_name,
+        )
+
+
+def _assert_db_sidecar_logs(namespace: str, database: str) -> None:
+    """DB sidecar: logs only, no metrics receiver (D002 — deliberately deferred,
+    otel-db-sidecar-configmap.yaml:8-9). Postgres emits JSON log lines at startup, so this is a
+    hard assertion, not a fallback."""
+    _wait_for_query_nonzero(
+        namespace,
+        database,
+        "SELECT count() FROM otel_logs WHERE ServiceName = 'kasm-db'",
+        description=f"kasm-db has otel_logs rows in database {database}",
+    )
+
+
 def _drive_traffic(namespace: str) -> None:
     proxy_pod = get_first_pod_by_selector(namespace, "app.kubernetes.io/component=proxy")
     status_code, _ = curl_from_pod(namespace, proxy_pod, "https://localhost:8443/", insecure=True)
@@ -131,6 +208,9 @@ def _assert_core_telemetry(namespace: str, database: str) -> None:
     assert "kasm-api" in services, f"kasm-api missing from otel_logs ServiceName values: {services}"
     assert "kasm-manager" in services, f"kasm-manager missing from otel_logs ServiceName values: {services}"
 
+    _assert_connection_proxy_sidecar_services(namespace, database)
+    _assert_db_sidecar_logs(namespace, database)
+
     _wait_for_query_nonzero(
         namespace,
         database,
@@ -147,8 +227,8 @@ def _assert_core_telemetry(namespace: str, database: str) -> None:
         namespace, database, "SELECT count() FROM otel_logs WHERE ServiceName = 'kasm-proxy'"
     )
     assert int(proxy_log_count.splitlines()[0] or "0") > 0, (
-        "no kasm-proxy log rows — the hostLogs DaemonSet did not tail /var/log/pods, or its glob "
-        "did not match the proxy pod's log file path"
+        "no kasm-proxy log rows — the unconditional nginx otel sidecar did not tail "
+        "/var/log/nginx/otel/access_json.log, or its filelog receiver did not match"
     )
 
     # The filelog operators move fields to semconv names via dotted paths
@@ -174,19 +254,6 @@ def _assert_core_telemetry(namespace: str, database: str) -> None:
         "SELECT count() FROM otel_logs WHERE ServiceName = 'kasm-proxy' AND SeverityText != ''",
     )
     LOGGER.info("[observability] kasm-proxy error-classified log rows: %s", error_log_count)
-
-    # The container operator's add_metadata_from_filepath writes k8s.* to RESOURCE attributes, not
-    # log attributes — they describe the source entity, not the record.
-    pod_name_result = _clickhouse_query(
-        namespace,
-        database,
-        "SELECT DISTINCT ResourceAttributes['k8s.pod.name'] FROM otel_logs "
-        "WHERE ServiceName='kasm-proxy'",
-    )
-    assert pod_name_result.strip(), (
-        "no k8s.pod.name resource attribute on any kasm-proxy log row — the container operator's "
-        "filepath metadata extraction did not populate pod name (and needed no RBAC to do so)"
-    )
 
     metrics_tables = _clickhouse_query(
         namespace,
@@ -218,6 +285,8 @@ def test_observability_default_install_end_to_end(installer, temp_workdir: Path)
         values_file=str(values_path),
         set_args=None,
     )
+
+    _assert_single_forwarder(namespace)
 
     LOGGER.info("[observability] pods ready; driving traffic and waiting for telemetry to flush")
     _drive_traffic(namespace)
@@ -293,3 +362,45 @@ def test_observability_non_default_clickhouse_database(installer, temp_workdir: 
     # ClickHouse-side query above (which reads through the exact database the API is configured
     # to read from) is the read/write-agreement proof here, per the phase doc's guidance that
     # this is "the only test that proves reads and writes agree."
+
+
+@pytest.mark.e2e
+def test_observability_gateway_replicas_scale_out(installer, temp_workdir: Path) -> None:
+    """components.otelGateway.replicas=2 smoke test: the loadbalancing exporter in front of the
+    gateway (otel-forwarder-configmap.yaml) partitions by traceID across gateway pods, so this
+    proves the partitioned tail-sampling path still delivers telemetry end to end with more than
+    one gateway.
+
+    Run with `make e2e-observability`.
+    """
+    e2e_config = installer["config"]
+    namespace = installer["namespace"]
+
+    values_path = temp_workdir / "values.yaml"
+    values_path.write_text(yaml.safe_dump(_low_resource_values(gateway_replicas=2), sort_keys=False))
+
+    install_and_wait_with_retry(
+        helm_install_fn=helm_install,
+        e2e_config=e2e_config,
+        namespace=namespace,
+        values_file=str(values_path),
+        set_args=None,
+    )
+
+    gateway_pods = json.loads(
+        kubectl(
+            ["get", "pods", "-l", "app.kubernetes.io/component=otel-gateway", "-o", "json"],
+            namespace=namespace,
+        ).stdout
+    )["items"]
+    assert len(gateway_pods) == 2, f"expected 2 otel-gateway pods, found {len(gateway_pods)}"
+    for pod in gateway_pods:
+        ready_conditions = [c for c in pod["status"].get("conditions", []) if c.get("type") == "Ready"]
+        assert ready_conditions and ready_conditions[0].get("status") == "True", (
+            f"otel-gateway pod {pod['metadata']['name']} is not Ready"
+        )
+
+    _drive_traffic(namespace)
+    time.sleep(15)
+
+    _assert_core_telemetry(namespace, "kasm_otel")

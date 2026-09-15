@@ -123,7 +123,7 @@ CRANE_ARCH := $(subst amd64,x86_64,$(ARCH))
 CLOUD_PROVIDER_KIND_PID_FILE ?= $(CURDIR)/.kind/cloud-provider-kind.pid
 CLOUD_PROVIDER_KIND_LOG ?= $(CURDIR)/.kind/cloud-provider-kind.log
 
-.PHONY: tools lint render kubeconform kyverno unittest readme readme-check changelog changelog-llm changelog-console changelog-console-llm changelog-check docs test build-pytest kind-up kind-down kind-recreate kind-ensure kind-load-images kind-load-old-images kind-clean-namespace kind-prep pytest-docker e2e e2e-basic e2e-trustedca e2e-multizone e2e-externaldb e2e-backup e2e-backup-pss e2e-pss e2e-json-logging e2e-observability e2e-observability-off e2e-observability-filelogs e2e-observability-sidecar e2e-upgrade e2e-upgrade-included e2e-upgrade-standalone e2e-settle e2e-preseed validate-preseed extract-old-chart clean
+.PHONY: tools lint render kubeconform kyverno unittest readme readme-check changelog changelog-llm changelog-console changelog-console-llm changelog-check docs test build-pytest kind-up kind-down kind-recreate kind-ensure kind-load-images kind-load-old-images kind-clean-namespace kind-prep pytest-docker e2e e2e-basic e2e-trustedca e2e-multizone e2e-externaldb e2e-backup e2e-backup-pss e2e-pss e2e-json-logging e2e-observability e2e-observability-off e2e-upgrade e2e-upgrade-included e2e-upgrade-standalone e2e-settle e2e-preseed validate-preseed extract-old-chart clean
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*## "; printf "\nUsage: make \033[36m<target>\033[0m\n"} \
@@ -268,6 +268,7 @@ lint: $(HELM) ## Lint the primary Helm chart
 	$(HELM) lint $(CHART_DIR)
 
 render: $(HELM) ## Render all test scenario values to .rendered/
+	@rm -rf .rendered
 	@mkdir -p .rendered
 	@set -euo pipefail; \
 	  for values_file in $(TEST_VALUES_DIR)/*.yaml; do \
@@ -609,12 +610,6 @@ e2e: ## Run all e2e scenarios sequentially (requires kind cluster)
 	$(MAKE) e2e-observability-off E2E_NAMESPACE=kasm-e2e-observability-off
 	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-observability-off
 	$(MAKE) e2e-settle
-	$(MAKE) e2e-observability-filelogs E2E_NAMESPACE=kasm-e2e-observability-filelogs
-	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-observability-filelogs
-	$(MAKE) e2e-settle
-	$(MAKE) e2e-observability-sidecar E2E_NAMESPACE=kasm-e2e-observability-sidecar
-	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-observability-sidecar
-	$(MAKE) e2e-settle
 	$(MAKE) e2e-upgrade-included E2E_NAMESPACE=kasm-e2e-upgrade-included
 	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-upgrade-included
 	$(MAKE) e2e-settle
@@ -682,12 +677,6 @@ e2e-observability: kind-prep build-pytest ## Default observability install: coll
 
 e2e-observability-off: kind-prep build-pytest ## observability.enabled=false stays deployable
 	$(MAKE) pytest-docker E2E_SCENARIO=e2e-observability-off E2E_IMAGE_VALUES=/e2e-values/dev31-images.yaml PYTEST_ARGS="-m e2e -q test_13_observability_disabled.py"
-
-e2e-observability-filelogs: kind-prep build-pytest ## observability.fileLogs sidecar produces JSON file logs that reach ClickHouse
-	$(MAKE) pytest-docker E2E_SCENARIO=e2e-observability-filelogs E2E_IMAGE_VALUES=/e2e-values/dev31-images.yaml PYTEST_ARGS="-m e2e -q test_14_observability_filelogs.py"
-
-e2e-observability-sidecar: kind-prep build-pytest ## PSS-restricted fallback: nginxLogs sidecar instead of the hostLogs DaemonSet
-	$(MAKE) pytest-docker E2E_SCENARIO=e2e-observability-sidecar E2E_IMAGE_VALUES=/e2e-values/dev31-images.yaml PYTEST_ARGS="-m e2e -q test_15_observability_sidecar_logs.py"
 
 ##@ Upgrade Helpers
 
