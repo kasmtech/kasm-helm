@@ -319,6 +319,18 @@ spec:
                   type: object
                   x-kubernetes-map-type: atomic
                 type: array
+              labels:
+                description: |-
+                  Labels are the Kasm server labels this agent advertises to the manager on
+                  every heartbeat (KASM_SERVER_LABELS), replacing whatever the manager's
+                  server record currently holds. They are what a workspace's include/exclude
+                  labels match against, so per-workspace targeting of this agent is
+                  configured here instead of by hand-editing the server in the admin UI.
+                  Labels may not contain commas.
+                items:
+                  type: string
+                type: array
+                x-kubernetes-list-type: set
               logLevel:
                 default: INFO
                 description: LogLevel is the agent log level (LOG_LEVEL).
@@ -695,6 +707,53 @@ spec:
                   WorkspacesNodeSelector is passed to the agent (KASM_NODE_SELECTOR) to pin
                   launched workspace pods.
                 type: object
+              workspacesTolerations:
+                description: |-
+                  WorkspacesTolerations are the tolerations every launched workspace pod
+                  carries (KASM_TOLERATIONS), with a workspace template's own tolerations
+                  appended per session. Set these when workspaces are meant to run on
+                  tainted nodes, e.g. a dedicated pool tainted `kasm.com/workspaces=true:NoSchedule`.
+                  They also scope the image puller and the heartbeat's capacity report:
+                  a node whose NoSchedule/NoExecute taints these don't cover is neither
+                  pre-staged nor counted as capacity, since no workspace could land there.
+                items:
+                  description: |-
+                    The pod this Toleration is attached to tolerates any taint that matches
+                    the triple <key,value,effect> using the matching operator <operator>.
+                  properties:
+                    effect:
+                      description: |-
+                        Effect indicates the taint effect to match. Empty means match all taint effects.
+                        When specified, allowed values are NoSchedule, PreferNoSchedule and NoExecute.
+                      type: string
+                    key:
+                      description: |-
+                        Key is the taint key that the toleration applies to. Empty means match all taint keys.
+                        If the key is empty, operator must be Exists; this combination means to match all values and all keys.
+                      type: string
+                    operator:
+                      description: |-
+                        Operator represents a key's relationship to the value.
+                        Valid operators are Exists, Equal, Lt, and Gt. Defaults to Equal.
+                        Exists is equivalent to wildcard for value, so that a pod can
+                        tolerate all taints of a particular category.
+                        Lt and Gt perform numeric comparisons (requires feature gate TaintTolerationComparisonOperators).
+                      type: string
+                    tolerationSeconds:
+                      description: |-
+                        TolerationSeconds represents the period of time the toleration (which must be
+                        of effect NoExecute, otherwise this field is ignored) tolerates the taint. By default,
+                        it is not set, which means tolerate the taint forever (do not evict). Zero and
+                        negative values will be treated as 0 (evict immediately) by the system.
+                      format: int64
+                      type: integer
+                    value:
+                      description: |-
+                        Value is the taint value the toleration matches to.
+                        If the operator is Exists, the value should be empty, otherwise just a regular string.
+                      type: string
+                  type: object
+                type: array
               zone:
                 default: default
                 description: Zone is the deployment zone the agent reports (AGENT_ZONE).

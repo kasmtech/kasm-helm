@@ -162,6 +162,14 @@ spec:
   workspacesNodeSelector:
     {{- toYaml . | nindent 4 }}
   {{- end }}
+  {{- with .Values.workspacesTolerations }}
+  workspacesTolerations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.labels }}
+  labels:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   {{- with .Values.resources }}
   resources:
     {{- toYaml . | nindent 4 }}

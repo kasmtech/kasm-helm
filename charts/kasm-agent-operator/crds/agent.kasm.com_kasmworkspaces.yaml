@@ -3595,6 +3595,17 @@ spec:
                 type: string
               lastEvictionReason:
                 type: string
+              lastOOMKilledAt:
+                description: |-
+                  LastOOMKilledAt is the termination time of the most recent OOM kill
+                  already counted in EvictionCount. With restartPolicy Always the killed
+                  container is usually restarted (and often Ready again) before the next
+                  reconcile, so detection reads the container's last termination state
+                  rather than only its current state, and this high-water mark keeps the
+                  same kill from being counted on every reconcile that can still see it.
+                  Unlike the fields above it is not reset when the pod becomes Ready.
+                format: date-time
+                type: string
               lastReconcileTime:
                 format: date-time
                 type: string

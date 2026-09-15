@@ -474,6 +474,35 @@ tests:
           path: spec.resources.limits.cpu
           value: 500m
 
+
+  - it: passes workspacesTolerations and the advertised server labels through to the Agent
+    set:
+      workspacesTolerations:
+        - key: kasm.com/workspaces
+          operator: Exists
+          effect: NoSchedule
+      labels:
+        - kasm.com/pool=a
+        - kasm.com/gpu=none
+    asserts:
+      - equal:
+          path: spec.workspacesTolerations[0].key
+          value: kasm.com/workspaces
+      - equal:
+          path: spec.workspacesTolerations[0].effect
+          value: NoSchedule
+      - equal:
+          path: spec.labels
+          value:
+            - kasm.com/pool=a
+            - kasm.com/gpu=none
+
+  - it: omits workspacesTolerations and labels when empty
+    asserts:
+      - isNull:
+          path: spec.workspacesTolerations
+      - isNull:
+          path: spec.labels
   - it: omits storageMappings when it is disabled and no installation id is set
     set:
       storageMappings:

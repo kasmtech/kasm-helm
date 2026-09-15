@@ -288,6 +288,29 @@ nodeSelector: {}
 #
 workspacesNodeSelector: {}
 
+# workspacesTolerations -- Tolerations every workspace pod the agent launches carries, with a workspace
+# template's own tolerations appended per session. Set them when sessions are meant to run on tainted
+# nodes, such as a dedicated pool tainted `kasm.com/workspaces=true:NoSchedule`. They also scope the
+# agent's image puller and its capacity report: a node whose NoSchedule/NoExecute taints these do not
+# tolerate is left out of the CPU and memory the agent advertises to the manager. Omitted when empty.
+# Example:
+#   workspacesTolerations:
+#     - key: kasm.com/workspaces
+#       operator: Exists
+#       effect: NoSchedule
+#
+workspacesTolerations: []
+
+# labels -- Kasm server labels this agent advertises to the manager on every heartbeat, replacing whatever
+# the manager's server record holds. A workspace's include/exclude labels are matched against them, so
+# per-workspace targeting of this agent is configured here rather than by editing the server in the admin
+# UI. `key=value` strings; a label may not contain a comma. Omitted when empty.
+# Example:
+#   labels:
+#     - kasm.com/pool=a
+#
+labels: []
+
 # workspaceImagePullSecrets -- Pull secrets the agent injects into launched workspace pods, for private
 # workspace images. Distinct from `imagePullSecrets`, which pulls the agent and proxy images. Omitted from the
 # Agent resource entirely when empty.

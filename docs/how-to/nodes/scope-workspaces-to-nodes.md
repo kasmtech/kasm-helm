@@ -16,12 +16,13 @@ sessions need, and kept clear of other workloads. Three things have to agree for
 3. **Everything else.** The agent, the operator and the control plane place themselves with their own
    selectors (`agent.nodeSelector` for the agent and its session proxy) and normally stay off the pool.
 
-Per-workspace targeting needs no chart value: the *include labels* set on a workspace in the Kasm
-admin UI are added to that workspace's `KasmWorkspace` selector on top of the fleet-wide one. One
-precondition is easy to miss: the manager matches a workspace's include labels against the labels of
-the *server* (the agent's row under Infrastructure → Servers) before the request ever reaches
-Kubernetes, and a Kubernetes agent registers with no labels. Put the same label on the server, or
-every launch of that workspace is refused with `No Agent slots available`.
+Per-workspace targeting takes one chart value and one admin-UI setting: `agent.labels` is the list of
+server labels the agent advertises to the manager on every heartbeat, and the *include labels* set on
+a workspace in the Kasm admin UI are matched against them before the request ever reaches Kubernetes.
+When they match, the agent adds the workspace's include labels to that `KasmWorkspace`'s selector on
+top of the fleet-wide one; when they do not, the launch is refused with `No Agent slots available`.
+The heartbeat replaces whatever the server row held, so labels typed into the server's page in the
+admin UI do not survive.
 
 ```mermaid
 %%{init: {"theme":"base","themeVariables":{"background":"#ffffff","primaryColor":"#f2f4f7","primaryBorderColor":"#f2f4f7","primaryTextColor":"#0f2a44","lineColor":"#0f2a44","clusterBkg":"#ffffff","clusterBorder":"#0f2a44","edgeLabelBackground":"#ffffff","fontFamily":"system-ui, sans-serif"}}}%%
@@ -32,7 +33,7 @@ flowchart LR
   ws["KasmWorkspace<br/>spec.nodeSelector"]:::card
   pod["session pod<br/>nodeSelector"]:::card
   ui["workspace include labels<br/>(admin UI)"]:::card
-  srv["server labels<br/>(admin UI, must match)"]:::card
+  srv["agent.labels<br/>(server labels, heartbeat)"]:::card
   v --> cr --> env --> ws --> pod
   ui --> ws
   srv --> ui
@@ -96,16 +97,17 @@ flowchart LR
 3. **Upgrade the release.** The agent Deployment rolls to pick up the selector; sessions already
    running keep their old placement until they end.
 
-4. **Narrow a single workspace** where needed. Two edits in the admin UI, both as `key=value`
-   strings: add `kasm.com/pool=gpu` to the workspace's *Include Labels*, and add the same label to
-   the agent's server row (Infrastructure → Servers → edit → Labels). The manager checks the server's
-   labels first and refuses the launch with `No Agent slots available` while they do not match; once
-   they do, the agent merges the include labels into the fleet-wide selector
-   (`{kasm.com/workspaces: "true", kasm.com/pool: gpu}`), so the workspace only ever lands on pool
-   nodes that also carry that label. A label the server has but no node has is not caught by the
-   control plane: the pod cannot schedule (`didn't match Pod's node affinity/selector`), the agent
-   fails the launch after a few seconds and the user sees `An Unexpected Error occurred creating the
-   Kasm`, so keep server labels and node labels in step.
+4. **Narrow a single workspace** where needed. Advertise the label from the chart and set it on the
+   workspace, both as `key=value` strings: `agent.labels: [kasm.com/pool=gpu]` (the agent sends it
+   with every heartbeat, replacing the server row's labels) and `kasm.com/pool=gpu` in the workspace's
+   *Include Labels* in the admin UI. The manager checks the server's labels first and refuses the
+   launch with `No Agent slots available` while they do not match; once they do, the agent merges the
+   include labels into the fleet-wide selector (`{kasm.com/workspaces: "true", kasm.com/pool: gpu}`),
+   so the workspace only ever lands on pool nodes that also carry that label. A label the agent
+   advertises but no node carries is not caught by the control plane: the pod cannot schedule
+   (`didn't match Pod's node affinity/selector`), the agent fails the launch after a few seconds and
+   the user sees `An Unexpected Error occurred creating the Kasm`, so keep `agent.labels` and the
+   node labels in step.
 
 5. **Warm pools** are custom resources you author, and place themselves: `spec.nodeSelector`,
    `spec.affinity` and `spec.tolerations` on a `WarmPool` apply to its instance pods. Give them the
@@ -117,8 +119,15 @@ flowchart LR
    the three DaemonSets. Without them the operator's puller DaemonSet runs on every schedulable node
    and stages workspace images where no session can ever run. The agent also owns a puller of its own
    (`<release>-image-puller`, fed from the control plane's workspace list); it inherits
-   `workspacesNodeSelector` but carries no tolerations, so a tainted pool node is only pre-staged by
-   the chart's puller.
+   `workspacesNodeSelector` and `workspacesTolerations`, so it follows the sessions without a value of
+   its own.
+
+7. **Tainted pool nodes.** Sessions carry no tolerations by default, so a `NoSchedule` taint on a pool
+   node keeps them off it even though the DaemonSets (with their `tolerations`) prepare it. To run
+   sessions there, set `agent.workspacesTolerations` to the same toleration; every session pod carries
+   it, a workspace template's own tolerations are appended per session, and the agent's capacity
+   report and its puller follow suit. Without it the agent leaves a tainted node out of the CPU and
+   memory it advertises, so the control plane never hands it sessions it cannot place.
 
 ## Verify
 
@@ -149,11 +158,11 @@ an exhausted node. Before letting the node back in it reads the node's `MemoryPr
 access to nodes (`get`, `list` and `watch`: the read goes through a cached client, and with `get`
 alone the reconcile hangs at the end of the window). The image puller keeps the same bookkeeping per
 node in `status.nodeBackoffs`. No value controls this; it works within whatever selector you set, so
-a pool of one node has nowhere to go and the replacement waits. The first window is 30 s. The agent's capacity report to the control plane is the
-sum of allocatable CPU and memory over the nodes the selector matches and nothing else (verified
-with pool nodes of unique sizes), refreshed by the heartbeat; it counts tainted pool nodes too, so
-with a tainted node in the pool the control plane can hand the agent sessions the pool cannot
-schedule, and those pods stay `Pending` rather than being refused. Only
+a pool of one node has nowhere to go and the replacement waits. The first window is 30 s, and an OOM kill is counted from the
+container's last termination state, so a container that restarts before the next reconcile is not
+missed. The agent's capacity report to the control plane is the sum of allocatable CPU and memory
+over the nodes the selector matches whose taints `workspacesTolerations` tolerate, and nothing else
+(verified with pool nodes of unique sizes), refreshed by the heartbeat. Only
 kubelet-side failures count: an OOM-killed container or a node-pressure eviction. A delete through
 the Eviction API (`kubectl drain`, a descheduler) is a graceful delete to the operator and is not
 recorded, so the replacement schedules without an exclusion.
@@ -194,6 +203,13 @@ kasm-agent:
         - key: kasm.com/workspaces
           operator: Exists
           effect: NoSchedule
+    # optional: server labels for per-workspace targeting, and tolerations if the pool is tainted
+    labels:
+      - kasm.com/pool=a
+    workspacesTolerations:
+      - key: kasm.com/workspaces
+        operator: Exists
+        effect: NoSchedule
 ```
 
 Installing `kasm-agent` directly? Drop the `kasm-agent:` key and start at `agent:`.
@@ -203,12 +219,12 @@ Installing `kasm-agent` directly? Drop the `kasm-agent:` key and start at `agent
 | Symptom | Cause | Fix |
 | ------- | ----- | --- |
 | Session pods `Pending` with `didn't match Pod's node affinity/selector` | No node carries the selector, or a workspace label narrows it to nothing | `kubectl get nodes -l <selector>`; fix the labels or the workspace's labels |
-| Session pods `Pending` with `had untolerated taint` | The pool is tainted and sessions cannot tolerate taints | Remove the taint from the session pool, or keep the taint on nodes sessions are not meant to use |
+| Session pods `Pending` with `had untolerated taint` | The pool is tainted and `agent.workspacesTolerations` is unset | Add the toleration there, or keep the taint on nodes sessions are not meant to use |
 | Sessions run on nodes outside the pool | The selector is set on the wrong key, or the agent has not rolled since the upgrade | Check `KASM_NODE_SELECTOR` on the agent Deployment; `kubectl rollout restart` it |
 | `kasm.com/video` advertised on nodes that have no `/dev/video*` | `videoDevicePlugin.nodeSelector` wider than `nodePrep.nodeSelector` | Make the three DaemonSet selectors identical |
 | A session pod stays `Pending` after an eviction although the pool has room | Every pool node is either the backed-off node or tainted | Wait for `backoffUntil` on the `KasmWorkspace` status, or add a pool node |
 | DaemonSet pods missing from a tainted pool node | No tolerations on that DaemonSet | Add the `tolerations` block shown above to each of the three |
-| Every launch of a workspace that has include labels is refused with `No Agent slots available`, with room in the pool | The agent's server row carries no matching label; the manager filters servers by label before Kubernetes is involved | Add the same `key=value` label to the server under Infrastructure → Servers |
+| Every launch of a workspace that has include labels is refused with `No Agent slots available`, with room in the pool | The agent advertises no matching label; the manager filters servers by label before Kubernetes is involved | Add the same `key=value` string to `agent.labels` (labels typed into the server's admin-UI page are overwritten by the next heartbeat) |
 | A session pod is replaced after `kubectl drain` with no back-off on the `KasmWorkspace` status | Eviction API deletes are not node-exhaustion failures; only OOM kills and kubelet pressure evictions are tracked | Expected; the replacement schedules normally |
 | After a back-off window closes the `KasmWorkspace` stays `Pending` although its pod is `Running` | The operator's role has only `get` on nodes (a chart before this fix), so the cached node read never returns | Upgrade the operator chart (nodes: get, list, watch) and restart the operator |
 | `WarmPool` rejected with `unknown field "spec.affinity.nodeAffinity"` | The pools CRD takes a node affinity directly under `spec.affinity` | Drop the `nodeAffinity` wrapper |
@@ -218,7 +234,7 @@ Installing `kasm-agent` directly? Drop the `kasm-agent:` key and start at `agent
 
 - [ ] Pool label chosen; every session node carries it
 - [ ] `agent.workspacesNodeSelector` and the three DaemonSet `nodeSelector`s identical
-- [ ] Taint decision made, knowing sessions cannot tolerate taints
-- [ ] Sub-pool labels (GPU, region) agreed with whoever sets workspace include labels in the admin UI, and mirrored onto the agent's server row
+- [ ] Taint decision made: `agent.workspacesTolerations` set if sessions are meant to run on tainted pool nodes
+- [ ] Sub-pool labels (GPU, region) agreed with whoever sets workspace include labels in the admin UI, and advertised through `agent.labels`
 - [ ] `imagePuller.nodeSelector` set with the DaemonSets, or the wider staging accepted
 - [ ] A session launched and its pod's node checked after the upgrade

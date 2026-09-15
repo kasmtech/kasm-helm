@@ -572,6 +572,14 @@ spec:
                         0 once the node is confirmed healthy again.
                       format: int32
                       type: integer
+                    lastOOMKilledAt:
+                      description: |-
+                        LastOOMKilledAt is the termination time of the most recent OOM kill on
+                        this node already counted in FailureCount, so a kill that stays visible
+                        in a container's last termination state after it restarted is counted
+                        once rather than on every reconcile.
+                      format: date-time
+                      type: string
                     lastReason:
                       type: string
                     node:
