@@ -103,8 +103,9 @@ flowchart LR
    they do, the agent merges the include labels into the fleet-wide selector
    (`{kasm.com/workspaces: "true", kasm.com/pool: gpu}`), so the workspace only ever lands on pool
    nodes that also carry that label. A label the server has but no node has is not caught by the
-   control plane: the session pod stays `Pending` with `didn't match Pod's node affinity/selector`
-   until the session request times out, so keep server labels and node labels in step.
+   control plane: the pod cannot schedule (`didn't match Pod's node affinity/selector`), the agent
+   fails the launch after a few seconds and the user sees `An Unexpected Error occurred creating the
+   Kasm`, so keep server labels and node labels in step.
 
 5. **Warm pools** are custom resources you author, and place themselves: `spec.nodeSelector`,
    `spec.affinity` and `spec.tolerations` on a `WarmPool` apply to its instance pods. Give them the
