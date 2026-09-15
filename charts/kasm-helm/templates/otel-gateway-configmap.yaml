@@ -2,8 +2,8 @@
 Kasm OTel Collector gateway ConfigMap — one per release, cluster-wide (not zone-scoped).
 
 Owns tail_sampling and the three ClickHouse exporters. This is the only tier that may hold
-either, and the only tier the gateway Deployment may ever scale past 1 replica for — see
-docs/otel-execution/H4-collector.md.
+either. Scaling past 1 replica is safe: the forwarder reaches this tier through a trace-ID-keyed
+loadbalancing exporter, so each gateway replica samples whole traces.
 
 Ported from kasm_backend/install/conf/otel/otel-collector-local.yaml, minus the nginx log/metric
 receivers (those live in the per-pod nginx sidecars, not the central Collector).

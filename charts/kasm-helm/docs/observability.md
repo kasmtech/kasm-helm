@@ -289,7 +289,7 @@ tier's `existingConfigMap` is set, since the chart no longer renders the templat
 read them.
 
 Start from `examples/otel-collector-custom.yaml` (a gateway-shaped starting point, safe to edit —
-its tuning values are illustrative and match no rendered `deploymentSize` preset), `examples/otel-collector-splunk.yaml` (adds a Splunk HEC exporter), or
+its tuning values are illustrative rather than preset-derived), `examples/otel-collector-splunk.yaml` (adds a Splunk HEC exporter), or
 `examples/otel-collector-debug.yaml` (adds the `debug` stdout exporter from §3). All three are
 complete, applyable ConfigMaps for the **gateway** tier; there is no matching forwarder example
 because the forwarder's own config is a thin batch-and-loadbalance shape with nothing customers
