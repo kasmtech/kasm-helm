@@ -68,9 +68,8 @@ spec:
               affinity:
                 description: |-
                   Affinity further restricts/prefers which nodes pre-pull images (label
-                  requirements beyond NodeSelector's exact match, e.g. NotIn/Exists). The
-                  controller merges its own per-node eviction-backoff exclusions into
-                  this on top of whatever is set here.
+                  requirements beyond NodeSelector's exact match, e.g. NotIn/Exists).
+                  Passed through to the DaemonSet's pod template as is.
                 properties:
                   preferredDuringSchedulingIgnoredDuringExecution:
                     description: |-
@@ -555,8 +554,11 @@ spec:
                   description: |-
                     NodePullBackoff tracks a node the controller has temporarily excluded from
                     pre-pulling because its DaemonSet pod there kept failing for a
-                    node-exhaustion reason (eviction, OOM). While Now is before BackoffUntil,
-                    the node is left out of the DaemonSet's node affinity.
+                    node-exhaustion reason (eviction, OOM). It is bookkeeping: what failed,
+                    how often, and when the controller next checks the node's conditions. It
+                    does not change the DaemonSet's pod template - excluding a node there
+                    would roll every puller pod and abort the pulls in flight on all nodes,
+                    while the kubelet already refuses new pods on a node under pressure.
                   properties:
                     backoffUntil:
                       description: |-
@@ -572,6 +574,13 @@ spec:
                         0 once the node is confirmed healthy again.
                       format: int32
                       type: integer
+                    lastEvictedPodUID:
+                      description: |-
+                        LastEvictedPodUID is the UID of the evicted puller pod on this node
+                        already counted in FailureCount. Evicted pods stay in the API as Failed
+                        records long after the eviction, so without it the same eviction would
+                        count again at every window expiry.
+                      type: string
                     lastOOMKilledAt:
                       description: |-
                         LastOOMKilledAt is the termination time of the most recent OOM kill on
