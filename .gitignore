@@ -54,3 +54,5 @@ charts/kasm-helm/values-test.yaml
 .superpowers/
 AGENTS.md
 CLAUDE.md
+# Node-scoping verification recipe for a specific LXD environment: kept local, never published
+tests/e2e-agent/node-scoping/
