@@ -82,3 +82,69 @@ tests:
       - notContains:
           path: spec.dnsNames
           content: legacy-a.example.com
+
+  - it: excludes upstream auth addresses from the SANs (private DNS zone)
+    values:
+      - ../../../tests/values/certmanager.yaml
+    set:
+      certificate:
+        certManager:
+          addWildCard: false
+      kasmZones:
+        - name: zonea
+          proxy_hostname: zonea.kasm.example.com
+          primary: true
+        - name: zoneb
+          proxy_hostname: zoneb.kasm.example.com
+          upstream_auth_address: mgmt-b.example.com
+      upstreamAuth:
+        hostname: mgmt-a.example.com
+    asserts:
+      - contains:
+          path: spec.dnsNames
+          content: zonea.kasm.example.com
+      - contains:
+          path: spec.dnsNames
+          content: zoneb.kasm.example.com
+      - notContains:
+          path: spec.dnsNames
+          content: mgmt-a.example.com
+      - notContains:
+          path: spec.dnsNames
+          content: mgmt-b.example.com
+
+  - it: addWildCard=true emits only publicAddr and its wildcard
+    values:
+      - ../../../tests/values/certmanager.yaml
+    set:
+      kasmZones:
+        - name: zonea
+          proxy_hostname: zonea.other-domain.example.net
+          primary: true
+      upstreamAuth:
+        hostname: mgmt.other-domain.example.net
+    asserts:
+      - equal:
+          path: spec.dnsNames
+          value:
+            - kasm.example.com
+            - "*.kasm.example.com"
+
+  - it: skips a zone with no proxy_hostname instead of failing
+    values:
+      - ../../../tests/values/certmanager.yaml
+    set:
+      certificate:
+        certManager:
+          addWildCard: false
+      kasmZones:
+        - name: zonea
+          proxy_hostname: zonea.kasm.example.com
+          primary: true
+        - name: zoneb
+    asserts:
+      - equal:
+          path: spec.dnsNames
+          value:
+            - kasm.example.com
+            - zonea.kasm.example.com

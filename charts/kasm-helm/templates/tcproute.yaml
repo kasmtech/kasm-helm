@@ -12,11 +12,10 @@
   the bundle is not the same as the data plane implementing it - check the
   implementation's conformance before choosing this over a LoadBalancer.
 
-  The backend is replica 0's per-pod RDP Service of the zone's connection-proxy
-  StatefulSet (connection-proxy-services.yaml renders it as ClusterIP when only
-  the TCPRoute publishes it). Every rdp-gateway replica has to advertise its own
-  external address and a TCPRoute cannot tell replicas apart, so
-  kasm.validateRdpExposure limits tcpRoute to one replica per zone.
+  The backend is the per-pod direct RDP Service that connection-proxy-services.yaml
+  renders when tcpRoute is enabled: ClusterIP, ordinal 0. A TCPRoute advertises one
+  hostname, so kasm.validateRdpExposure pins connection-proxy to a single replica in
+  this mode - per-replica fan-out belongs to directRdpService.perServiceSettings.
 */}}
 {{- if .Values.tcpRoute.enabled }}
 {{- $api := .Values.tcpRoute.apiVersion | default "gateway.networking.k8s.io/v1" -}}

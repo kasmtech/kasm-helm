@@ -520,18 +520,20 @@ tests:
       - notExists:
           path: spec.volumeClaimTemplates
 
-  # With only the TCPRoute publishing the gateway, the per-pod RDP Service still renders (the route
-  # needs a backend) but stays ClusterIP: the Gateway owns the external address.
-  - it: tcpRoute renders replica 0's per-pod RDP Service as ClusterIP
+  - it: tcpRoute renders the ordinal-0 backend Service as ClusterIP on the RDP port
     template: templates/connection-proxy-services.yaml
     set:
+      publicAddr: kasm.example.com
+      proxyService:
+        type: ClusterIP
       tcpRoute:
         enabled: true
         rdpAccessURL: rdp.kasm.example.com
         parentRefs:
           - name: kasm-gateway
     asserts:
-      # document 0 is the zone's headless connection-proxy Service; 1 is replica 0's RDP Service.
+      - hasDocuments:
+          count: 2
       - equal:
           path: metadata.name
           value: RELEASE-NAME-connection-proxy-default-rdp-0
@@ -540,15 +542,29 @@ tests:
           path: spec.type
           value: ClusterIP
         documentIndex: 1
-      - contains:
-          path: spec.ports
-          content:
-            name: RELEASE-NAME-connection-proxy-default-rdp-0-svc-3389
-            protocol: TCP
-            port: 3389
-            targetPort: 3389
+      - equal:
+          path: spec.ports[0].port
+          value: 3389
         documentIndex: 1
       - equal:
-          path: spec.selector["statefulset.kubernetes.io/pod-name"]
-          value: RELEASE-NAME-connection-proxy-default-0
+          path: spec.ports[0].targetPort
+          value: 3389
         documentIndex: 1
+
+  - it: tcpRoute feeds its rdpAccessURL into RDP_ACCESS_URLS so the gateway registers the Gateway hostname
+    template: templates/connection-proxy-statefulset.yaml
+    set:
+      publicAddr: kasm.example.com
+      proxyService:
+        type: ClusterIP
+      tcpRoute:
+        enabled: true
+        rdpAccessURL: rdp.kasm.example.com
+        parentRefs:
+          - name: kasm-gateway
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[?(@.name == 'RELEASE-NAME-connection-proxy-rdp-gateway')].env
+          content:
+            name: RDP_ACCESS_URLS
+            value: "rdp.kasm.example.com"

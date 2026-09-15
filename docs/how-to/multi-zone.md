@@ -1,6 +1,6 @@
 # Deploy multiple zones
 
-> **Applies to:** both halves · **Charts/values:** `kasm-helm.kasmZones`, `kasm-helm.publicAddr`, `kasm-helm.ingress.*`, `kasm-helm.route.*`, `kasm-helm.httpRoute.zones`, `kasm-helm.tcpRoute.zones`, `agent.zone`, `agent.publicHostname`
+> **Applies to:** both halves · **Charts/values:** `kasm-helm.kasmZones`, `kasm-helm.publicAddr`, `kasm-helm.ingress.*`, `kasm-helm.route.*`, `kasm-helm.tcpRoute.zones`, `agent.zone`, `agent.publicHostname`
 
 ## Why this is needed
 
@@ -15,10 +15,9 @@ with. Why it is shaped this way, what fans out per zone and what does not, is
 - A front end that routes by hostname: an [Ingress](networking/ingress.md), an
   [OpenShift Route](networking/openshift-route.md) or a
   [Gateway API route](networking/gateway-api-httproute.md). `proxyService.type=LoadBalancer` or
-  `NodePort` alongside `kasmZones` is refused by the chart. With a Gateway, the listener the routes
-  attach to must admit every zone hostname (a wildcard listener), or each zone gets its own listener
-  named in `httpRoute.zones[].parentRefs`; a `sectionName` pinned to a single-hostname listener in
-  `httpRoute.parentRefs` rejects every other zone's route.
+  `NodePort` alongside `kasmZones` is refused by the chart. The chart publishes only `publicAddr`;
+  each zone's `proxy_hostname` is served by its own backend, usually behind a different ingress or
+  load balancer entirely, and is not published here.
 - Capacity for a control-plane stack **per zone**: each `kasmZones` entry renders its own API,
   manager, proxy, Guacamole and RDP gateways (the last three for primary-region zones), roughly the
   requests of the whole single-zone control plane again ([Capacity](../explanation/capacity.md)).
@@ -65,7 +64,8 @@ with. Why it is shaped this way, what fans out per zone and what does not, is
    | ----- | ------- |
    | `name` | The zone name. `zone_name` is accepted as an alias; `name` wins when both are set |
    | `proxy_hostname` | The zone's external hostname; it builds the ingress, Route and certificate entries and the zone's preseed. `proxyAddress` is a deprecated alias |
-   | `primary` | At most one zone; with none set the first entry is primary. Traffic to `publicAddr` routes here |
+   | `primary` | Exactly one zone when several are configured (a lone zone is implicitly primary). Traffic to `publicAddr` routes here |
+   | `seedOnly` | Preseeds the zone record without deploying it here; the zone's workloads install from their own cluster ([Multi-cluster zones](#multi-cluster-zones)) |
    | `region_name` | Groups zones into a region; Guacamole and the RDP gateways are rendered for primary-region zones only |
    | `proxy_connections`, `upstream_auth_address` | The direct-connect pair, per zone: [Switch sessions to direct-connect](networking/direct-connect.md) |
 
@@ -89,9 +89,8 @@ with. Why it is shaped this way, what fans out per zone and what does not, is
    `scheme: http`. The second and later releases on the same cluster set `operator.enabled=false`;
    the operator is a cluster singleton.
 
-3. **Gateway API listeners per zone.** The proxy's `HTTPRoute` for a zone attaches through
-   `httpRoute.parentRefs` unless `httpRoute.zones` names the zone with its own `parentRefs`
-   (a listener of its own, or a different Gateway):
+3. **Gateway API listeners.** The proxy's single `HTTPRoute` (for `publicAddr`) attaches through
+   `httpRoute.parentRefs`:
 
    ```yaml
    kasm-helm:
@@ -101,12 +100,6 @@ with. Why it is shaped this way, what fans out per zone and what does not, is
          - name: kasm-gateway
            namespace: kube-system
            sectionName: kasm-https        # the publicAddr listener
-       zones:
-         - name: zoneb
-           parentRefs:
-             - name: kasm-gateway
-               namespace: kube-system
-               sectionName: zoneb-https
    ```
 
    The RDP gateway through the Gateway API always needs a listener per primary-region zone, named
@@ -179,6 +172,43 @@ kasm-helm:
 
 Each agent release, as in step 2, with `zone`, `manager.hostname` and `publicHostname` per zone.
 
+## Multi-cluster zones
+
+One cluster per zone, one shared external database. The cluster that initializes the database
+lists every zone and marks the ones hosted elsewhere `seedOnly: true`, so their zone records
+(hostname, port, RDP settings) are preseeded without rendering any of their workloads, routing
+rules or certificate hostnames locally:
+
+```yaml
+# Cluster 1 (seeds the database, hosts ashburn)
+kasmZones:
+  - name: ashburn
+    proxy_hostname: ashburn.kasm.example.com
+    primary: true
+  - name: frankfurt
+    proxy_hostname: frankfurt.kasm.example.com
+    seedOnly: true
+```
+
+Every other cluster lists only its own zone(s), pointed at the shared database with seeding off:
+
+```yaml
+# Cluster 2 (hosts frankfurt)
+kasmZones:
+  - name: frankfurt
+    proxy_hostname: frankfurt.kasm.example.com
+database:
+  standalone: false
+  hostname: db.kasm.example.com
+dbManagement:
+  initialize: false
+```
+
+Zone names must match the seeded records exactly; each cluster's components register into their
+zone row by name. The primary zone cannot be `seedOnly`, at least one zone per values file must
+deploy, and a `seedOnly` zone must not share a `region_name` with a deployed zone; zones in one
+region deploy to one cluster.
+
 ## Troubleshooting
 
 [Troubleshooting](../reference/troubleshooting.md). Specific to this page: sessions launching in one
@@ -190,7 +220,7 @@ Infrastructure → Agents is undone by the next heartbeat. A zone missing its RD
 
 ## Decisions
 
-- [ ] Zone names chosen; `primary` on exactly one, or deliberately left to the first entry.
+- [ ] Zone names chosen; `primary` on exactly one (only a single-zone list may leave it implicit).
 - [ ] `region_name` set on every zone that needs Guacamole and an RDP gateway.
 - [ ] `proxy_hostname` per zone, all under the parent domain shared with the agents.
 - [ ] A hostname-routing front end, not `proxyService.type=LoadBalancer`.

@@ -67,6 +67,8 @@ api:
   portName: api-pt
   image: {{ printf "%s/%s:%s" .Values.components.api.image.registry .Values.components.api.image.repository (include "kasm.imageTag" (list . .Values.components.api.image.tag "api")) }}
   port: 8080
+  livenessPortName: api-liveness-pt
+  livenessPort: 8081
 manager:
   component: manager
   svc: {{ printf "%s-manager" .Release.Name }}
@@ -130,20 +132,48 @@ connectionProxy:
   string if neither is set. If both are set, proxy_hostname wins (per values.yaml).
 */}}
 {{- define "kasm.zoneProxyHostname" -}}
-{{- default .proxyAddress .proxy_hostname -}}
+{{- /* The trailing default "" matters: rendering a nil map key emits the literal
+       string "<no value>", which callers' `with` guards would treat as a hostname. */ -}}
+{{- .proxy_hostname | default .proxyAddress | default "" -}}
 {{- end -}}
 
 {{/*
-  Resolve a zone's proxy hostname for host-bearing resources (ingress, route,
-  certificate) that cannot render a valid entry with an empty string. Fails with a
-  descriptive error if the zone has neither proxy_hostname nor proxyAddress set.
+  Resolve a zone's upstream auth (management) address. Prefers the zone's own
+  upstream_auth_address; the primary (or implicit default) zone falls back to
+  upstreamAuth.hostname. Returns an empty string when neither is set - the
+  database preseed then keeps its $request_host$ default.
+  Args: (list <root context> <zone dict>).
 */}}
-{{- define "kasm.zoneProxyHostnameRequired" -}}
-{{- $hostname := include "kasm.zoneProxyHostname" . -}}
-{{- if not $hostname -}}
-  {{- fail (printf "kasmZones[%s]: 'proxy_hostname' (or deprecated 'proxyAddress') must be set to generate an ingress/route/certificate hostname for this zone" (default "unnamed zone" .name)) -}}
+{{- define "kasm.zoneUpstreamAuthAddress" -}}
+{{- $root := index . 0 -}}
+{{- $zone := index . 1 -}}
+{{- if $zone.upstream_auth_address -}}
+  {{- $zone.upstream_auth_address -}}
+{{- else if $root.Values.upstreamAuth.hostname -}}
+  {{- $primaryZone := (include "kasm.primaryZone" $root | fromYaml) -}}
+  {{- if eq $zone.name $primaryZone.name -}}
+    {{- $root.Values.upstreamAuth.hostname -}}
+  {{- end -}}
 {{- end -}}
-{{- $hostname -}}
+{{- end -}}
+
+{{/*
+  Resolve a zone's upstream auth address for host-bearing resources (the
+  upstream-auth Ingress, Route, HTTPRoute and TLSRoute), which cannot render a
+  valid entry with an empty string and whose host fields cannot carry a port.
+  Fails with a descriptive error in either case.
+  Args: (list <root context> <zone dict>).
+*/}}
+{{- define "kasm.zoneUpstreamAuthAddressRequired" -}}
+{{- $zone := index . 1 -}}
+{{- $address := include "kasm.zoneUpstreamAuthAddress" . -}}
+{{- if not $address -}}
+  {{- fail (printf "kasmZones[%s]: 'upstream_auth_address' (or 'upstreamAuth.hostname' for the primary zone) must be set to generate an upstream-auth ingress/route hostname for this zone" (default "unnamed zone" $zone.name)) -}}
+{{- end -}}
+{{- if contains ":" $address -}}
+  {{- fail (printf "kasmZones[%s]: upstream_auth_address %q carries a port, but ingress/route/gateway host fields cannot. Use a bare hostname here; a non-443 listener port belongs only in the preseed value agents are given." (default "unnamed zone" $zone.name) $address) -}}
+{{- end -}}
+{{- $address -}}
 {{- end -}}
 
 {{/*
@@ -168,6 +198,8 @@ connectionProxy:
 
 {{/*
   Return the effective Kasm zones, falling back to a single default zone when none configured.
+  Includes seedOnly zones, so this is the list for the database preseed; everything that
+  renders per-zone workloads or routing uses kasm.deployedZones instead.
 */}}
 {{- define "kasm.zones" -}}
 {{- $zones := (include "kasm.configuredZones" . | fromYamlArray) | default list -}}
@@ -179,11 +211,48 @@ connectionProxy:
 {{- end -}}
 
 {{/*
+  Return the configured zones that deploy workloads in THIS cluster: kasm.configuredZones
+  minus zones marked seedOnly: true. Seed-only zones let a multi-cluster deployment
+  preseed every zone's database record from the cluster that initializes the database,
+  while each seed-only zone's workloads are installed from that zone's own cluster with
+  its own values file. Returns an empty list when kasmZones is not set; fails when zones
+  are configured but every one is seedOnly, since that leaves nothing to install.
+*/}}
+{{- define "kasm.deployedConfiguredZones" -}}
+{{- $zones := (include "kasm.configuredZones" . | fromYamlArray) | default list -}}
+{{- $result := list -}}
+{{- range $zone := $zones -}}
+  {{- if not (dig "seedOnly" false $zone) -}}
+    {{- $result = append $result $zone -}}
+  {{- end -}}
+{{- end -}}
+{{- if and $zones (not $result) -}}
+  {{- fail "kasmZones: every zone is marked 'seedOnly: true', leaving nothing to deploy in this cluster. Remove 'seedOnly: true' from the zone(s) this cluster hosts." -}}
+{{- end -}}
+{{- toYaml $result -}}
+{{- end -}}
+
+{{/*
+  Return the effective zones to deploy in this cluster, falling back to a single
+  default zone when none configured. The per-zone workload templates (api, manager,
+  proxy and their Services/ConfigMaps) range over this list.
+*/}}
+{{- define "kasm.deployedZones" -}}
+{{- $zones := (include "kasm.deployedConfiguredZones" . | fromYamlArray) | default list -}}
+{{- if $zones -}}
+  {{- toYaml $zones -}}
+{{- else -}}
+  {{- toYaml (list (dict "name" "default")) -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
   Return the primary zone as a YAML dict.
-  If exactly one zone has primary: true, that zone is used. If no zone has
-  primary: true, the first zone in kasmZones is treated as primary (per values.yaml).
-  Fails with a descriptive error if more than one zone has primary: true, since
-  that is ambiguous.
+  A single configured zone is implicitly primary. With more than one zone configured,
+  exactly one must be marked primary: true; there is deliberately no first-zone
+  fallback, so a multi-zone values file always states which zone owns publicAddr.
+  The primary zone backs publicAddr routing in this cluster, so it cannot be seedOnly.
+  Fails with a descriptive error if more than one zone has primary: true.
   When kasmZones is not defined, returns the implicit default zone.
 */}}
 {{- define "kasm.primaryZone" -}}
@@ -198,9 +267,15 @@ connectionProxy:
   {{- if gt (len $primaryZones) 1 -}}
     {{- fail (printf "kasmZones has %d zones marked 'primary: true'; at most one zone may be primary. Remove 'primary: true' from all but one zone." (len $primaryZones)) -}}
   {{- else if eq (len $primaryZones) 1 -}}
-    {{- toYaml (first $primaryZones) -}}
-  {{- else -}}
+    {{- $primary := first $primaryZones -}}
+    {{- if dig "seedOnly" false $primary -}}
+      {{- fail (printf "kasmZones[%s] is marked both 'primary: true' and 'seedOnly: true'. The primary zone backs publicAddr routing in this cluster, so it must deploy here: remove one of the two flags." $primary.name) -}}
+    {{- end -}}
+    {{- toYaml $primary -}}
+  {{- else if eq (len $configured) 1 -}}
     {{- toYaml (first $configured) -}}
+  {{- else -}}
+    {{- fail (printf "kasmZones has %d zones and none marked 'primary: true'. With more than one zone configured, mark exactly one deployed zone 'primary: true'." (len $configured)) -}}
   {{- end -}}
 {{- else -}}
   {{- toYaml (dict "name" "default") -}}
@@ -231,7 +306,7 @@ true
   Guac, RDP Gateway, and RDP HTTPS Gateway are only deployed in primary-region zones.
 */}}
 {{- define "kasm.primaryRegionZones" -}}
-{{- $zones := (include "kasm.zones" . | fromYamlArray) | default list -}}
+{{- $zones := (include "kasm.deployedZones" . | fromYamlArray) | default list -}}
 {{- $result := list -}}
 {{- range $zone := $zones -}}
   {{- if include "kasm.isInPrimaryRegion" (list $ $zone) -}}
@@ -247,9 +322,6 @@ true
   so any render failure always attributes to that template (helm-unittest's failedTemplate assertions
   require the failure to originate from the template under test, and Helm renders every template file in
   one pass, so a `fail` reachable from two files could attribute to whichever one Go evaluates first).
-
-  With directRdpService disabled and tcpRoute enabled, the list is the single tcpRoute.rdpAccessURL
-  entry for replica 0, which is all a TCPRoute can publish.
 
   Call with (list <root context> <zone name>); returns a YAML array (parse with fromYamlArray) of
   perServiceSettings-shaped entries. List order is the ordinal (index 0 is pod ordinal 0, etc), scoped to
@@ -267,9 +339,9 @@ true
 {{- $zoneCount := len (include "kasm.primaryRegionZones" $ctx | fromYamlArray) -}}
 {{- $flat := $ctx.Values.directRdpService.perServiceSettings | default list -}}
 {{- $entries := list -}}
-{{- if and (not $ctx.Values.directRdpService.enabled) $ctx.Values.tcpRoute.enabled -}}
-  {{/* tcpRoute publishes replica 0 only (kasm.validateRdpExposure enforces one replica per zone),
-       and advertises one hostname: the same list shape, one entry. */}}
+{{/* A TCPRoute advertises one hostname, so every zone resolves to that single
+     entry; kasm.validateRdpExposure pins the replica count to 1 in that mode. */}}
+{{- if $ctx.Values.tcpRoute.enabled -}}
   {{- $entries = list (dict "rdpAccessURL" $ctx.Values.tcpRoute.rdpAccessURL) -}}
 {{- else if le $zoneCount 1 -}}
   {{- if $flat -}}
@@ -520,6 +592,36 @@ Where:
   {{- end -}}
 {{- end -}}
 
+{{- if and (eq $component "upstream-auth") (eq $resource "service") -}}
+  {{- with $ctx.Values.upstreamAuth.service.labels -}}
+    {{- $labels = merge $labels . -}}
+  {{- end -}}
+{{- end -}}
+
+{{- if eq $resource "upstreamAuth-ingress" -}}
+  {{- with $ctx.Values.upstreamAuth.ingress.labels -}}
+    {{- $labels = merge $labels . -}}
+  {{- end -}}
+{{- end -}}
+
+{{- if eq $resource "upstreamAuth-route" -}}
+  {{- with $ctx.Values.upstreamAuth.route.labels -}}
+    {{- $labels = merge $labels . -}}
+  {{- end -}}
+{{- end -}}
+
+{{- if eq $resource "upstreamAuth-httpRoute" -}}
+  {{- with $ctx.Values.upstreamAuth.httpRoute.labels -}}
+    {{- $labels = merge $labels . -}}
+  {{- end -}}
+{{- end -}}
+
+{{- if eq $resource "upstreamAuth-tlsRoute" -}}
+  {{- with $ctx.Values.upstreamAuth.tlsRoute.labels -}}
+    {{- $labels = merge $labels . -}}
+  {{- end -}}
+{{- end -}}
+
 {{- $labels = merge $labels (dict
   "kasm.com/version" $ctx.Chart.AppVersion
   "app.kubernetes.io/name" $labelName
@@ -559,6 +661,36 @@ Where:
 
 {{- if and (or (eq $component "proxy") (eq $component "proxy-ext")) (eq $resource "service") -}}
   {{- with $ctx.Values.proxyService.annotations -}}
+    {{- $annotations = merge $annotations . -}}
+  {{- end -}}
+{{- end -}}
+
+{{- if and (eq $component "upstream-auth") (eq $resource "service") -}}
+  {{- with $ctx.Values.upstreamAuth.service.annotations -}}
+    {{- $annotations = merge $annotations . -}}
+  {{- end -}}
+{{- end -}}
+
+{{- if eq $resource "upstreamAuth-ingress" -}}
+  {{- with $ctx.Values.upstreamAuth.ingress.annotations -}}
+    {{- $annotations = merge $annotations . -}}
+  {{- end -}}
+{{- end -}}
+
+{{- if eq $resource "upstreamAuth-route" -}}
+  {{- with $ctx.Values.upstreamAuth.route.annotations -}}
+    {{- $annotations = merge $annotations . -}}
+  {{- end -}}
+{{- end -}}
+
+{{- if eq $resource "upstreamAuth-httpRoute" -}}
+  {{- with $ctx.Values.upstreamAuth.httpRoute.annotations -}}
+    {{- $annotations = merge $annotations . -}}
+  {{- end -}}
+{{- end -}}
+
+{{- if eq $resource "upstreamAuth-tlsRoute" -}}
+  {{- with $ctx.Values.upstreamAuth.tlsRoute.annotations -}}
     {{- $annotations = merge $annotations . -}}
   {{- end -}}
 {{- end -}}
@@ -730,7 +862,7 @@ securityContext:
     component: Component selector used to locate healthCheckTiming in values.yaml. Standard components resolve from:
                 .Values.components.<component>.healthCheckTiming. The database component is special-cased: component: db
                 resolves from: .Values.database.healthCheckTiming
-    probeType: Probe timing selector under healthCheckTiming. Expected values: livenessProbe, readinessProbe type: Kubernetes
+    probeType: Probe timing selector under healthCheckTiming. Expected values: livenessProbe, readinessProbe, startupProbe type: Kubernetes
               probe implementation type. Allowed values: http, https, tcp, command
 
   Optional args:

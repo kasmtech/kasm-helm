@@ -1,0 +1,42 @@
+{{/*
+  Gateway API TLSRoutes for the upstream auth (management) endpoint, when
+  upstreamAuth.tlsRoute.enabled - SNI passthrough, where the Gateway forwards
+  the connection untouched and the Kasm proxy terminates TLS itself on its HTTPS
+  port. The option to reach for when management TLS must not terminate on shared
+  cluster infrastructure.
+
+  One TLSRoute per deployed zone, matched by SNI, each routing to that zone's own
+  proxy Service. The Gateway needs a listener with protocol: TLS and
+  tls.mode: Passthrough whose allowedRoutes admit this namespace.
+
+  TLSRoute has been standard-channel v1 since Gateway API 1.5; set
+  upstreamAuth.tlsRoute.apiVersion for older, experimental-channel bundles.
+
+  Every route attaches through upstreamAuth.tlsRoute.parentRefs unless
+  upstreamAuth.tlsRoute.zones names the zone with its own parentRefs.
+*/}}
+{{- if .Values.upstreamAuth.tlsRoute.enabled }}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $zoneRefs := dict -}}
+{{- range $z := .Values.upstreamAuth.tlsRoute.zones -}}
+  {{- $zoneRefs = set $zoneRefs $z.name $z.parentRefs -}}
+{{- end -}}
+{{- $api := .Values.upstreamAuth.tlsRoute.apiVersion | default "gateway.networking.k8s.io/v1" -}}
+{{- range $idx, $zone := (include "kasm.deployedZones" . | fromYamlArray) }}
+{{- $refs := (get $zoneRefs $zone.name) | default $.Values.upstreamAuth.tlsRoute.parentRefs }}
+---
+apiVersion: {{ $api }}
+kind: TLSRoute
+metadata:
+  {{- include "kasm.metadata" (dict "context" $ "component" "upstream-auth" "resource" "upstreamAuth-tlsRoute" "zone" $zone.name "include" "all") | indent 2 }}
+spec:
+  parentRefs:
+    {{- toYaml $refs | nindent 4 }}
+  hostnames:
+    - {{ include "kasm.zoneUpstreamAuthAddressRequired" (list $ $zone) | quote }}
+  rules:
+    - backendRefs:
+        - name: {{ printf "%s-%s" $constants.proxy.svc (include "kasm.zoneName" $zone.name) }}
+          port: {{ $constants.proxy.https }}
+{{- end }}
+{{- end }}

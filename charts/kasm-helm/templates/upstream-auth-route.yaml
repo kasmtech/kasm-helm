@@ -1,0 +1,46 @@
+{{/*
+  OpenShift Routes for the upstream auth (management) endpoint, when
+  upstreamAuth.route.enabled.
+
+  One Route per deployed zone, each routing to that zone's own proxy Service.
+  There is no publicAddr Route here - management traffic has no shared front
+  door. upstreamAuth.route.* settings apply to all of them.
+*/}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- if .Values.upstreamAuth.route.enabled }}
+{{- range $idx, $zone := (include "kasm.deployedZones" . | fromYamlArray) }}
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  {{- include "kasm.metadata" (dict "context" $ "component" "upstream-auth" "resource" "upstreamAuth-route" "zone" $zone.name "include" "all") | indent 2 }}
+spec:
+  host: {{ include "kasm.zoneUpstreamAuthAddressRequired" (list $ $zone) | quote }}
+  to:
+    kind: Service
+    name: {{ printf "%s-%s" $constants.proxy.svc (include "kasm.zoneName" $zone.name) }}
+    weight: 100
+  port:
+    targetPort: {{ if eq $.Values.upstreamAuth.route.backendProtocol "https" }}{{ $constants.proxy.https }}{{ else }}{{ $constants.proxy.http }}{{ end }}
+  wildcardPolicy: {{ $.Values.upstreamAuth.route.wildcardPolicy | default "None" }}
+  {{- with $.Values.upstreamAuth.route.tls }}
+  tls:
+    termination: {{ .termination | default "edge" }}
+    {{- with .insecureEdgeTerminationPolicy }}
+    insecureEdgeTerminationPolicy: {{ . | default "Redirect" }}
+    {{- end }}
+    {{- with .certificate }}
+    certificate: |
+      {{- . | nindent 6 }}
+    {{- end }}
+    {{- with .key }}
+    key: |
+      {{- . | nindent 6 }}
+    {{- end }}
+    {{- with .caCertificate }}
+    caCertificate: |
+      {{- . | nindent 6 }}
+    {{- end }}
+    {{- end }}
+{{- end }}
+{{- end }}

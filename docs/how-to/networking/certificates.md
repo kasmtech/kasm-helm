@@ -86,13 +86,14 @@ hostnames; getting one right does not get the other right.
    > or issue a certificate per half. Behind an Ingress or HTTPRoute that terminates TLS, one
    > certificate covering both hostnames is enough.
 
-3. **Multi-zone: cover every zone hostname.** With `kasm-helm.kasmZones` set, the control plane
-   answers on `publicAddr` **and** on every zone's `proxy_hostname`; one certificate has to cover
-   all of them, or the zones users are routed to fail while the primary works.
-   `certManager.addWildCard: true` adds `*.<publicAddr>`, so `*.kasm.example.com`, which covers
-   `zonea.kasm.example.com` and `zoneb.kasm.example.com` because those sit one label beneath
-   `publicAddr`. Zone hostnames shaped any other way (`zonea.example.com` beside
-   `kasm.example.com`) are not covered by that wildcard; list every name in `dnsNames` then.
+3. **Multi-zone.** The chart publishes only `publicAddr`; each zone's `proxy_hostname` is served by
+   its own backend, usually behind a different ingress or load balancer, which presents its own
+   certificate. The chart-minted certificate still lists `publicAddr` plus every deployed
+   (non-`seedOnly`) zone's `proxy_hostname` in its SANs, so it can be reused on that backend.
+   `certManager.addWildCard: true` narrows it to `publicAddr` and `*.<publicAddr>` only, so
+   `*.kasm.example.com` covers `zonea.kasm.example.com` because it sits one label beneath
+   `publicAddr`; zone hostnames shaped any other way (`zonea.example.com` beside
+   `kasm.example.com`) are not covered by that wildcard.
 
 4. **Internal CAs inside the cluster** go in with `kasm-helm.trustedCaBundle.enabled=true` and
    `kasm-helm.trustedCaBundle.caCerts`. CA certificates *inside sessions* are a different mechanism:

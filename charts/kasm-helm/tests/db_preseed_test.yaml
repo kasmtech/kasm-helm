@@ -685,3 +685,55 @@ tests:
         equal:
           path: metadata.labels["my-label"]
           value: my-value
+
+  - it: upstreamAuth.hostname seeds the primary zone's upstream_auth_address
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: zonea
+          proxy_hostname: zonea.kasm.example.com
+          primary: true
+        - name: zoneb
+          proxy_hostname: zoneb.kasm.example.com
+          upstream_auth_address: mgmt-b.example.com
+        - name: zonec
+          proxy_hostname: zonec.kasm.example.com
+          seedOnly: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      ingress.enabled: true
+      proxyService.type: ClusterIP
+      upstreamAuth:
+        hostname: mgmt-a.example.com
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'upstream_auth_address: "mgmt-a.example.com"'
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'upstream_auth_address: "mgmt-b.example.com"'
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'upstream_auth_address: "\$request_host\$"'
+
+  - it: upstream_auth_address defaults to $request_host$ with upstreamAuth unset
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'upstream_auth_address: "\$request_host\$"'

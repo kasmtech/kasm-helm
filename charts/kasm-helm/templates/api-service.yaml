@@ -2,7 +2,7 @@
 Deploy Kasm API Service .Values.components.api service definition
 */}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
-{{- range $idx, $zone := (.Values.kasmZones | default (list (dict "name" "default"))) }}
+{{- range $idx, $zone := (include "kasm.deployedZones" . | fromYamlArray) }}
 ---
 apiVersion: v1
 kind: Service

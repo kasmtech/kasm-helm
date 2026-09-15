@@ -55,6 +55,37 @@ tests:
           path: spec.template.spec.containers[0].livenessProbe.successThreshold
           value: 1
 
+  # This fork pins the 1.19.0 image line, which has no /livez endpoint; the api keeps the
+  # pre-DEV-539 TCP liveness probe on the api port and renders no startup probe or 8081 port.
+  - it: api liveness probe is a TCP socket check on the api port (1.19.0 images have no /livez)
+    template: templates/api-deployment.yaml
+    set:
+      applyHealthChecks: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.tcpSocket.port
+          value: api-pt
+      - notExists:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet
+      - notExists:
+          path: spec.template.spec.containers[0].ports[1]
+
+  - it: api renders no startup probe with the 1.19.0 image line
+    template: templates/api-deployment.yaml
+    set:
+      applyHealthChecks: true
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].startupProbe
+
+  - it: api startup probe omitted when applyHealthChecks=false
+    template: templates/api-deployment.yaml
+    set:
+      applyHealthChecks: false
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].startupProbe
+
   - it: api readiness probe uses default timing when no override is set
     template: templates/api-deployment.yaml
     set:

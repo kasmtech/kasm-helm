@@ -80,10 +80,11 @@ flowchart LR
        secretName: kasm-tls
    ```
 
-   With `kasmZones` set, the chart renders one rule per zone plus a rule for `publicAddr` pointing
-   at the primary zone's Service, all on one Ingress; the TLS block lists every zone hostname. The
-   backend Services are named `<release>-proxy-<zone>`, so a release called `kasm` with the default
-   zone gives `kasm-proxy-default`.
+   With `kasmZones` set, the Ingress still carries exactly one rule: `publicAddr`, pointing at the
+   primary zone's Service. Zone `proxy_hostname`s are associated with a different backend, usually
+   behind a different ingress or load balancer entirely, so the chart publishes no rules for them.
+   The backend Services are named `<release>-proxy-<zone>`, so a release called `kasm` with the
+   default zone gives `kasm-proxy-default`.
 
 2. **Agent, direct-connect only.**
 

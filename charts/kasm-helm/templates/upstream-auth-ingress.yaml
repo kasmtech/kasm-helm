@@ -1,0 +1,44 @@
+{{/*
+  Ingress for the upstream auth (management) endpoint, when
+  upstreamAuth.ingress.enabled.
+
+  One host rule per deployed zone, each routing to that zone's own proxy Service:
+  the zone's Upstream Auth Address is what its agents are registered against, so
+  hostnames must not cross zones. There is no publicAddr rule here - management
+  traffic has no shared front door.
+
+  Point upstreamAuth.ingress.ingressClassName at an internal controller class to
+  keep the endpoint private while the front-door Ingress stays public.
+*/}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- if .Values.upstreamAuth.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  {{- include "kasm.metadata" (dict "context" . "component" "upstream-auth" "resource" "upstreamAuth-ingress" "include" "all") | indent 2 }}
+spec:
+{{- with .Values.upstreamAuth.ingress.ingressClassName }}
+  ingressClassName: {{ . }}
+{{- end }}
+  {{- if .Values.upstreamAuth.ingress.tls }}
+  tls:
+    - hosts:
+        {{- range $idx, $zone := (include "kasm.deployedZones" . | fromYamlArray) }}
+        - {{ include "kasm.zoneUpstreamAuthAddressRequired" (list $ $zone) | quote }}
+        {{- end }}
+      secretName: {{ .Values.upstreamAuth.ingress.secretName | default .Values.certificate.secretName | default (include "kasm.name" (list . "cert-manager" "secret")) }}
+  {{- end }}
+  rules:
+  {{- range $idx, $zone := (include "kasm.deployedZones" . | fromYamlArray) }}
+  - host: {{ include "kasm.zoneUpstreamAuthAddressRequired" (list $ $zone) | quote }}
+    http:
+      paths:
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: {{ printf "%s-%s" $constants.proxy.svc (include "kasm.zoneName" $zone.name) }}
+              port:
+                number: {{ if eq $.Values.upstreamAuth.ingress.backendProtocol "https" }}{{ $constants.proxy.https }}{{ else }}{{ $constants.proxy.http }}{{ end }}
+  {{- end }}
+{{- end }}

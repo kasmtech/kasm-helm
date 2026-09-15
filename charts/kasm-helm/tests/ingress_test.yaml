@@ -34,7 +34,7 @@ tests:
           path: spec.tls[0].hosts
           content: "*.kasm.example.com"
 
-  - it: adds per-zone rules when kasmZones are defined
+  - it: publishes only publicAddr when kasmZones are defined
     values:
       - ../../../tests/values/multizone-config.yaml
     set:
@@ -47,48 +47,31 @@ tests:
           count: 1
       - equal:
           path: spec.rules[0].host
-          value: zonea.kasm.example.com
-      - equal:
-          path: spec.rules[1].host
-          value: zoneb.kasm.example.com
-      - equal:
-          path: spec.rules[2].host
           value: kasm.example.com
-      - contains:
+      - lengthEqual:
+          path: spec.rules
+          count: 1
+      - notContains:
           path: spec.tls[0].hosts
           content: zonea.kasm.example.com
-      - contains:
+      - notContains:
           path: spec.tls[0].hosts
           content: zoneb.kasm.example.com
 
-  - it: falls back to the deprecated proxyAddress alias when proxy_hostname is unset
+  - it: routes publicAddr to the primary zone's proxy Service in multizone
     set:
       proxyService.type: ClusterIP
       ingress.enabled: true
       kasmZones:
         - name: zonea
-          primary: true
-          proxyAddress: legacy-a.example.com
+          proxy_hostname: zonea.example.com
         - name: zoneb
-          proxy_hostname: preferred-b.example.com
-    asserts:
-      - equal:
-          path: spec.rules[0].host
-          value: legacy-a.example.com
-      - equal:
-          path: spec.rules[1].host
-          value: preferred-b.example.com
-
-  - it: prefers proxy_hostname when both proxyAddress and proxy_hostname are set on the same zone
-    set:
-      proxyService.type: ClusterIP
-      ingress.enabled: true
-      kasmZones:
-        - name: zonea
           primary: true
-          proxyAddress: legacy-a.example.com
-          proxy_hostname: preferred-a.example.com
+          proxy_hostname: zoneb.example.com
     asserts:
+      - lengthEqual:
+          path: spec.rules
+          count: 1
       - equal:
-          path: spec.rules[0].host
-          value: preferred-a.example.com
+          path: spec.rules[0].http.paths[0].backend.service.name
+          value: RELEASE-NAME-proxy-zoneb

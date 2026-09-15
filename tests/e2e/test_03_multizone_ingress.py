@@ -39,7 +39,9 @@ def test_multizone_ingress_routes_publicaddr_and_zone_hosts(installer, temp_work
         },
         "proxyService": {"type": "ClusterIP"},
         "kasmZones": [
-            {"name": "zonea", "proxyAddress": "zonea.kasm.example.test"},
+            # Multi-zone requires an explicit primary; the chart no longer
+            # falls back to the first entry. publicAddr routes to zonea.
+            {"name": "zonea", "proxyAddress": "zonea.kasm.example.test", "primary": True},
             {"name": "zoneb", "proxyAddress": "zoneb.kasm.example.test"},
         ],
         "ingress": {

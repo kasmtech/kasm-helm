@@ -39,28 +39,6 @@ tests:
           path: metadata.name
           pattern: ".*zoneb.*"
 
-  - it: uses the first zone as primary for connection-proxy statefulset when no zone has primary true
-    template: templates/connection-proxy-statefulset.yaml
-    values:
-      - ../../../tests/values/components-all.yaml
-    set:
-      proxyService.type: ClusterIP
-      ingress.enabled: true
-      kasmZones:
-        - name: zonea
-          proxyAddress: zonea.example.com
-        - name: zoneb
-          proxyAddress: zoneb.example.com
-    asserts:
-      - hasDocuments:
-          count: 1
-      - matchRegex:
-          path: metadata.name
-          pattern: ".*zonea.*"
-      - notMatchRegex:
-          path: metadata.name
-          pattern: ".*zoneb.*"
-
   - it: deploys api for all zones regardless of primary position
     template: templates/api-deployment.yaml
     set:

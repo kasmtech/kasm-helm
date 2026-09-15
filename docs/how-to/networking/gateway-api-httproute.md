@@ -173,11 +173,9 @@ These checks serve all three Gateway API pages; the other two link here.
            namespace: kube-system
    ```
 
-   With `kasmZones` set, the chart renders one `HTTPRoute` per zone plus one for `publicAddr`: an
-   HTTPRoute's hostnames belong to the object, so they cannot be fanned out inside one route the way
-   Ingress rules can. Every route attaches through `httpRoute.parentRefs`, so a `sectionName` there
-   must name a listener that admits every zone hostname (a wildcard). A zone that needs its own
-   listener gets its own `parentRefs` in `httpRoute.zones`
+   With `kasmZones` set, the chart still renders a single `HTTPRoute`, for `publicAddr`, routed to
+   the primary zone's proxy Service. Zone `proxy_hostname`s are associated with a different backend,
+   usually behind a different Gateway entirely, so the chart renders no route for them
    ([Deploy multiple zones](../multi-zone.md#steps)).
 
 2. **Agent, direct-connect only.**
@@ -288,5 +286,5 @@ Installing the charts directly, drop the `kasm-helm:` and `kasm-agent:` keys.
 - [ ] A terminating HTTPS listener per hostname, holding its certificate, admitting every release namespace.
 - [ ] `kasm-helm.proxyService.type=ClusterIP`.
 - [ ] Idle timeout raised on the Gateway's data plane.
-- [ ] Multi-zone: one route per zone rendered, each hostname on a listener.
+- [ ] Multi-zone: only the `publicAddr` route rendered; zone hostnames published by their own backend.
 - [ ] Direct-connect: the agent route present and the switch completed; relayed: no agent route.

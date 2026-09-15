@@ -43,11 +43,6 @@ Service without every replica claiming the same identity. Precedence here is del
 resource in this chart -- do not "fix" it back:
   perServiceSettings[i].annotations/labels  >  directRdpService.annotations/labels (shared)  >  global/kasm.metadata
 */}}
-{{/*
-  With tcpRoute instead of directRdpService the Services still render, one per replica, but stay
-  ClusterIP: the Gateway fronts replica 0's Service through the TCPRoute (kasm.validateRdpExposure
-  limits tcpRoute to one replica per zone) and owns the external address.
-*/}}
 {{- $type := "ClusterIP" -}}
 {{- if and .Values.directRdpService.enabled (or (eq .Values.directRdpService.type "NodePort") (eq .Values.directRdpService.type "LoadBalancer")) -}}
   {{- $type = .Values.directRdpService.type -}}
@@ -56,6 +51,9 @@ resource in this chart -- do not "fix" it back:
 {{- end -}}
 {{- $defaultPort := .Values.directRdpService.loadBalancerPort | default 3389 -}}
 {{- $rdpPort := 3389 -}}
+{{/* tcpRoute also renders these Services: it needs a ClusterIP backend exposing the raw
+     RDP port ($type stays ClusterIP because directRdpService.enabled is false then, and
+     kasm.validateRdpExposure caps tcpRoute at one replica, so this renders one Service). */}}
 {{- if and (or .Values.directRdpService.enabled .Values.tcpRoute.enabled) $cp.rdpGateway.enabled }}
 {{- $cpReplicas := ternary .Values.components.connectionProxy.replicas (include "replicas.preset" (dict "node" $constants.connectionProxy.component "size" .Values.deploymentSize)) (gt (int .Values.components.connectionProxy.replicas) 0) -}}
 {{- range $zone := (include "kasm.primaryRegionZones" $ | fromYamlArray) }}

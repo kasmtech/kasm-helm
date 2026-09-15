@@ -1,0 +1,428 @@
+suite: upstream auth (management) endpoint exposure
+
+templates:
+  - templates/upstream-auth-service.yaml
+  - templates/upstream-auth-ingress.yaml
+  - templates/upstream-auth-route.yaml
+  - templates/upstream-auth-httproute.yaml
+  - templates/upstream-auth-tlsroute.yaml
+  - templates/validation.yaml
+
+tests:
+  - it: renders no upstream auth objects by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: service publishes the proxy pods behind a per-zone LoadBalancer
+    template: templates/upstream-auth-service.yaml
+    set:
+      publicAddr: kasm.example.com
+      proxyService:
+        type: ClusterIP
+      upstreamAuth:
+        service:
+          enabled: true
+          annotations:
+            service.beta.kubernetes.io/aws-load-balancer-scheme: internal
+          labels:
+            example.com/tier: management
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Service
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-upstream-auth-default
+      - equal:
+          path: metadata.annotations["service.beta.kubernetes.io/aws-load-balancer-scheme"]
+          value: internal
+      - equal:
+          path: metadata.labels["example.com/tier"]
+          value: management
+      - equal:
+          path: spec.type
+          value: LoadBalancer
+      - equal:
+          path: spec.selector["app.kubernetes.io/name"]
+          value: RELEASE-NAME-proxy-default
+      - equal:
+          path: spec.selector["app.kubernetes.io/component"]
+          value: proxy
+      - equal:
+          path: spec.ports[0].port
+          value: 443
+      - equal:
+          path: spec.ports[0].targetPort
+          value: proxy-pt-https
+
+  - it: service NodePort honours a pinned nodePort on a single zone
+    template: templates/upstream-auth-service.yaml
+    set:
+      publicAddr: kasm.example.com
+      proxyService:
+        type: ClusterIP
+      upstreamAuth:
+        service:
+          enabled: true
+          type: NodePort
+          nodePort: 30443
+    asserts:
+      - equal:
+          path: spec.type
+          value: NodePort
+      - equal:
+          path: spec.ports[0].nodePort
+          value: 30443
+
+  - it: service fans out one Service per deployed zone, none for seedOnly
+    template: templates/upstream-auth-service.yaml
+    set:
+      publicAddr: kasm.example.com
+      proxyService:
+        type: ClusterIP
+      ingress:
+        enabled: true
+      kasmZones:
+        - name: zonea
+          proxy_hostname: zonea.kasm.example.com
+          primary: true
+        - name: zoneb
+          proxy_hostname: zoneb.kasm.example.com
+        - name: zonec
+          proxy_hostname: zonec.kasm.example.com
+          seedOnly: true
+      upstreamAuth:
+        service:
+          enabled: true
+    asserts:
+      - hasDocuments:
+          count: 2
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-upstream-auth-zonea
+        documentIndex: 0
+      - equal:
+          path: spec.selector["app.kubernetes.io/name"]
+          value: RELEASE-NAME-proxy-zonea
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-upstream-auth-zoneb
+        documentIndex: 1
+
+  - it: ingress publishes upstreamAuth.hostname on the default zone's proxy Service
+    template: templates/upstream-auth-ingress.yaml
+    set:
+      publicAddr: kasm.example.com
+      proxyService:
+        type: ClusterIP
+      upstreamAuth:
+        hostname: mgmt.example.com
+        ingress:
+          enabled: true
+          ingressClassName: internal-nginx
+          annotations:
+            example.com/owner: management
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Ingress
+      - equal:
+          path: spec.ingressClassName
+          value: internal-nginx
+      - equal:
+          path: metadata.annotations["example.com/owner"]
+          value: management
+      - equal:
+          path: spec.tls[0].hosts[0]
+          value: mgmt.example.com
+      - equal:
+          path: spec.tls[0].secretName
+          value: RELEASE-NAME-cert-manager
+      - equal:
+          path: spec.rules[0].host
+          value: mgmt.example.com
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.name
+          value: RELEASE-NAME-proxy-default
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.port.number
+          value: 8080
+
+  - it: ingress binds a dedicated certificate Secret when secretName is set
+    template: templates/upstream-auth-ingress.yaml
+    set:
+      publicAddr: kasm.example.com
+      proxyService:
+        type: ClusterIP
+      certificate:
+        secretName: front-door-tls
+      upstreamAuth:
+        hostname: mgmt.example.com
+        ingress:
+          enabled: true
+          secretName: mgmt-tls
+    asserts:
+      - equal:
+          path: spec.tls[0].secretName
+          value: mgmt-tls
+
+  - it: ingress falls back to the front door's certificate Secret without secretName
+    template: templates/upstream-auth-ingress.yaml
+    set:
+      publicAddr: kasm.example.com
+      proxyService:
+        type: ClusterIP
+      certificate:
+        secretName: front-door-tls
+      upstreamAuth:
+        hostname: mgmt.example.com
+        ingress:
+          enabled: true
+    asserts:
+      - equal:
+          path: spec.tls[0].secretName
+          value: front-door-tls
+
+  - it: ingress does not inherit the front-door ingress annotations
+    template: templates/upstream-auth-ingress.yaml
+    set:
+      publicAddr: kasm.example.com
+      proxyService:
+        type: ClusterIP
+      ingress:
+        annotations:
+          example.com/front-door: "true"
+      upstreamAuth:
+        hostname: mgmt.example.com
+        ingress:
+          enabled: true
+    asserts:
+      - notExists:
+          path: metadata.annotations["example.com/front-door"]
+
+  - it: ingress multi-zone uses each zone's upstream_auth_address, primary falling back to upstreamAuth.hostname
+    template: templates/upstream-auth-ingress.yaml
+    set:
+      publicAddr: kasm.example.com
+      proxyService:
+        type: ClusterIP
+      ingress:
+        enabled: true
+      kasmZones:
+        - name: zonea
+          proxy_hostname: zonea.kasm.example.com
+          primary: true
+        - name: zoneb
+          proxy_hostname: zoneb.kasm.example.com
+          upstream_auth_address: mgmt-b.example.com
+      upstreamAuth:
+        hostname: mgmt-a.example.com
+        ingress:
+          enabled: true
+    asserts:
+      - equal:
+          path: spec.rules[0].host
+          value: mgmt-a.example.com
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.name
+          value: RELEASE-NAME-proxy-zonea
+      - equal:
+          path: spec.rules[1].host
+          value: mgmt-b.example.com
+      - equal:
+          path: spec.rules[1].http.paths[0].backend.service.name
+          value: RELEASE-NAME-proxy-zoneb
+
+  - it: httpRoute fans out one route per zone with no publicAddr route
+    template: templates/upstream-auth-httproute.yaml
+    set:
+      publicAddr: kasm.example.com
+      proxyService:
+        type: ClusterIP
+      ingress:
+        enabled: true
+      kasmZones:
+        - name: zonea
+          proxy_hostname: zonea.kasm.example.com
+          primary: true
+        - name: zoneb
+          proxy_hostname: zoneb.kasm.example.com
+          upstream_auth_address: mgmt-b.example.com
+      upstreamAuth:
+        hostname: mgmt-a.example.com
+        httpRoute:
+          enabled: true
+          parentRefs:
+            - name: internal-gateway
+              namespace: kube-system
+          zones:
+            - name: zoneb
+              parentRefs:
+                - name: internal-gateway
+                  namespace: kube-system
+                  sectionName: zoneb-mgmt
+    asserts:
+      - hasDocuments:
+          count: 2
+      - isKind:
+          of: HTTPRoute
+      - equal:
+          path: spec.hostnames[0]
+          value: mgmt-a.example.com
+        documentIndex: 0
+      - equal:
+          path: spec.rules[0].backendRefs[0].name
+          value: RELEASE-NAME-proxy-zonea
+        documentIndex: 0
+      - equal:
+          path: spec.rules[0].backendRefs[0].port
+          value: 8080
+        documentIndex: 0
+      - equal:
+          path: spec.parentRefs[0].sectionName
+          value: zoneb-mgmt
+        documentIndex: 1
+      - equal:
+          path: spec.hostnames[0]
+          value: mgmt-b.example.com
+        documentIndex: 1
+      - equal:
+          path: spec.rules[0].backendRefs[0].name
+          value: RELEASE-NAME-proxy-zoneb
+        documentIndex: 1
+
+  - it: httpRoute backendProtocol https targets the proxy's HTTPS port
+    template: templates/upstream-auth-httproute.yaml
+    set:
+      publicAddr: kasm.example.com
+      proxyService:
+        type: ClusterIP
+      upstreamAuth:
+        hostname: mgmt.example.com
+        httpRoute:
+          enabled: true
+          backendProtocol: https
+          parentRefs:
+            - name: internal-gateway
+    asserts:
+      - equal:
+          path: spec.rules[0].backendRefs[0].port
+          value: 8443
+
+  - it: tlsRoute passes through to the proxy's own HTTPS listener
+    template: templates/upstream-auth-tlsroute.yaml
+    set:
+      publicAddr: kasm.example.com
+      proxyService:
+        type: ClusterIP
+      upstreamAuth:
+        hostname: mgmt.example.com
+        tlsRoute:
+          enabled: true
+          parentRefs:
+            - name: internal-gateway
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: TLSRoute
+      - isAPIVersion:
+          of: gateway.networking.k8s.io/v1
+      - equal:
+          path: spec.hostnames[0]
+          value: mgmt.example.com
+      - equal:
+          path: spec.rules[0].backendRefs[0].port
+          value: 8443
+
+  - it: tlsRoute honours an apiVersion override and per-zone parentRefs
+    template: templates/upstream-auth-tlsroute.yaml
+    set:
+      publicAddr: kasm.example.com
+      proxyService:
+        type: ClusterIP
+      ingress:
+        enabled: true
+      kasmZones:
+        - name: zonea
+          proxy_hostname: zonea.kasm.example.com
+          primary: true
+        - name: zoneb
+          proxy_hostname: zoneb.kasm.example.com
+          upstream_auth_address: mgmt-b.example.com
+      upstreamAuth:
+        hostname: mgmt-a.example.com
+        tlsRoute:
+          enabled: true
+          apiVersion: gateway.networking.k8s.io/v1alpha2
+          parentRefs:
+            - name: internal-gateway
+          zones:
+            - name: zoneb
+              parentRefs:
+                - name: internal-gateway
+                  sectionName: zoneb-mgmt-tls
+    asserts:
+      - hasDocuments:
+          count: 2
+      - isAPIVersion:
+          of: gateway.networking.k8s.io/v1alpha2
+        documentIndex: 0
+      - equal:
+          path: spec.parentRefs[0].sectionName
+          value: zoneb-mgmt-tls
+        documentIndex: 1
+
+  - it: route publishes one OpenShift Route per zone
+    template: templates/upstream-auth-route.yaml
+    set:
+      publicAddr: kasm.example.com
+      proxyService:
+        type: ClusterIP
+      upstreamAuth:
+        hostname: mgmt.example.com
+        route:
+          enabled: true
+          backendProtocol: https
+          tls:
+            termination: passthrough
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Route
+      - equal:
+          path: spec.host
+          value: mgmt.example.com
+      - equal:
+          path: spec.to.name
+          value: RELEASE-NAME-proxy-default
+      - equal:
+          path: spec.port.targetPort
+          value: 8443
+      - equal:
+          path: spec.tls.termination
+          value: passthrough
+
+  - it: front-door ingress plus upstream auth LoadBalancer render together cleanly
+    set:
+      publicAddr: kasm.example.com
+      proxyService:
+        type: ClusterIP
+      ingress:
+        enabled: true
+      upstreamAuth:
+        hostname: mgmt.example.com
+        service:
+          enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/upstream-auth-service.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/validation.yaml

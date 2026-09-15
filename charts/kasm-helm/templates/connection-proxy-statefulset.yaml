@@ -14,7 +14,7 @@ rdp-https-gateway. Sessions pin to the pod's stable per-pod DNS name via the hea
   RDP_ACCESS_URLS is a comma-separated, ordinal-ordered list of directly-reachable RDP hostnames, one
   per connection-proxy replica in THIS zone. Resolved per zone (not once globally) because each
   primary-region zone needs its own addresses -- see kasm.directRdpEntriesForZone. Empty (and therefore
-  inert) when neither directRdpService nor tcpRoute publishes the gateway. Validation of list length vs. replica count lives in
+  inert) when directRdpService is disabled. Validation of list length vs. replica count lives in
   connection-proxy-services.yaml; this StatefulSet renders fine even with a short/empty list.
 */}}
 {{- $rdpAccessURLs := list -}}

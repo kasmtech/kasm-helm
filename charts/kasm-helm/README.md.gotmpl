@@ -67,9 +67,45 @@ terminating HTTPS listener will not serve it.
 
 ### Multi-zone
 
-With `kasmZones` set, the Ingress renders one rule per zone while the Route and both Gateway API
-routes render one object per zone, plus one for `publicAddr` pointing at the primary zone. The
-certificate has to cover `publicAddr` and every zone's `proxy_hostname`.
+With `kasmZones` set, every front-door publisher still carries exactly one host rule: `publicAddr`,
+pointing at the primary zone's proxy Service. Zone `proxy_hostname`s are associated with a different
+backend, usually behind a different ingress or load balancer entirely, so this chart publishes no
+routing rules for them. The chart-minted certificate still covers `publicAddr` and every deployed
+zone's `proxy_hostname` (unless `certificate.certManager.addWildCard` narrows it to `publicAddr`
+plus its wildcard).
+
+### The upstream auth (management) endpoint
+
+`upstreamAuth` publishes a separate, out-of-band URL for the zone's **Upstream Auth Address** — the
+address external Kasm Agents and Windows services use for `/api/` and `/manager_api/` — typically a
+private load balancer or an internal ingress class/Gateway, though nothing requires it to be
+private. The backend is the same per-zone proxy Service the front door publishes (the proxy's nginx
+is hostname-agnostic), so no extra workload is deployed; only the publishing object is new.
+
+The same five mechanisms are available, **at most one of them**, and the choice is fully independent
+of the front-door choice — the headline combination is `ingress.enabled` for users plus an internal
+`upstreamAuth.service` LoadBalancer for agents:
+
+| Values | Publishes with | Private by |
+| ------ | -------------- | ---------- |
+| `upstreamAuth.service.enabled` | one `LoadBalancer`/`NodePort` Service per zone, `<release>-upstream-auth-<zone>` | internal-scheme `annotations`, e.g. `service.beta.kubernetes.io/aws-load-balancer-scheme: internal` |
+| `upstreamAuth.ingress.enabled` | one Ingress, one host rule per zone | an internal `ingressClassName` |
+| `upstreamAuth.route.enabled` | one OpenShift `Route` per zone | router sharding / an internal router |
+| `upstreamAuth.httpRoute.enabled` | one `HTTPRoute` per zone | an internal Gateway (`parentRefs`, per-zone `zones[].parentRefs`) |
+| `upstreamAuth.tlsRoute.enabled` | one `TLSRoute` per zone, SNI passthrough | an internal Gateway; TLS terminates at the Kasm proxy |
+
+Per-zone hostnames come from `kasmZones[].upstream_auth_address`, with `upstreamAuth.hostname` as
+the primary (or implicit default) zone's fallback; each zone's hostname routes to **that zone's own**
+proxy Service, and every deployed zone needs its own address. The L7 publishers share one load
+balancer across zones by hostname/SNI; the Service publisher is raw L4 and creates one load balancer
+per zone. Resolved hostnames are written to the database preseed (`kasmConfig.generatePreseed`).
+They are NOT added to the cert-manager/self-signed certificate SANs: upstream auth addresses
+typically live in a private DNS zone a public issuer cannot validate, and Kasm agents do not
+validate the certificate. If a hostname-matching front end (ingress-nginx, Traefik) should serve a
+certificate covering the management hostnames, provide one on the upstream auth Ingress with
+`upstreamAuth.ingress.secretName`. The preseed only applies when the database is
+initialized — on an existing deployment, also set the address in the Kasm admin UI
+(Infrastructure → Zones).
 
 ### The RDP Gateway
 
@@ -83,12 +119,6 @@ implementation supports `TCPRoute` before choosing it over a Service. And becaus
 matches on neither hostname nor SNI, zones cannot share one listener the way they do for
 `httpRoute`: when more than one zone sits in the primary region, give each an entry in
 `tcpRoute.zones` with its own `parentRefs[].sectionName`.
-
-A `TCPRoute` cannot tell replicas apart either, and every rdp-gateway replica has to advertise its own
-external address, so `tcpRoute` requires `components.connectionProxy` to resolve to one replica per zone
-(`deploymentSize: small`, or `components.connectionProxy.replicas: 1`) and fronts that replica's per-pod RDP
-Service, `<release>-connection-proxy-<zone>-rdp-0`; with more replicas, publish them with
-`directRdpService.perServiceSettings` instead.
 
 ## Migrating to connection-proxy
 

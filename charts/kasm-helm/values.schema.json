@@ -2228,7 +2228,7 @@
           },
           "primary": {
             "title": "primary",
-            "description": "Set this value to true on the zone in the cluster with the Database. If you are deploying multiple zones in a single namespace and region, then just pick whichever Zone you want the chart to consider the primary.",
+            "description": "Marks the primary zone, which backs publicAddr routing. A single configured zone is implicitly primary; with more than one zone configured, exactly one deployed zone must be marked primary: true (there is no first-zone fallback). Cannot be combined with seedOnly: true.",
             "type": "boolean"
           },
           "proxyAddress": {
@@ -2271,6 +2271,11 @@
             "description": "The name of the region where the Zone is deployed. This is very useful if you wish to deploy multiple zones in a single region, you can use the same region_name value for all zones in the region and the Helm chart will deploy resources accordingly.",
             "type": "string"
           },
+          "seedOnly": {
+            "title": "seedOnly",
+            "description": "When true, this zone is written to the database preseed (kasmConfig.generatePreseed) but deploys no workloads, Services, routing rules or certificate hostnames in this cluster. Use for multi-cluster deployments where this zone is installed from its own cluster with its own values file. The primary zone cannot be seedOnly, at least one zone must deploy, and a seedOnly zone must not share a region_name with a deployed zone.",
+            "type": "boolean"
+          },
           "search_alternate_zones": {
             "title": "search_alternate_zones",
             "description": "When a user requests a Kasm session, the system will first search for available resources on Agents within the same Zone. When enabled, the server can also search alternate Zones to satisfy the request if it can not be satisfied within the same Zone. Agents in the same Zone are always preferred over alternate Zones.",
@@ -2278,7 +2283,7 @@
           },
           "upstream_auth_address": {
             "title": "upstream_auth_address",
-            "description": "Connections to Kasm session are authenticated against a Kasm API server. This value is the address of the server. The default is $request_host$.",
+            "description": "Connections to Kasm session are authenticated against a Kasm API server. This value is the address of the server. The default is $request_host$; the primary zone falls back to upstreamAuth.hostname when set. This value also builds the zone's hostname for the upstreamAuth ingress/route/httpRoute/tlsRoute publishers, which require a bare hostname (no port).",
             "type": "string"
           },
           "verify_rdp_client_ip": {
@@ -2468,56 +2473,6 @@
               "port": {
                 "type": "integer",
                 "title": "port"
-              }
-            }
-          }
-        },
-        "zones": {
-          "description": "Per-zone Gateway attachment, for zones that cannot share httpRoute.parentRefs: a sectionName pinned to a single-hostname listener rejects every other zone's hostname. Zones without an entry use httpRoute.parentRefs.",
-          "title": "zones",
-          "type": "array",
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "name",
-              "parentRefs"
-            ],
-            "properties": {
-              "name": {
-                "type": "string",
-                "title": "name",
-                "description": "Zone name, matching an entry in kasmZones."
-              },
-              "parentRefs": {
-                "description": "Gateways to attach the route to. Passed through verbatim, so any field of a Gateway API ParentReference is accepted - name, namespace, sectionName, port, kind, group.",
-                "title": "parentRefs",
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "required": [
-                    "name"
-                  ],
-                  "properties": {
-                    "name": {
-                      "type": "string",
-                      "title": "name"
-                    },
-                    "namespace": {
-                      "type": "string",
-                      "title": "namespace"
-                    },
-                    "sectionName": {
-                      "type": "string",
-                      "title": "sectionName"
-                    },
-                    "port": {
-                      "type": "integer",
-                      "title": "port"
-                    }
-                  }
-                }
               }
             }
           }
@@ -2716,6 +2671,408 @@
         }
       },
       "title": "tcpRoute",
+      "type": "object"
+    },
+    "upstreamAuth": {
+      "additionalProperties": false,
+      "description": "Publish a separate, out-of-band URL for Kasm management traffic (the zone's Upstream Auth Address, used by external Kasm Agents and Windows services), typically a private load balancer or internal ingress class/Gateway. Enable at most one of service, ingress, route, httpRoute or tlsRoute; all are independent of the front-door exposure choice. Per-zone hostnames come from kasmZones[].upstream_auth_address, with upstreamAuth.hostname as the primary/default zone's fallback.",
+      "properties": {
+        "hostname": {
+          "default": "",
+          "description": "Upstream auth hostname for the primary (or implicit default) zone. Zones with kasmZones[].upstream_auth_address set keep their own value. Required by the ingress/route/httpRoute/tlsRoute publishers; optional for the service publisher.",
+          "title": "hostname",
+          "type": "string"
+        },
+        "service": {
+          "additionalProperties": false,
+          "description": "Publish the upstream auth endpoint with one Service per deployed zone, port 443 to the proxy's HTTPS port. Private/internal LB schemes are selected through annotations.",
+          "properties": {
+            "enabled": {
+              "default": false,
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "type": {
+              "default": "LoadBalancer",
+              "title": "type",
+              "type": "string",
+              "enum": [
+                "LoadBalancer",
+                "NodePort"
+              ]
+            },
+            "nodePort": {
+              "default": "",
+              "description": "Pin the node port when type is NodePort. Empty lets Kubernetes assign one. Only valid with a single deployed zone.",
+              "title": "nodePort",
+              "type": [
+                "string",
+                "integer"
+              ]
+            },
+            "annotations": {
+              "additionalProperties": true,
+              "title": "annotations",
+              "type": "object"
+            },
+            "labels": {
+              "additionalProperties": true,
+              "title": "labels",
+              "type": "object"
+            }
+          },
+          "title": "service",
+          "type": "object",
+          "required": [
+            "enabled",
+            "type",
+            "annotations",
+            "labels"
+          ]
+        },
+        "ingress": {
+          "additionalProperties": false,
+          "description": "Publish the upstream auth endpoint through an Ingress, one host rule per deployed zone.",
+          "properties": {
+            "enabled": {
+              "default": false,
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "tls": {
+              "default": true,
+              "description": "Add a TLS section covering every zone's upstream auth hostname, using the certificate Secret from upstreamAuth.ingress.secretName or the front door's chain.",
+              "title": "tls",
+              "type": "boolean"
+            },
+            "secretName": {
+              "default": "",
+              "description": "Certificate Secret for the upstream auth Ingress. Empty uses certificate.secretName, else the chart-minted Secret. Set when a bring-your-own front-door certificate does not cover the upstream auth hostnames.",
+              "title": "secretName",
+              "type": "string"
+            },
+            "backendProtocol": {
+              "default": "http",
+              "description": "Protocol the Ingress uses to reach the Kasm proxy Service. Valid values: http or https",
+              "title": "backendProtocol",
+              "type": "string"
+            },
+            "ingressClassName": {
+              "default": "",
+              "title": "ingressClassName",
+              "type": "string"
+            },
+            "annotations": {
+              "additionalProperties": true,
+              "title": "annotations",
+              "type": "object"
+            },
+            "labels": {
+              "additionalProperties": true,
+              "title": "labels",
+              "type": "object"
+            }
+          },
+          "title": "ingress",
+          "type": "object",
+          "required": [
+            "enabled",
+            "tls",
+            "backendProtocol",
+            "ingressClassName",
+            "annotations",
+            "labels"
+          ]
+        },
+        "route": {
+          "additionalProperties": false,
+          "description": "Publish the upstream auth endpoint through OpenShift Routes, one per deployed zone.",
+          "properties": {
+            "enabled": {
+              "default": false,
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "backendProtocol": {
+              "default": "http",
+              "description": "Protocol the Route uses to reach the Kasm proxy Service. Valid values: http or https",
+              "title": "backendProtocol",
+              "type": "string"
+            },
+            "wildcardPolicy": {
+              "default": "None",
+              "description": "Wildcard policy for the Routes. Valid values: None, Subdomain",
+              "title": "wildcardPolicy",
+              "type": "string"
+            },
+            "tls": {
+              "additionalProperties": true,
+              "description": "TLS configuration for the Routes, in the same shape as route.tls.",
+              "title": "tls",
+              "type": "object",
+              "properties": {
+                "termination": {
+                  "title": "termination",
+                  "type": "string"
+                },
+                "insecureEdgeTerminationPolicy": {
+                  "title": "insecureEdgeTerminationPolicy",
+                  "type": "string"
+                },
+                "key": {
+                  "title": "key",
+                  "type": "string"
+                },
+                "certificate": {
+                  "title": "certificate",
+                  "type": "string"
+                },
+                "caCertificate": {
+                  "title": "caCertificate",
+                  "type": "string"
+                }
+              }
+            },
+            "annotations": {
+              "additionalProperties": true,
+              "title": "annotations",
+              "type": "object"
+            },
+            "labels": {
+              "additionalProperties": true,
+              "title": "labels",
+              "type": "object"
+            }
+          },
+          "title": "route",
+          "type": "object",
+          "required": [
+            "enabled",
+            "tls",
+            "annotations",
+            "labels"
+          ]
+        },
+        "httpRoute": {
+          "additionalProperties": false,
+          "description": "Publish the upstream auth endpoint through Gateway API HTTPRoutes, one per deployed zone.",
+          "properties": {
+            "enabled": {
+              "default": false,
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "parentRefs": {
+              "description": "Gateways to attach the routes to. Passed through verbatim, so any field of a Gateway API ParentReference is accepted - name, namespace, sectionName, port, kind, group.",
+              "title": "parentRefs",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": true,
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "title": "name"
+                  },
+                  "namespace": {
+                    "type": "string",
+                    "title": "namespace"
+                  },
+                  "sectionName": {
+                    "type": "string",
+                    "title": "sectionName"
+                  },
+                  "port": {
+                    "type": "integer",
+                    "title": "port"
+                  }
+                }
+              }
+            },
+            "zones": {
+              "description": "Per-zone Gateway attachment, for zones that cannot share upstreamAuth.httpRoute.parentRefs. Zones without an entry use upstreamAuth.httpRoute.parentRefs.",
+              "title": "zones",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "parentRefs"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "title": "name",
+                    "description": "Zone name, matching an entry in kasmZones."
+                  },
+                  "parentRefs": {
+                    "description": "Gateways to attach the route to. Passed through verbatim, so any field of a Gateway API ParentReference is accepted - name, namespace, sectionName, port, kind, group.",
+                    "title": "parentRefs",
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "required": [
+                        "name"
+                      ],
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "title": "name"
+                        },
+                        "namespace": {
+                          "type": "string",
+                          "title": "namespace"
+                        },
+                        "sectionName": {
+                          "type": "string",
+                          "title": "sectionName"
+                        },
+                        "port": {
+                          "type": "integer",
+                          "title": "port"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "backendProtocol": {
+              "default": "http",
+              "description": "Protocol the Gateway uses to reach the Kasm proxy Service. Valid values: http or https",
+              "title": "backendProtocol",
+              "type": "string"
+            },
+            "annotations": {
+              "additionalProperties": true,
+              "title": "annotations",
+              "type": "object"
+            },
+            "labels": {
+              "additionalProperties": true,
+              "title": "labels",
+              "type": "object"
+            }
+          },
+          "title": "httpRoute",
+          "type": "object"
+        },
+        "tlsRoute": {
+          "additionalProperties": false,
+          "description": "Publish the upstream auth endpoint by SNI passthrough through Gateway API TLSRoutes, one per deployed zone.",
+          "properties": {
+            "enabled": {
+              "default": false,
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "apiVersion": {
+              "default": "gateway.networking.k8s.io/v1",
+              "description": "API version to render the TLSRoutes at. Standard-channel v1 since Gateway API 1.5; use v1alpha2 for older experimental-channel bundles.",
+              "title": "apiVersion",
+              "type": "string"
+            },
+            "parentRefs": {
+              "description": "Gateways to attach the routes to. Passed through verbatim, so any field of a Gateway API ParentReference is accepted - name, namespace, sectionName, port, kind, group.",
+              "title": "parentRefs",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": true,
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "title": "name"
+                  },
+                  "namespace": {
+                    "type": "string",
+                    "title": "namespace"
+                  },
+                  "sectionName": {
+                    "type": "string",
+                    "title": "sectionName"
+                  },
+                  "port": {
+                    "type": "integer",
+                    "title": "port"
+                  }
+                }
+              }
+            },
+            "zones": {
+              "description": "Per-zone Gateway attachment, for zones that cannot share upstreamAuth.tlsRoute.parentRefs. Zones without an entry use upstreamAuth.tlsRoute.parentRefs.",
+              "title": "zones",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "parentRefs"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "title": "name",
+                    "description": "Zone name, matching an entry in kasmZones."
+                  },
+                  "parentRefs": {
+                    "description": "Gateways to attach the route to. Passed through verbatim, so any field of a Gateway API ParentReference is accepted - name, namespace, sectionName, port, kind, group.",
+                    "title": "parentRefs",
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "required": [
+                        "name"
+                      ],
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "title": "name"
+                        },
+                        "namespace": {
+                          "type": "string",
+                          "title": "namespace"
+                        },
+                        "sectionName": {
+                          "type": "string",
+                          "title": "sectionName"
+                        },
+                        "port": {
+                          "type": "integer",
+                          "title": "port"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "annotations": {
+              "additionalProperties": true,
+              "title": "annotations",
+              "type": "object"
+            },
+            "labels": {
+              "additionalProperties": true,
+              "title": "labels",
+              "type": "object"
+            }
+          },
+          "title": "tlsRoute",
+          "type": "object"
+        }
+      },
+      "title": "upstreamAuth",
       "type": "object"
     }
   }

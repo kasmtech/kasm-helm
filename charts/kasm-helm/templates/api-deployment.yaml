@@ -4,7 +4,7 @@ Kasm API server Deployment definition
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- $apiReplicas := ternary .Values.components.api.replicas (include "replicas.preset" (dict "node" ($constants.api.component) "size" .Values.deploymentSize)) (gt (int .Values.components.api.replicas) 0) -}}
 {{- $merged := fromYaml (include "kasm.mergedValues" (dict "root" . "componentName" "api")) -}}
-{{- range $idx, $zone := (include "kasm.zones" $ | fromYamlArray) }}
+{{- range $idx, $zone := (include "kasm.deployedZones" $ | fromYamlArray) }}
 ---
 apiVersion: apps/v1
 kind: Deployment

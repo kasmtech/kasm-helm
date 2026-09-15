@@ -15,8 +15,28 @@
   been user-facing since before the Gateway API options existed.
 */}}
 
+{{/*
+  Zone list consistency. Zones sharing one region_name deploy to one cluster
+  (kasm.isInPrimaryRegion groups them for the session-plane fan-out), so a
+  seedOnly zone in a deployed zone's region is a contradiction: it would be
+  silently dropped from that fan-out instead of deployed alongside its region.
+*/}}
+{{- define "kasm.validateZones" -}}
+{{- $zones := (include "kasm.configuredZones" . | fromYamlArray) | default list -}}
+{{- range $zone := $zones -}}
+  {{- if and (dig "seedOnly" false $zone) $zone.region_name -}}
+    {{- range $other := $zones -}}
+      {{- if and (not (dig "seedOnly" false $other)) $other.region_name (eq $other.region_name $zone.region_name) -}}
+        {{- fail (printf "kasmZones[%s] is marked 'seedOnly: true' but shares region_name %q with deployed zone %q. Zones in one region deploy to one cluster: remove 'seedOnly: true' from %s, or give it a different region_name." $zone.name $zone.region_name $other.name $zone.name) -}}
+      {{- end -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+{{- end -}}
+
 {{- define "kasm.validateExposure" -}}
 {{- $v := .Values -}}
+{{- include "kasm.validateZones" . -}}
 
 {{- if and $v.ingress.enabled $v.route.enabled -}}
   {{- fail "The ingress.enabled and route.enabled cannot both be set. Either configure an Ingress or an OpenShift Route, not both." -}}
@@ -59,6 +79,59 @@
 {{- end -}}
 
 {{- include "kasm.validateRdpExposure" . -}}
+{{- include "kasm.validateUpstreamAuthExposure" . -}}
+{{- end -}}
+
+{{/*
+  Upstream auth (management) endpoint publication. Deliberately independent of the
+  front-door exposure rules above: the whole point of the endpoint is to ride a
+  separate data path (front-door Ingress for users plus an internal upstreamAuth
+  LoadBalancer for agents is the headline combination), so the only mutual
+  exclusion is among the upstreamAuth publishers themselves. Missing per-zone
+  hostnames fail inside the publisher templates via
+  kasm.zoneUpstreamAuthAddressRequired, mirroring the front door.
+*/}}
+{{- define "kasm.validateUpstreamAuthExposure" -}}
+{{- $ua := .Values.upstreamAuth -}}
+
+{{- $uaExposure := list -}}
+{{- if $ua.service.enabled -}}{{- $uaExposure = append $uaExposure "upstreamAuth.service.enabled" -}}{{- end -}}
+{{- if $ua.ingress.enabled -}}{{- $uaExposure = append $uaExposure "upstreamAuth.ingress.enabled" -}}{{- end -}}
+{{- if $ua.route.enabled -}}{{- $uaExposure = append $uaExposure "upstreamAuth.route.enabled" -}}{{- end -}}
+{{- if $ua.httpRoute.enabled -}}{{- $uaExposure = append $uaExposure "upstreamAuth.httpRoute.enabled" -}}{{- end -}}
+{{- if $ua.tlsRoute.enabled -}}{{- $uaExposure = append $uaExposure "upstreamAuth.tlsRoute.enabled" -}}{{- end -}}
+{{- if gt (len $uaExposure) 1 -}}
+  {{- fail (printf "Only one upstream auth exposure method may be enabled, but %s are set. The Service, the Ingress, the OpenShift Route, the Gateway API HTTPRoute and the Gateway API TLSRoute all publish the same upstream auth endpoint, so enabling more than one gives the same hostname two owners." (join " and " $uaExposure)) -}}
+{{- end -}}
+
+{{- if and $ua.httpRoute.enabled (not (or $ua.httpRoute.parentRefs $ua.httpRoute.zones)) -}}
+  {{- fail "upstreamAuth.httpRoute.enabled is set but neither upstreamAuth.httpRoute.parentRefs nor upstreamAuth.httpRoute.zones is populated - the routes would attach to no Gateway, and the upstream auth endpoint would stay unreachable from outside the cluster." -}}
+{{- end -}}
+{{- if and $ua.tlsRoute.enabled (not (or $ua.tlsRoute.parentRefs $ua.tlsRoute.zones)) -}}
+  {{- fail "upstreamAuth.tlsRoute.enabled is set but neither upstreamAuth.tlsRoute.parentRefs nor upstreamAuth.tlsRoute.zones is populated - the routes would attach to no Gateway, and the upstream auth endpoint would stay unreachable from outside the cluster." -}}
+{{- end -}}
+
+{{- $deployedZones := (include "kasm.deployedZones" . | fromYamlArray) -}}
+
+{{- if and $ua.service.enabled (eq $ua.service.type "NodePort") $ua.service.nodePort (gt (len $deployedZones) 1) -}}
+  {{- fail (printf "upstreamAuth.service.nodePort is pinned but %d zones deploy in this cluster, and every zone's upstream auth Service would claim the same node port. Remove the pin, or deploy a single zone per cluster." (len $deployedZones)) -}}
+{{- end -}}
+
+{{/* One hostname, one owner: two zones resolving to the same upstream auth
+     address would give one host two backends (undefined routing on the L7
+     publishers, wrong zone registration everywhere). */}}
+{{- if $uaExposure -}}
+  {{- $seen := dict -}}
+  {{- range $zone := $deployedZones -}}
+    {{- $address := include "kasm.zoneUpstreamAuthAddress" (list $ $zone) -}}
+    {{- if $address -}}
+      {{- if hasKey $seen $address -}}
+        {{- fail (printf "kasmZones[%s] and kasmZones[%s] both resolve their upstream auth address to %q. Every deployed zone needs its own address, since each routes to its own proxy Service." (get $seen $address) $zone.name $address) -}}
+      {{- end -}}
+      {{- $seen = set $seen $address $zone.name -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
 {{- end -}}
 
 
@@ -77,11 +150,13 @@
 {{- define "kasm.validateRdpExposure" -}}
 {{- $v := .Values -}}
 
+{{/* directRdpService's own rules (perServiceSettings shape, entry counts, legacy
+     rdpAccessURL restrictions) live in kasm.directRdpServiceValidateZone, invoked
+     from connection-proxy-services.yaml. Only the tcpRoute rules live here. */}}
 {{- if $v.tcpRoute.enabled -}}
 
-  {{- $cp := $v.components.connectionProxy -}}
-  {{- if not (and $cp.enabled $cp.rdpGateway.enabled) -}}
-    {{- fail "tcpRoute.enabled publishes the RDP Gateway, but components.connectionProxy.rdpGateway.enabled (or components.connectionProxy.enabled) is false. Enable the component, or disable tcpRoute." -}}
+  {{- if not (and $v.components.connectionProxy.enabled $v.components.connectionProxy.rdpGateway.enabled) -}}
+    {{- fail "tcpRoute.enabled publishes the RDP Gateway, but components.connectionProxy.enabled or components.connectionProxy.rdpGateway.enabled is false. Enable the component, or disable tcpRoute." -}}
   {{- end -}}
 
   {{- if $v.directRdpService.enabled -}}
@@ -92,10 +167,14 @@
     {{- fail "tcpRoute.rdpAccessURL must be set if tcpRoute.enabled is true - it is the hostname Kasm advertises to RDP clients, and the RDP Gateway has no way to infer it from the Gateway." -}}
   {{- end -}}
 
+  {{/* tcpRoute advertises ONE hostname (per zone), so only one rdp-gateway instance
+       per zone can register it. connection-proxy scales 1/2/3 by deploymentSize; a
+       TCPRoute cannot fan per-replica hostnames out the way perServiceSettings does. */}}
   {{- $constants := include "kasm.constants" . | fromYaml -}}
+  {{- $cp := $v.components.connectionProxy -}}
   {{- $cpReplicas := ternary $cp.replicas (include "replicas.preset" (dict "node" $constants.connectionProxy.component "size" $v.deploymentSize)) (gt (int $cp.replicas) 0) -}}
   {{- if gt (int $cpReplicas) 1 -}}
-    {{- fail (printf "tcpRoute.enabled requires exactly one connection-proxy replica per zone, but components.connectionProxy resolves to %d (deploymentSize %s). A TCPRoute matches on neither hostname nor SNI, so it cannot give each rdp-gateway replica the distinct external address it must advertise. Set components.connectionProxy.replicas=1, or publish the replicas with directRdpService.perServiceSettings instead of tcpRoute." (int $cpReplicas) $v.deploymentSize) -}}
+    {{- fail (printf "tcpRoute.enabled advertises a single RDP hostname, but components.connectionProxy resolves to %d replicas - every replica would register the same address. Set components.connectionProxy.replicas=1, or publish per-replica addresses with directRdpService.perServiceSettings instead of the TCPRoute." (int $cpReplicas)) -}}
   {{- end -}}
 
   {{- $zones := (include "kasm.primaryRegionZones" . | fromYamlArray) -}}
@@ -119,3 +198,5 @@
 
 {{- end -}}
 {{- end -}}
+
+

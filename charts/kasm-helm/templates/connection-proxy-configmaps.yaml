@@ -390,10 +390,7 @@ data:
         version: 1
 {{- end }}
 ---
-{{- $zoneName := "default" -}}
-{{- if .Values.kasmZones }}
-  {{- $zoneName = (index .Values.kasmZones 0).name -}}
-{{- end }}
+{{- $zoneName := (include "kasm.primaryZone" . | fromYaml).name -}}
 {{- if and $cp.rdpHttpsGateway.enabled (eq .Values.logFormat "json") }}
 apiVersion: v1
 kind: ConfigMap

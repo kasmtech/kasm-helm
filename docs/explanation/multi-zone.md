@@ -74,12 +74,13 @@ Not everything fans out, and the difference catches people:
 
 | Component | Scope |
 | --------- | ----- |
-| API (`<release>-api-<zone>`), manager (`<release>-manager-<zone>`), proxy Service (`<release>-proxy-<zone>`), ingress rule / Route / Gateway API route | **every** zone, plus one route for `publicAddr` → the primary zone |
+| API (`<release>-api-<zone>`), manager (`<release>-manager-<zone>`), proxy Service (`<release>-proxy-<zone>`) | every **deployed** zone (zones marked `seedOnly: true` render none of these) |
+| Ingress rule / Route / Gateway API route | one, for `publicAddr` → the primary zone; zone `proxy_hostname`s are served by their own backend, not published by this chart |
 | Guacamole, RDP gateway, RDP HTTPS gateway | **primary-region zones only** - zones sharing the primary zone's `region_name` |
 | Database, credentials Secret, certificate | one per deployment, not per zone |
 
 In the example above, `zonea` and `zoneb` share `us-east` with the primary, so both get a
-Guacamole and an RDP gateway. `zonec` in `eu-west` gets a proxy and a route, and no RDP gateway.
+Guacamole and an RDP gateway. `zonec` in `eu-west` gets a proxy, and no RDP gateway.
 Zones with **no** `region_name` are never in the primary region unless they *are* the primary zone  - 
 which is why a two-zone list with no regions set produces only one RDP gateway.
 
@@ -99,7 +100,7 @@ Three proxies, two connection proxies (Guac and both RDP gateways) - `zonec` is 
 
 ## Which zone an agent joins
 
-A zone is a manager. Every `kasmZones` entry renders one, and each zone's proxy forwards
+A zone is a manager. Every deployed `kasmZones` entry renders one (a `seedOnly: true` zone's manager lives in that zone's own cluster), and each zone's proxy forwards
 `/manager_api` to its own manager, so an agent joins the zone of the manager it registers with:
 the one behind `agent.manager.hostname`. An agent pointed at `publicAddr` reaches the primary
 zone's proxy and lands in the primary zone; one pointed at `zonec.kasm.example.com` (or the
@@ -108,7 +109,7 @@ agent reports and has to match; it never moves an agent, and a move made by hand
 Infrastructure → Agents is undone by the next heartbeat.
 
 The same rule is why a zone created only in the admin UI cannot take a Kubernetes agent: it has a
-record in the database and no manager on the control plane. Add it to `kasmZones` (which renders
+record in the database and no manager on the control plane. Add it to `kasmZones` without `seedOnly` (which renders
 the manager) and, on an existing database where the preseed no longer runs, create the zone in
 the admin UI with the same name and hostname. Verified on Kasm 1.19: an agent with `agent.zone`
 naming a UI-created zone registered into `default`.
