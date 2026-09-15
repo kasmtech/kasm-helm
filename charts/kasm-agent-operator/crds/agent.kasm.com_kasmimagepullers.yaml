@@ -62,7 +62,10 @@ spec:
               KasmImagePullerSpec pre-stages OCI images onto nodes to remove cold-start pull
               latency. The controller runs a DaemonSet whose pod holds one idle ("sleep")
               container per image, forcing the kubelet to pull and retain each image on
-              every targeted node.
+              every targeted node. A change to the image set replaces that pod on every
+              node, so the controller applies one only once no puller pod is still
+              pulling; until then the change waits (Progressing=True, reason
+              RolloutDeferred) and later changes join it in the same rollout.
             properties:
               affinity:
                 description: |-
@@ -301,7 +304,8 @@ spec:
               images:
                 description: |-
                   Images is the catalog to stage (written by the agent from the manager's
-                  heartbeat image list).
+                  heartbeat image list). Order is irrelevant: the controller stages them
+                  sorted by reference, so reordering never rolls the DaemonSet.
                 items:
                   description: PulledImage is one image to stage on every targeted
                     node.
@@ -642,6 +646,14 @@ spec:
                     format: int32
                     type: integer
                   imagesCount:
+                    format: int32
+                    type: integer
+                  imagesPending:
+                    description: |-
+                      ImagesPending counts images in spec.images that are not in the
+                      DaemonSet's pod template yet because a rollout is still in flight: the
+                      controller waits for every puller pod to finish pulling before it
+                      replaces them, and images added in the meantime go out together.
                     format: int32
                     type: integer
                 type: object

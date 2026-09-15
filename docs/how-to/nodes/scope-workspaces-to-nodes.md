@@ -159,7 +159,15 @@ access to nodes (`get`, `list` and `watch`: the read goes through a cached clien
 alone the reconcile hangs at the end of the window). The image puller keeps the same bookkeeping per
 node in `status.nodeBackoffs`, as a record only: it never writes exclusions into its DaemonSet, because
 a pod template change rolls every puller pod and aborts the pulls in flight, and the kubelet already
-refuses new pods on a node under pressure. No value controls this; it works within whatever selector you set, so
+refuses new pods on a node under pressure. Since the operator at `02747c3` the same rule covers every other template change: an image
+added to or removed from the catalog waits while any puller pod is still pulling, then goes out with
+whatever else accumulated, in one rollout. The kubelet finishes a replaced pod's remaining pulls
+anyway, so a mid-pull rollout only adds another pod per node downloading the same images. A pull that
+has given up (`ImagePullBackOff`) does not hold it, so a corrected reference still rolls at once. While
+a change waits, the `KasmImagePuller` reports `Progressing=True` with reason `RolloutDeferred` and
+counts the images in `status.summary.imagesPending`. Do not force-delete a Terminating puller pod to
+hurry it along: the kubelet keeps pulling for it regardless, only now out of sight; if a node has such
+leftovers, restarting the kubelet there is what drops them. No value controls this; it works within whatever selector you set, so
 a pool of one node has nowhere to go and the replacement waits. The first window is 30 s, and an OOM kill is counted from the
 container's last termination state, so a container that restarts before the next reconcile is not
 missed. The agent's capacity report to the control plane is the sum of allocatable CPU and memory
