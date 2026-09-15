@@ -3,8 +3,9 @@
 #
 # Starting point for taking full ownership of the gateway Collector's config. The gateway is
 # the tier that makes the trace-sampling decision and is the only writer to ClickHouse — the
-# per-zone forwarder tier (services and nginx export to it) has its own, separate
-# `observability.collector.forwarder.existingConfigMap` and does not need any of this.
+# single cluster-wide forwarder tier (services, nginx sidecars, and the DB sidecar export to it)
+# has its own, separate `observability.collector.forwarder.existingConfigMap` and does not need
+# any of this.
 #
 # This is the chart's own rendered gateway config, byte-for-byte, as a starting point so you
 # can edit it rather than write one from scratch. The values the chart normally substitutes
@@ -49,8 +50,9 @@ data:
         endpoint: "0.0.0.0:13133"
 
     receivers:
-      # The forwarders and the host-log DaemonSet are this receiver's only clients. Nothing
-      # addresses the gateway directly: no otlp/local (4318), no otlp/nginx (4316).
+      # The forwarder Deployment is this receiver's only client (via its loadbalancing exporter,
+      # dns-resolved and trace-ID-hashed). Nothing addresses the gateway directly: no otlp/local
+      # (4318), no otlp/nginx (4316) — those are sidecar-only, loopback-bound listeners.
       otlp/remote:
         protocols:
           grpc:

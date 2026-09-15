@@ -1,5 +1,14 @@
 # Helm Chart OpenTelemetry Integration Plan
 
+> **Superseded in part.** This plan documents the design as originally proposed and executed
+> through `docs/otel-execution/` (H0–H7). Several of its decisions were reversed in a later
+> design review recorded in bead `kasm-helm-4ss` (Decision record: OTEL architecture reversals) —
+> most visibly the topology in §3 below, which this doc's own text now supersedes. For the
+> as-built architecture, read `charts/kasm-helm/docs/observability.md` and the chart templates
+> under `charts/kasm-helm/templates/otel-*.yaml`, not this plan. Sections other than §3 are left
+> as historical record of the "why" behind choices that still stand (ClickHouse schema, logging
+> refactor, values shape, etc.) and were not re-verified against the final code for this pass.
+
 Mirror the observability stack added to `kasm_backend` on `feature/DEV-31` (OTel Collector +
 ClickHouse + nginx tracing + browser telemetry) into the `kasm-helm` chart.
 
@@ -93,7 +102,34 @@ mount their own `nginx.conf`.
 
 ---
 
-## 3. Collector topology: forwarder per zone + one cluster gateway + a host-log DaemonSet
+## 3. Collector topology (SUPERSEDED — see `kasm-helm-4ss`)
+
+**Everything below this point in §3 (through 3b) is the topology as originally designed and
+built by H1–H5. It was reversed in the 2026-08-14 design review (`kasm-helm-4ss`) and does not
+match the chart. Kept for historical context only; do not implement against it.** The as-built
+topology is documented in `charts/kasm-helm/docs/observability.md` §1–2 and §7. In short, the
+reversals were:
+
+- **No DaemonSet, ever.** The host-log DaemonSet proposed below was rejected before it shipped:
+  it cannot be zone-scoped, node-local routing needs either `internalTrafficPolicy: Local` (a
+  blackhole risk) or `hostPort` (a Pod Security violation), and it does not improve gateway
+  throughput. nginx (and PostgreSQL) logs are collected by an **unconditional sidecar** instead —
+  the "fallback" described in §3a below is the only path that shipped, and it isn't a fallback.
+- **One forwarder Deployment, cluster-wide, not one per zone.** Zone identity never needs to be
+  encoded in a forwarder *endpoint* — it belongs on the telemetry itself. The chart records it as
+  the `kasm.zone` resource attribute via `kasm.otelEnv`/`kasm.otelSidecar` instead.
+- **The gateway is no longer hard-limited to `replicas: 1`.** A `loadbalancing` exporter (DNS
+  resolver over the gateway's headless Service, hashed on `traceID` for the traces pipeline)
+  replaced the plain `otlp` exporter at the forwarder, so every span of a trace still reaches one
+  gateway pod even with more than one replica. `replicas: 1` remains the *default*, but it is now
+  a sizing choice, not a correctness ceiling.
+- **The forwarder's port-4316 receiver was deleted.** nginx now speaks to its pod-local sidecar
+  over loopback instead of to a cluster-reachable unauthenticated receiver on the forwarder.
+- **`observability.fileLogs` was deleted outright**, and `logFormat` was deleted (not just
+  narrowed) for API/Manager — see the `kasm-helm-4ss` record for the full rationale on both, and
+  `docs/otel-execution/PROGRESS.md` for the reversal log.
+
+The rest of §3 is left unedited below as the historical proposal that these points supersede.
 
 Docker gets one collector per node with the nginx log directory bind-mounted in. The Kubernetes
 equivalent of "one collector per node reading local log files" is a **DaemonSet mounting
@@ -225,6 +261,10 @@ recorded as follow-ups rather than built now:
 
 The `stub_status.conf` server block is still rendered (cheap, harmless, and needed by option 2), just
 not scraped by default.
+
+**This entire §3b gap is also closed as-built**: the sidecar that shipped is not a restricted-
+namespace fallback, it is the only path, and it scrapes `stub_status` over loopback from every
+pod unconditionally — see `charts/kasm-helm/docs/observability.md` §4.
 
 ---
 

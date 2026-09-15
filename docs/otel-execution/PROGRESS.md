@@ -1,5 +1,7 @@
 # OTel Helm Integration — Progress Board
 
+> **Historical / superseded.** Execution record for `docs/otel-integration-plan.md`; several decisions here were reversed in design review (`kasm-helm-4ss`) and do not describe the shipped chart — see `charts/kasm-helm/docs/observability.md` for current behavior.
+
 Shared state between phase sessions. **Append your entry when you finish a phase.** Later phases read
 this to get the names, ports, endpoints and deviations they depend on — treat it as the contract
 between phases, not a diary.
@@ -1475,3 +1477,47 @@ Deliberately-not-done work, for the human to ticket. This list is final as of H7
 - **`kasm.metadata`'s `daemonSet`/`daemonset` case mismatch (found in H5).** Dead code today (nothing
   passes the lowercase form to the top-level call), left unfixed since fixing it wasn't in scope for
   any phase. Worth a cleanup pass whenever `kasm.metadata` is next touched.
+
+## Architecture reversals (post-H7, docs sweep)
+
+The design review recorded in bead `kasm-helm-4ss` (Decision record: OTEL architecture reversals,
+2026-08-11 / amended 2026-08-14) reversed several of the plan's and H1–H5's decisions after this
+package's phases were executed. The chart as it exists on `feature/DEV-31` reflects the reversed
+architecture, not the plan text in `H1`–`H5` or `docs/otel-integration-plan.md` §3 (now marked
+superseded). Reversals, for anyone reading the H-phase docs after the fact:
+
+1. **Zone-scoped forwarders → single cluster-wide forwarder.** H1/H4 specified one forwarder
+   Deployment per zone, selected by endpoint. Reversed: zone identity was never recorded on the
+   telemetry itself under that design, only implied by which endpoint a sender used. The chart now
+   runs one de-zoned forwarder Deployment for the whole release and records zone as the `kasm.zone`
+   resource attribute via `kasm.otelEnv`/`kasm.otelSidecar` instead.
+2. **`hostLogs` DaemonSet default → unconditional sidecar.** H5 proposed a `hostPath`-mounting
+   DaemonSet as the default nginx log path, with a sidecar as the PSS-restricted/OpenShift fallback.
+   Reversed before it shipped: a DaemonSet can't be zone-scoped, node-local routing needs
+   `internalTrafficPolicy: Local` (blackhole risk) or `hostPort` (PSS violation), and it doesn't
+   change gateway throughput. The sidecar is now the only path, unconditional on
+   `observability.enabled`, with no DaemonSet ever rendered.
+3. **`observability.fileLogs` deleted.** H1/H5 added a JSON-file-plus-sidecar logging path as a
+   third option alongside OTLP and DaemonSet/stdout scraping. Reversed: nothing in api/manager
+   depends on file-shaped logs, and it duplicated the sidecar mechanism for no real use case
+   (`kasm-helm-4ss` item 8/20).
+4. **`logFormat` deleted for API/Manager.** Originally the plan narrowed `logFormat`'s effect on
+   those services; the review deleted the value's effect on them outright rather than partially
+   honoring it — console output is always human-readable text, structured logs are OTLP-only.
+   Because the root values schema is permissive (`additionalProperties: true`), a leftover
+   `logFormat` value from an old release is a silent no-op on upgrade, not a render failure
+   (`kasm-helm-4ss` items 9 and the correction in item 22).
+5. **Gateway single-replica constraint lifted.** The plan and H4 hard-required
+   `replicas: 1` on the gateway as a correctness property of `tail_sampling`. Reversed: the
+   forwarder now reaches the gateway through a `loadbalancing` exporter (DNS resolver over the
+   gateway's headless Service, hashed on `traceID` for the traces pipeline), so every span of a
+   trace still lands on one gateway pod with more than one replica. `replicas: 1` is now only the
+   *default*, raised via `components.otelGateway.replicas`.
+6. **Forwarder's port-4316 receiver deleted.** H4's forwarder rendered an unauthenticated
+   `otlp/nginx` receiver on 4316, reachable cluster-wide, so `ngx_otel_module` (which cannot send a
+   bearer token) could reach it directly. Reversed: nginx now sends its spans to its own pod-local
+   sidecar over loopback only; the forwarder has no 4316 receiver at all, closing that
+   unauthenticated cluster-wide surface.
+
+See `kasm-helm-4ss` for the full decision record, `charts/kasm-helm/docs/observability.md` for the
+as-built architecture, and `docs/otel-integration-plan.md` §3 for the superseded-topology marker.

@@ -1,5 +1,7 @@
 # OTel Helm Integration — Execution Package
 
+> **Historical / superseded.** Execution record for `docs/otel-integration-plan.md`; several decisions here were reversed in design review (`kasm-helm-4ss`) and do not describe the shipped chart — see `charts/kasm-helm/docs/observability.md` for current behavior.
+
 Hand-off docs for implementing `docs/otel-integration-plan.md` across several focused sessions.
 Each phase is sized to be executed by one session on a mid-tier model without re-deriving design
 decisions.

@@ -9,7 +9,10 @@ that powers the reporting views in the Kasm Admin UI. It is enabled by default.
 - **Structured logs, traces, and metrics** from every Kasm service (`api`, `manager`, `guac`,
   `rdp-gateway`, `rdp-https-gateway`), exported over OTLP.
 - **nginx as the trace root.** The Kasm Proxy's nginx is instrumented (`ngx_otel_module`), so a
-  request's trace starts at the proxy and continues into the service that handles it.
+  request's trace starts at the proxy and continues into the service that handles it. nginx logs
+  and connection metrics are collected by an always-on sidecar — see §4.
+- **PostgreSQL logs**, collected by an always-on sidecar in the DB pod. **PostgreSQL metrics are
+  not collected** — deferred; see §4.
 - **Browser telemetry** from the Kasm web UI (page loads, user interactions).
 - **ClickHouse-backed reporting** in the Kasm Admin UI — the same data these signals produce is
   what the reporting views read back.
@@ -20,12 +23,12 @@ that powers the reporting views in the Kasm Admin UI. It is enabled by default.
                     |                                               |
                     | nginx (proxy) --trace root--> api / manager   |
                     |    |                              |           |
-                    |    | access/error logs           OTLP         |
+                    |    | sidecar (logs, conn metrics) OTLP        |
                     |    v                              |           |
-                    | forwarder Collector (per zone) <--+           |
+                    | forwarder Collector (cluster-wide, 1+ pods) <--+
                     |    |  (batch; no sampling, no ClickHouse)     |
-                    |    v                                          |
-                    | gateway Collector (cluster-wide, 1 pod)       |
+                    |    v  loadbalancing exporter (hash on traceID)|
+                    | gateway Collector (cluster-wide, 1+ pods)     |
                     |    |  (tail_sampling; only ClickHouse writer) |
                     |    v                                          |
                     | ClickHouse (logs / traces / metrics)          |
@@ -37,85 +40,72 @@ that powers the reporting views in the Kasm Admin UI. It is enabled by default.
 
 ## 2. What gets deployed
 
-| Workload                                   | Count             | Notes                                                                                       |
-| ------------------------------------------ | ----------------- | ------------------------------------------------------------------------------------------- |
-| Collector *forwarder* Deployment + Service | one per zone      | What Kasm services and nginx export to. Batches and forwards only.                          |
-| Collector *gateway* Deployment + Service   | one, cluster-wide | Makes the trace-sampling decision; the only writer to ClickHouse.                           |
-| ClickHouse StatefulSet + Service + PVC     | one               | Bundled and enabled by default.                                                             |
-| nginx log DaemonSet or proxy-pod sidecar   | one of the two    | Default is the DaemonSet — see §4 below, the one place a default doesn't fit every cluster. |
+| Workload                                   | Count                          | Notes                                                                              |
+| ------------------------------------------ | ------------------------------ | ----------------------------------------------------------------------------------- |
+| Collector *forwarder* Deployment + Service | 1/2/2 by `deploymentSize`, cluster-wide (not per zone) | What every Kasm service and every sidecar exports to. Batches and forwards only.  |
+| Collector *gateway* Deployment + Service   | one by default, cluster-wide   | Makes the trace-sampling decision; the only writer to ClickHouse. Scalable — see §7. |
+| ClickHouse StatefulSet + Service + PVC     | one                             | Bundled and enabled by default.                                                     |
+| nginx + DB sidecar containers              | one per Proxy/Connection Proxy/DB pod, unconditional | No DaemonSet, no separate opt-in — always present when `observability.enabled`. |
 
 Budget for this up front: a new PVC (`observability.clickhouse.storage.pvcSize`, default 20 GiB),
-a new StatefulSet, two new Collector Deployments, and — on the default path — one DaemonSet pod
-per node. See §6 for sizing.
+a new StatefulSet, two new Collector Deployments, and one extra container in every proxy/DB pod.
+See §6 for sizing.
 
 ## 3. Getting logs into your own tooling
 
-There are three ways to get Kasm's logs, in order of recommendation:
+There are two ways to get Kasm's logs, in order of recommendation:
 
 1. **OTLP export to the bundled Collector (recommended, default).** Every service exports logs,
    traces, and metrics over OTLP already; no extra configuration needed. Point
-   `observability.collector.forward.endpoint` at your own OTLP/HTTP backend (see §8) to get a
-   copy of everything alongside ClickHouse, or replace the Collector config entirely with
-   `existingConfigMap` (see §9) to send only to your own backend.
-2. **File-based JSON logging (`observability.fileLogs`).** Off by default. Enable this only if you
-   specifically need JSON log files inside the pod, tailed by a sidecar Collector — for example, a
-   log-shipping agent already deployed cluster-wide that scrapes files rather than OTLP.
-3. **The Collector's `debug` exporter to stdout.** Not recommended; see
+   `observability.collector.gateway.forward.endpoint` at your own OTLP/HTTP backend (see §8) to
+   get a copy of everything alongside ClickHouse, or replace either tier's Collector config
+   entirely with `existingConfigMap` (see §9) to send only to your own backend.
+2. **The Collector's `debug` exporter to stdout.** Not recommended; see
    `examples/otel-collector-debug.yaml`. Supported for customers who want today's
    scrape-the-pod-logs behavior, at the cost of a second, more expensive Collector path.
 
-**Important:** `logFormat: json` no longer changes API or Manager console output — those
-services no longer honor the setting. Their stdout is human-readable text; their structured logs
-go out over OTLP instead. If you were scraping JSON from `api`/`manager` pod stdout, switch to
-OTLP collection or enable `observability.fileLogs`. `logFormat` still controls the Database's and
-nginx-owning pods' (Proxy, RDP Gateway, RDP HTTPS Gateway) console format as before — except that
-the Proxy's access log is forced to JSON whenever `observability.enabled` is true, regardless of
-`logFormat`, because the log collector parses it as JSON (see §4).
+**Important:** `logFormat` was removed from the chart. Every service's stdout is now
+human-readable text; structured logs go out over OTLP instead (see §4 for how nginx and DB logs
+are collected). If you were scraping JSON from `api`/`manager` pod stdout, switch to OTLP
+collection. The root values schema does not reject unknown top-level keys, so a leftover
+`logFormat` in your values file is a silent no-op, not a render error — remove it rather than
+relying on a schema error to catch it. Separately, the Proxy's access log is forced to JSON
+whenever `observability.enabled` is true, because the sidecar collector parses it as JSON (see
+§4).
 
-## 4. How nginx logs are collected, and the Pod Security trade-off
+## 4. How nginx and DB logs are collected, and the early-startup caveat
 
-This is the one place in the chart where the default does not fit every cluster.
+An OpenTelemetry Collector sidecar runs, unconditionally, in every Kasm Proxy pod, every
+Connection Proxy pod (guac/rdp-gateway/rdp-https-gateway), and the Kasm DB pod, whenever
+`observability.enabled` is true. There is no DaemonSet, no `hostPath`, and no opt-in/opt-out
+knob — this is the only nginx/DB log-collection path the chart offers, and it needs no
+ServiceAccount and no cluster RBAC.
 
-By default, a DaemonSet reads the container runtime's log files from each node
-(`/var/log/pods`), scoped to this release's proxy pods only (via an include glob, not a
-Kubernetes API watch). It needs no ServiceAccount and no cluster permissions — the chart creates
-zero RBAC objects.
+Each sidecar is that pod's single egress point to the forwarder:
 
-That DaemonSet mounts a `hostPath` and runs as root, so it **cannot run in a namespace enforcing
-the `baseline` or `restricted` Pod Security Standards.** If yours does, set:
+- The nginx sidecar tails the access and error log files nginx writes to a shared `emptyDir`,
+  scrapes nginx connection metrics from `stub_status` over the pod's own loopback interface, and
+  receives nginx's OTLP traces on a loopback-only gRPC listener. Because it scrapes loopback
+  directly (not a Service), nginx connection metrics are collected correctly regardless of
+  replica count — the round-robin/DaemonSet problem that ruled out per-node metrics scraping in an
+  earlier design does not apply to a per-pod sidecar.
+- The DB sidecar tails PostgreSQL's JSON log file from the data PVC. **It does not collect
+  PostgreSQL metrics** — a `postgresql` receiver would need database credentials inside the DB
+  pod, and that is deliberately deferred until there is a concrete need for it. Request rate,
+  error, and query-log visibility for the DB come from these logs and from the API/Manager's own
+  traces of their DB calls, not from DB-side metrics.
 
-```yaml
-observability:
-  hostLogs:
-    enabled: false
-  nginxLogs:
-    enabled: true
-```
+**Known early-startup caveat.** nginx (and PostgreSQL) start writing to their log files as soon as
+their container starts, which can be before the sidecar container in the same pod is ready. The
+sidecar's `filelog` receivers use `start_at: end`: on first boot, the sidecar begins reading from
+whatever the end of the file is *at the moment it starts*, not from the beginning. Any log lines
+written between the primary container's start and the sidecar's readiness are therefore **not**
+collected — they are silently skipped, not duplicated or replayed later. This is a narrow,
+one-time gap at pod startup; it does not recur on ordinary log rotation or on Collector restarts
+after the checkpoint file exists (`file_storage` offsets survive a sidecar restart).
 
-This switches to a sidecar container in the proxy pod instead, sharing an `emptyDir` volume with
-nginx — no hostPath, no root. As a bonus, the sidecar path also collects nginx **connection
-metrics** (`connections active/accepted/handled`), which the DaemonSet path does not.
-
-nginx **traces** work identically on both paths — this trade-off is about logs and connection
-metrics only.
-
-**Known gap, stated plainly:** on the default (DaemonSet) path, nginx connection metrics are
-**not** collected — a DaemonSet cannot reach pod loopback (`stub_status`), and scraping the proxy
-Service instead would round-robin across replicas and corrupt the cumulative counters it returns.
-Request rate, latency, and status codes are unaffected — those all come from access logs and
-spans on both paths. Enable `observability.nginxLogs` if you need connection metrics.
-
-`hostLogs.enabled` and `nginxLogs.enabled` are mutually exclusive; the chart fails the render if
-both are true.
-
-### On OpenShift
-
-Setting `isOpenshift: true` forces the sidecar path automatically: the chart fails the render
-(rather than silently deploying a broken DaemonSet) if `hostLogs.enabled` is left at its default
-`true` on OpenShift. A `hostPath` + root DaemonSet would need a `SecurityContextConstraint` this
-chart does not ship, so on OpenShift you must set `nginxLogs.enabled: true` (and leave
-`hostLogs.enabled: false`) — the same values as the restricted-PSS case above, for the same
-underlying reason.
+nginx **traces** are unaffected by any of this — `ngx_otel_module` talks to the sidecar directly
+over the network as spans are emitted, with nothing to tail from a file.
 
 ## 5. Using your own ClickHouse
 
@@ -167,7 +157,7 @@ Four independent retention windows, applied to the ClickHouse schema at install 
 re-applied by a post-upgrade Job whenever you change them:
 
 | Value                                              | Default  | Covers                                             |
-| -------------------------------------------------- | -------- | -------------------------------------------------- |
+| --------------------------------------------------- | -------- | --------------------------------------------------- |
 | `observability.clickhouse.retention.logsDays`      | 30 days  | General application logs                           |
 | `observability.clickhouse.retention.auditLogsDays` | 365 days | Security-relevant audit logs (login/logout events) |
 | `observability.clickhouse.retention.tracesDays`    | 7 days   | Distributed traces                                 |
@@ -219,22 +209,44 @@ logs are on the shorter window.
 This applies only to changing the database *name*. A normal `helm upgrade` that keeps the name is
 unaffected — the table already exists and the post-upgrade Job updates its TTLs in place.
 
-## 7. Trace sampling
+## 7. Trace sampling, and scaling the gateway
 
 Traces containing an error, and traces slower than one second, are **always kept** regardless of
-the sampling setting. Of everything else, `observability.collector.tailSamplePercentage` (default
-`10`, i.e. 10%) is kept. Say this plainly to anyone investigating "missing" traces: a trace that
-wasn't slow and had no error is very likely a case of correct, expected sampling, not a bug or a
-dropped signal.
+the sampling setting. Of everything else, `observability.collector.gateway.tailSamplePercentage`
+(default `10`, i.e. 10%) is kept. Say this plainly to anyone investigating "missing" traces: a
+trace that wasn't slow and had no error is very likely a case of correct, expected sampling, not a
+bug or a dropped signal.
 
-Sampling happens once, at the gateway Collector — the single cluster-wide Deployment that sees
-every span of a trace. This is also why the gateway is `replicas: 1` **as a correctness
-requirement, not a sizing choice**: the sampling decision needs every span of a trace in one
-process, and a plain Kubernetes Service load-balances requests (and therefore spans) across
-replicas. Raising `observability.collector.gateway.replicas` above 1 without also putting
-trace-ID-aware load balancing in front of the gateway does not increase throughput — it silently
-produces traces with missing spans, because each replica votes on only the fragment of a trace it
-happens to receive. The forwarder tier (per zone) scales freely; it does no sampling and holds no
+Sampling happens once, at the gateway Collector, which is why it needs to see every span of a
+trace in one process. The forwarder's exporter to the gateway is a **`loadbalancing` exporter**,
+not a plain `otlp` exporter pointed at a ClusterIP: it resolves the gateway's headless Service
+(DNS resolver) and hashes each trace's ID to one gateway backend, so every span of a trace lands
+on the same gateway pod regardless of which forwarder pod it arrived through. This is what makes
+it **safe to run more than one gateway replica** — a correctness property of the load-balancing
+scheme, not a manual sizing tradeoff.
+
+**Scale-out procedure:**
+
+1. Set `components.otelGateway.replicas`. Raising `deploymentSize` does **not** scale the
+   gateway — its replica preset is 1 at every size, since sampling correctness is the concern
+   here, not throughput; this is the one component you scale by hand.
+2. `helm upgrade`. The gateway Deployment's rollout uses `maxSurge: 0` / `maxUnavailable: 1`, so
+   pods change one at a time; a trace whose spans straddle the rollout can still split across the
+   old and new pod, bounded by `tail_sampling`'s `decision_wait` (30s) — an accepted, temporary
+   cost of being able to scale and update at all, not an ongoing issue.
+3. Do **not** point anything directly at the gateway's plain `<release>-otel-gateway` ClusterIP
+   Service with more than one replica configured — only the forwarder's `loadbalancing` exporter
+   (via the headless Service) preserves the "every span of a trace, one process" invariant.
+   Sending telemetry straight to the ClusterIP with multiple gateway replicas silently produces
+   traces with missing spans.
+4. `num_traces` and the `memory_limiter` limits baked into the gateway config scale with
+   `deploymentSize` (small/medium/large: 25000/50000/100000 `num_traces`, 800/1600/3200 MiB
+   `limit_mib`, 200/400/800 MiB `spike_limit_mib`). The pod's own resource requests/limits scale
+   alongside them (512Mi/1Gi/2Gi memory requests, 1Gi/2Gi/4Gi memory limits). A manual
+   `components.otelGateway.resources` override does **not** rescale these — see the note on
+   `components.otelGateway.resources` in `values.yaml`.
+
+The forwarder tier scales freely regardless of the gateway; it does no sampling and holds no
 cross-request state.
 
 ## 8. Forwarding to an external backend
@@ -245,11 +257,12 @@ ClickHouse:
 ```yaml
 observability:
   collector:
-    forward:
-      endpoint: "https://otlp-gateway.example.com/otlp"
-      existingSecret:
-        name: my-otlp-forward-token
-        key: token
+    gateway:
+      forward:
+        endpoint: "https://otlp-gateway.example.com/otlp"
+        existingSecret:
+          name: my-otlp-forward-token
+          key: token
 ```
 
 Prefer `existingSecret` over the plaintext `token` field. Forwarding happens at the gateway, so
@@ -275,10 +288,13 @@ not affect the other. Every value that only shapes a tier's own config (e.g.
 tier's `existingConfigMap` is set, since the chart no longer renders the template that would have
 read them.
 
-Start from `examples/otel-collector-custom.yaml` (a copy of the chart's own rendered gateway
-config, safe to edit), `examples/otel-collector-splunk.yaml` (adds a Splunk HEC exporter), or
+Start from `examples/otel-collector-custom.yaml` (a gateway-shaped starting point, safe to edit —
+its tuning values are illustrative and match no rendered `deploymentSize` preset), `examples/otel-collector-splunk.yaml` (adds a Splunk HEC exporter), or
 `examples/otel-collector-debug.yaml` (adds the `debug` stdout exporter from §3). All three are
-complete, applyable ConfigMaps.
+complete, applyable ConfigMaps for the **gateway** tier; there is no matching forwarder example
+because the forwarder's own config is a thin batch-and-loadbalance shape with nothing customers
+typically need to change (see `templates/otel-forwarder-configmap.yaml` if you do need to replace
+it).
 
 ## 10. Disabling telemetry
 
@@ -296,8 +312,9 @@ views in the Admin UI that read telemetry return empty results.**
 
 - **Check the Collector's own logs first** — both the forwarder and the gateway Deployments log
   to stdout.
-- **Health endpoint:** each Collector exposes `:13133` (`health_check` extension). A pod that
-  fails its own health check is a good first signal something's wrong before diving into data.
+- **Health endpoint:** each Collector, and each sidecar, exposes `:13133` (`health_check`
+  extension). A pod that fails its own health check is a good first signal something's wrong
+  before diving into data.
 - **Confirm data is arriving:** query ClickHouse directly, e.g.
   `clickhouse-client --query "SELECT count() FROM otel_logs"` against the ClickHouse Service (or
   your standalone instance).
@@ -309,6 +326,7 @@ views in the Admin UI that read telemetry return empty results.**
   - ClickHouse is unreachable from the gateway — this fails **warn-and-skip**, not hard: the
     gateway logs a retry/queue warning and keeps accepting telemetry rather than crashing, so
     check the gateway's own logs for ClickHouse connection errors.
+  - the early-startup gap in §4, if the missing lines are a handful right at pod start.
 - **Spot the `debug` exporter path:** if you've adopted `examples/otel-collector-debug.yaml`, or
   otherwise added a `debug` exporter, remember it duplicates every signal into the gateway pod's
   own stdout — a busy gateway with `debug` enabled will have much higher pod log volume than one
@@ -324,3 +342,10 @@ token and endpoint (via a Secret — see that file's header comment, not a liter
 until you do this, Splunk forwarding stops on upgrade.
 
 **`logFormat: json`** no longer affects the API or Manager services — see §3 above.
+
+**If you are upgrading from an early feature build of this chart** that had per-zone forwarders,
+a `hostLogs` DaemonSet, `observability.fileLogs`, or a gateway hard-limited to one replica: those
+values are gone, not renamed. The chart's root values schema does not reject unknown top-level
+`observability.*` keys, so leftover values under the old names are silently ignored rather than
+causing a render failure — remove them from your values file rather than relying on a schema
+error to catch them. See `charts/kasm-helm/CHANGELOG.md` for the full list.

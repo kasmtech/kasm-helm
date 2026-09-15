@@ -1,5 +1,7 @@
 # H6 — Unit test suites and end-to-end scenarios
 
+> **Historical / superseded.** Execution record for `docs/otel-integration-plan.md`; several decisions here were reversed in design review (`kasm-helm-4ss`) and do not describe the shipped chart — see `charts/kasm-helm/docs/observability.md` for current behavior.
+
 **Repo:** `kasm-helm`. **Depends on:** H2, H3, H4, H5. **Size:** large.
 
 Read `PROGRESS.md` first — the exact names, ports, volumes and endpoints the earlier phases chose are

@@ -1,5 +1,7 @@
 # Shared Context — read before any phase
 
+> **Historical / superseded.** Execution record for `docs/otel-integration-plan.md`; several decisions here were reversed in design review (`kasm-helm-4ss`) and do not describe the shipped chart — see `charts/kasm-helm/docs/observability.md` for current behavior.
+
 Everything here was verified against the code on 2026-08-04. If code and doc disagree, code wins.
 
 ---

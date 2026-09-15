@@ -1,5 +1,7 @@
 # H1 — Values, schema, helpers, secret keys
 
+> **Historical / superseded.** Execution record for `docs/otel-integration-plan.md`; several decisions here were reversed in design review (`kasm-helm-4ss`) and do not describe the shipped chart — see `charts/kasm-helm/docs/observability.md` for current behavior.
+
 > **SUPERSEDED IN PART (2026-08-06).** H1 is complete, but the `collector` values tree was
 > restructured afterwards when the forwarder/gateway split landed. The YAML block in §1 below shows the
 > **original** flat shape and is kept only as a record of what was executed. The tree as it actually

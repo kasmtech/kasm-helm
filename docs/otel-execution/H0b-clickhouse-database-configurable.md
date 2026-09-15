@@ -1,5 +1,7 @@
 # H0b — Make the ClickHouse database name configurable end to end
 
+> **Historical / superseded.** Execution record for `docs/otel-integration-plan.md`; several decisions here were reversed in design review (`kasm-helm-4ss`) and do not describe the shipped chart — see `charts/kasm-helm/docs/observability.md` for current behavior.
+
 **Repos:** `kasm_backend` (parts 1, 3, 4) and `kasm-helm` docs (part 2).
 **Depends on:** H0 (merged into the same working tree). **Blocks:** nothing, but H3/H4 must land part 2's
 instructions before they are implemented.

@@ -1,5 +1,7 @@
 # H0 — Backend: let the ClickHouse read path verify TLS
 
+> **Historical / superseded.** Execution record for `docs/otel-integration-plan.md`; several decisions here were reversed in design review (`kasm-helm-4ss`) and do not describe the shipped chart — see `charts/kasm-helm/docs/observability.md` for current behavior.
+
 **Repo:** `kasm_backend` (working directory = repo root, branch `feature/DEV-31`)
 **Depends on:** nothing. **Blocks:** H3.
 **Size:** small (one function, one test, two doc rows).

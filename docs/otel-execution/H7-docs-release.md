@@ -1,5 +1,7 @@
 # H7 — Documentation, examples, release plumbing
 
+> **Historical / superseded.** Execution record for `docs/otel-integration-plan.md`; several decisions here were reversed in design review (`kasm-helm-4ss`) and do not describe the shipped chart — see `charts/kasm-helm/docs/observability.md` for current behavior.
+
 **Repo:** `kasm-helm`. **Depends on:** H2–H5 (H6 in parallel). **Size:** medium.
 
 Read `PROGRESS.md` in full first — this phase documents what was actually built, including every

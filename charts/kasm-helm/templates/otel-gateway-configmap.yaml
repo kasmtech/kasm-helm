@@ -6,7 +6,7 @@ either, and the only tier the gateway Deployment may ever scale past 1 replica f
 docs/otel-execution/H4-collector.md.
 
 Ported from kasm_backend/install/conf/otel/otel-collector-local.yaml, minus the nginx log/metric
-receivers (those live in H5's host-log DaemonSet / nginx sidecar, not the central Collector).
+receivers (those live in the per-pod nginx sidecars, not the central Collector).
 */}}
 {{- $obs := .Values.observability -}}
 {{- if and $obs.enabled (not $obs.collector.gateway.existingConfigMap) }}
@@ -48,7 +48,7 @@ data:
         endpoint: "0.0.0.0:13133"
 
     receivers:
-      # The forwarders and the host-log DaemonSet are this receiver's only clients. Nothing
+      # The forwarders are this receiver's only clients. Nothing
       # addresses the gateway directly: no otlp/local (4318), no otlp/nginx (4316).
       otlp/remote:
         protocols:

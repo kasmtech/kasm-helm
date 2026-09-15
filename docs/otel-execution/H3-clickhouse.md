@@ -1,5 +1,7 @@
 # H3 — ClickHouse: StatefulSet, service, schema, retention
 
+> **Historical / superseded.** Execution record for `docs/otel-integration-plan.md`; several decisions here were reversed in design review (`kasm-helm-4ss`) and do not describe the shipped chart — see `charts/kasm-helm/docs/observability.md` for current behavior.
+
 **Repo:** `kasm-helm`. **Depends on:** H1, and H0 for the TLS read path.
 **Parallel-safe with:** H2, H4, H5. **Size:** large.
 

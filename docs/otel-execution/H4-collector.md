@@ -1,5 +1,7 @@
 # H4 — The OpenTelemetry Collector
 
+> **Historical / superseded.** Execution record for `docs/otel-integration-plan.md`; several decisions here were reversed in design review (`kasm-helm-4ss`) and do not describe the shipped chart — see `charts/kasm-helm/docs/observability.md` for current behavior.
+
 **Repo:** `kasm-helm`. **Depends on:** H1. **Parallel-safe with:** H2, H3, H5.
 **Size:** large.
 
