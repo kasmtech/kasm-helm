@@ -149,6 +149,35 @@ tests:
           path: data["config.yaml"]
           pattern: "storage: file_storage/checkpoints"
 
+  # ---------- per-consumer service name ----------
+  # Proxy and Connection Proxy share the nginx sidecar's collector config, but each gets its own
+  # rendered ConfigMap so their logs land in ClickHouse under distinct service names rather than
+  # both as kasm-proxy.
+  - it: proxy nginx sidecar config carries service.name kasm-proxy
+    template: templates/otel-nginx-sidecar-configmap.yaml
+    documentIndex: 0
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'field: resource\["service\.name"\]\s+value: kasm-proxy'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'field: attributes\["application"\]\s+value: kasm-proxy'
+
+  - it: connection-proxy nginx sidecar config carries service.name kasm-connection-proxy
+    template: templates/otel-nginx-sidecar-configmap.yaml
+    documentIndex: 1
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'field: resource\["service\.name"\]\s+value: kasm-connection-proxy'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'field: attributes\["application"\]\s+value: kasm-connection-proxy'
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: 'value: kasm-proxy'
+
   # The DB's log files outlive the pod, so its offsets go on the PVC rather than an emptyDir.
   - it: db sidecar tails the JSON log and checkpoints onto the data volume
     asserts:

@@ -151,12 +151,15 @@ def _service_name_seen(namespace: str, database: str, service_name: str, *, time
 def _assert_connection_proxy_sidecar_services(namespace: str, database: str) -> None:
     """guac/rdp-gateway/rdp-https-gateway ship logs via their own OTel SDK straight to the
     connection-proxy pod's otel-sidecar (kasm.otelEnv(sidecar=true) in
-    connection-proxy-statefulset.yaml:158,264,362). They emit at process startup, but without a
-    live session there's no guarantee which of the three logs first — poll each with a short
-    budget, and if one never shows up, fall back to proving the delivery path exists (the sidecar
-    container is present in the pod) rather than asserting traffic that requires a session.
+    connection-proxy-statefulset.yaml:158,264,362). kasm-connection-proxy is the nginx sidecar's
+    own filelog pipeline (otel-nginx-sidecar-configmap.yaml, kasm.otelNginxAccessLogOperators /
+    kasm.otelNginxErrorLogOperators), distinct from the proxy tier's kasm-proxy. All of these emit
+    at process/nginx startup, but without a live session there's no guarantee which shows up
+    first — poll each with a short budget, and if one never shows up, fall back to proving the
+    delivery path exists (the sidecar container is present in the pod) rather than asserting
+    traffic that requires a session.
     """
-    for service_name in ("kasm-guac", "kasm-rdp-gateway", "kasm-rdp-https-gateway"):
+    for service_name in ("kasm-guac", "kasm-rdp-gateway", "kasm-rdp-https-gateway", "kasm-connection-proxy"):
         if _service_name_seen(namespace, database, service_name, timeout_seconds=30):
             continue
         pod = get_first_pod_by_selector(namespace, "app.kubernetes.io/component=connection-proxy")

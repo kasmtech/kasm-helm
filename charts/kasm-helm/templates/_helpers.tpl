@@ -1802,11 +1802,16 @@ Dedup rules:
   directly as the `operators:` list of the unconditional otel-sidecar's filelog/nginx_access
   receiver (otel-nginx-sidecar-configmap.yaml) — the sidecar reads a plain file, so no
   container/router unwrapping is needed here.
+  Args (dict):
+    context     = root context (.)
+    serviceName = resource["service.name"]/attributes["application"] to stamp on every record
+                  (e.g. "kasm-proxy", "kasm-connection-proxy")
   Usage:
     operators:
-      {{- include "kasm.otelNginxAccessLogOperators" . | nindent 8 }}
+      {{- include "kasm.otelNginxAccessLogOperators" (dict "context" . "serviceName" "kasm-proxy") | nindent 8 }}
 */}}
 {{- define "kasm.otelNginxAccessLogOperators" -}}
+{{- $serviceName := .serviceName -}}
 - type: json_parser
   timestamp:
     parse_from: attributes.time_iso8601
@@ -1833,21 +1838,26 @@ Dedup rules:
   to:   attributes.http.response.status_code
 - type: add
   field: resource["service.name"]
-  value: kasm-proxy
+  value: {{ $serviceName }}
 - type: add
   field: attributes["application"]
-  value: kasm-proxy
+  value: {{ $serviceName }}
 {{- end -}}
 
 {{/*
   filelog operator chain for the nginx error log, ported verbatim from
   kasm_backend/install/conf/otel/otel-collector-local.yaml. See kasm.otelNginxAccessLogOperators
-  for why the DaemonSet doesn't include this define directly.
+  for the serviceName arg this define shares.
+  Args (dict):
+    context     = root context (.)
+    serviceName = resource["service.name"] to stamp on every record (e.g. "kasm-proxy",
+                  "kasm-connection-proxy")
   Usage:
     operators:
-      {{- include "kasm.otelNginxErrorLogOperators" . | nindent 8 }}
+      {{- include "kasm.otelNginxErrorLogOperators" (dict "context" . "serviceName" "kasm-proxy") | nindent 8 }}
 */}}
 {{- define "kasm.otelNginxErrorLogOperators" -}}
+{{- $serviceName := .serviceName -}}
 - type: regex_parser
   regex: '^(?P<timestamp>\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}) \[(?P<level>\w+)\] (?P<pid>\d+)#\d+: (?:\*\d+ )?(?P<message>.+)$'
   timestamp:
@@ -1864,7 +1874,7 @@ Dedup rules:
     debug:  [info, debug]
 - type: add
   field: resource["service.name"]
-  value: kasm-proxy
+  value: {{ $serviceName }}
 {{- end -}}
 
 {{/*

@@ -1,7 +1,10 @@
 {{/*
-Collector config for the nginx pods' sidecar, shared by the Kasm Proxy Deployment and the Kasm
-Connection Proxy StatefulSet. One rendered ConfigMap covers both: the forwarder endpoint is supplied
-per-pod through OTEL_EXPORTER_OTLP_ENDPOINT by kasm.otelSidecar.
+Collector config for the nginx pods' sidecar. Rendered once per consumer (Kasm Proxy Deployment,
+Kasm Connection Proxy StatefulSet) because each needs its own resource["service.name"]/
+attributes["application"] baked into the filelog operator chains (kasm.otelNginxAccessLogOperators,
+kasm.otelNginxErrorLogOperators) so their logs are distinguishable in ClickHouse. Everything else is
+identical between the two; the forwarder endpoint is supplied per-pod through
+OTEL_EXPORTER_OTLP_ENDPOINT by kasm.otelSidecar.
 
 The sidecar is the pod's single egress point. It:
   - tails the two log files nginx writes to the shared emptyDir (a sidecar cannot read another
@@ -19,10 +22,15 @@ checkpointed into the sidecar's own emptyDir so a sidecar restart neither loses 
 {{- $obs := .Values.observability -}}
 {{- if $obs.enabled }}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $variants := list (dict "component" "otel-nginx-sidecar" "serviceName" "kasm-proxy") (dict "component" "otel-nginx-sidecar-connection-proxy" "serviceName" "kasm-connection-proxy") -}}
+{{- range $i, $v := $variants }}
+{{- if $i }}
+---
+{{- end }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  {{- include "kasm.metadata" (dict "context" . "component" "otel-nginx-sidecar" "resource" "configMap" "include" "all") | indent 2 }}
+  {{- include "kasm.metadata" (dict "context" $ "component" $v.component "resource" "configMap" "include" "all") | indent 2 }}
 data:
   config.yaml: |
     extensions:
@@ -45,14 +53,14 @@ data:
         start_at: end
         storage: file_storage/checkpoints
         operators:
-          {{- include "kasm.otelNginxAccessLogOperators" . | nindent 10 }}
+          {{- include "kasm.otelNginxAccessLogOperators" (dict "context" $ "serviceName" $v.serviceName) | nindent 10 }}
 
       filelog/nginx_error:
         include: [/var/log/nginx/otel/error.log]
         start_at: end
         storage: file_storage/checkpoints
         operators:
-          {{- include "kasm.otelNginxErrorLogOperators" . | nindent 10 }}
+          {{- include "kasm.otelNginxErrorLogOperators" (dict "context" $ "serviceName" $v.serviceName) | nindent 10 }}
 
       # ngx_otel_module traces. Loopback only.
       otlp/nginx:
@@ -118,4 +126,5 @@ data:
                   prometheus:
                     host: "0.0.0.0"
                     port: {{ $constants.otel.selfMetrics }}
+{{- end }}
 {{- end }}
