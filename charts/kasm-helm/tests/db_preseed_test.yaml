@@ -343,6 +343,58 @@ tests:
           path: metadata.name
           value: RELEASE-NAME-password-salts
 
+  - it: renders group_permissions as [] when the api config has no permissions and there are no groups
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmConfig.defaultApiUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.apiConfigs:
+        - name: "MyApi"
+          api_key: "MyApiKey"
+    asserts:
+      - documentIndex: 2
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'group_permissions: \[\]'
+
+  - it: renders group_permissions, group_settings and user_groups as [] for a group with neither and a user in no group
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmConfig.defaultApiUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.groups:
+        - name: Lonely
+      kasmConfig.config.users:
+        - username: solo@example.com
+          password: "solo-password"
+    asserts:
+      - documentIndex: 2
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'group_permissions: \[\]'
+      - documentIndex: 2
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'group_settings: \[\]'
+      - documentIndex: 2
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'user_groups: \[\]'
+
   - it: apiConfig api_id and group_permission_id use the startup.sh uuid token, not a real UUID
     set:
       publicAddr: kasm.example.com

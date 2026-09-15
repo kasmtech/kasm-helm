@@ -52,6 +52,8 @@ See [Migrating to connection-proxy](./README.md#migrating-to-connection-proxy) f
 
 ### Fixed
 
+- `kasmConfig.generatePreseed`: `group_permissions`, `group_settings` and `user_groups` rendered as `null` instead of `[]` whenever their parents existed without the nested field (an `apiConfigs` entry or a group with no `permissions`, a group with no `settings`, a user in no group). The importer rejects `null` and db-init crash-looped on an otherwise valid preseed. Each list now checks for actual entries.
+
 - A deployed zone without `proxy_hostname` added a bogus empty SAN (rendered from Go's `<no value>`) to the certificates instead of being skipped; the cert-manager Certificate also failed the render outright where the self-signed path skipped. Both now skip hostname-less zones.
 - The rdp-https-gateway app-config ConfigMap resolved its zone from the first `kasmZones` entry instead of the primary zone, so with `primary: true` on a non-first zone the ConfigMap named the wrong zone and disagreed with the per-zone `SERVER_ZONE_NAME` env var. It now resolves through `kasm.primaryZone`.
 - The api, manager, and kasm-proxy Services and the proxy-settings ConfigMap ranged over raw `kasmZones` instead of the normalized zone list, so a zone declared only with the `zone_name` alias got an empty name suffix on those four resources while its Deployment was suffixed correctly.
