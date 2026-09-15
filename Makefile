@@ -123,7 +123,7 @@ CRANE_ARCH := $(subst amd64,x86_64,$(ARCH))
 CLOUD_PROVIDER_KIND_PID_FILE ?= $(CURDIR)/.kind/cloud-provider-kind.pid
 CLOUD_PROVIDER_KIND_LOG ?= $(CURDIR)/.kind/cloud-provider-kind.log
 
-.PHONY: tools lint render kubeconform kyverno unittest readme readme-check changelog changelog-llm changelog-console changelog-console-llm changelog-check docs test build-pytest kind-up kind-down kind-recreate kind-ensure kind-load-images kind-load-old-images kind-clean-namespace kind-prep pytest-docker e2e e2e-basic e2e-trustedca e2e-multizone e2e-externaldb e2e-backup e2e-backup-pss e2e-pss e2e-json-logging e2e-observability e2e-observability-off e2e-upgrade e2e-upgrade-included e2e-upgrade-standalone e2e-settle e2e-preseed validate-preseed extract-old-chart clean
+.PHONY: tools lint render kubeconform kyverno unittest otel-validate readme readme-check changelog changelog-llm changelog-console changelog-console-llm changelog-check docs test build-pytest kind-up kind-down kind-recreate kind-ensure kind-load-images kind-load-old-images kind-clean-namespace kind-prep pytest-docker e2e e2e-basic e2e-trustedca e2e-multizone e2e-externaldb e2e-backup e2e-backup-pss e2e-pss e2e-json-logging e2e-observability e2e-observability-off e2e-upgrade e2e-upgrade-included e2e-upgrade-standalone e2e-settle e2e-preseed validate-preseed extract-old-chart clean
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*## "; printf "\nUsage: make \033[36m<target>\033[0m\n"} \
@@ -295,7 +295,23 @@ kyverno: tools render ## Apply Kyverno policies against rendered manifests
 unittest: tools ## Run helm-unittest test suites
 	HELM_PLUGINS="$(HELM_PLUGINS_DIR)" $(HELM) unittest $(CHART_DIR)
 
-test: lint kubeconform kyverno unittest ## Run full static suite: lint + kubeconform + kyverno + unittest
+otel-validate: tools $(HELM) ## Validate rendered OTel Collector configs with the collector's own `validate` command
+	@set -euo pipefail; \
+	command -v docker >/dev/null 2>&1 || { echo "otel-validate: docker is required to run 'otelcol-contrib validate' and was not found in PATH" >&2; exit 1; }; \
+	tmp_dir=$$(mktemp -d); \
+	trap 'rm -rf "$$tmp_dir"' EXIT; \
+	rendered=$$tmp_dir/rendered.yaml; \
+	manifest=$$tmp_dir/manifest.txt; \
+	$(HELM) template kasm-otel-validate $(CHART_DIR) -n kasm-test -f $(TEST_VALUES_DIR)/default.yaml > $$rendered; \
+	python3 scripts/otel_validate_extract.py $$rendered $$tmp_dir $$manifest; \
+	while IFS='|' read -r cfg_path image; do \
+	  echo "otel-validate: validating $$cfg_path against $$image"; \
+	  docker run --rm -i -e OTEL_BEARER_TOKEN=dummy -e CLICKHOUSE_PASSWORD=dummy \
+	    -e OTEL_FORWARD_TOKEN=dummy -e OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
+	    "$$image" validate --config=/dev/stdin < "$$cfg_path"; \
+	done < "$$manifest"
+
+test: lint kubeconform kyverno unittest otel-validate ## Run full static suite: lint + kubeconform + kyverno + unittest + otel-validate
 
 validate-preseed: tools render ## Validate preseed output against the 1.19.0 schema
 	python3 tests/validate_preseed.py \
