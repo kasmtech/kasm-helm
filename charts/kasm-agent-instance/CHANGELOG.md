@@ -6,6 +6,8 @@ All notable changes to the kasm-agent-instance chart are documented here.
 
 ### Changed
 
+- `publicPort` defaults to empty and is derived: 4444 while the hostname is derived in-cluster, the pinned `sessionProxy.service.httpsNodePort` when the proxy Service is a `NodePort`, 443 otherwise. An explicit value still wins. Rendering now fails for a `NodePort` proxy with neither a pinned node port nor a `publicPort`: the control plane dials `https://<publicHostname>:<publicPort>/` for its Hello before every launch, a random node port is never 443, and the only symptom was every session request answering "No Agent slots available" while the agent looked healthy (seen live on a CRI-O lab, 2026-09-14). Set `publicPort: 443` explicitly if a load balancer or firewall in front forwards 443 to the node port.
+- `imagePuller.nodeSelector`, `imagePuller.tolerations` and `imagePuller.affinity` pass through to the `KasmImagePuller`, so the chart's puller can follow the session pool instead of staging images on every schedulable node.
 - README lists the self-signed session-proxy Secret with its three render-time lookup cases (generate; reuse or regenerate when release-owned; leave untouched when created by anyone else), states that only one of the five exposure options renders and that `httpRoute`/`tlsRoute` need a non-empty `parentRefs`, cuts the LoadBalancer/NodePort, client-IP and older-operator material to the two value snippets and the 30000-32767 constraint (linking the how-to), and lists the required values with `inClusterControlPlane` in mind. The HTML values-table template moved to the shared `_templates.gotmpl`.
 
 ### Fixed

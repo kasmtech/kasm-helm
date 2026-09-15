@@ -207,6 +207,32 @@ tests:
           value: 32080
       - isNull:
           path: spec.sessionProxy.service.annotations
+      - equal:
+          path: spec.publicPort
+          value: 32443              # follows the pinned node port: the control plane dials it for its Hello
+
+  - it: keeps an explicit publicPort over the pinned node port
+    set:
+      publicPort: 443
+      sessionProxy:
+        service:
+          type: NodePort
+          httpsNodePort: 32443
+    asserts:
+      - equal:
+          path: spec.publicPort
+          value: 443
+
+  - it: accepts an unpinned NodePort proxy once publicPort names the port in front of it
+    set:
+      publicPort: 443
+      sessionProxy:
+        service:
+          type: NodePort
+    asserts:
+      - equal:
+          path: spec.publicPort
+          value: 443
 
   - it: renders the service block for an otherwise default ClusterIP carrying annotations
     set:

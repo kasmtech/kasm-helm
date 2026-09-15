@@ -76,3 +76,12 @@ tests:
     asserts:
       - failedTemplate:
           errorMessage: "agent.tlsRoute.enabled is set but agent.tlsRoute.parentRefs is empty - the TLSRoute would attach to no Gateway, and the session proxy would stay unreachable from outside the cluster."
+
+  - it: refuses a NodePort proxy with neither a pinned node port nor a publicPort
+    set:
+      sessionProxy:
+        service:
+          type: NodePort
+    asserts:
+      - failedTemplate:
+          errorPattern: "agent.sessionProxy.service.type is NodePort but neither agent.sessionProxy.service.httpsNodePort nor agent.publicPort is set"

@@ -80,9 +80,15 @@ manager:
 #
 publicHostname: ""
 
-# publicPort -- Port the session proxy is reachable on publicly.
+# publicPort -- Port the session proxy is reachable on publicly: the port browsers connect to and the one the
+# control plane dials (`https://<publicHostname>:<publicPort>/agent/api/v1/hello/`) before it hands this agent
+# a session. Empty (the default) derives it: 4444 while the hostname is derived in-cluster, the pinned
+# `sessionProxy.service.httpsNodePort` when the proxy Service is a `NodePort`, 443 otherwise. Set it
+# explicitly when something in front of the proxy owns the port (an ingress or load balancer on 443, a
+# firewall forwarding 443 to the node port). A wrong value fails silently at install time and loudly at the
+# first launch: the Hello is refused and every session request answers "No Agent slots available".
 #
-publicPort: 443
+publicPort: ""
 
 # zone -- Deployment zone the agent reports to the manager. Must match a zone configured on the control plane.
 #

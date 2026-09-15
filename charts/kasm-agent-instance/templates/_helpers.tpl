@@ -121,12 +121,17 @@ app.kubernetes.io/part-of: kasm-ai
 
 {{/*
   The port the manager reaches the session proxy on. Derived to 4444, the proxy's own HTTPS
-  listener, only while the public hostname is derived too (relayed, in-cluster); an explicit
-  publicHostname takes publicPort as set (443 by default), because then something in front of
-  the proxy owns the port.
+  listener, while the public hostname is derived too (relayed, in-cluster). Otherwise an explicit
+  publicPort wins; with none set, a NodePort Service with a pinned httpsNodePort is reached on that
+  node port (the control plane dials publicPort for its Hello, so the two must agree), and anything
+  else takes 443, because then something in front of the proxy owns the port.
 */}}
 {{- define "kasmAgentInstance.publicPort" -}}
-{{- if and .Values.inClusterControlPlane (not .Values.publicHostname) -}}4444{{- else -}}{{ .Values.publicPort }}{{- end -}}
+{{- if and .Values.inClusterControlPlane (not .Values.publicHostname) -}}4444
+{{- else if .Values.publicPort -}}{{ .Values.publicPort }}
+{{- else if and (eq (toString .Values.sessionProxy.service.type) "NodePort") .Values.sessionProxy.service.httpsNodePort -}}{{ .Values.sessionProxy.service.httpsNodePort }}
+{{- else -}}443
+{{- end -}}
 {{- end }}
 
 {{/*

@@ -35,4 +35,15 @@
 {{- if and $v.tlsRoute.enabled (not $v.tlsRoute.parentRefs) -}}
   {{- fail "agent.tlsRoute.enabled is set but agent.tlsRoute.parentRefs is empty - the TLSRoute would attach to no Gateway, and the session proxy would stay unreachable from outside the cluster." -}}
 {{- end -}}
+
+{{/*
+  A NodePort session proxy with neither a pinned node port nor an explicit publicPort: Kubernetes
+  allocates the port at install time, the control plane dials https://<publicHostname>:<publicPort>/
+  for its Hello before every launch, and the default 443 is not that port, so every session request
+  would answer "No Agent slots available" while everything looks healthy. Seen live 2026-09-14.
+  The relayed in-cluster case derives both hostname and port and is exempt.
+*/}}
+{{- if and (eq (toString $v.sessionProxy.service.type) "NodePort") (not $v.sessionProxy.service.httpsNodePort) (not $v.publicPort) (not (and $v.inClusterControlPlane (not $v.publicHostname))) -}}
+  {{- fail "agent.sessionProxy.service.type is NodePort but neither agent.sessionProxy.service.httpsNodePort nor agent.publicPort is set. The control plane reaches the session proxy at https://<publicHostname>:<publicPort>/ and a randomly allocated node port is never 443, so every launch would fail with 'No Agent slots available'. Pin agent.sessionProxy.service.httpsNodePort (publicPort then follows it), or set agent.publicPort to the port something in front of the proxy forwards to it." -}}
+{{- end -}}
 {{- end -}}
