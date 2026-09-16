@@ -253,3 +253,13 @@ tests:
       - hasDocuments:
           count: 0
         template: templates/otel-gateway-configmap.yaml
+
+  # ---------- read-only ClickHouse user (bd kasm-helm-hvx): gateway stays on the writer ----------
+  - it: gateway Collector's CLICKHOUSE_PASSWORD secretKeyRef stays on the writer key when readUsername is set
+    template: templates/otel-gateway-deployment.yaml
+    set:
+      observability.clickhouse.readUsername: kasm_otel_ro
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="CLICKHOUSE_PASSWORD")].valueFrom.secretKeyRef.key
+          value: clickhouse-password

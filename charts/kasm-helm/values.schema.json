@@ -1830,13 +1830,19 @@
             },
             "username": {
               "default": "kasm_otel",
-              "description": "ClickHouse user Kasm connects as.",
+              "description": "ClickHouse user Kasm connects as. Also the writer credential used by the gateway Collector and the retention Job.",
               "title": "username",
+              "type": "string"
+            },
+            "readUsername": {
+              "default": "",
+              "description": "ClickHouse user api/manager use to read reports, holding only GRANT SELECT ON <db>.* instead of `username`'s full access. When the chart manages ClickHouse (`enabled: true`, `standalone: false`), leaving this empty still gets you a read-only user: it defaults to `kasm_otel_ro`. For a `standalone` external ClickHouse, leaving this empty instead keeps api/manager on `username` (no read-only user is rendered) unless you set this to a read-only user you have provisioned there yourself.",
+              "title": "readUsername",
               "type": "string"
             },
             "existingSecret": {
               "additionalProperties": false,
-              "description": "Read the ClickHouse password from an existing Secret instead of the chart-generated `clickhouse-password` key. Both `name` and `key` are required when used.",
+              "description": "Read the ClickHouse password(s) from an existing Secret instead of the chart-generated `clickhouse-password`/`clickhouse-ro-password` keys. `name` and `key` (for `username`) are required together when used; `readKey` (for `readUsername`) is optional and falls back to `key` when unset, matching `readUsername`'s own fallback to `username`.",
               "title": "existingSecret",
               "type": "object",
               "properties": {
@@ -1848,6 +1854,11 @@
                 "key": {
                   "default": "",
                   "title": "key",
+                  "type": "string"
+                },
+                "readKey": {
+                  "default": "",
+                  "title": "readKey",
                   "type": "string"
                 }
               }
@@ -2636,6 +2647,12 @@
               "default": "",
               "description": "Pin the clickhouse-password credential to a specific value instead of random generation.",
               "title": "clickhouse-password",
+              "type": "string"
+            },
+            "clickhouse-ro-password": {
+              "default": "",
+              "description": "Pin the clickhouse-ro-password credential to a specific value instead of random generation.",
+              "title": "clickhouse-ro-password",
               "type": "string"
             },
             "otel-bearer-token": {

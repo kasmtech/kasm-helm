@@ -231,6 +231,108 @@ tests:
       - notExists:
           path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_ENDPOINT")]
 
+  # ---------- KASM_CLICKHOUSE_USER: RO fallback/switch (bd kasm-helm-hvx) ----------
+  - it: api KASM_CLICKHOUSE_USER defaults to kasm_otel_ro when the chart manages ClickHouse (D4)
+    template: templates/api-deployment.yaml
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_USER" && @.value=="kasm_otel_ro")]
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_PASSWORD")].valueFrom.secretKeyRef.key
+          value: clickhouse-ro-password
+
+  - it: manager KASM_CLICKHOUSE_USER defaults to kasm_otel_ro when the chart manages ClickHouse (D4)
+    template: templates/manager-deployment.yaml
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_USER" && @.value=="kasm_otel_ro")]
+
+  - it: api KASM_CLICKHOUSE_USER falls back to the writer username on a standalone external ClickHouse
+    template: templates/api-deployment.yaml
+    set:
+      observability.clickhouse.standalone: true
+      observability.clickhouse.nativeEndpoint: "tcp://ch.example.com:9440"
+      observability.clickhouse.httpEndpoint: "https://ch.example.com:8443"
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_USER" && @.value=="kasm_otel")]
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_PASSWORD")].valueFrom.secretKeyRef.key
+          value: clickhouse-password
+
+  - it: api switches to a custom RO user and RO secret key when readUsername is set
+    template: templates/api-deployment.yaml
+    set:
+      observability.clickhouse.readUsername: kasm_otel_custom_ro
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_USER" && @.value=="kasm_otel_custom_ro")]
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_PASSWORD")].valueFrom.secretKeyRef.key
+          value: clickhouse-ro-password
+
+  - it: manager switches to a custom RO user when readUsername is set
+    template: templates/manager-deployment.yaml
+    set:
+      observability.clickhouse.readUsername: kasm_otel_custom_ro
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_USER" && @.value=="kasm_otel_custom_ro")]
+
+  # ---------- KASM_CLICKHOUSE_PASSWORD key wiring: existingSecret + readUsername + readKey ----------
+  - it: api uses the writer key for RO password when existingSecret is set and readKey is unset
+    template: templates/api-deployment.yaml
+    set:
+      observability.clickhouse.readUsername: kasm_otel_ro
+      observability.clickhouse.existingSecret.name: my-ch-secret
+      observability.clickhouse.existingSecret.key: ch-pass
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_PASSWORD")].valueFrom.secretKeyRef.name
+          value: my-ch-secret
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_PASSWORD")].valueFrom.secretKeyRef.key
+          value: ch-pass
+
+  - it: api uses readKey for RO password when existingSecret and readKey are both set
+    template: templates/api-deployment.yaml
+    set:
+      observability.clickhouse.readUsername: kasm_otel_ro
+      observability.clickhouse.existingSecret.name: my-ch-secret
+      observability.clickhouse.existingSecret.key: ch-pass
+      observability.clickhouse.existingSecret.readKey: ch-ro-pass
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_PASSWORD")].valueFrom.secretKeyRef.key
+          value: ch-ro-pass
+
+  - it: manager uses the writer key for RO password when existingSecret is set and readKey is unset
+    template: templates/manager-deployment.yaml
+    set:
+      observability.clickhouse.readUsername: kasm_otel_ro
+      observability.clickhouse.existingSecret.name: my-ch-secret
+      observability.clickhouse.existingSecret.key: ch-pass
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_PASSWORD")].valueFrom.secretKeyRef.name
+          value: my-ch-secret
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_PASSWORD")].valueFrom.secretKeyRef.key
+          value: ch-pass
+
+  - it: manager uses readKey for RO password when existingSecret and readKey are both set
+    template: templates/manager-deployment.yaml
+    set:
+      observability.clickhouse.readUsername: kasm_otel_ro
+      observability.clickhouse.existingSecret.name: my-ch-secret
+      observability.clickhouse.existingSecret.key: ch-pass
+      observability.clickhouse.existingSecret.readKey: ch-ro-pass
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_PASSWORD")].valueFrom.secretKeyRef.key
+          value: ch-ro-pass
+
+
   # ---------- KASM_LOG_CONSOLE_COLOR ----------
   - it: KASM_LOG_CONSOLE_COLOR=false on api
     template: templates/api-deployment.yaml

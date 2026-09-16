@@ -1687,17 +1687,40 @@ Dedup rules:
 {{- $endpoint := include "kasm.clickhouseHttpEndpoint" (dict "context" $ctx) -}}
 {{- $secretName := default $constants.secrets.name $ch.existingSecret.name -}}
 {{- $secretKey := default "clickhouse-password" $ch.existingSecret.key -}}
+{{- /* api/manager read as the RO user when one is configured. An unset readUsername defaults to
+     "kasm_otel_ro" when the chart manages ClickHouse (enabled && !standalone) — a stock install
+     gets the read-only split without extra values. A standalone external ClickHouse has no
+     RO user provisioned unless readUsername is set explicitly, so an unset value there falls
+     back to the writer credential unchanged. */ -}}
+{{- $readUser := $ch.readUsername -}}
+{{- if not $readUser -}}
+{{- if and $ch.enabled (not $ch.standalone) -}}
+{{- $readUser = "kasm_otel_ro" -}}
+{{- else -}}
+{{- $readUser = $ch.username -}}
+{{- end -}}
+{{- end -}}
+{{- $readSecretKey := $secretKey -}}
+{{- if ne $readUser $ch.username }}
+{{- if $ch.existingSecret.readKey }}
+{{- $readSecretKey = $ch.existingSecret.readKey }}
+{{- else if $ch.existingSecret.name }}
+{{- $readSecretKey = $secretKey }}
+{{- else }}
+{{- $readSecretKey = "clickhouse-ro-password" }}
+{{- end }}
+{{- end -}}
 - name: KASM_CLICKHOUSE_ENDPOINT
   value: {{ $endpoint | quote }}
 - name: KASM_CLICKHOUSE_DATABASE
   value: {{ $ch.database | quote }}
 - name: KASM_CLICKHOUSE_USER
-  value: {{ $ch.username | quote }}
+  value: {{ $readUser | quote }}
 - name: KASM_CLICKHOUSE_PASSWORD
   valueFrom:
     secretKeyRef:
       name: {{ $secretName }}
-      key: {{ $secretKey }}
+      key: {{ $readSecretKey }}
 {{- if and (not $ch.standalone) $ch.tls }}
 - name: KASM_CLICKHOUSE_CA_CERT
   value: /etc/ssl/certs/kasm_clickhouse.crt
@@ -1732,6 +1755,15 @@ Dedup rules:
 {{- end -}}
 {{- if and $ch.caCert $ch.caCertConfigMap -}}
   {{- fail "observability.clickhouse.caCert and observability.clickhouse.caCertConfigMap are mutually exclusive: caCert has the chart render a ConfigMap from literal PEM text, caCertConfigMap points at one you already manage." -}}
+{{- end -}}
+{{- /* Same default readUsername resolution as kasm.clickhouseEnv/clickhouse-configmap.yaml/
+     clickhouse-statefulset.yaml: bundled ClickHouse defaults to kasm_otel_ro, external stays empty. */ -}}
+{{- $effectiveReadUsername := $ch.readUsername -}}
+{{- if and (not $effectiveReadUsername) $ch.enabled (not $ch.standalone) -}}
+  {{- $effectiveReadUsername = "kasm_otel_ro" -}}
+{{- end -}}
+{{- if and $effectiveReadUsername (eq $effectiveReadUsername $ch.username) -}}
+  {{- fail (printf "observability.clickhouse.readUsername (%q) must differ from observability.clickhouse.username (%q): ClickHouse's users.xml cannot define two users with the same name, and the second definition silently discards the read-only password." $effectiveReadUsername $ch.username) -}}
 {{- end -}}
 {{- $forwardSecretNameSet := ne $collector.gateway.forward.existingSecret.name "" -}}
 {{- $forwardSecretKeySet := ne $collector.gateway.forward.existingSecret.key "" -}}

@@ -253,6 +253,22 @@ tests:
       - failedTemplate:
           errorMessage: "observability.collector.forwarder.externalEndpoint is mutually exclusive with observability.collector.forwarder.existingConfigMap: externalEndpoint means the chart renders no forwarder at all, so there is no config for it to override. The gateway is unaffected either way."
 
+  - it: readUsername equal to username fails (bd kasm-helm-hvx)
+    template: templates/otel-forwarder-configmap.yaml
+    set:
+      observability.clickhouse.readUsername: kasm_otel
+    asserts:
+      - failedTemplate:
+          errorMessage: "observability.clickhouse.readUsername (\"kasm_otel\") must differ from observability.clickhouse.username (\"kasm_otel\"): ClickHouse's users.xml cannot define two users with the same name, and the second definition silently discards the read-only password."
+
+  - it: readUsername defaulting to kasm_otel_ro equal to a custom username fails (bd kasm-helm-hvx)
+    template: templates/otel-forwarder-configmap.yaml
+    set:
+      observability.clickhouse.username: kasm_otel_ro
+    asserts:
+      - failedTemplate:
+          errorMessage: "observability.clickhouse.readUsername (\"kasm_otel_ro\") must differ from observability.clickhouse.username (\"kasm_otel_ro\"): ClickHouse's users.xml cannot define two users with the same name, and the second definition silently discards the read-only password."
+
   - it: tailSamplePercentage above 100 fails
     template: templates/otel-forwarder-configmap.yaml
     set:

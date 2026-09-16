@@ -281,6 +281,7 @@ kasmSecrets:
     admin-password: ""
     user-password: ""
     clickhouse-password: ""
+    clickhouse-ro-password: ""
     otel-bearer-token: ""
   # Example additional custom secret value:
   #   my-custom-secret: "some-value"
@@ -1196,15 +1197,27 @@ observability:
     # deployment.
     #
     database: kasm_otel
-    # observability.clickhouse.username -- ClickHouse user Kasm connects as.
+    # observability.clickhouse.username -- ClickHouse user Kasm connects as. Also the writer credential
+    # used by the gateway Collector and the retention Job.
     #
     username: kasm_otel
-    # observability.clickhouse.existingSecret -- Read the ClickHouse password from an existing Secret
-    # instead of the chart-generated `clickhouse-password` key. Both `name` and `key` are required when used.
+    # observability.clickhouse.readUsername -- ClickHouse user api/manager use to read reports, holding
+    # only GRANT SELECT ON <db>.* instead of `username`'s full access. When the chart manages
+    # ClickHouse (`enabled: true`, `standalone: false`), leaving this empty still gets you a
+    # read-only user: it defaults to `kasm_otel_ro`. For a `standalone` external ClickHouse, leaving
+    # this empty instead keeps api/manager on `username` (no read-only user is rendered) unless you
+    # set this to a read-only user you have provisioned there yourself.
+    #
+    readUsername: ""
+    # observability.clickhouse.existingSecret -- Read the ClickHouse password(s) from an existing Secret
+    # instead of the chart-generated `clickhouse-password`/`clickhouse-ro-password` keys. `name` and `key`
+    # (for `username`) are required together when used; `readKey` (for `readUsername`) is optional and
+    # falls back to `key` when unset, matching `readUsername`'s own fallback to `username`.
     #
     existingSecret:
       name: ""
       key: ""
+      readKey: ""
     # observability.clickhouse.tls -- Enable TLS on the bundled ClickHouse's 8443 (HTTPS) and 9440 (native)
     # ports using the same certificate as the rest of Kasm, mirroring how the bundled Kasm DB is configured.
     # Requires `certificate.secretName` or cert-manager. Has no effect when `standalone` is true.

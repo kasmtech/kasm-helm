@@ -247,3 +247,88 @@ tests:
       - matchRegex:
           path: spec.template.spec.containers[0].args[0]
           pattern: '\$\{CLICKHOUSE_DATABASE\}\.otel_traces'
+
+  # ---------- read-only user (bd kasm-helm-hvx) ----------
+  - it: bundled default renders the kasm_otel_ro read-only user when readUsername is unset (D4)
+    template: templates/clickhouse-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["users.xml"]
+          pattern: "<kasm_otel_ro>"
+      - matchRegex:
+          path: data["users.xml"]
+          pattern: "GRANT SELECT ON kasm_otel\\.\\*"
+
+  - it: read-only user rendered with GRANT SELECT (not ALL) when readUsername is set
+    template: templates/clickhouse-configmap.yaml
+    set:
+      observability.clickhouse.readUsername: kasm_otel_ro
+    asserts:
+      - matchRegex:
+          path: data["users.xml"]
+          pattern: "<kasm_otel_ro>"
+      - matchRegex:
+          path: data["users.xml"]
+          pattern: "GRANT SELECT ON kasm_otel\\.\\*"
+      - matchRegex:
+          path: data["users.xml"]
+          pattern: 'from_env="KASM_CLICKHOUSE_READ_PASSWORD"'
+      # mutation check: the writer user's own grant is untouched (still ALL, not narrowed to SELECT)
+      - matchRegex:
+          path: data["users.xml"]
+          pattern: "GRANT ALL ON kasm_otel\\.\\*"
+
+  - it: ClickHouse StatefulSet carries KASM_CLICKHOUSE_READ_PASSWORD when readUsername is set
+    template: templates/clickhouse-statefulset.yaml
+    set:
+      observability.clickhouse.readUsername: kasm_otel_ro
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_READ_PASSWORD")].valueFrom.secretKeyRef
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_READ_PASSWORD")].valueFrom.secretKeyRef.key
+          value: clickhouse-ro-password
+
+  - it: ClickHouse StatefulSet carries KASM_CLICKHOUSE_READ_PASSWORD by default (bundled RO user, D4)
+    template: templates/clickhouse-statefulset.yaml
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_READ_PASSWORD")].valueFrom.secretKeyRef
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_READ_PASSWORD")].valueFrom.secretKeyRef.key
+          value: clickhouse-ro-password
+
+  - it: ClickHouse StatefulSet RO secret key follows existingSecret.readKey wiring
+    template: templates/clickhouse-statefulset.yaml
+    set:
+      observability.clickhouse.existingSecret.name: my-ch-secret
+      observability.clickhouse.existingSecret.key: ch-pass
+      observability.clickhouse.readUsername: kasm_otel_ro
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_READ_PASSWORD")].valueFrom.secretKeyRef.name
+          value: my-ch-secret
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_READ_PASSWORD")].valueFrom.secretKeyRef.key
+          value: ch-pass
+
+  - it: ClickHouse StatefulSet RO secret key uses readKey when set alongside existingSecret
+    template: templates/clickhouse-statefulset.yaml
+    set:
+      observability.clickhouse.existingSecret.name: my-ch-secret
+      observability.clickhouse.existingSecret.key: ch-pass
+      observability.clickhouse.existingSecret.readKey: ch-ro-pass
+      observability.clickhouse.readUsername: kasm_otel_ro
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_READ_PASSWORD")].valueFrom.secretKeyRef.key
+          value: ch-ro-pass
+
+  - it: retention Job stays on the writer secret key when readUsername is set
+    template: templates/clickhouse-retention-job.yaml
+    set:
+      observability.clickhouse.readUsername: kasm_otel_ro
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="CLICKHOUSE_PASSWORD")].valueFrom.secretKeyRef.key
+          value: clickhouse-password

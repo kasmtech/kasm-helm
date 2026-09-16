@@ -18,6 +18,16 @@ base image's docker-entrypoint.sh has non-obvious behavior around these):
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- $secretName := default $constants.secrets.name $ch.existingSecret.name -}}
 {{- $secretKey := default "clickhouse-password" $ch.existingSecret.key -}}
+{{- /* Bundled ClickHouse always renders the RO user (see clickhouse-configmap.yaml), regardless
+     of readUsername, so the RO password env var is unconditional here too. */ -}}
+{{- $roSecretKey := $secretKey -}}
+{{- if $ch.existingSecret.readKey }}
+{{- $roSecretKey = $ch.existingSecret.readKey }}
+{{- else if $ch.existingSecret.name }}
+{{- $roSecretKey = $secretKey }}
+{{- else }}
+{{- $roSecretKey = "clickhouse-ro-password" }}
+{{- end }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -74,6 +84,11 @@ spec:
                 secretKeyRef:
                   name: {{ $secretName }}
                   key: {{ $secretKey }}
+            - name: KASM_CLICKHOUSE_READ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: {{ $roSecretKey }}
           ports:
             - name: ch-http
               containerPort: {{ $constants.clickhouse.http }}

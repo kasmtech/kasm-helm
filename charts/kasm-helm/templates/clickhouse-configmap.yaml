@@ -11,6 +11,10 @@ StatefulSet supplies KASM_CLICKHOUSE_PASSWORD from the kasm-secrets Secret via s
 */}}
 {{- if and .Values.observability.enabled .Values.observability.clickhouse.enabled (not .Values.observability.clickhouse.standalone) }}
 {{- $ch := .Values.observability.clickhouse }}
+{{- /* Bundled ClickHouse: an unset readUsername defaults to the RO user below rather than the
+     writer-fallback external installs get (see kasm.clickhouseEnv), so a stock install ships
+     with api/manager off the drop-capable writer credential without extra values. */ -}}
+{{- $readUsername := default "kasm_otel_ro" $ch.readUsername }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -76,6 +80,26 @@ data:
                     <query>GRANT ALL ON {{ $ch.database }}.*</query>
                 </grants>
             </{{ $ch.username }}>
+            <!--
+              Read-only user for api/manager reporting queries. GRANT SELECT ON <db>.* is the ticket's
+              specified shape (bd kasm-helm-hvx). Whether Kasm's reporting queries also touch system.*
+              tables outside this grant is an open risk this chart cannot verify (the application query
+              text lives outside this repo) — an XML grant that's too narrow fails as empty reports, not
+              an error. The e2e suite exercises a real reporting-style query as this user to catch that
+              case; if it needs widening, add the specific system.* table(s) required, not a blanket grant.
+            -->
+            <{{ $readUsername }}>
+                <password from_env="KASM_CLICKHOUSE_READ_PASSWORD"/>
+                <networks>
+                    <ip>::/0</ip>
+                </networks>
+                <profile>default</profile>
+                <quota>default</quota>
+                <access_management>0</access_management>
+                <grants>
+                    <query>GRANT SELECT ON {{ $ch.database }}.*</query>
+                </grants>
+            </{{ $readUsername }}>
         </users>
     </clickhouse>
 

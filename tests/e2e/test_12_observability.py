@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import time
@@ -27,7 +28,9 @@ _TELEMETRY_FLUSH_TIMEOUT_SECONDS = 90
 _TELEMETRY_POLL_SECONDS = 5
 
 
-def _low_resource_values(database: str | None = None, *, gateway_replicas: int | None = None) -> dict:
+def _low_resource_values(
+    database: str | None = None, *, gateway_replicas: int | None = None, read_username: str | None = None
+) -> dict:
     low_resources = {"requests": {"cpu": "50m", "memory": "256Mi"}}
     low_resources_proxy = {"requests": {"cpu": "50m", "memory": "128Mi"}}
     low_resources_gw = {"requests": {"cpu": "25m", "memory": "128Mi"}}
@@ -59,8 +62,13 @@ def _low_resource_values(database: str | None = None, *, gateway_replicas: int |
             },
         },
     }
+    clickhouse_obs: dict = {}
     if database:
-        values_obj["observability"] = {"clickhouse": {"database": database}}
+        clickhouse_obs["database"] = database
+    if read_username:
+        clickhouse_obs["readUsername"] = read_username
+    if clickhouse_obs:
+        values_obj["observability"] = {"clickhouse": clickhouse_obs}
     if gateway_replicas is not None:
         values_obj["components"]["otelGateway"]["replicas"] = gateway_replicas
     return values_obj
@@ -91,6 +99,45 @@ def _clickhouse_query(namespace: str, database: str, sql: str) -> str:
         ],
     )
     return result.stdout.strip()
+
+
+def _get_secret_value(namespace: str, secret_name: str, key: str) -> str:
+    result = kubectl(["get", "secret", secret_name, "-o", f"jsonpath={{.data.{key}}}"], namespace=namespace)
+    return base64.b64decode(result.stdout).decode()
+
+
+def _clickhouse_query_as(
+    namespace: str, database: str, sql: str, *, user: str, password: str, check: bool = True
+):
+    """Run a query via clickhouse-client inside the ClickHouse pod as an explicit user/password.
+
+    Settles bd kasm-helm-hvx's RISK note: the RO user's GRANT SELECT ON <db>.* is an XML grant
+    (ACCESS_STORAGE_READONLY) that cannot be corrected by SQL at runtime, and a grant that's too
+    narrow for Kasm's real reporting queries fails silently as empty results, not an error — so
+    this has to run an actual query as that user to prove it, not just assert the grant text.
+
+    Credentials are passed via `env FOO=bar clickhouse-client ...` rather than `--user`/
+    `--password` flags, so the password never appears in this process's argv (only in its
+    environment, which `kubectl exec` does not log or expose via `ps`).
+    """
+    clickhouse_pod = get_first_pod_by_selector(namespace, "app.kubernetes.io/component=clickhouse")
+    return kubectl(
+        [
+            "exec",
+            clickhouse_pod,
+            "--",
+            "env",
+            f"CLICKHOUSE_USER={user}",
+            f"CLICKHOUSE_PASSWORD={password}",
+            "clickhouse-client",
+            "--database",
+            database,
+            "--query",
+            sql,
+        ],
+        namespace=namespace,
+        check=check,
+    )
 
 
 def _wait_for_query_nonzero(namespace: str, database: str, sql: str, *, description: str) -> str:
@@ -316,8 +363,9 @@ def test_observability_default_install_end_to_end(installer, temp_workdir: Path)
     e2e_config = installer["config"]
     namespace = installer["namespace"]
 
+    read_username = "kasm_otel_ro"
     values_path = temp_workdir / "values.yaml"
-    values_path.write_text(yaml.safe_dump(_low_resource_values(), sort_keys=False))
+    values_path.write_text(yaml.safe_dump(_low_resource_values(read_username=read_username), sort_keys=False))
 
     install_and_wait_with_retry(
         helm_install_fn=helm_install,
@@ -336,6 +384,35 @@ def test_observability_default_install_end_to_end(installer, temp_workdir: Path)
     time.sleep(15)
 
     _assert_core_telemetry(namespace, "kasm_otel")
+
+    # bd kasm-helm-hvx: the RO user (api/manager's credential) must be able to run a real
+    # reporting-style SELECT and must NOT be able to write. This is the RISK the ticket flags —
+    # an XML grant that's too narrow fails as empty reports, not an error — so it settles it by
+    # actually running the query as that user rather than only asserting the grant text.
+    LOGGER.info("[observability] verifying the read-only ClickHouse user")
+    secret_name = f"{e2e_config.release_name}-secrets"
+    ro_password = _get_secret_value(namespace, secret_name, "clickhouse-ro-password")
+
+    ro_report_rows = _clickhouse_query_as(
+        namespace, "kasm_otel", "SELECT count() FROM otel_logs", user=read_username, password=ro_password
+    ).stdout.strip()
+    assert int(ro_report_rows.splitlines()[0] or "0") > 0, (
+        f"RO user {read_username} returned no rows from a reporting-style query — GRANT SELECT ON "
+        "kasm_otel.* may not cover what Kasm's reporting queries actually need"
+    )
+
+    ro_write_result = _clickhouse_query_as(
+        namespace,
+        "kasm_otel",
+        "INSERT INTO otel_logs (Timestamp) VALUES (now64(9))",
+        user=read_username,
+        password=ro_password,
+        check=False,
+    )
+    assert ro_write_result.returncode != 0, f"RO user {read_username} was able to write to otel_logs"
+    assert "ACCESS_DENIED" in ro_write_result.stderr, (
+        f"expected an ACCESS_DENIED failure for a write as the RO user, got: {ro_write_result.stderr}"
+    )
 
     LOGGER.info("[observability] checking for syslog UDP loss on idle loopback")
     _assert_no_syslog_loss(namespace, "kasm_otel")
