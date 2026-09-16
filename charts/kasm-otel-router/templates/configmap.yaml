@@ -47,11 +47,47 @@ data:
             endpoint: "0.0.0.0:4318"
             auth:
               authenticator: bearertokenauth/server
+{{- if .Values.k8sEvents.enabled }}
+      # Optional Kubernetes event collection (k8sEvents, D17 pass 2). auth_type: serviceAccount
+      # uses the in-cluster token/CA of the ServiceAccount bound by the k8sEvents RBAC
+      # (k8sevents-rbac.yaml) -- no bearer token of ours involved. `mode: watch` streams events as
+      # they happen rather than polling. One receiver, many namespaces: the Role/RoleBinding pair
+      # rendered per registration is what actually authorizes reading each of them.
+      k8s_objects:
+        auth_type: serviceAccount
+        objects:
+          - name: events
+            mode: watch
+            namespaces:
+{{- range .Values.registrations }}
+              - {{ .namespace | quote }}
+{{- end }}
+{{- end }}
 
     processors:
       {{- include "kasm.common.otelBatchProcessor" . | nindent 6 }}
 
 {{ include "kasm.common.otelMemoryLimiter" (dict "limitMib" 256 "spikeLimitMib" 64) | indent 6 }}
+{{- if .Values.k8sEvents.enabled }}
+      # Stamps the routing key (service.namespace, D14) from k8s.namespace.name, the resource
+      # attribute the k8s_objects receiver itself sets per ResourceLogs in watch mode (it splits
+      # events per namespace and puts the namespace there, not in the log body -- the body is
+      # {"type": <verb>, "object": <the Event>}, so digging metadata.namespace out of it resolves
+      # nil and silently drops every event to the unrouted sink). Also stamps a service.name that
+      # marks these log records as Kubernetes events rather than Kasm application logs, so a
+      # gateway/SIEM operator can tell the two apart. context: resource, not log: this sets a
+      # resource-level attribute, and log-record context is last-write-wins across the records
+      # sharing that resource. error_mode: propagate, not ignore: ignore is what let this defect
+      # ship silently; the source attribute is guaranteed present in watch mode, so a failure here
+      # means the receiver's contract changed and that should be loud, not swallowed.
+      transform/k8sevents:
+        error_mode: propagate
+        log_statements:
+          - context: resource
+            statements:
+              - set(attributes["service.namespace"], attributes["k8s.namespace.name"])
+              - set(attributes["service.name"], "kasm-k8s-events")
+{{- end }}
 
     connectors:
 {{- range $signal := list "traces" "logs" "metrics" }}
@@ -63,6 +99,17 @@ data:
           - context: resource
             condition: attributes["service.namespace"] == {{ $reg.namespace | quote }}
             pipelines: [{{ $signal }}/{{ $reg.namespace }}]
+{{- end }}
+{{- end }}
+{{- if .Values.k8sEvents.enabled }}
+      routing/k8sevents:
+        error_mode: ignore
+        default_pipelines: [logs/k8sevents-unrouted]
+        table:
+{{- range $i, $reg := .Values.registrations }}
+          - context: resource
+            condition: attributes["service.namespace"] == {{ $reg.namespace | quote }}
+            pipelines: [logs/k8sevents/{{ $reg.namespace }}]
 {{- end }}
 {{- end }}
 
@@ -91,6 +138,25 @@ data:
           enabled: true
           num_consumers: 2
           queue_size: 500
+{{- if and $.Values.k8sEvents.enabled $reg.events $reg.events.endpoint }}
+      # events.endpoint override (D17 pass 2): lets an operator send this registration's
+      # Kubernetes events somewhere other than its own otlp/{{ $reg.namespace }} gateway above.
+      otlp/k8sevents/{{ $reg.namespace }}:
+        endpoint: {{ $reg.events.endpoint | quote }}
+        headers:
+          Authorization: "Bearer ${env:OTEL_K8SEVENTS_TOKEN_{{ $i }}}"
+        tls:
+          insecure: {{ $reg.events.insecure | default false }}
+        retry_on_failure:
+          enabled: true
+          initial_interval: 5s
+          max_interval: 30s
+          max_elapsed_time: 300s
+        sending_queue:
+          enabled: true
+          num_consumers: 2
+          queue_size: 500
+{{- end }}
 {{- end }}
 {{- if .Values.tee.enabled }}
       otlp/tee:
@@ -150,6 +216,28 @@ data:
         metrics/unrouted:
           receivers: [routing/metrics]
           exporters: [debug/unrouted]
+{{- if .Values.k8sEvents.enabled }}
+        logs/k8sevents/in:
+          receivers: [k8s_objects]
+          processors: [memory_limiter, batch, transform/k8sevents]
+          exporters: [routing/k8sevents]
+        # Own unrouted sink for events matching no registration -- kept separate from
+        # logs/unrouted above (a different connector, routing/logs, is that pipeline's declared
+        # consumer; the pinned collector rejects two connectors feeding one pipeline instance).
+        # Same debug/unrouted exporter, so the observability behavior is identical.
+        logs/k8sevents-unrouted:
+          receivers: [routing/k8sevents]
+          exporters: [debug/unrouted]
+{{- range $reg := .Values.registrations }}
+{{- $exporter := printf "otlp/%s" $reg.namespace }}
+{{- if and $reg.events $reg.events.endpoint }}
+{{- $exporter = printf "otlp/k8sevents/%s" $reg.namespace }}
+{{- end }}
+        logs/k8sevents/{{ $reg.namespace }}:
+          receivers: [routing/k8sevents]
+          exporters: [{{ $exporter }}]
+{{- end }}
+{{- end }}
 
       telemetry:
         logs:

@@ -37,6 +37,7 @@
         }
       }
     },
+    "replicaCount": { "type": "integer", "minimum": 1 },
     "nodeSelector": { "type": "object", "additionalProperties": true },
     "affinity": { "type": "object", "additionalProperties": true },
     "resources": { "type": "object", "additionalProperties": true },
@@ -76,8 +77,36 @@
               "name": { "type": "string", "minLength": 1 },
               "key": { "type": "string", "minLength": 1 }
             }
+          },
+          "events": {
+            "additionalProperties": false,
+            "title": "events",
+            "type": "object",
+            "required": ["endpoint", "tokenSecret"],
+            "properties": {
+              "endpoint": { "type": "string", "minLength": 1 },
+              "insecure": { "type": "boolean" },
+              "tokenSecret": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": ["name", "key"],
+                "properties": {
+                  "name": { "type": "string", "minLength": 1 },
+                  "key": { "type": "string", "minLength": 1 }
+                }
+              }
+            }
           }
         }
+      }
+    },
+    "k8sEvents": {
+      "additionalProperties": false,
+      "title": "k8sEvents",
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" }
       }
     },
     "tee": {

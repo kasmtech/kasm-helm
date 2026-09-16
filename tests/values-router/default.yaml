@@ -1,6 +1,6 @@
-# Minimal scenario, but exercises both exporter paths: a single registration, plus a tee. This
+# Minimal scenario, but exercises every path: a single registration, k8sEvents, plus a tee. This
 # is the one scenario `make otel-validate` renders (Makefile CHART_VALUES_DIRS always points at
-# <values_dir>/default.yaml), so both paths get run through the real collector binary in CI.
+# <values_dir>/default.yaml), so all three get run through the real collector binary in CI.
 ingestAuth:
   existingSecret:
     name: kasm-otel-router-secrets
@@ -12,6 +12,9 @@ registrations:
     tokenSecret:
       name: kasm-prod-secrets
       key: otel-bearer-token
+
+k8sEvents:
+  enabled: true
 
 tee:
   enabled: true

@@ -1,17 +1,22 @@
 {{/*
-Kasm OTel router Deployment — single replica (this is pass 1 of kasm-helm-l0r; D17). Routing is
-stateless per-record (keyed on the `service.namespace` resource attribute already on every
-record), so nothing here requires the single-writer discipline the otel-gateway's tail_sampling
-does -- one replica is just the sane default for optional, low-volume routing infrastructure.
+Kasm OTel router Deployment — replicaCount defaults to 1. Routing is stateless per-record (keyed
+on the `service.namespace` resource attribute already on every record), so nothing here requires
+the single-writer discipline the otel-gateway's tail_sampling does -- one replica is just the sane
+default for optional, low-volume routing infrastructure. k8sEvents (D17 pass 2) hard-requires
+replicaCount: 1 (guarded below): each replica would independently watch the same namespaces'
+events and forward its own copy, duplicating every event downstream.
 */}}
 {{- $image := include "kasm.common.imageRef" .Values.image -}}
+{{- if and .Values.k8sEvents.enabled (gt (int .Values.replicaCount) 1) -}}
+{{- fail "kasm-otel-router: k8sEvents.enabled requires replicaCount: 1 -- each replica would independently watch and forward the same events, duplicating every event downstream." -}}
+{{- end -}}
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   {{- include "kasm.common.metadata" (dict "context" . "component" "otel-router" "resource" "deployment" "include" "all") | indent 2 }}
 spec:
-  replicas: 1
+  replicas: {{ .Values.replicaCount }}
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -25,6 +30,9 @@ spec:
       {{- $checksumAnn := dict "checksum/config" (include (print .Template.BasePath "/configmap.yaml") . | sha256sum) -}}
       {{- include "kasm.common.metadata" (dict "context" . "component" "otel-router" "resource" "pod" "include" "la" "extraAnnotations" $checksumAnn) | indent 6 }}
     spec:
+      {{- if .Values.k8sEvents.enabled }}
+      serviceAccountName: {{ include "kasm.common.name" (list . "otel-router") }}
+      {{- end }}
       {{- include "kasm.common.securityContext" (list . 10001 "pod") | nindent 6 }}
       {{- with .Values.nodeSelector }}
       nodeSelector: {{ toYaml . | nindent 8 }}
@@ -48,6 +56,17 @@ spec:
                 secretKeyRef:
                   name: {{ $reg.tokenSecret.name }}
                   key: {{ $reg.tokenSecret.key }}
+{{- end }}
+{{- if .Values.k8sEvents.enabled }}
+{{- range $i, $reg := .Values.registrations }}
+{{- if and $reg.events $reg.events.endpoint }}
+            - name: OTEL_K8SEVENTS_TOKEN_{{ $i }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $reg.events.tokenSecret.name }}
+                  key: {{ $reg.events.tokenSecret.key }}
+{{- end }}
+{{- end }}
 {{- end }}
 {{- if .Values.tee.enabled }}
             - name: OTEL_TEE_TOKEN

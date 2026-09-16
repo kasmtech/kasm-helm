@@ -1,0 +1,223 @@
+suite: "kasm-otel-router — k8sEvents (D17 pass 2): k8s_objects receiver + per-namespace RBAC"
+
+templates:
+  - templates/configmap.yaml
+  - templates/deployment.yaml
+  - templates/k8sevents-rbac.yaml
+
+set:
+  ingestAuth.existingSecret.name: kasm-otel-router-secrets
+  ingestAuth.existingSecret.key: otel-bearer-token
+  registrations:
+    - namespace: kasm-prod
+      endpoint: "otel-gateway.kasm-prod.svc.cluster.local:4317"
+      tokenSecret:
+        name: kasm-prod-secrets
+        key: otel-bearer-token
+    - namespace: kasm-dev
+      endpoint: "otel-gateway.kasm-dev.svc.cluster.local:4317"
+      tokenSecret:
+        name: kasm-dev-secrets
+        key: otel-bearer-token
+
+tests:
+  # ---------- receiver: absent by default, present when enabled ----------
+  - it: no k8s_objects receiver, no RBAC objects when k8sEvents is disabled (default)
+    asserts:
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: 'k8s_objects:'
+        template: templates/configmap.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/k8sevents-rbac.yaml
+
+  - it: k8s_objects receiver present, watching every registered namespace, when enabled
+    set:
+      k8sEvents.enabled: true
+    template: templates/configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'k8s_objects:\s*\n\s*auth_type: serviceAccount'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'namespaces:\s*\n\s*- "kasm-prod"\s*\n\s*- "kasm-dev"'
+
+  # ---------- RBAC: ServiceAccount, one Role+RoleBinding per registered namespace ----------
+  - it: renders exactly one ServiceAccount, and one Role + one RoleBinding per registered namespace
+    set:
+      k8sEvents.enabled: true
+    template: templates/k8sevents-rbac.yaml
+    asserts:
+      - hasDocuments:
+          count: 5
+      - containsDocument:
+          kind: ServiceAccount
+          apiVersion: v1
+          namespace: NAMESPACE
+          any: true
+      - containsDocument:
+          kind: Role
+          apiVersion: rbac.authorization.k8s.io/v1
+          namespace: kasm-prod
+          any: true
+      - containsDocument:
+          kind: RoleBinding
+          apiVersion: rbac.authorization.k8s.io/v1
+          namespace: kasm-prod
+          any: true
+      - containsDocument:
+          kind: Role
+          apiVersion: rbac.authorization.k8s.io/v1
+          namespace: kasm-dev
+          any: true
+      - containsDocument:
+          kind: RoleBinding
+          apiVersion: rbac.authorization.k8s.io/v1
+          namespace: kasm-dev
+          any: true
+
+  - it: no ClusterRole anywhere and no wildcard in any RBAC rule
+    set:
+      k8sEvents.enabled: true
+    template: templates/k8sevents-rbac.yaml
+    asserts:
+      - notMatchRegexRaw:
+          pattern: 'ClusterRole'
+      - notMatchRegexRaw:
+          pattern: '\*'
+      - equal:
+          path: rules[0].apiGroups
+          value: [""]
+        documentIndex: 1
+      - equal:
+          path: rules[0].resources
+          value: ["events"]
+        documentIndex: 1
+      - equal:
+          path: rules[0].verbs
+          value: ["get", "list", "watch"]
+        documentIndex: 1
+
+  - it: RoleBinding binds the router's own ServiceAccount, in the router's own namespace, to the local Role
+    set:
+      k8sEvents.enabled: true
+    template: templates/k8sevents-rbac.yaml
+    documentIndex: 2
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: kasm-prod
+      - equal:
+          path: subjects[0].kind
+          value: ServiceAccount
+      - equal:
+          path: subjects[0].name
+          value: RELEASE-NAME-otel-router
+      - equal:
+          path: subjects[0].namespace
+          value: NAMESPACE
+      - equal:
+          path: roleRef.kind
+          value: Role
+      - equal:
+          path: roleRef.name
+          value: RELEASE-NAME-otel-router-events
+      - equal:
+          path: roleRef.apiGroup
+          value: rbac.authorization.k8s.io
+
+  # ---------- Deployment: serviceAccountName wired only when enabled ----------
+  - it: Deployment has no serviceAccountName when k8sEvents is disabled (default)
+    template: templates/deployment.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.serviceAccountName
+
+  - it: Deployment binds the router ServiceAccount when k8sEvents is enabled
+    set:
+      k8sEvents.enabled: true
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: RELEASE-NAME-otel-router
+
+  # ---------- routing key: from the resource attribute, not the log body (defect F-R23) ----------
+  - it: transform/k8sevents stamps service.namespace from the k8s.namespace.name resource attribute the receiver already sets, not from the log body
+    set:
+      k8sEvents.enabled: true
+    template: templates/configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'context: resource\s*\n\s*statements:\s*\n\s*- set\(attributes\["service\.namespace"\], attributes\["k8s\.namespace\.name"\]\)'
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: 'body\["metadata"\]\["namespace"\]'
+
+  # ---------- events override requires a complete destination (defect F-R24) ----------
+  - it: registrations[].events with an endpoint but no tokenSecret is rejected by the schema, not a nil-pointer render failure
+    set:
+      k8sEvents.enabled: true
+      registrations:
+        - namespace: kasm-prod
+          endpoint: "otel-gateway.kasm-prod.svc.cluster.local:4317"
+          tokenSecret:
+            name: kasm-prod-secrets
+            key: otel-bearer-token
+          events:
+            endpoint: "siem.example.com:4317"
+    asserts:
+      - failedTemplate: {}
+
+  # ---------- per-registration events destination override ----------
+  - it: a registration's events flow to its own gateway exporter by default
+    set:
+      k8sEvents.enabled: true
+    template: templates/configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'logs/k8sevents/kasm-prod:\s*\n\s*receivers: \[routing/k8sevents\]\s*\n\s*exporters: \[otlp/kasm-prod\]'
+
+  - it: setting registrations[].events.endpoint sends only that entry's events elsewhere
+    set:
+      k8sEvents.enabled: true
+      registrations:
+        - namespace: kasm-prod
+          endpoint: "otel-gateway.kasm-prod.svc.cluster.local:4317"
+          tokenSecret:
+            name: kasm-prod-secrets
+            key: otel-bearer-token
+          events:
+            endpoint: "siem.example.com:4317"
+            tokenSecret:
+              name: siem-secret
+              key: token
+        - namespace: kasm-dev
+          endpoint: "otel-gateway.kasm-dev.svc.cluster.local:4317"
+          tokenSecret:
+            name: kasm-dev-secrets
+            key: otel-bearer-token
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'otlp/k8sevents/kasm-prod:\s*\n\s*endpoint: "siem\.example\.com:4317"'
+        template: templates/configmap.yaml
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'logs/k8sevents/kasm-prod:\s*\n\s*receivers: \[routing/k8sevents\]\s*\n\s*exporters: \[otlp/k8sevents/kasm-prod\]'
+        template: templates/configmap.yaml
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'logs/k8sevents/kasm-dev:\s*\n\s*receivers: \[routing/k8sevents\]\s*\n\s*exporters: \[otlp/kasm-dev\]'
+        template: templates/configmap.yaml
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_K8SEVENTS_TOKEN_0")].valueFrom.secretKeyRef.name
+          value: siem-secret
+        template: templates/deployment.yaml
+      - notExists:
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_K8SEVENTS_TOKEN_1")]
+        template: templates/deployment.yaml
