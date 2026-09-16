@@ -25,10 +25,7 @@ that powers the reporting views in the Kasm Admin UI. It is enabled by default.
                     |    |                              |           |
                     |    | sidecar (logs, conn metrics) OTLP        |
                     |    v                              |           |
-                    | forwarder Collector (cluster-wide, 1+ pods) <--+
-                    |    |  (batch; no sampling, no ClickHouse)     |
-                    |    v  loadbalancing exporter (hash on traceID)|
-                    | gateway Collector (cluster-wide, 1+ pods)     |
+                    | gateway Collector (cluster-wide, 1 pod)     <--+
                     |    |  (tail_sampling; only ClickHouse writer) |
                     |    v                                          |
                     | ClickHouse (logs / traces / metrics)          |
@@ -42,13 +39,12 @@ that powers the reporting views in the Kasm Admin UI. It is enabled by default.
 
 | Workload                                   | Count                          | Notes                                                                              |
 | ------------------------------------------ | ------------------------------ | ----------------------------------------------------------------------------------- |
-| Collector *forwarder* Deployment + Service | 1/2/2 by `deploymentSize`, cluster-wide (not per zone) | What every Kasm service and every sidecar exports to. Batches and forwards only.  |
-| Collector *gateway* Deployment + Service   | one by default, cluster-wide   | Makes the trace-sampling decision; the only writer to ClickHouse. Scalable — see §7. |
+| Collector *gateway* Deployment + Service   | one, cluster-wide, pinned      | The only OTel Collector tier in the chart. Every Kasm service, every sidecar, and any out-of-cluster senders export straight to it. Makes the trace-sampling decision and is the only writer to ClickHouse. Pinned to 1 replica — see §7. |
 | ClickHouse StatefulSet + Service + PVC     | one                             | Bundled and enabled by default.                                                     |
 | nginx + DB sidecar containers              | one per Proxy/Connection Proxy/DB pod, unconditional | No DaemonSet, no separate opt-in — always present when `observability.enabled`. |
 
 Budget for this up front: a new PVC (`observability.clickhouse.storage.pvcSize`, default 20 GiB),
-a new StatefulSet, two new Collector Deployments, and one extra container in every proxy/DB pod.
+a new StatefulSet, one new Collector Deployment, and one extra container in every proxy/DB pod.
 See §6 for sizing.
 
 ## 3. Getting logs into your own tooling
@@ -81,7 +77,7 @@ Connection Proxy pod (guac/rdp-gateway/rdp-https-gateway), and the Kasm DB pod, 
 knob — this is the only nginx/DB log-collection path the chart offers, and it needs no
 ServiceAccount and no cluster RBAC.
 
-Each sidecar is that pod's single egress point to the forwarder:
+Each sidecar is that pod's single egress point to the gateway:
 
 - The nginx sidecar receives nginx's access and error logs over loopback syslog UDP (nginx sends
   them directly; there is no shared log volume between the containers), scrapes nginx connection
@@ -224,7 +220,7 @@ logs are on the shorter window.
 This applies only to changing the database *name*. A normal `helm upgrade` that keeps the name is
 unaffected — the table already exists and the post-upgrade Job updates its TTLs in place.
 
-## 7. Trace sampling, and scaling the gateway
+## 7. Trace sampling, and the single-replica gateway
 
 Traces containing an error, and traces slower than one second, are **always kept** regardless of
 the sampling setting. Of everything else, `observability.collector.gateway.tailSamplePercentage`
@@ -233,37 +229,23 @@ trace that wasn't slow and had no error is very likely a case of correct, expect
 bug or a dropped signal.
 
 Sampling happens once, at the gateway Collector, which is why it needs to see every span of a
-trace in one process. The forwarder's exporter to the gateway is a **`loadbalancing` exporter**,
-not a plain `otlp` exporter pointed at a ClusterIP: it resolves the gateway's headless Service
-(DNS resolver) and hashes each trace's ID to one gateway backend, so every span of a trace lands
-on the same gateway pod regardless of which forwarder pod it arrived through. This is what makes
-it **safe to run more than one gateway replica** — a correctness property of the load-balancing
-scheme, not a manual sizing tradeoff. This same trace-ID hashing lets a client that reuses one
-trace ID pin its traffic to a single gateway pod, which replica count does not fix — see §13.
+trace in one process. Every Kasm service, every sidecar, and any out-of-cluster senders export
+straight to the gateway's plain `<release>-otel-gateway` ClusterIP Service — there is no forwarder
+tier in front of it any more, and nothing partitions traces by ID before they reach it. The
+gateway authenticates both of its receivers with the same bearer token: Collector sidecars (nginx,
+DB) use OTLP/gRPC on `:4317`, while the Kasm app services (api, manager) use OTLP/HTTP on `:4318`
+because that is the protocol their SDKs are wired to send, not a choice this chart makes.
 
-**Scale-out procedure:**
-
-1. Set `components.otelGateway.replicas`. Raising `deploymentSize` does **not** scale the
-   gateway — its replica preset is 1 at every size, since sampling correctness is the concern
-   here, not throughput; this is the one component you scale by hand.
-2. `helm upgrade`. The gateway Deployment's rollout uses `maxSurge: 0` / `maxUnavailable: 1`, so
-   pods change one at a time; a trace whose spans straddle the rollout can still split across the
-   old and new pod, bounded by `tail_sampling`'s `decision_wait` (30s) — an accepted, temporary
-   cost of being able to scale and update at all, not an ongoing issue.
-3. Do **not** point anything directly at the gateway's plain `<release>-otel-gateway` ClusterIP
-   Service with more than one replica configured — only the forwarder's `loadbalancing` exporter
-   (via the headless Service) preserves the "every span of a trace, one process" invariant.
-   Sending telemetry straight to the ClusterIP with multiple gateway replicas silently produces
-   traces with missing spans.
-4. `num_traces` and the `memory_limiter` limits baked into the gateway config scale with
-   `deploymentSize` (small/medium/large: 25000/50000/100000 `num_traces`, 800/1600/3200 MiB
-   `limit_mib`, 200/400/800 MiB `spike_limit_mib`). The pod's own resource requests/limits scale
-   alongside them (512Mi/1Gi/2Gi memory requests, 1Gi/2Gi/4Gi memory limits). A manual
-   `components.otelGateway.resources` override does **not** rescale these — see the note on
-   `components.otelGateway.resources` in `values.yaml`.
-
-The forwarder tier scales freely regardless of the gateway; it does no sampling and holds no
-cross-request state.
+**`components.otelGateway.replicas` is pinned to 1.** `deploymentSize` never raises it (the
+replica preset is 1 at every size), and the chart fails the render if you set it above 1: with
+plain ClusterIP round-robin and no trace-ID-aware routing in front of the gateway, a second
+replica would receive some spans of a trace while the first receives the rest, and
+`tail_sampling` would decide keep/drop on a partial trace, silently. `num_traces` and the
+`memory_limiter` limits baked into the gateway config still scale with `deploymentSize`
+(small/medium/large: 25000/50000/100000 `num_traces`, 800/1600/3200 MiB `limit_mib`, 200/400/800
+MiB `spike_limit_mib`), as do the pod's own resource requests/limits (512Mi/1Gi/2Gi memory
+requests, 1Gi/2Gi/4Gi memory limits) — a manual `components.otelGateway.resources` override does
+**not** rescale these, see the note on `components.otelGateway.resources` in `values.yaml`.
 
 ## 8. Forwarding to an external backend
 
@@ -286,31 +268,25 @@ the forwarded copy reflects the same sampling decision as what lands in ClickHou
 
 ## 9. Bringing your own Collector config
 
-Take full ownership of either tier's Collector configuration with an `existingConfigMap`:
+Take full ownership of the gateway's Collector configuration with an `existingConfigMap`:
 
 ```yaml
 observability:
   collector:
-    forwarder:
-      existingConfigMap: kasm-otel-collector-custom   # forwarder tier only
     gateway:
-      existingConfigMap: kasm-otel-gateway-custom      # gateway tier only — ClickHouse, sampling
+      existingConfigMap: kasm-otel-gateway-custom      # ClickHouse, sampling, receiver, everything
 ```
 
-Each ConfigMap must hold a complete Collector configuration under the key `config.yaml`; the chart
-renders none of its own for that tier when set. The two tiers are independent — setting one does
-not affect the other. Every value that only shapes a tier's own config (e.g.
-`tailSamplePercentage`, `forward`, `clickhouse.retention` for the gateway) is ignored once that
-tier's `existingConfigMap` is set, since the chart no longer renders the template that would have
-read them.
+The ConfigMap must hold a complete Collector configuration under the key `config.yaml`; the chart
+renders none of its own when this is set. Every value that only shapes the rendered config (e.g.
+`tailSamplePercentage`, `forward`, `clickhouse.retention`) is ignored once `existingConfigMap` is
+set, since the chart no longer renders the template that would have read them.
 
-Start from `examples/otel-collector-custom.yaml` (a gateway-shaped starting point, safe to edit —
-its tuning values are illustrative rather than preset-derived), `examples/otel-collector-splunk.yaml` (adds a Splunk HEC exporter), or
-`examples/otel-collector-debug.yaml` (adds the `debug` stdout exporter from §3). All three are
-complete, applyable ConfigMaps for the **gateway** tier; there is no matching forwarder example
-because the forwarder's own config is a thin batch-and-loadbalance shape with nothing customers
-typically need to change (see `templates/otel-forwarder-configmap.yaml` if you do need to replace
-it).
+Start from `examples/otel-collector-custom.yaml` (safe to edit — its tuning values are
+illustrative rather than preset-derived), `examples/otel-collector-splunk.yaml` (adds a Splunk HEC
+exporter), or `examples/otel-collector-debug.yaml` (adds the `debug` stdout exporter from §3). All
+three are complete, applyable ConfigMaps for the gateway — the only OTel Collector tier in the
+chart.
 
 ## 10. Disabling telemetry
 
@@ -326,8 +302,7 @@ views in the Admin UI that read telemetry return empty results.**
 
 ## 11. Troubleshooting
 
-- **Check the Collector's own logs first** — both the forwarder and the gateway Deployments log
-  to stdout.
+- **Check the Collector's own logs first** — the gateway Deployment logs to stdout.
 - **Health endpoint:** each Collector, and each sidecar, exposes `:13133` (`health_check`
   extension). A pod that fails its own health check is a good first signal something's wrong
   before diving into data.
@@ -361,10 +336,21 @@ until you do this, Splunk forwarding stops on upgrade.
 
 **If you are upgrading from an early feature build of this chart** that had per-zone forwarders,
 a `hostLogs` DaemonSet, `observability.fileLogs`, or a gateway hard-limited to one replica: those
-values are gone, not renamed. The chart's root values schema does not reject unknown top-level
-`observability.*` keys, so leftover values under the old names are silently ignored rather than
-causing a render failure — remove them from your values file rather than relying on a schema
-error to catch them. See `charts/kasm-helm/CHANGELOG.md` for the full list.
+values are gone, not renamed. `observability` and `components` both set
+`additionalProperties: false` in `values.schema.json`, so leftover keys under the old names are
+**rejected** — `helm upgrade` fails with e.g. `at '/observability': additional properties
+'fileLogs' not allowed`. Delete them from your values file. See
+`charts/kasm-helm/CHANGELOG.md` for the full list. (Unknown keys at the values *root*, such as the
+removed `logFormat`, are the exception: the root schema is permissive, so those are silent no-ops
+— see §3.)
+
+**If you are upgrading from a build that had the single cluster-wide `otel-forwarder` tier**
+(`components.otelForwarder`, `observability.collector.forwarder.*`): that tier and its Deployment,
+Service, and ConfigMap are gone. Every Kasm service and sidecar now exports straight to the
+gateway, and `components.otelGateway.replicas` is pinned to 1. Delete any
+`components.otelForwarder` and `observability.collector.forwarder.*` values before upgrading —
+both are rejected by the schema (`additional properties 'forwarder' not allowed`), so leaving
+them fails the upgrade at validation.
 
 ## 13. Edge trust: client-supplied trace context
 
@@ -381,14 +367,12 @@ the `sampled` flag) for its own requests. This has three consequences:
 2. **Sampling control.** The `sampled` flag rides in the same header, so a client can influence
    whether its own traffic is retained, undermining
    `observability.collector.gateway.tailSamplePercentage` (§7).
-3. **Hash targeting.** The forwarder's `loadbalancing` exporter routes traces on `routing_key:
-   traceID` (`charts/kasm-helm/templates/otel-forwarder-configmap.yaml:79`) so that every span of
-   a trace lands on one gateway pod (§7). A client that reuses one trace ID for many requests pins
-   all of that traffic to a single gateway pod — **scaling `components.otelGateway.replicas` does
-   not mitigate this**, since the pinning is a property of the trace ID, not the replica count.
 
-Effects 1 and 2 exist independent of gateway replica count; effect 3 is specific to the
-load-balanced gateway topology in §7.
+(A third consequence used to apply here: a client that reused one trace ID could pin its traffic
+to a single gateway pod via the forwarder's trace-ID-hashing `loadbalancing` exporter. That
+exporter, and the forwarder tier it lived in, are gone — the gateway is a single pod now, pinned
+by `kasm.observabilityValidate` (§7) — so there is no longer a second gateway pod to pin traffic
+away from.)
 
 **Why `propagate` is kept anyway:** the browser telemetry path
 (`charts/kasm-helm/templates/proxy-configmaps.yaml:301-305`, `/otel-config.js`, `serviceName:

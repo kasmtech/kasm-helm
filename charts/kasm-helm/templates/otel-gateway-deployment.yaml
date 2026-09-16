@@ -2,20 +2,15 @@
 Kasm OTel Collector gateway Deployment — cluster-wide, not zone-scoped.
 
 Owns tail_sampling and is the only writer to ClickHouse. tail_sampling needs to see every span of
-a trace in one process, which is why traffic reaches this tier only through the forwarder's
-loadbalancing exporter, resolving <release>-otel-gateway-headless and hashing on trace ID. Scaling
-this Deployment is therefore safe, but ONLY through that path: pointing anything directly at the
-gateway's ClusterIP Service with more than one replica splits traces across independent samplers
-and produces traces with missing spans, silently.
+a trace in one process, and every sender now exports here directly (no forwarder tier partitions
+traces by ID in front of it) — Collector sidecars over gRPC :4317, Kasm app services over
+HTTP :4318, both authenticated — so this Deployment is pinned to a single replica.
+kasm.observabilityValidate fails the render if components.otelGateway.replicas is set above 1 —
+see that helper for the reasoning this used to live here.
 
-The rollout uses maxSurge: 0 so the pod set changes one at a time. Traces spanning a rollout can
-still split, bounded by tail_sampling's decision_wait; that is the accepted cost of being able to
-scale and update at all.
-
-Renders whenever observability is enabled, including when
-observability.collector.forwarder.externalEndpoint replaces the chart's forwarder: that value
-replaces the forwarder tier only, and the operator's own Collector is then expected to forward here
-on 4317 with the bearer token. Without that, ClickHouse simply stays empty.
+The rollout uses maxSurge: 0 so the single pod is replaced in place rather than briefly running
+two. Traces spanning a rollout can still split, bounded by tail_sampling's decision_wait; that is
+the accepted cost of being able to update at all.
 */}}
 {{- $obs := .Values.observability -}}
 {{- if $obs.enabled }}
@@ -23,12 +18,6 @@ on 4317 with the bearer token. Without that, ClickHouse simply stays empty.
 {{- $ch := $obs.clickhouse -}}
 {{- $useClickhouse := or $ch.enabled $ch.standalone -}}
 {{- $forwardEnabled := ne $obs.collector.gateway.forward.endpoint "" -}}
-{{/*
-  replicas.preset "otel-gateway" stays 1 at every deploymentSize: the gateway only does sampling
-  and ClickHouse writes, so it needs far less headroom than the forwarder. Raise
-  components.otelGateway.replicas to scale it; the loadbalancing exporter in front keeps sampling
-  correct. See the header comment for the one thing that is not safe.
-*/}}
 {{- $gatewayReplicas := ternary .Values.components.otelGateway.replicas (include "replicas.preset" (dict "node" "otel-gateway" "size" .Values.deploymentSize)) (gt (int .Values.components.otelGateway.replicas) 0) -}}
 {{- $resourcesObj := .Values.components.otelGateway.resources -}}
 {{- if not (gt (len $resourcesObj) 0) -}}
@@ -131,6 +120,9 @@ spec:
           ports:
             - name: otlp-grpc
               containerPort: {{ $constants.otel.otlpGrpc }}
+              protocol: TCP
+            - name: otlp-http
+              containerPort: {{ $constants.otel.otlpHttp }}
               protocol: TCP
             - name: health
               containerPort: {{ $constants.otel.health }}

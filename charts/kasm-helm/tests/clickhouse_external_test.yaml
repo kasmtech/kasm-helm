@@ -8,7 +8,6 @@ templates:
   - templates/api-deployment.yaml
   - templates/manager-deployment.yaml
   - templates/otel-gateway-configmap.yaml
-  - templates/otel-forwarder-configmap.yaml
 
 tests:
   - it: standalone=true renders no StatefulSet/Service/ConfigMap/Job
@@ -65,7 +64,7 @@ tests:
         template: templates/clickhouse-retention-job.yaml
 
   - it: standalone=true with clickhouse.enabled=false fails render (mutually exclusive)
-    template: templates/otel-forwarder-configmap.yaml
+    template: templates/otel-gateway-configmap.yaml
     set:
       observability.clickhouse.standalone: true
       observability.clickhouse.enabled: false

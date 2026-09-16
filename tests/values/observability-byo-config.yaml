@@ -1,6 +1,4 @@
 observability:
   collector:
-    forwarder:
-      existingConfigMap: my-forwarder-collector-config
     gateway:
       existingConfigMap: my-gateway-collector-config

@@ -2,7 +2,7 @@
 Collector config for the Kasm DB pod's sidecar.
 
 PostgreSQL writes JSON log lines to postgresql.json on the data volume (see db-configmap.yaml);
-this tails them, parses each line, and forwards to the forwarder. The text copy of the same log goes
+this tails them, parses each line, and forwards to the gateway. The text copy of the same log goes
 to the container console and is not collected, so nothing is stored twice.
 
 There are no metrics here yet. A postgresql receiver would need database credentials in this pod, so
@@ -61,7 +61,7 @@ data:
 {{ include "kasm.common.otelMemoryLimiter" (dict "limitMib" 96 "spikeLimitMib" 32) | indent 6 }}
 
     exporters:
-      {{- include "kasm.common.otelOtlphttpExporterToForwarder" . | nindent 6 }}
+      {{- include "kasm.common.otelOtlpExporterToGateway" . | nindent 6 }}
 
     service:
       extensions: [health_check, file_storage/checkpoints]
@@ -70,7 +70,7 @@ data:
         logs:
           receivers: [filelog/postgres]
           processors: [memory_limiter, batch]
-          exporters: [otlphttp]
+          exporters: [otlp]
 
       telemetry:
         logs:

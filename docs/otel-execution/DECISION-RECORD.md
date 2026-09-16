@@ -20,6 +20,11 @@ prose summary aimed at readers of the H-phase docs.
    partitions traces across replicas so `tail_sampling` stays correct. `dns` resolver (headless
    Service) chosen over `k8s` resolver to keep chart RBAC-free. Default stays 1 replica, smaller
    base resources; scaling is horizontal via the `replicas` knob.
+   **SUPERSEDED (2026-09-16):** the forwarder tier that made this lifting safe is gone (bd
+   kasm-helm-7a0, `.claude/scratch/router-chain/DECISIONS.md` D2). Every sender now exports
+   straight to the gateway's plain ClusterIP; nothing partitions traces by ID in front of it. The
+   gateway is back to a hard single-replica constraint, enforced by `kasm.observabilityValidate`
+   failing the render if `components.otelGateway.replicas` is set above 1.
 4. `hostLogs` DaemonSet default REVERSED (plan 3a/3b): sidecar-only nginx log collection,
    unconditional on `observability.enabled`. PSS-restricted-clean and OpenShift-clean single code
    path. Caveat documented: nginx output predating config load appears only in `kubectl logs`.

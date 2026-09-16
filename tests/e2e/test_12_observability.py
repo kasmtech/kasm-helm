@@ -15,6 +15,7 @@ from .helpers import (
     curl_from_pod,
     exec_in_pod,
     get_first_pod_by_selector,
+    helm,
     install_and_wait_with_retry,
     kubectl,
     wait_for_condition,
@@ -22,8 +23,8 @@ from .helpers import (
 
 LOGGER = logging.getLogger(__name__)
 
-# The collector batches on a 10s timeout; give the whole pipeline (Kasm service -> forwarder ->
-# gateway -> ClickHouse) generous headroom before giving up on a query.
+# The collector batches on a 10s timeout; give the whole pipeline (Kasm service -> gateway ->
+# ClickHouse) generous headroom before giving up on a query.
 _TELEMETRY_FLUSH_TIMEOUT_SECONDS = 90
 _TELEMETRY_POLL_SECONDS = 5
 
@@ -50,7 +51,6 @@ def _low_resource_values(
                 "rdpGateway": {"resources": low_resources_gw},
                 "rdpHttpsGateway": {"resources": low_resources_gw},
             },
-            "otelForwarder": {"resources": low_resources_otel},
             "otelGateway": {"resources": low_resources_otel},
             "clickhouse": {
                 "resources": {"requests": {"cpu": "100m", "memory": "512Mi"}},
@@ -160,18 +160,26 @@ def _wait_for_query_nonzero(namespace: str, database: str, sql: str, *, descript
     return last_value
 
 
-def _assert_single_forwarder(namespace: str) -> None:
-    """Restructured topology: one cluster-wide otel-forwarder, never a copy per zone."""
-    selector = "app.kubernetes.io/component=otel-forwarder"
+def _assert_single_gateway(namespace: str) -> None:
+    """Restructured topology: one cluster-wide otel-gateway, never a copy per zone, and no
+    forwarder tier at all — every sender exports straight to the gateway."""
+    selector = "app.kubernetes.io/component=otel-gateway"
     deployments = json.loads(kubectl(["get", "deployments", "-l", selector, "-o", "json"], namespace=namespace).stdout)
     assert len(deployments["items"]) == 1, (
-        f"expected exactly one otel-forwarder Deployment, found {len(deployments['items'])}"
+        f"expected exactly one otel-gateway Deployment, found {len(deployments['items'])}"
     )
     pods = json.loads(kubectl(["get", "pods", "-l", selector, "-o", "json"], namespace=namespace).stdout)
     assert len(pods["items"]) == 1, (
-        f"expected exactly one otel-forwarder pod (cluster-wide, no per-zone copies), found "
+        f"expected exactly one otel-gateway pod (cluster-wide, no per-zone copies), found "
         f"{len(pods['items'])}"
     )
+    forwarder_deployments = json.loads(
+        kubectl(
+            ["get", "deployments", "-l", "app.kubernetes.io/component=otel-forwarder", "-o", "json"],
+            namespace=namespace,
+        ).stdout
+    )
+    assert len(forwarder_deployments["items"]) == 0, "forwarder tier was removed; no otel-forwarder Deployment should exist"
 
 
 def _service_name_seen(namespace: str, database: str, service_name: str, *, timeout_seconds: int) -> bool:
@@ -375,7 +383,7 @@ def test_observability_default_install_end_to_end(installer, temp_workdir: Path)
         set_args=None,
     )
 
-    _assert_single_forwarder(namespace)
+    _assert_single_gateway(namespace)
 
     LOGGER.info("[observability] pods ready; driving traffic and waiting for telemetry to flush")
     _drive_traffic(namespace)
@@ -486,42 +494,22 @@ def test_observability_non_default_clickhouse_database(installer, temp_workdir: 
 
 
 @pytest.mark.e2e
-def test_observability_gateway_replicas_scale_out(installer, temp_workdir: Path) -> None:
-    """components.otelGateway.replicas=2 smoke test: the loadbalancing exporter in front of the
-    gateway (otel-forwarder-configmap.yaml) partitions by traceID across gateway pods, so this
-    proves the partitioned tail-sampling path still delivers telemetry end to end with more than
-    one gateway.
+def test_observability_gateway_replicas_above_one_fails_render(e2e_config, temp_workdir: Path) -> None:
+    """components.otelGateway.replicas=2 must fail the render. The forwarder tier that used to
+    partition traces by ID in front of the gateway is gone (bd kasm-helm-7a0, D2 in
+    .claude/scratch/router-chain/DECISIONS.md): every sender now exports straight to the gateway's
+    ClusterIP, so a second replica would let tail_sampling decide on partial traces. This proves
+    the kasm.observabilityValidate guard end to end via `helm template`, not just the unittest
+    suite, since it's the render path an operator would actually hit.
 
     Run with `make e2e-observability`.
     """
-    e2e_config = installer["config"]
-    namespace = installer["namespace"]
-
     values_path = temp_workdir / "values.yaml"
     values_path.write_text(yaml.safe_dump(_low_resource_values(gateway_replicas=2), sort_keys=False))
 
-    install_and_wait_with_retry(
-        helm_install_fn=helm_install,
-        e2e_config=e2e_config,
-        namespace=namespace,
-        values_file=str(values_path),
-        set_args=None,
+    result = helm(
+        ["template", e2e_config.release_name, e2e_config.chart_dir, "-f", str(values_path)],
+        check=False,
     )
-
-    gateway_pods = json.loads(
-        kubectl(
-            ["get", "pods", "-l", "app.kubernetes.io/component=otel-gateway", "-o", "json"],
-            namespace=namespace,
-        ).stdout
-    )["items"]
-    assert len(gateway_pods) == 2, f"expected 2 otel-gateway pods, found {len(gateway_pods)}"
-    for pod in gateway_pods:
-        ready_conditions = [c for c in pod["status"].get("conditions", []) if c.get("type") == "Ready"]
-        assert ready_conditions and ready_conditions[0].get("status") == "True", (
-            f"otel-gateway pod {pod['metadata']['name']} is not Ready"
-        )
-
-    _drive_traffic(namespace)
-    time.sleep(15)
-
-    _assert_core_telemetry(namespace, "kasm_otel")
+    assert result.returncode != 0, "helm template should have failed with replicas=2"
+    assert "components.otelGateway.replicas (2) must be 0" in result.stderr, result.stderr

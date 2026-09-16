@@ -3,7 +3,7 @@ suite: negative path / explicit fail messages
 templates:
   - templates/proxy-service-external.yaml
   - templates/route.yaml
-  - templates/otel-forwarder-configmap.yaml
+  - templates/otel-gateway-configmap.yaml
   - templates/connection-proxy-services.yaml
 
 tests:
@@ -199,7 +199,7 @@ tests:
 
   # ---------- kasm.observabilityValidate ----------
   - it: standalone=true with one endpoint missing fails
-    template: templates/otel-forwarder-configmap.yaml
+    template: templates/otel-gateway-configmap.yaml
     set:
       observability.clickhouse.standalone: true
       observability.clickhouse.nativeEndpoint: "tcp://ch.example.test:9440"
@@ -209,7 +209,7 @@ tests:
           errorMessage: "observability.clickhouse.standalone requires both observability.clickhouse.nativeEndpoint and observability.clickhouse.httpEndpoint to be set."
 
   - it: standalone=true with clickhouse.enabled=false fails (mutually exclusive)
-    template: templates/otel-forwarder-configmap.yaml
+    template: templates/otel-gateway-configmap.yaml
     set:
       observability.clickhouse.standalone: true
       observability.clickhouse.enabled: false
@@ -220,7 +220,7 @@ tests:
           errorMessage: "observability.clickhouse.standalone and observability.clickhouse.enabled=false are mutually exclusive: standalone already means 'use an external ClickHouse', while enabled=false means 'no ClickHouse store at all'."
 
   - it: caCert and caCertConfigMap both set fails
-    template: templates/otel-forwarder-configmap.yaml
+    template: templates/otel-gateway-configmap.yaml
     set:
       observability.clickhouse.caCert: "-----BEGIN CERTIFICATE-----\nabc\n-----END CERTIFICATE-----"
       observability.clickhouse.caCertConfigMap: my-ca-configmap
@@ -229,7 +229,7 @@ tests:
           errorMessage: "observability.clickhouse.caCert and observability.clickhouse.caCertConfigMap are mutually exclusive: caCert has the chart render a ConfigMap from literal PEM text, caCertConfigMap points at one you already manage."
 
   - it: forward.existingSecret half-set (name only) fails
-    template: templates/otel-forwarder-configmap.yaml
+    template: templates/otel-gateway-configmap.yaml
     set:
       observability.collector.gateway.forward.existingSecret.name: my-forward-secret
     asserts:
@@ -237,24 +237,23 @@ tests:
           errorMessage: "observability.collector.gateway.forward.existingSecret requires both 'name' and 'key' to be set."
 
   - it: forward.existingSecret half-set (key only) fails
-    template: templates/otel-forwarder-configmap.yaml
+    template: templates/otel-gateway-configmap.yaml
     set:
       observability.collector.gateway.forward.existingSecret.key: token
     asserts:
       - failedTemplate:
           errorMessage: "observability.collector.gateway.forward.existingSecret requires both 'name' and 'key' to be set."
 
-  - it: forwarder.externalEndpoint + forwarder.existingConfigMap fails
-    template: templates/otel-forwarder-configmap.yaml
+  - it: components.otelGateway.replicas above 1 fails
+    template: templates/otel-gateway-configmap.yaml
     set:
-      observability.collector.forwarder.externalEndpoint: http://alloy.observability:4318
-      observability.collector.forwarder.existingConfigMap: my-forwarder-config
+      components.otelGateway.replicas: 2
     asserts:
       - failedTemplate:
-          errorMessage: "observability.collector.forwarder.externalEndpoint is mutually exclusive with observability.collector.forwarder.existingConfigMap: externalEndpoint means the chart renders no forwarder at all, so there is no config for it to override. The gateway is unaffected either way."
+          errorMessage: "components.otelGateway.replicas (2) must be 0 (use the deploymentSize preset, always 1) or 1: every sender exports straight to the gateway, and nothing partitions traces by ID in front of it, so a second replica would make tail_sampling decide on partial traces and silently drop spans."
 
   - it: readUsername equal to username fails (bd kasm-helm-hvx)
-    template: templates/otel-forwarder-configmap.yaml
+    template: templates/otel-gateway-configmap.yaml
     set:
       observability.clickhouse.readUsername: kasm_otel
     asserts:
@@ -262,7 +261,7 @@ tests:
           errorMessage: "observability.clickhouse.readUsername (\"kasm_otel\") must differ from observability.clickhouse.username (\"kasm_otel\"): ClickHouse's users.xml cannot define two users with the same name, and the second definition silently discards the read-only password."
 
   - it: readUsername defaulting to kasm_otel_ro equal to a custom username fails (bd kasm-helm-hvx)
-    template: templates/otel-forwarder-configmap.yaml
+    template: templates/otel-gateway-configmap.yaml
     set:
       observability.clickhouse.username: kasm_otel_ro
     asserts:
@@ -270,7 +269,7 @@ tests:
           errorMessage: "observability.clickhouse.readUsername (\"kasm_otel_ro\") must differ from observability.clickhouse.username (\"kasm_otel_ro\"): ClickHouse's users.xml cannot define two users with the same name, and the second definition silently discards the read-only password."
 
   - it: tailSamplePercentage above 100 fails
-    template: templates/otel-forwarder-configmap.yaml
+    template: templates/otel-gateway-configmap.yaml
     set:
       observability.collector.gateway.tailSamplePercentage: 101
     asserts:
@@ -278,7 +277,7 @@ tests:
           errorMessage: "observability.collector.gateway.tailSamplePercentage must be between 0 and 100, got 101."
 
   - it: tailSamplePercentage below 0 fails
-    template: templates/otel-forwarder-configmap.yaml
+    template: templates/otel-gateway-configmap.yaml
     set:
       observability.collector.gateway.tailSamplePercentage: -1
     asserts:
@@ -292,28 +291,28 @@ tests:
   # before any template renders; helm-unittest's failedTemplate.errorMessage exact-match
   # does not attribute it to a template, so only failure (not message text) is asserted here.
   - it: observability.fileLogs is rejected as an unknown key
-    template: templates/otel-forwarder-configmap.yaml
+    template: templates/otel-gateway-configmap.yaml
     set:
       observability.fileLogs.enabled: true
     asserts:
       - failedTemplate: {}
 
   - it: observability.hostLogs is rejected as an unknown key
-    template: templates/otel-forwarder-configmap.yaml
+    template: templates/otel-gateway-configmap.yaml
     set:
       observability.hostLogs.enabled: true
     asserts:
       - failedTemplate: {}
 
   - it: observability.nginxLogs is rejected as an unknown key
-    template: templates/otel-forwarder-configmap.yaml
+    template: templates/otel-gateway-configmap.yaml
     set:
       observability.nginxLogs.enabled: true
     asserts:
       - failedTemplate: {}
 
   - it: observability.logFormat is rejected as an unknown key
-    template: templates/otel-forwarder-configmap.yaml
+    template: templates/otel-gateway-configmap.yaml
     set:
       observability.logFormat: json
     asserts:

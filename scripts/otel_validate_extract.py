@@ -22,7 +22,7 @@ def component(doc):
 def main(rendered, outdir, manifest):
     docs = [d for d in yaml.safe_load_all(open(rendered)) if d]
 
-    # otel-forwarder and otel-gateway ConfigMaps pair 1:1 with their own Deployment (same
+    # The otel-gateway ConfigMap pairs 1:1 with its own Deployment (same
     # component label). The db and nginx sidecar ConfigMaps don't - their host workload's
     # component is "db"/"connection-proxy"/"proxy" - so any "otel-sidecar" container's image
     # is used for those instead; all sidecars share components.otelSidecar.image.

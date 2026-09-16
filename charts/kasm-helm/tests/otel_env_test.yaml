@@ -5,8 +5,37 @@ templates:
   - templates/manager-deployment.yaml
   - templates/connection-proxy-statefulset.yaml
   - templates/db-init-job.yaml
+  - templates/otel-gateway-configmap.yaml
+  - templates/otel-gateway-deployment.yaml
+  - templates/otel-gateway-service.yaml
 
 tests:
+  # ---------- gateway: both receivers, both ports, same auth (D5) ----------
+  - it: gateway renders an authenticated gRPC receiver on 4317 and HTTP receiver on 4318
+    template: templates/otel-gateway-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'grpc:\s*\n\s*endpoint: "0\.0\.0\.0:4317"\s*\n\s*auth:\s*\n\s*authenticator: bearertokenauth/server'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'http:\s*\n\s*endpoint: "0\.0\.0\.0:4318"\s*\n\s*auth:\s*\n\s*authenticator: bearertokenauth/server'
+
+  - it: gateway Deployment exposes both otlp-grpc and otlp-http container ports
+    template: templates/otel-gateway-deployment.yaml
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].ports[?(@.name=="otlp-grpc" && @.containerPort==4317)]
+      - exists:
+          path: spec.template.spec.containers[0].ports[?(@.name=="otlp-http" && @.containerPort==4318)]
+
+  - it: gateway Service exposes both otlp-grpc and otlp-http ports
+    template: templates/otel-gateway-service.yaml
+    asserts:
+      - exists:
+          path: spec.ports[?(@.name=="otlp-grpc" && @.port==4317)]
+      - exists:
+          path: spec.ports[?(@.name=="otlp-http" && @.port==4318)]
   # ---------- OTEL_SERVICE_NAME per workload ----------
   - it: api container gets OTEL_SERVICE_NAME=kasm-api
     template: templates/api-deployment.yaml
@@ -41,14 +70,21 @@ tests:
       - exists:
           path: spec.template.spec.containers[3].env[?(@.name=="OTEL_SERVICE_NAME" && @.value=="kasm-rdp-https-gateway")]
 
-  # ---------- endpoint: forwarder Service for pods without a sidecar, loopback for pods with one ----------
-  - it: api exports to the cluster-wide forwarder Service
+  # ---------- endpoint: gateway Service for pods without a sidecar, loopback for pods with one ----------
+  - it: api exports straight to the gateway Service over HTTP, authenticated
     template: templates/api-deployment.yaml
     asserts:
       - exists:
-          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_EXPORTER_OTLP_ENDPOINT" && @.value=="http://RELEASE-NAME-otel-forwarder:4318")]
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_EXPORTER_OTLP_ENDPOINT" && @.value=="http://RELEASE-NAME-otel-gateway:4318")]
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_EXPORTER_OTLP_PROTOCOL" && @.value=="http/protobuf")]
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_BEARER_TOKEN")].valueFrom.secretKeyRef.key
+          value: otel-bearer-token
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_EXPORTER_OTLP_HEADERS" && @.value=="Authorization=Bearer $(OTEL_BEARER_TOKEN)")]
 
-  # Zones no longer select an endpoint; there is one forwarder and zone identity travels as a
+  # Zones no longer select an endpoint; there is one gateway and zone identity travels as a
   # resource attribute on the telemetry instead.
   - it: api endpoint is identical in a multi-zone install
     template: templates/api-deployment.yaml
@@ -57,7 +93,7 @@ tests:
     documentIndex: 0
     asserts:
       - exists:
-          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_EXPORTER_OTLP_ENDPOINT" && @.value=="http://RELEASE-NAME-otel-forwarder:4318")]
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_EXPORTER_OTLP_ENDPOINT" && @.value=="http://RELEASE-NAME-otel-gateway:4318")]
       - matchRegex:
           path: spec.template.spec.containers[0].env[?(@.name=="OTEL_RESOURCE_ATTRIBUTES")].value
           pattern: "kasm\\.zone=zonea"
@@ -78,14 +114,6 @@ tests:
       - matchRegex:
           path: spec.template.spec.containers[3].env[?(@.name=="OTEL_RESOURCE_ATTRIBUTES")].value
           pattern: "kasm\\.zone=zonea"
-
-  - it: api endpoint follows forwarder.externalEndpoint when set
-    template: templates/api-deployment.yaml
-    set:
-      observability.collector.forwarder.externalEndpoint: http://alloy.observability:4318
-    asserts:
-      - exists:
-          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_EXPORTER_OTLP_ENDPOINT" && @.value=="http://alloy.observability:4318")]
 
   # Containers co-located with a sidecar export to it over loopback; the sidecar is the pod's
   # single egress point.

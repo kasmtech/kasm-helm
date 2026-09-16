@@ -20,7 +20,6 @@ Values keys the real implementations here read directly from the caller's root c
                                 .Values.extraLabels/.extraAnnotations, .Values.ingress,
                                 .Values.route, .Values.certificate.certManager, .Values.database,
                                 .Values.imagePullSecrets, .Values.kasmSecrets, .Values.proxyService,
-                                .Values.observability.collector.forwarder.externalService,
                                 .Values.applyHealthChecks, .Values.applySecurity, .Release, .Chart
   kasm.common.securityContext: .Values.applySecurity, .Values.isOpenshift
   kasm.common.name:            .Release.Name (via the root context passed in)
@@ -176,12 +175,6 @@ Where:
   {{- end -}}
 {{- end -}}
 
-{{- if eq $component "otel-forwarder-ext" -}}
-  {{- with $ctx.Values.observability.collector.forwarder.externalService.labels -}}
-    {{- $labels = merge $labels . -}}
-  {{- end -}}
-{{- end -}}
-
 {{- $labels = merge $labels (dict
   "kasm.com/version" $ctx.Chart.AppVersion
   "app.kubernetes.io/name" $labelName
@@ -221,12 +214,6 @@ Where:
 
 {{- if and (or (eq $component "proxy") (eq $component "proxy-ext")) (eq $resource "service") -}}
   {{- with $ctx.Values.proxyService.annotations -}}
-    {{- $annotations = merge $annotations . -}}
-  {{- end -}}
-{{- end -}}
-
-{{- if eq $component "otel-forwarder-ext" -}}
-  {{- with $ctx.Values.observability.collector.forwarder.externalService.annotations -}}
     {{- $annotations = merge $annotations . -}}
   {{- end -}}
 {{- end -}}
@@ -551,10 +538,10 @@ successThreshold: {{ $successThreshold }}
 {{- end -}}
 
 {{/*
-  OTel Collector config fragments shared across the forwarder, gateway, nginx-sidecar, and
-  db-sidecar ConfigMaps (otel-*-configmap.yaml). Extracted so the shapes those four configs share
-  can't drift independently; anything signal-specific (receivers, exporters that write to
-  ClickHouse or do tail_sampling, etc.) stays inline in its own configmap template.
+  OTel Collector config fragments shared across the gateway, nginx-sidecar, and db-sidecar
+  ConfigMaps (otel-*-configmap.yaml). Extracted so the shapes those three configs share can't
+  drift independently; anything signal-specific (receivers, exporters that write to ClickHouse or
+  do tail_sampling, etc.) stays inline in its own configmap template.
 */}}
 
 {{/*
@@ -588,14 +575,19 @@ batch:
 {{- end -}}
 
 {{/*
-  otlphttp exporter the nginx-sidecar and db-sidecar configs use to send everything to the
-  forwarder over OTEL_EXPORTER_OTLP_ENDPOINT. Identical in both callers, including the queue sizing
-  (these sidecars are low-volume compared to the forwarder/gateway tiers).
-  Usage: {{ include "kasm.common.otelOtlphttpExporterToForwarder" . | nindent 6 }}
+  otlp/gRPC exporter the nginx-sidecar and db-sidecar configs use to send everything straight to
+  the gateway over OTEL_EXPORTER_OTLP_ENDPOINT, authenticated with OTEL_BEARER_TOKEN. Identical in
+  both callers, including the queue sizing (these sidecars are low-volume compared to the gateway
+  tier). In-cluster traffic only; not attempting mTLS between the sidecar and the gateway.
+  Usage: {{ include "kasm.common.otelOtlpExporterToGateway" . | nindent 6 }}
 */}}
-{{- define "kasm.common.otelOtlphttpExporterToForwarder" -}}
-otlphttp:
+{{- define "kasm.common.otelOtlpExporterToGateway" -}}
+otlp:
   endpoint: "${env:OTEL_EXPORTER_OTLP_ENDPOINT}"
+  headers:
+    Authorization: "Bearer ${env:OTEL_BEARER_TOKEN}"
+  tls:
+    insecure: true
   retry_on_failure:
     enabled: true
     initial_interval: 5s

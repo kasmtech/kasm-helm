@@ -114,14 +114,9 @@ connectionProxy:
     portName: cp-rdp-tls-pt
     image: {{ if and $cp.rdpHttpsGateway.image.registry $cp.rdpHttpsGateway.image.repository }}{{ printf "%s/%s:%s" $cp.rdpHttpsGateway.image.registry $cp.rdpHttpsGateway.image.repository (include "kasm.imageTag" (list . $cp.rdpHttpsGateway.image.tag "connectionProxy.rdpHttpsGateway")) }}{{ end }}
 otel:
-  component: otel-forwarder
-  svc: {{ printf "%s-otel-forwarder" .Release.Name }}
   portName: otel-pt
   gatewayComponent: otel-gateway
   gatewaySvc: {{ printf "%s-otel-gateway" .Release.Name }}
-  gatewayHeadlessSvc: {{ printf "%s-otel-gateway-headless" .Release.Name }}
-  gatewayHeadlessFqdn: {{ printf "%s-otel-gateway-headless.%s.svc.%s" .Release.Name .Release.Namespace .Values.clusterDomain }}
-  image: {{ include "kasm.common.imageRef" .Values.components.otelForwarder.image }}
   gatewayImage: {{ include "kasm.common.imageRef" .Values.components.otelGateway.image }}
   sidecarImage: {{ include "kasm.common.imageRef" .Values.components.otelSidecar.image }}
   otlpHttp: 4318
@@ -743,10 +738,10 @@ Where:
   Example usage:
   {{ include "replicas.preset" (dict "node" "proxy" "size" "small") -}}
 
-  Note: "otel-gateway" is 1 at every size on purpose — it only samples and writes to ClickHouse,
-  so it needs less headroom than the forwarder. It can be scaled via components.otelGateway.replicas:
-  the forwarder reaches it through a loadbalancing exporter keyed on trace ID, so tail_sampling
-  still sees whole traces. "otel-forwarder" has no such constraint and scales with size.
+  Note: "otel-gateway" is 1 at every size and pinned there — kasm.observabilityValidate fails the
+  render if components.otelGateway.replicas is set above 1. Every sender now talks to the gateway's
+  ClusterIP Service directly; nothing partitions traces by ID in front of it, so a second replica
+  would let tail_sampling see partial traces and silently drop spans.
 */}}
 {{- define "replicas.preset" -}}
 {{- $presetSizes := dict
@@ -774,11 +769,6 @@ Where:
     "small" 1
     "medium" 2
     "large" 3
-  )
-  "otel-forwarder" (dict
-    "small" 1
-    "medium" 2
-    "large" 2
   )
   "otel-gateway" (dict
     "small" 1
@@ -935,20 +925,6 @@ Where:
       "large" (dict
         "requests" (dict "cpu" "1500m" "memory" "512Mi" "ephemeral-storage" "50Mi")
         "limits" (dict "cpu" "1500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
-      )
-    )
-    "otel-forwarder" (dict
-      "small" (dict
-        "requests" (dict "cpu" "200m" "memory" "256Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
-      )
-      "medium" (dict
-        "requests" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "1" "memory" "1Gi" "ephemeral-storage" "2Gi")
-      )
-      "large" (dict
-        "requests" (dict "cpu" "1" "memory" "1Gi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "2" "memory" "2Gi" "ephemeral-storage" "2Gi")
       )
     )
     "otel-gateway" (dict
@@ -1210,10 +1186,10 @@ Dedup rules:
     context     = root context (.)
     serviceName = OTEL_SERVICE_NAME value, e.g. "kasm-api"
     zone        = (optional) zone name (from kasm.zones), recorded as the kasm.zone resource
-                  attribute. Zones no longer select an endpoint: there is one cluster-wide forwarder.
+                  attribute. Zones no longer select an endpoint: there is one cluster-wide gateway.
     sidecar     = (optional bool) set true for containers in a pod that runs a Collector sidecar
                   (Connection Proxy). Those export to the sidecar over loopback and the sidecar is the
-                  pod's single egress point; everything else exports to the forwarder Service.
+                  pod's single egress point; everything else exports straight to the gateway Service.
     python      = (optional bool) set true for the Python services (api, manager) to also emit
                   OTEL_PYTHON_EXCLUDED_URLS.
   Emits a YAML list fragment suitable for splicing into a container's `env:`.
@@ -1226,22 +1202,37 @@ Dedup rules:
 - name: OTEL_SDK_DISABLED
   value: "true"
 {{- else }}
+{{- $constants := include "kasm.constants" $ctx | fromYaml -}}
 {{- $zone := .zone | default "" -}}
 {{- $endpoint := "" -}}
+{{- $protocol := "" -}}
 {{- if .sidecar -}}
-  {{- $endpoint = printf "http://localhost:%v" (include "kasm.constants" $ctx | fromYaml).otel.otlpHttp -}}
+  {{- $endpoint = printf "http://localhost:%v" $constants.otel.otlpHttp -}}
+  {{- $protocol = "http/protobuf" -}}
 {{- else -}}
-  {{- $endpoint = $obs.collector.forwarder.externalEndpoint -}}
-  {{- if not $endpoint -}}
-    {{- $endpoint = printf "http://%s-otel-forwarder:4318" $ctx.Release.Name -}}
-  {{- end -}}
+  {{/* Every non-sidecar sender (Kasm app services) talks straight to the gateway (no forwarder
+       tier between them), authenticated with the same bearer token the gateway's
+       bearertokenauth/server extension checks. HTTP, not gRPC: the Kasm app SDKs are wired to
+       the OTLP HTTP exporter (that choice lives in kasm_backend, not this chart), so the gateway
+       exposes an authenticated HTTP receiver alongside the gRPC one the Collector sidecars use. */}}
+  {{- $endpoint = printf "http://%s:%v" $constants.otel.gatewaySvc $constants.otel.otlpHttp -}}
+  {{- $protocol = "http/protobuf" -}}
 {{- end }}
 - name: OTEL_SERVICE_NAME
   value: {{ $serviceName | quote }}
+{{- if not .sidecar }}
+- name: OTEL_BEARER_TOKEN
+  valueFrom:
+    secretKeyRef:
+      name: {{ $constants.secrets.name }}
+      key: otel-bearer-token
+- name: OTEL_EXPORTER_OTLP_HEADERS
+  value: "Authorization=Bearer $(OTEL_BEARER_TOKEN)"
+{{- end }}
 - name: OTEL_EXPORTER_OTLP_ENDPOINT
   value: {{ $endpoint | quote }}
 - name: OTEL_EXPORTER_OTLP_PROTOCOL
-  value: "http/protobuf"
+  value: {{ $protocol | quote }}
 {{- if .python }}
 - name: OTEL_PYTHON_EXCLUDED_URLS
   value: "socket.io/*,healthcheck"
@@ -1366,7 +1357,7 @@ Dedup rules:
 
 {{/*
   Render-time validation for the observability values tree. Call once from a template that
-  always renders (called at the top of templates/otel-forwarder-configmap.yaml).
+  always renders (called at the top of templates/otel-gateway-configmap.yaml).
   Usage:
     {{ include "kasm.observabilityValidate" $ }}
 */}}
@@ -1400,11 +1391,14 @@ Dedup rules:
 {{- if and (or $forwardSecretNameSet $forwardSecretKeySet) (not (and $forwardSecretNameSet $forwardSecretKeySet)) -}}
   {{- fail "observability.collector.gateway.forward.existingSecret requires both 'name' and 'key' to be set." -}}
 {{- end -}}
-{{- if and $collector.forwarder.externalEndpoint $collector.forwarder.existingConfigMap -}}
-  {{- fail "observability.collector.forwarder.externalEndpoint is mutually exclusive with observability.collector.forwarder.existingConfigMap: externalEndpoint means the chart renders no forwarder at all, so there is no config for it to override. The gateway is unaffected either way." -}}
-{{- end -}}
 {{- if or (lt (int $collector.gateway.tailSamplePercentage) 0) (gt (int $collector.gateway.tailSamplePercentage) 100) -}}
   {{- fail (printf "observability.collector.gateway.tailSamplePercentage must be between 0 and 100, got %d." (int $collector.gateway.tailSamplePercentage)) -}}
+{{- end -}}
+{{- /* Every sender exports straight to the gateway; nothing in front of it partitions traces by
+     ID the way the removed forwarder's loadbalancing exporter did. A second replica would let
+     tail_sampling see only some of a trace's spans and silently drop the rest. */ -}}
+{{- if gt (int $ctx.Values.components.otelGateway.replicas) 1 -}}
+  {{- fail (printf "components.otelGateway.replicas (%d) must be 0 (use the deploymentSize preset, always 1) or 1: every sender exports straight to the gateway, and nothing partitions traces by ID in front of it, so a second replica would make tail_sampling decide on partial traces and silently drop spans." (int $ctx.Values.components.otelGateway.replicas)) -}}
 {{- end -}}
 {{- end -}}
 
@@ -1504,7 +1498,7 @@ Dedup rules:
 
 {{/*
   Shared OTel Collector sidecar container. A sidecar runs in every pod whose telemetry can only be
-  read from inside the pod, and is that pod's single egress point to the forwarder:
+  read from inside the pod, and is that pod's single egress point to the gateway:
     - Kasm Proxy and Connection Proxy (loopback syslog for nginx logs, plus stub_status metrics)
     - Kasm DB (PostgreSQL JSON log files on the data PVC)
   The caller is responsible for adding matching volumes to the pod spec:
@@ -1537,10 +1531,10 @@ Dedup rules:
 {{- $constants := include "kasm.constants" $ctx | fromYaml -}}
 {{- $zone := .zone | default "" -}}
 {{- $uid := .uid | default 10001 -}}
-{{- $endpoint := $ctx.Values.observability.collector.forwarder.externalEndpoint -}}
-{{- if not $endpoint -}}
-  {{- $endpoint = printf "http://%s-otel-forwarder:4318" $ctx.Release.Name -}}
-{{- end -}}
+{{/* This container's own exported config (kasm.common.otelOtlpExporterToGateway) forwards to the
+     gateway over OTLP/gRPC, authenticated with the same bearer token the gateway's
+     bearertokenauth/server extension checks. */}}
+{{- $endpoint := printf "%s:%v" $constants.otel.gatewaySvc $constants.otel.otlpGrpc -}}
 - name: otel-sidecar
   image: {{ $constants.otel.sidecarImage }}
   imagePullPolicy: {{ $ctx.Values.imagePullPolicy }}
@@ -1548,6 +1542,11 @@ Dedup rules:
   env:
     - name: OTEL_EXPORTER_OTLP_ENDPOINT
       value: {{ $endpoint | quote }}
+    - name: OTEL_BEARER_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: {{ $constants.secrets.name }}
+          key: otel-bearer-token
     {{- if .serviceName }}
     - name: OTEL_SERVICE_NAME
       value: {{ .serviceName | quote }}

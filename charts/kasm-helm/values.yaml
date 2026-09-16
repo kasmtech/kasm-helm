@@ -910,47 +910,10 @@ components:
     #    command: [/bin/sh, -c, 'echo "Hello world"']
     extraInitContainers: []
 
-  # Configuration settings for the OpenTelemetry forwarder Collector. This is the tier every Kasm
-  # service and every Collector sidecar exports to, and the only ingest point exposed outside the
-  # cluster. It batches and forwards to the gateway; it neither samples nor writes to ClickHouse, so
-  # it holds no cross-request state and scales freely. Behaviour is configured under
-  # `observability.collector.forwarder`.
-  #
-  otelForwarder:
-    # components.otelForwarder.image -- Configure the image repository where the image is stored. Use this to point to an private hosted
-    # container registry instead of our public DockerHub hosted one.
-    #
-    # The forwarder, gateway, and sidecars each carry their own image reference on purpose, so a
-    # deployment can replace one tier without touching the others.
-    #
-    image:
-      registry: docker.io
-      repository: otel/opentelemetry-collector-contrib
-      # components.otelForwarder.image.tag -- Tag for this component's image. Pinned by the chart rather than
-      # falling back to the chart-wide `useImageTags`, because the Collector is versioned independently of Kasm.
-      tag: "0.156.0"
-    # components.otelForwarder.replicas -- Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset (default).
-    replicas: 0
-    # components.otelForwarder.annotations -- Custom annotations to add to the forwarder Collector Deployment
-    annotations: {}
-    # components.otelForwarder.resources -- Manually configure the forwarder Collector Deployment resources. This overrides the pre-defined `deploymentSize` values.
-    resources: {}
-    # components.otelForwarder.labels -- Custom labels to add to the forwarder Collector Deployment
-    labels: {}
-    # components.otelForwarder.extraVolumes -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
-    #  like custom SSL certificates, config files, or data volumes to the forwarder Collector container
-    extraVolumes: []
-    # components.otelForwarder.extraVolumeMounts -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
-    #  like custom SSL certificates, config files, or data volumes to the forwarder Collector container
-    extraVolumeMounts: []
-    # components.otelForwarder.extraContainers -- Additional sidecar containers to run in the pod
-    extraContainers: []
-    # components.otelForwarder.extraInitContainers -- Additional init containers to run in the pod
-    extraInitContainers: []
-
-  # Configuration settings for the OpenTelemetry gateway Collector. This tier makes the trace-sampling
-  # decision and is the only writer to ClickHouse. Behaviour is configured under
-  # `observability.collector.gateway`.
+  # Configuration settings for the OpenTelemetry gateway Collector. This is the only OTel Collector
+  # tier in the chart: every Kasm service, every Collector sidecar, and any out-of-cluster senders
+  # export straight to it. It makes the trace-sampling decision and is the only writer to
+  # ClickHouse. Behaviour is configured under `observability.collector.gateway`.
   #
   otelGateway:
     # components.otelGateway.image -- Configure the image repository where the image is stored. Use this to point to an private hosted
@@ -965,10 +928,9 @@ components:
     # components.otelGateway.replicas -- Override the replica count set by deploymentSize. Set to 0 to use the
     # deploymentSize preset (default, which is 1 at every size).
     #
-    # Scaling this is safe: the forwarder reaches the gateway through a loadbalancing exporter that hashes each
-    # trace ID to one gateway pod, so trace sampling still sees whole traces. Sending telemetry directly to the
-    # gateway's Service while running more than one replica is not safe, and produces traces with missing spans
-    # and no error anywhere.
+    # Pinned to 1: every sender exports straight to the gateway, and nothing in front of it
+    # partitions traces by ID, so a second replica would make tail_sampling decide on partial
+    # traces and silently drop spans. The chart fails at render time if this is set above 1.
     replicas: 0
     # components.otelGateway.annotations -- Custom annotations to add to the gateway Collector Deployment
     annotations: {}
@@ -994,7 +956,7 @@ components:
   # produces telemetry only readable from inside the pod: the Kasm Proxy and Connection Proxy (nginx
   # log files and connection metrics) and the Kasm DB (PostgreSQL log files). In pods that have one,
   # the other containers export OTLP to it over loopback and the sidecar is the pod's single egress
-  # point to the forwarder. This is not a workload of its own, so it has no replicas.
+  # point to the gateway. This is not a workload of its own, so it has no replicas.
   #
   otelSidecar:
     # components.otelSidecar.image -- Configure the image repository where the image is stored. Use this to point to an private hosted
@@ -1077,57 +1039,15 @@ observability:
   enabled: true
 
   # Configure the behaviour of the OpenTelemetry Collector tiers. Deployment settings for each tier
-  # (image, replicas, resources) live under `components.otelForwarder`, `components.otelGateway`, and
-  # `components.otelSidecar`.
+  # (image, replicas, resources) live under `components.otelGateway` and `components.otelSidecar`.
   #
-  # Telemetry flows through three hops. A Collector *sidecar* runs in every pod that produces telemetry
+  # Telemetry flows through two hops. A Collector *sidecar* runs in every pod that produces telemetry
   # only readable from inside the pod (the Kasm Proxy and Connection Proxy nginx logs, and the Kasm DB
-  # PostgreSQL logs) and is that pod's single egress point. A single cluster-wide *forwarder* receives
-  # from every sidecar, from the Kasm services that export directly, and from any Kasm resources
-  # outside the cluster. A single *gateway* makes the trace-sampling decision and is the only writer to
-  # ClickHouse.
+  # PostgreSQL logs) and is that pod's single egress point. Every sidecar, and every Kasm service that
+  # exports directly, sends straight to the single cluster-wide *gateway*, which makes the
+  # trace-sampling decision and is the only writer to ClickHouse.
   #
   collector:
-    # observability.collector.forwarder -- Configure the cluster-wide forwarder Collector, which every
-    # Kasm service and every Collector sidecar exports to. It batches and forwards to the gateway; it
-    # neither samples nor writes to ClickHouse, so it holds no cross-request state and scales freely.
-    #
-    forwarder:
-      # observability.collector.forwarder.externalEndpoint -- Replace the chart's forwarder with an
-      # OTLP/HTTP endpoint you already run (e.g. `http://alloy.observability:4318`). No forwarder
-      # Deployment, Service, or ConfigMap is rendered, and every sidecar and Kasm service exports to this
-      # endpoint instead.
-      #
-      # This replaces the forwarder only. The gateway, ClickHouse, and the retention Job are still
-      # deployed, and your Collector must forward to `<release>-otel-gateway:4317` using the bearer token
-      # in the `otel-bearer-token` key of the Kasm secret. If it does not, ClickHouse stays empty and
-      # Kasm reporting returns no results, with no error anywhere.
-      #
-      externalEndpoint: ""
-      # observability.collector.forwarder.existingConfigMap -- Name of a user-created ConfigMap holding a
-      # complete configuration for the forwarder Collector, under the key `config.yaml`. Set this to take
-      # full ownership of the forwarder config; the chart renders none of its own. The gateway config is
-      # unaffected — override that separately with `gateway.existingConfigMap`. Start from the chart's
-      # rendered output or from `examples/otel-collector-custom.yaml`.
-      #
-      existingConfigMap: ""
-      # observability.collector.forwarder.externalService -- Expose the forwarder's OTLP/gRPC port (4317)
-      # outside the cluster so Kasm Agents or Collectors running outside Kubernetes can forward telemetry in.
-      # The connection requires the bearer token stored in the `otel-bearer-token` key of the Kasm secret.
-      #
-      externalService:
-        enabled: false
-        type: LoadBalancer
-        # observability.collector.forwarder.externalService.tls -- Terminate TLS on the exposed OTLP/gRPC
-        # port using the same certificate as the rest of Kasm. Leave this enabled: the bearer token is sent
-        # on every export, so exposing the port without TLS puts a long-lived credential on the wire in
-        # cleartext. Senders must trust the certificate; with the default self-signed Kasm certificate they
-        # need to skip verification, which protects the token from capture but not from an active
-        # man-in-the-middle. Supply your own certificate via `certificate.secretName` to close that gap.
-        #
-        tls: true
-        annotations: {}
-        labels: {}
     # observability.collector.gateway -- Configure the single cluster-wide gateway Collector, which makes
     # the trace-sampling decision and is the only writer to ClickHouse.
     #
@@ -1136,8 +1056,7 @@ observability:
       # complete configuration for the gateway Collector, under the key `config.yaml`. Set this to take
       # full ownership of the gateway config: the chart renders none of its own, and the sibling values that
       # only shape that config (`tailSamplePercentage` and `forward`, plus `clickhouse.retention`) are
-      # ignored. The forwarder config is unaffected — override that separately with
-      # `forwarder.existingConfigMap`.
+      # ignored.
       #
       existingConfigMap: ""
       # observability.collector.gateway.tailSamplePercentage -- Percentage (0-100) of traces to keep after the

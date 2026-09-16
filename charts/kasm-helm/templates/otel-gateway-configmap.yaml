@@ -2,12 +2,17 @@
 Kasm OTel Collector gateway ConfigMap — one per release, cluster-wide (not zone-scoped).
 
 Owns tail_sampling and the three ClickHouse exporters. This is the only tier that may hold
-either. Scaling past 1 replica is safe: the forwarder reaches this tier through a trace-ID-keyed
-loadbalancing exporter, so each gateway replica samples whole traces.
+either. It is also the only OTel tier in the chart: every Kasm service, the Collector sidecars,
+and any out-of-cluster senders export straight to it with bearer auth — Collector sidecars over
+OTLP/gRPC, Kasm app services over OTLP/HTTP (see kasm.otelEnv, kasm.otelSidecar). replicas is
+pinned to 1 (kasm.observabilityValidate fails the
+render otherwise): nothing in front of this receiver partitions traces by ID, so a second replica
+would let tail_sampling see partial traces.
 
 Ported from kasm_backend/install/conf/otel/otel-collector-local.yaml, minus the nginx log/metric
 receivers (those live in the per-pod nginx sidecars, not the central Collector).
 */}}
+{{- include "kasm.observabilityValidate" . }}
 {{- $obs := .Values.observability -}}
 {{- if and $obs.enabled (not $obs.collector.gateway.existingConfigMap) }}
 {{- $ch := $obs.clickhouse -}}
@@ -47,12 +52,22 @@ data:
 {{ include "kasm.common.otelHealthCheckExtension" (dict "port" 13133) | indent 6 }}
 
     receivers:
-      # The forwarders are this receiver's only clients. Nothing
-      # addresses the gateway directly: no otlp/local (4318), no otlp/nginx (4316).
+      # Every Kasm service, Collector sidecar, and out-of-cluster sender exports here directly,
+      # authenticated with the same bearer token. There is no unauthenticated local receiver: this
+      # is the gateway's only ingest point.
+      #
+      # Two protocols, same auth: the Collector sidecars (nginx/db) speak gRPC natively via the
+      # Collector's own otlp exporter. The Kasm app SDKs (api, manager) are wired to the OTLP HTTP
+      # exporter — that choice lives in kasm_backend, not this chart — so the gateway must also
+      # accept HTTP on a separate port for those senders. See kasm.otelEnv.
       otlp/remote:
         protocols:
           grpc:
             endpoint: "0.0.0.0:4317"
+            auth:
+              authenticator: bearertokenauth/server
+          http:
+            endpoint: "0.0.0.0:4318"
             auth:
               authenticator: bearertokenauth/server
 

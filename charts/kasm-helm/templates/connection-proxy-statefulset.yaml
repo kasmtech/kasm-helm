@@ -389,7 +389,7 @@ spec:
           One Collector sidecar per pod. It receives this pod's nginx logs over loopback syslog,
           scrapes stub_status over loopback, and receives OTLP from the guac / rdp-gateway /
           rdp-https-gateway containers on 127.0.0.1, so the pod has a single egress point to the
-          forwarder.
+          gateway.
         */}}
         {{- include "kasm.otelSidecar" (dict "context" $ "zone" $zone.name "configMap" (include "kasm.name" (list $ "otel-nginx-sidecar-connection-proxy" "configmap"))) | nindent 8 }}
         {{- end }}

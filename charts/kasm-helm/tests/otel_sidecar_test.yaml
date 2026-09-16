@@ -88,27 +88,26 @@ tests:
           value: false
 
   # ---------- egress ----------
-  - it: sidecars export to the cluster-wide forwarder
+  - it: sidecars export straight to the gateway, authenticated
     asserts:
       - equal:
           path: spec.template.spec.containers[1].env[?(@.name=="OTEL_EXPORTER_OTLP_ENDPOINT")].value
-          value: http://RELEASE-NAME-otel-forwarder:4318
+          value: RELEASE-NAME-otel-gateway:4317
+        template: templates/proxy-deployment.yaml
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[1].env[?(@.name=="OTEL_BEARER_TOKEN")].valueFrom.secretKeyRef.key
+          value: otel-bearer-token
         template: templates/proxy-deployment.yaml
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[1].env[?(@.name=="OTEL_EXPORTER_OTLP_ENDPOINT")].value
-          value: http://RELEASE-NAME-otel-forwarder:4318
+          value: RELEASE-NAME-otel-gateway:4317
         template: templates/db-statefulset.yaml
-
-  - it: sidecars follow forwarder.externalEndpoint when the chart renders no forwarder
-    template: templates/proxy-deployment.yaml
-    documentIndex: 0
-    values:
-      - ../../../tests/values/observability-external-forwarder.yaml
-    asserts:
       - equal:
-          path: spec.template.spec.containers[1].env[?(@.name=="OTEL_EXPORTER_OTLP_ENDPOINT")].value
-          value: http://alloy.observability:4318
+          path: spec.template.spec.containers[1].env[?(@.name=="OTEL_BEARER_TOKEN")].valueFrom.secretKeyRef.key
+          value: otel-bearer-token
+        template: templates/db-statefulset.yaml
 
   # ---------- sidecar config: loopback only ----------
   # These receivers must never be reachable from outside the pod. They are bound to 127.0.0.1 and
@@ -125,6 +124,19 @@ tests:
       - notMatchRegex:
           path: data["config.yaml"]
           pattern: '0\.0\.0\.0:431'
+
+  - it: nginx sidecar's exporter is otlp/gRPC to the gateway with bearer auth
+    template: templates/otel-nginx-sidecar-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'otlp:\s+endpoint: "\$\{env:OTEL_EXPORTER_OTLP_ENDPOINT\}"\s+headers:\s+Authorization: "Bearer \$\{env:OTEL_BEARER_TOKEN\}"'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "exporters: \\[otlp\\]"
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "otlphttp"
 
   - it: sidecar listeners are not published as containerPorts
     template: templates/proxy-deployment.yaml

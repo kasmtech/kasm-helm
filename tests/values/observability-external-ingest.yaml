@@ -1,8 +1,0 @@
-# Expose OTLP/gRPC outside the cluster for Kasm resources running on VMs. TLS is on by default so
-# the bearer token is not sent in cleartext.
-observability:
-  collector:
-    forwarder:
-      externalService:
-        enabled: true
-        type: LoadBalancer

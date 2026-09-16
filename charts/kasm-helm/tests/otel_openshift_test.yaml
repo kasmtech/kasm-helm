@@ -6,8 +6,8 @@ suite: isOpenshift — the observability stack needs no special handling
 # problem: there is one code path, and it is PSS-restricted-clean and OpenShift-clean.
 
 templates:
-  - templates/otel-forwarder-configmap.yaml
-  - templates/otel-forwarder-deployment.yaml
+  - templates/otel-gateway-configmap.yaml
+  - templates/otel-gateway-deployment.yaml
   - templates/proxy-deployment.yaml
   - templates/db-statefulset.yaml
   - templates/clickhouse-statefulset.yaml
@@ -20,10 +20,10 @@ tests:
     asserts:
       - hasDocuments:
           count: 1
-        template: templates/otel-forwarder-configmap.yaml
+        template: templates/otel-gateway-configmap.yaml
       - hasDocuments:
           count: 1
-        template: templates/otel-forwarder-deployment.yaml
+        template: templates/otel-gateway-deployment.yaml
       - hasDocuments:
           count: 1
         template: templates/clickhouse-statefulset.yaml
@@ -66,7 +66,7 @@ tests:
     asserts:
       - hasDocuments:
           count: 1
-        template: templates/otel-forwarder-deployment.yaml
+        template: templates/otel-gateway-deployment.yaml
       - lengthEqual:
           path: spec.template.spec.containers
           count: 2
@@ -85,4 +85,4 @@ tests:
         template: templates/db-statefulset.yaml
       - notExists:
           path: spec.template.spec.volumes[?(@.hostPath)]
-        template: templates/otel-forwarder-deployment.yaml
+        template: templates/otel-gateway-deployment.yaml

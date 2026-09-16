@@ -60,7 +60,7 @@ data:
     # rdp-https-gateway traffic is otherwise instrumented.
     #
     # Exports to the Collector sidecar in this pod over loopback, so this ConfigMap no longer has
-    # to pick a zone's forwarder. That removes the cross-zone hop non-primary-zone pods used to
+    # to pick a zone's gateway. That removes the cross-zone hop non-primary-zone pods used to
     # take.
     otel_exporter {
       endpoint 127.0.0.1:{{ $constants.otel.otlpNginx }};

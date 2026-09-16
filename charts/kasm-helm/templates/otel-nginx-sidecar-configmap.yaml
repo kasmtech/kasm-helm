@@ -3,7 +3,7 @@ Collector config for the nginx pods' sidecar. Rendered once per consumer (Kasm P
 Kasm Connection Proxy StatefulSet) because each needs its own resource["service.name"]/
 attributes["application"] baked into the syslog receiver operator chains (kasm.otelNginxAccessLogOperators,
 kasm.otelNginxErrorLogOperators) so their logs are distinguishable in ClickHouse. Everything else is
-identical between the two; the forwarder endpoint is supplied per-pod through
+identical between the two; the gateway endpoint is supplied per-pod through
 OTEL_EXPORTER_OTLP_ENDPOINT by kasm.otelSidecar.
 
 The sidecar is the pod's single egress point. It:
@@ -74,7 +74,7 @@ data:
 {{ include "kasm.common.otelMemoryLimiter" (dict "limitMib" 96 "spikeLimitMib" 32) | indent 6 }}
 
     exporters:
-      {{- include "kasm.common.otelOtlphttpExporterToForwarder" . | nindent 6 }}
+      {{- include "kasm.common.otelOtlpExporterToGateway" . | nindent 6 }}
 
     service:
       extensions: [health_check]
@@ -83,17 +83,17 @@ data:
         logs:
           receivers: [syslog/nginx_access, syslog/nginx_error, otlp/local]
           processors: [memory_limiter, batch]
-          exporters: [otlphttp]
+          exporters: [otlp]
 
         traces:
           receivers: [otlp/nginx, otlp/local]
           processors: [memory_limiter, batch]
-          exporters: [otlphttp]
+          exporters: [otlp]
 
         metrics:
           receivers: [nginx/metrics, otlp/local]
           processors: [memory_limiter, batch]
-          exporters: [otlphttp]
+          exporters: [otlp]
 
       telemetry:
         logs:
