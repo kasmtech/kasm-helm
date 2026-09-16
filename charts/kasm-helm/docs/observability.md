@@ -369,9 +369,18 @@ the `sampled` flag) for its own requests. This has three consequences:
 1. **Trace collision.** Two unrelated clients sending the same `traceparent` produce spans that
    merge into one stored trace — unrelated activity gets written and read back together. This is
    data mixing, not a cosmetic display issue.
-2. **Sampling control.** The `sampled` flag rides in the same header, so a client can influence
-   whether its own traffic is retained, undermining
-   `observability.collector.gateway.tailSamplePercentage` (§7).
+2. **Sampling control over backend spans.** The `sampled` flag rides in the same header. It does
+   *not* affect nginx's own recording — `otel.conf` sets `otel_trace on`, so the proxy records a
+   span for every request regardless. It does affect the Kasm services behind it: their SDKs
+   sample **parent-based**, so a client that sends `sampled=0` suppresses recording of the
+   api/manager spans for its own requests, and `sampled=1` forces them. A client can therefore
+   keep its own backend activity out of the trace store.
+3. **Sampling-buffer eviction.** The gateway's `tail_sampling` holds up to `num_traces` traces
+   (25 000 at `deploymentSize: small`) for a 30s `decision_wait`, sized for
+   `expected_new_traces_per_sec: 100` (§7). A client that sends a *unique* `traceparent` per
+   request at a high enough rate overruns that buffer, so unrelated legitimate traces are evicted
+   before their sampling decision completes and are lost — degrading tracing for everyone else
+   while the flood lasts.
 
 (A third consequence used to apply here: a client that reused one trace ID could pin its traffic
 to a single gateway pod via the forwarder's trace-ID-hashing `loadbalancing` exporter. That
@@ -379,19 +388,27 @@ exporter, and the forwarder tier it lived in, are gone — the gateway is a sing
 by `kasm.observabilityValidate` (§7) — so there is no longer a second gateway pod to pin traffic
 away from.)
 
-**Why `propagate` is kept anyway:** the browser telemetry path
+**Decision: the chart keeps `propagate`.** Kasm's backend SDKs sample parent-based, so the
+inbound trace context is load-bearing for backend tracing, not merely for correlation — switching
+it off would change how backend spans are sampled as well as severing browser linkage. The
+exposures above are accepted knowingly and mitigated at the edge (see the end of this section),
+not by changing the propagation mode.
+
+**Why `propagate` is kept:** the browser telemetry path
 (`charts/kasm-helm/templates/proxy-configmaps.yaml:301-305`, `/otel-config.js`, `serviceName:
 "kasm-web"`) is a client-generated-trace design on purpose — the browser starts the trace so that
 real-user-monitoring spans link end-to-end with the backend spans of the same page load. Switching
 to `otel_trace_context ignore` would sever that linkage.
 
-**The two alternative postures, and their trade-offs** (an operator/backend decision, not a chart
-default — this chart does not choose one for you):
+**The two alternative postures, and their trade-offs** — these are what an operator would change
+if their threat model differs from the default above. Changing either one requires overriding
+`otel.conf`; the chart ships `propagate`:
 
 - `otel_trace_context ignore` — nginx mints its own trace ID and disregards any client-supplied
   one. This is the normal posture for a public edge and closes all three issues above, but it
-  breaks browser-to-backend trace linkage: RUM spans and backend spans of the same request no
-  longer share a trace ID.
+  breaks browser-to-backend trace linkage, and because the backend SDKs are parent-based it also
+  changes how backend spans are sampled: RUM spans and backend spans of the same request no longer
+  share a trace ID.
 - `otel_trace_context extract` — trusts the inbound `traceparent` for correlation but is only
   appropriate when the proxy sits behind another trusted reverse proxy that itself strips or
   regenerates client-supplied trace context before it reaches this chart's ingress; it does not
