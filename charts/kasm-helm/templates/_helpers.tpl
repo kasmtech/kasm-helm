@@ -1391,6 +1391,14 @@ Dedup rules:
 {{- if and (or $forwardSecretNameSet $forwardSecretKeySet) (not (and $forwardSecretNameSet $forwardSecretKeySet)) -}}
   {{- fail "observability.collector.gateway.forward.existingSecret requires both 'name' and 'key' to be set." -}}
 {{- end -}}
+{{- $chSecretNameSet := ne $ch.existingSecret.name "" -}}
+{{- $chSecretKeySet := ne $ch.existingSecret.key "" -}}
+{{- if and (or $chSecretNameSet $chSecretKeySet) (not (and $chSecretNameSet $chSecretKeySet)) -}}
+  {{- fail "observability.clickhouse.existingSecret requires both 'name' and 'key' to be set." -}}
+{{- end -}}
+{{- if and (ne $ch.existingSecret.readKey "") (not $chSecretNameSet) -}}
+  {{- fail "observability.clickhouse.existingSecret.readKey requires observability.clickhouse.existingSecret.name to also be set: readKey names a key inside that same Secret." -}}
+{{- end -}}
 {{- if or (lt (int $collector.gateway.tailSamplePercentage) 0) (gt (int $collector.gateway.tailSamplePercentage) 100) -}}
   {{- fail (printf "observability.collector.gateway.tailSamplePercentage must be between 0 and 100, got %d." (int $collector.gateway.tailSamplePercentage)) -}}
 {{- end -}}
@@ -1540,6 +1548,10 @@ Dedup rules:
   imagePullPolicy: {{ $ctx.Values.imagePullPolicy }}
   {{- include "kasm.securityContext" (list $ctx $uid "container") | nindent 2 }}
   env:
+    - name: POD_NAME
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.name
     - name: OTEL_EXPORTER_OTLP_ENDPOINT
       value: {{ $endpoint | quote }}
     - name: OTEL_BEARER_TOKEN
@@ -1551,12 +1563,13 @@ Dedup rules:
     - name: OTEL_SERVICE_NAME
       value: {{ .serviceName | quote }}
     {{- end }}
-    - name: OTEL_RESOURCE_ATTRIBUTES
-      {{- if $zone }}
-      value: {{ printf "deployment.environment=kubernetes,service.namespace=%s,kasm.zone=%s" $ctx.Release.Namespace (include "kasm.zoneName" $zone) | quote }}
-      {{- else }}
-      value: {{ printf "deployment.environment=kubernetes,service.namespace=%s" $ctx.Release.Namespace | quote }}
-      {{- end }}
+    {{/* No OTEL_RESOURCE_ATTRIBUTES here: it's an SDK env var the Collector binary does not apply
+         to pipeline data (see kasm.common.otelResourceProcessor). POD_NAME above and this zone var
+         feed that processor's ${env:} expansion instead. */}}
+    {{- if $zone }}
+    - name: OTEL_KASM_ZONE
+      value: {{ include "kasm.zoneName" $zone | quote }}
+    {{- end }}
   {{- if $ctx.Values.components.otelSidecar.resources }}
   resources: {{- toYaml $ctx.Values.components.otelSidecar.resources | nindent 4 }}
   {{- else }}

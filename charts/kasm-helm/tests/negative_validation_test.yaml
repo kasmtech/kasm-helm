@@ -244,6 +244,30 @@ tests:
       - failedTemplate:
           errorMessage: "observability.collector.gateway.forward.existingSecret requires both 'name' and 'key' to be set."
 
+  - it: clickhouse.existingSecret half-set (name only) fails
+    template: templates/otel-gateway-configmap.yaml
+    set:
+      observability.clickhouse.existingSecret.name: my-clickhouse-secret
+    asserts:
+      - failedTemplate:
+          errorMessage: "observability.clickhouse.existingSecret requires both 'name' and 'key' to be set."
+
+  - it: clickhouse.existingSecret half-set (key only) fails
+    template: templates/otel-gateway-configmap.yaml
+    set:
+      observability.clickhouse.existingSecret.key: password
+    asserts:
+      - failedTemplate:
+          errorMessage: "observability.clickhouse.existingSecret requires both 'name' and 'key' to be set."
+
+  - it: clickhouse.existingSecret.readKey set without name fails
+    template: templates/otel-gateway-configmap.yaml
+    set:
+      observability.clickhouse.existingSecret.readKey: ro-password
+    asserts:
+      - failedTemplate:
+          errorMessage: "observability.clickhouse.existingSecret.readKey requires observability.clickhouse.existingSecret.name to also be set: readKey names a key inside that same Secret."
+
   - it: components.otelGateway.replicas above 1 fails
     template: templates/otel-gateway-configmap.yaml
     set:

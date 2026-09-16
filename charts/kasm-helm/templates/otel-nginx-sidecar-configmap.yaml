@@ -69,6 +69,8 @@ data:
             endpoint: "127.0.0.1:{{ $constants.otel.otlpHttp }}"
 
     processors:
+      {{- include "kasm.common.otelResourceProcessor" (dict "context" $ "zone" true) | nindent 6 }}
+
       {{- include "kasm.common.otelBatchProcessor" . | nindent 6 }}
 
 {{ include "kasm.common.otelMemoryLimiter" (dict "limitMib" 96 "spikeLimitMib" 32) | indent 6 }}
@@ -82,17 +84,17 @@ data:
       pipelines:
         logs:
           receivers: [syslog/nginx_access, syslog/nginx_error, otlp/local]
-          processors: [memory_limiter, batch]
+          processors: [memory_limiter, resource, batch]
           exporters: [otlp]
 
         traces:
           receivers: [otlp/nginx, otlp/local]
-          processors: [memory_limiter, batch]
+          processors: [memory_limiter, resource, batch]
           exporters: [otlp]
 
         metrics:
           receivers: [nginx/metrics, otlp/local]
-          processors: [memory_limiter, batch]
+          processors: [memory_limiter, resource, batch]
           exporters: [otlp]
 
       telemetry:

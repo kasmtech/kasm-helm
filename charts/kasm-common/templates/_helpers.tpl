@@ -575,6 +575,43 @@ batch:
 {{- end -}}
 
 {{/*
+  resource processor stamping identity attributes onto every record a sidecar forwards. This is the
+  Collector's own ${env:} config-expansion (already used above for OTEL_EXPORTER_OTLP_ENDPOINT/
+  OTEL_BEARER_TOKEN), not the SDK's OTEL_RESOURCE_ATTRIBUTES env var — the Collector binary does not
+  apply that to pipeline data, only to its own internal telemetry resource, so a resource processor
+  is the only mechanism that actually reaches emitted rows.
+  Args (dict):
+    context = root context (.)
+    zone    = (optional bool) true to also stamp kasm.zone from ${env:OTEL_KASM_ZONE}. Only the
+              nginx sidecars run per-zone; omit for callers with no zone concept (the DB sidecar).
+  Both env-backed values carry a `:-unknown` fallback: an attribute processor rejects an empty
+  string as "unset" (0.156.0), and `make otel-validate` runs `otelcol validate` against this
+  config with neither POD_NAME nor OTEL_KASM_ZONE in its environment. Real pods always set both.
+  Usage:
+    processors:
+      {{- include "kasm.common.otelResourceProcessor" (dict "context" . "zone" true) | nindent 6 }}
+*/}}
+{{- define "kasm.common.otelResourceProcessor" -}}
+{{- $ctx := .context -}}
+resource:
+  attributes:
+    - key: k8s.pod.name
+      value: "${env:POD_NAME:-unknown}"
+      action: upsert
+    - key: service.namespace
+      value: {{ $ctx.Release.Namespace | quote }}
+      action: upsert
+    - key: deployment.environment
+      value: kubernetes
+      action: upsert
+    {{- if .zone }}
+    - key: kasm.zone
+      value: "${env:OTEL_KASM_ZONE:-unknown}"
+      action: upsert
+    {{- end }}
+{{- end -}}
+
+{{/*
   otlp/gRPC exporter the nginx-sidecar and db-sidecar configs use to send everything straight to
   the gateway over OTEL_EXPORTER_OTLP_ENDPOINT, authenticated with OTEL_BEARER_TOKEN. Identical in
   both callers, including the queue sizing (these sidecars are low-volume compared to the gateway

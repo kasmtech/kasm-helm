@@ -208,40 +208,92 @@ tests:
           path: spec.template.spec.containers[1].volumeMounts[?(@.mountPath=="/var/lib/otelcol/checkpoints")]
         template: templates/db-statefulset.yaml
 
-  # ---------- kasm.zone resource attribute ----------
-  # Proxy and connection-proxy are zone-scoped; their sidecars record kasm.zone so telemetry
-  # can be attributed back to a zone. The DB is global (no zone dimension), so its sidecar
-  # deliberately carries no kasm.zone attribute.
-  - it: proxy sidecar carries kasm.zone in a multi-zone install
+  # ---------- kasm.zone / k8s.pod.name / service.namespace / deployment.environment ----------
+  # These identity attributes are stamped by a resource processor in the sidecar's own Collector
+  # config (kasm.common.otelResourceProcessor), not by OTEL_RESOURCE_ATTRIBUTES: that SDK env var
+  # is inert on a Collector container (see DECISIONS.md D4) and has been removed from the sidecar.
+  # The sidecar container only carries the processor's inputs: POD_NAME (fieldRef) and, for
+  # zone-scoped sidecars, OTEL_KASM_ZONE.
+  - it: proxy sidecar carries OTEL_KASM_ZONE in a multi-zone install, no dead OTEL_RESOURCE_ATTRIBUTES
     template: templates/proxy-deployment.yaml
     values:
       - ../../../tests/values/multizone-config.yaml
     documentIndex: 0
     asserts:
-      - matchRegex:
-          path: spec.template.spec.containers[1].env[?(@.name=="OTEL_RESOURCE_ATTRIBUTES")].value
-          pattern: "kasm\\.zone=zonea"
+      - equal:
+          path: spec.template.spec.containers[1].env[?(@.name=="POD_NAME")].valueFrom.fieldRef.fieldPath
+          value: metadata.name
+      - equal:
+          path: spec.template.spec.containers[1].env[?(@.name=="OTEL_KASM_ZONE")].value
+          value: zonea
+      - notExists:
+          path: spec.template.spec.containers[1].env[?(@.name=="OTEL_RESOURCE_ATTRIBUTES")]
 
-  - it: connection-proxy sidecar carries kasm.zone in a multi-zone install
+  - it: connection-proxy sidecar carries OTEL_KASM_ZONE in a multi-zone install, no dead OTEL_RESOURCE_ATTRIBUTES
     template: templates/connection-proxy-statefulset.yaml
     values:
       - ../../../tests/values/multizone-config.yaml
       - ../../../tests/values/components-all.yaml
     documentIndex: 0
     asserts:
-      - matchRegex:
-          path: spec.template.spec.containers[4].env[?(@.name=="OTEL_RESOURCE_ATTRIBUTES")].value
-          pattern: "kasm\\.zone=zonea"
+      - equal:
+          path: spec.template.spec.containers[4].env[?(@.name=="POD_NAME")].valueFrom.fieldRef.fieldPath
+          value: metadata.name
+      - equal:
+          path: spec.template.spec.containers[4].env[?(@.name=="OTEL_KASM_ZONE")].value
+          value: zonea
+      - notExists:
+          path: spec.template.spec.containers[4].env[?(@.name=="OTEL_RESOURCE_ATTRIBUTES")]
 
-  - it: db sidecar carries no kasm.zone attribute, because the DB has no zone dimension
+  - it: db sidecar carries no OTEL_KASM_ZONE (DB has no zone dimension) and no dead OTEL_RESOURCE_ATTRIBUTES
     template: templates/db-statefulset.yaml
     asserts:
+      - equal:
+          path: spec.template.spec.containers[1].env[?(@.name=="POD_NAME")].valueFrom.fieldRef.fieldPath
+          value: metadata.name
+      - notExists:
+          path: spec.template.spec.containers[1].env[?(@.name=="OTEL_KASM_ZONE")]
+      - notExists:
+          path: spec.template.spec.containers[1].env[?(@.name=="OTEL_RESOURCE_ATTRIBUTES")]
+
+  # ---------- resource processor: what actually reaches emitted data ----------
+  # Unlike the env-string assertions above, these bind to the mechanism the Collector actually
+  # applies to pipeline data (refuter-03 proved the env var does not).
+  - it: nginx sidecar config stamps identity attributes via a resource processor, wired into every pipeline
+    template: templates/otel-nginx-sidecar-configmap.yaml
+    documentIndex: 0
+    asserts:
       - matchRegex:
-          path: spec.template.spec.containers[1].env[?(@.name=="OTEL_RESOURCE_ATTRIBUTES")].value
-          pattern: "deployment\\.environment=kubernetes"
+          path: data["config.yaml"]
+          pattern: 'key: k8s\.pod\.name\n\s+value: "\$\{env:POD_NAME:-unknown\}"'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'key: kasm\.zone\n\s+value: "\$\{env:OTEL_KASM_ZONE:-unknown\}"'
+      # Assert per pipeline, not as a bare substring: a single `processors: [...]` match is
+      # satisfied by any one pipeline, so a `resource` dropped from traces or metrics alone
+      # would still pass while those signals ship unattributable to a pod or zone.
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'logs:\n\s+receivers: \[syslog/nginx_access, syslog/nginx_error, otlp/local\]\n\s+processors: \[memory_limiter, resource, batch\]'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'traces:\n\s+receivers: \[otlp/nginx, otlp/local\]\n\s+processors: \[memory_limiter, resource, batch\]'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'metrics:\n\s+receivers: \[nginx/metrics, otlp/local\]\n\s+processors: \[memory_limiter, resource, batch\]'
+
+  - it: db sidecar config stamps k8s.pod.name via a resource processor, with no kasm.zone attribute
+    template: templates/otel-db-sidecar-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'key: k8s\.pod\.name\n\s+value: "\$\{env:POD_NAME:-unknown\}"'
       - notMatchRegex:
-          path: spec.template.spec.containers[1].env[?(@.name=="OTEL_RESOURCE_ATTRIBUTES")].value
+          path: data["config.yaml"]
           pattern: "kasm\\.zone"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "processors: \\[memory_limiter, resource, batch\\]"
 
   - it: sidecar resources honour components.otelSidecar.resources
     template: templates/proxy-deployment.yaml

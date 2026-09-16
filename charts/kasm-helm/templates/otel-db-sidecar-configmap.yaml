@@ -56,6 +56,8 @@ data:
             value: kasm-db
 
     processors:
+      {{- include "kasm.common.otelResourceProcessor" (dict "context" .) | nindent 6 }}
+
       {{- include "kasm.common.otelBatchProcessor" . | nindent 6 }}
 
 {{ include "kasm.common.otelMemoryLimiter" (dict "limitMib" 96 "spikeLimitMib" 32) | indent 6 }}
@@ -69,7 +71,7 @@ data:
       pipelines:
         logs:
           receivers: [filelog/postgres]
-          processors: [memory_limiter, batch]
+          processors: [memory_limiter, resource, batch]
           exporters: [otlp]
 
       telemetry:
