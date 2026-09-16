@@ -8,8 +8,49 @@ templates:
   - templates/otel-gateway-configmap.yaml
   - templates/otel-gateway-deployment.yaml
   - templates/otel-gateway-service.yaml
+  - templates/otel-forward-snippet-configmap.yaml
 
 tests:
+  # ---------- forward-snippet ConfigMap (bd rse): renders with the gateway ----------
+  - it: forward-snippet ConfigMap renders with the resolved endpoint and bearertokenauth extension
+    template: templates/otel-forward-snippet-configmap.yaml
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-otel-forward-snippet
+      - matchRegex:
+          path: data["forward-snippet.yaml"]
+          pattern: 'endpoint: "http://RELEASE-NAME-otel-gateway\.NAMESPACE\.svc\.cluster\.local:4318"'
+      - matchRegex:
+          path: data["forward-snippet.yaml"]
+          pattern: 'bearertokenauth/kasm_gateway:\s*\n\s*scheme: "Bearer"'
+      # Positive assertion first: the notMatchRegex below passes vacuously if the
+      # token field is dropped entirely, and a snippet with no token gets 401 at the gateway.
+      - matchRegex:
+          path: data["forward-snippet.yaml"]
+          pattern: 'token: "\$\{env:KASM_OTEL_GATEWAY_TOKEN\}"'
+      - notMatchRegex:
+          path: data["forward-snippet.yaml"]
+          pattern: 'token: "\$\{env:OTEL_FORWARD_TOKEN\}"'
+
+  # An empty clusterDomain must not reach the endpoint as "%!s(<nil>)": helm exits 0 and
+  # every static gate passes, but the published endpoint never resolves.
+  - it: forward-snippet endpoint falls back to cluster.local when clusterDomain is empty
+    template: templates/otel-forward-snippet-configmap.yaml
+    set:
+      clusterDomain: null
+    asserts:
+      - matchRegex:
+          path: data["forward-snippet.yaml"]
+          pattern: 'endpoint: "http://RELEASE-NAME-otel-gateway\.NAMESPACE\.svc\.cluster\.local:4318"'
+
+  - it: forward-snippet ConfigMap does not render when the gateway does not render
+    template: templates/otel-forward-snippet-configmap.yaml
+    set:
+      observability.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
   # ---------- gateway: both receivers, both ports, same auth (D5) ----------
   - it: gateway renders an authenticated gRPC receiver on 4317 and HTTP receiver on 4318
     template: templates/otel-gateway-configmap.yaml

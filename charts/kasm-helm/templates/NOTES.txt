@@ -35,3 +35,11 @@ kubectl get secret --namespace {{ .Release.Namespace }} {{ .Release.Name }}-secr
 Retrieve Kasm Service Registration Token:
 kubectl get secret --namespace {{ .Release.Namespace }} {{ .Release.Name }}-secrets -o jsonpath="{.data.service-token}" | base64 -d; echo
 
+{{- $obs := .Values.observability }}
+{{- $useClickhouse := or $obs.clickhouse.enabled $obs.clickhouse.standalone }}
+{{- if and $obs.enabled (or $obs.collector.gateway.existingConfigMap $useClickhouse (ne $obs.collector.gateway.forward.endpoint "")) }}
+
+To let a third-party OTel Collector forward telemetry into this release's gateway, paste the
+config fragment from the {{ .Release.Name }}-otel-forward-snippet ConfigMap into that collector's config.
+{{- end }}
+
