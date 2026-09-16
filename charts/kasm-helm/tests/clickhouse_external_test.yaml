@@ -55,6 +55,7 @@ tests:
   - it: enabled=false renders no store and no retention Job (and no standalone conflict)
     set:
       observability.clickhouse.enabled: false
+      observability.collector.gateway.forward.endpoint: "https://otlp-gateway.example.com/otlp"
     asserts:
       - hasDocuments:
           count: 0

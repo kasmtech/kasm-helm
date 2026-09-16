@@ -14,9 +14,10 @@ receivers (those live in the per-pod nginx sidecars, not the central Collector).
 */}}
 {{- include "kasm.observabilityValidate" . }}
 {{- $obs := .Values.observability -}}
-{{- if and $obs.enabled (not $obs.collector.gateway.existingConfigMap) }}
 {{- $ch := $obs.clickhouse -}}
 {{- $useClickhouse := or $ch.enabled $ch.standalone -}}
+{{- $forwardEnabled := ne $obs.collector.gateway.forward.endpoint "" -}}
+{{- if and $obs.enabled (not $obs.collector.gateway.existingConfigMap) (or $useClickhouse $forwardEnabled) }}
 {{- $dsn := include "kasm.clickhouseNativeDsn" (dict "context" $) -}}
 {{- if not $ch.standalone -}}
   {{- $sep := ternary "&" "?" (contains "?" $dsn) -}}
@@ -34,11 +35,7 @@ receivers (those live in the per-pod nginx sidecars, not the central Collector).
   {{- $dsn = printf "%s?dial_timeout=10s" $dsn -}}
 {{- end -}}
 {{- $gwTuning := include "resources.preset" (dict "node" "otel-gateway-tuning" "size" $.Values.deploymentSize) | fromYaml -}}
-{{- $forwardEnabled := ne $obs.collector.gateway.forward.endpoint "" -}}
 {{- $forwardHasToken := or (ne $obs.collector.gateway.forward.token "") (ne $obs.collector.gateway.forward.existingSecret.name "") -}}
-{{- $logsExporter := ternary "clickhouse/logs" "debug" $useClickhouse -}}
-{{- $tracesExporter := ternary "clickhouse/traces" "debug" $useClickhouse -}}
-{{- $metricsExporter := ternary "clickhouse/metrics" "debug" $useClickhouse -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -169,12 +166,6 @@ data:
           enabled: true
           num_consumers: 4
           queue_size: 1000
-{{- else }}
-      # No ClickHouse store configured (observability.clickhouse.enabled: false, not standalone):
-      # receive and discard rather than crash-looping on a DNS lookup for a service that
-      # doesn't exist. Mirrors configure_otel_no_database in install.sh.
-      debug:
-        verbosity: basic
 {{- end }}
 {{- if $forwardEnabled }}
 
@@ -188,6 +179,23 @@ data:
 {{- end }}
 {{- end }}
 
+{{- /* The outer render condition guarantees useClickhouse or forwardEnabled (or both), so each
+     pipeline always ends up with at least one exporter — there is no discard fallback to fall
+     back to. */}}
+{{- $logsExporters := list -}}
+{{- $tracesExporters := list -}}
+{{- $metricsExporters := list -}}
+{{- if $useClickhouse -}}
+  {{- $logsExporters = append $logsExporters "clickhouse/logs" -}}
+  {{- $tracesExporters = append $tracesExporters "clickhouse/traces" -}}
+  {{- $metricsExporters = append $metricsExporters "clickhouse/metrics" -}}
+{{- end -}}
+{{- if $forwardEnabled -}}
+  {{- $logsExporters = append $logsExporters "otlphttp/external" -}}
+  {{- $tracesExporters = append $tracesExporters "otlphttp/external" -}}
+  {{- $metricsExporters = append $metricsExporters "otlphttp/external" -}}
+{{- end }}
+
     service:
       extensions: [bearertokenauth/server, health_check]
 
@@ -195,17 +203,17 @@ data:
         logs:
           receivers: [otlp/remote]
           processors: [memory_limiter, batch]
-          exporters: [{{ $logsExporter }}{{ if $forwardEnabled }}, otlphttp/external{{ end }}]
+          exporters: [{{ join ", " $logsExporters }}]
 
         traces:
           receivers: [otlp/remote]
           processors: [memory_limiter, tail_sampling, batch]
-          exporters: [{{ $tracesExporter }}{{ if $forwardEnabled }}, otlphttp/external{{ end }}]
+          exporters: [{{ join ", " $tracesExporters }}]
 
         metrics:
           receivers: [otlp/remote]
           processors: [memory_limiter, batch]
-          exporters: [{{ $metricsExporter }}{{ if $forwardEnabled }}, otlphttp/external{{ end }}]
+          exporters: [{{ join ", " $metricsExporters }}]
 
       telemetry:
         logs:

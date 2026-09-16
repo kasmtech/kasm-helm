@@ -1,3 +1,0 @@
-observability:
-  clickhouse:
-    enabled: false

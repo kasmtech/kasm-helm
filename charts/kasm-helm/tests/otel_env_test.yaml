@@ -36,6 +36,72 @@ tests:
           path: spec.ports[?(@.name=="otlp-grpc" && @.port==4317)]
       - exists:
           path: spec.ports[?(@.name=="otlp-http" && @.port==4318)]
+
+  # ---------- gateway render gating (D7): renders iff it has a destination ----------
+  - it: gateway renders with clickhouse only (default)
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/otel-gateway-configmap.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/otel-gateway-deployment.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/otel-gateway-service.yaml
+
+  - it: gateway renders with forward.endpoint only, no clickhouse
+    set:
+      observability.clickhouse.enabled: false
+      observability.collector.gateway.forward.endpoint: "https://otlp-gateway.example.com/otlp"
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/otel-gateway-configmap.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/otel-gateway-deployment.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/otel-gateway-service.yaml
+
+  - it: gateway renders with both clickhouse and forward.endpoint
+    set:
+      observability.collector.gateway.forward.endpoint: "https://otlp-gateway.example.com/otlp"
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/otel-gateway-configmap.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/otel-gateway-deployment.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/otel-gateway-service.yaml
+
+  - it: gateway fails to render with neither clickhouse nor forward.endpoint
+    template: templates/otel-gateway-configmap.yaml
+    set:
+      observability.clickhouse.enabled: false
+    asserts:
+      - failedTemplate:
+          errorMessage: "observability.enabled is true but the gateway has nowhere to send telemetry: set observability.clickhouse.enabled (or observability.clickhouse.standalone) to true, or set observability.collector.gateway.forward.endpoint to an external OTLP/HTTP endpoint."
+
+  - it: existingConfigMap still short-circuits the gateway ConfigMap even with no destination
+    set:
+      observability.clickhouse.enabled: false
+      observability.collector.gateway.existingConfigMap: my-gateway-collector-config
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/otel-gateway-configmap.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/otel-gateway-deployment.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/otel-gateway-service.yaml
+
   # ---------- OTEL_SERVICE_NAME per workload ----------
   - it: api container gets OTEL_SERVICE_NAME=kasm-api
     template: templates/api-deployment.yaml
@@ -255,6 +321,7 @@ tests:
     template: templates/api-deployment.yaml
     set:
       observability.clickhouse.enabled: false
+      observability.collector.gateway.forward.endpoint: "https://otlp-gateway.example.com/otlp"
     asserts:
       - notExists:
           path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_ENDPOINT")]

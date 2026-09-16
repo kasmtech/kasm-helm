@@ -1084,10 +1084,12 @@ observability:
   # Configure ClickHouse, the telemetry store that backs Kasm reporting.
   #
   clickhouse:
-    # observability.clickhouse.enabled -- Deploy a ClickHouse StatefulSet to store telemetry. Set to false
-    # to run the Collector with no telemetry store at all: signals are received and discarded, and Kasm
-    # reporting features return empty results. To use a ClickHouse you already run, leave this true and set
-    # `standalone` instead.
+    # observability.clickhouse.enabled -- Deploy a ClickHouse StatefulSet to store telemetry. To use a
+    # ClickHouse you already run, leave this true and set `standalone` instead. Setting this to false is
+    # only valid when the gateway has somewhere else to send telemetry: set
+    # `observability.collector.gateway.forward.endpoint` to an external OTLP/HTTP backend, or the render
+    # fails rather than deploying a Collector that would discard every signal. Kasm reporting features
+    # read from ClickHouse, so they return empty results whenever no ClickHouse is configured.
     #
     enabled: true
     # observability.clickhouse.standalone -- Setting standalone to true will prevent the deployment of the

@@ -1402,6 +1402,12 @@ Dedup rules:
 {{- if or (lt (int $collector.gateway.tailSamplePercentage) 0) (gt (int $collector.gateway.tailSamplePercentage) 100) -}}
   {{- fail (printf "observability.collector.gateway.tailSamplePercentage must be between 0 and 100, got %d." (int $collector.gateway.tailSamplePercentage)) -}}
 {{- end -}}
+{{- /* observability.enabled with no destination and no BYO config means every span/log/metric
+     the gateway receives is silently dropped. existingConfigMap is exempt: that config decides
+     its own routing. */ -}}
+{{- if and $obs.enabled (not $collector.gateway.existingConfigMap) (not (or $ch.enabled $ch.standalone)) (eq $collector.gateway.forward.endpoint "") -}}
+  {{- fail "observability.enabled is true but the gateway has nowhere to send telemetry: set observability.clickhouse.enabled (or observability.clickhouse.standalone) to true, or set observability.collector.gateway.forward.endpoint to an external OTLP/HTTP endpoint." -}}
+{{- end -}}
 {{- /* Every sender exports straight to the gateway; nothing in front of it partitions traces by
      ID the way the removed forwarder's loadbalancing exporter did. A second replica would let
      tail_sampling see only some of a trace's spans and silently drop the rest. */ -}}

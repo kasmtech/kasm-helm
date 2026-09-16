@@ -12,7 +12,10 @@ No external Service variant: out-of-cluster senders were previously routed throu
 forwarder's externalService, which was removed along with the rest of that tier.
 */}}
 {{- $obs := .Values.observability -}}
-{{- if $obs.enabled }}
+{{- $ch := $obs.clickhouse -}}
+{{- $useClickhouse := or $ch.enabled $ch.standalone -}}
+{{- $forwardEnabled := ne $obs.collector.gateway.forward.endpoint "" -}}
+{{- if and $obs.enabled (or $obs.collector.gateway.existingConfigMap $useClickhouse $forwardEnabled) }}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
 apiVersion: v1
 kind: Service

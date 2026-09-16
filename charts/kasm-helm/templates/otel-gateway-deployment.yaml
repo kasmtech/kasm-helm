@@ -13,11 +13,11 @@ two. Traces spanning a rollout can still split, bounded by tail_sampling's decis
 the accepted cost of being able to update at all.
 */}}
 {{- $obs := .Values.observability -}}
-{{- if $obs.enabled }}
-{{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- $ch := $obs.clickhouse -}}
 {{- $useClickhouse := or $ch.enabled $ch.standalone -}}
 {{- $forwardEnabled := ne $obs.collector.gateway.forward.endpoint "" -}}
+{{- if and $obs.enabled (or $obs.collector.gateway.existingConfigMap $useClickhouse $forwardEnabled) }}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- $gatewayReplicas := ternary .Values.components.otelGateway.replicas (include "replicas.preset" (dict "node" "otel-gateway" "size" .Values.deploymentSize)) (gt (int .Values.components.otelGateway.replicas) 0) -}}
 {{- $resourcesObj := .Values.components.otelGateway.resources -}}
 {{- if not (gt (len $resourcesObj) 0) -}}

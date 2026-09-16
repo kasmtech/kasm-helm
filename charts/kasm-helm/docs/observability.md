@@ -39,7 +39,7 @@ that powers the reporting views in the Kasm Admin UI. It is enabled by default.
 
 | Workload                                   | Count                          | Notes                                                                              |
 | ------------------------------------------ | ------------------------------ | ----------------------------------------------------------------------------------- |
-| Collector *gateway* Deployment + Service   | one, cluster-wide, pinned      | The only OTel Collector tier in the chart. Every Kasm service, every sidecar, and any out-of-cluster senders export straight to it. Makes the trace-sampling decision and is the only writer to ClickHouse. Pinned to 1 replica — see §7. |
+| Collector *gateway* Deployment + Service   | one, cluster-wide, pinned      | The only OTel Collector tier in the chart. Every Kasm service, every sidecar, and any out-of-cluster senders export straight to it. Makes the trace-sampling decision and is the only writer to ClickHouse. Pinned to 1 replica — see §7. Renders only when it has somewhere to send telemetry (`observability.clickhouse.enabled`/`.standalone`, or `observability.collector.gateway.forward.endpoint`) or an `existingConfigMap` is supplied — otherwise the render fails rather than deploying a Collector that discards everything it receives. |
 | ClickHouse StatefulSet + Service + PVC     | one                             | Bundled and enabled by default.                                                     |
 | nginx + DB sidecar containers              | one per Proxy/Connection Proxy/DB pod, unconditional | No DaemonSet, no separate opt-in — always present when `observability.enabled`. |
 
@@ -265,6 +265,11 @@ observability:
 
 Prefer `existingSecret` over the plaintext `token` field. Forwarding happens at the gateway, so
 the forwarded copy reflects the same sampling decision as what lands in ClickHouse.
+
+`forward.endpoint` also works with `observability.clickhouse.enabled: false` — the gateway will
+forward only, with no ClickHouse store. What's not supported is setting neither: the render fails
+if `observability.enabled` is true, no ClickHouse destination is configured, and
+`forward.endpoint` is empty, since the gateway would otherwise have nowhere to send telemetry.
 
 ## 9. Bringing your own Collector config
 
