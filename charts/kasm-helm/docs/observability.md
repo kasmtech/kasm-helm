@@ -139,6 +139,14 @@ either unset fails the render.
 
 `observability.clickhouse.database` is independent of `username` — a tenant may run the same user
 (`kasm_otel`) inside a differently-named database on a shared, multi-tenant ClickHouse instance.
+
+Credentials note: with the bundled ClickHouse, the chart's generated Secret carries two keys —
+`clickhouse-password` (writer, used by the gateway and retention Job) and `clickhouse-ro-password`
+(the read-only `kasm_otel_ro` user api/manager query reports with). If you supply your own chart
+Secret (`kasmSecrets.create: false`), it must carry both keys, or point
+`observability.clickhouse.existingSecret` (and `readKey` for the read-only side) at a Secret you
+manage. External ClickHouse deployments default to the single writer credential unless
+`readUsername` is set.
 Before your first install against a standalone ClickHouse, as the operator you must:
 
 1. **Create the database.** The chart and the Collector do not create it for you.
@@ -230,7 +238,8 @@ not a plain `otlp` exporter pointed at a ClusterIP: it resolves the gateway's he
 (DNS resolver) and hashes each trace's ID to one gateway backend, so every span of a trace lands
 on the same gateway pod regardless of which forwarder pod it arrived through. This is what makes
 it **safe to run more than one gateway replica** — a correctness property of the load-balancing
-scheme, not a manual sizing tradeoff.
+scheme, not a manual sizing tradeoff. This same trace-ID hashing lets a client that reuses one
+trace ID pin its traffic to a single gateway pod, which replica count does not fix — see §13.
 
 **Scale-out procedure:**
 
@@ -356,3 +365,49 @@ values are gone, not renamed. The chart's root values schema does not reject unk
 `observability.*` keys, so leftover values under the old names are silently ignored rather than
 causing a render failure — remove them from your values file rather than relying on a schema
 error to catch them. See `charts/kasm-helm/CHANGELOG.md` for the full list.
+
+## 13. Edge trust: client-supplied trace context
+
+The internet-facing Kasm Proxy sets `otel_trace_context propagate;` in its `otel.conf`
+(`charts/kasm-helm/templates/proxy-configmaps.yaml:87`). OpenTelemetry has no concept of trace
+ownership: nginx only checks whether an inbound request carries a syntactically valid
+`traceparent` header. If it does, the trace continues with the client-chosen trace ID; if not,
+nginx mints a new one. Nothing validates who minted it, so any client controls the trace ID (and
+the `sampled` flag) for its own requests. This has three consequences:
+
+1. **Trace collision.** Two unrelated clients sending the same `traceparent` produce spans that
+   merge into one stored trace — unrelated activity gets written and read back together. This is
+   data mixing, not a cosmetic display issue.
+2. **Sampling control.** The `sampled` flag rides in the same header, so a client can influence
+   whether its own traffic is retained, undermining
+   `observability.collector.gateway.tailSamplePercentage` (§7).
+3. **Hash targeting.** The forwarder's `loadbalancing` exporter routes traces on `routing_key:
+   traceID` (`charts/kasm-helm/templates/otel-forwarder-configmap.yaml:79`) so that every span of
+   a trace lands on one gateway pod (§7). A client that reuses one trace ID for many requests pins
+   all of that traffic to a single gateway pod — **scaling `components.otelGateway.replicas` does
+   not mitigate this**, since the pinning is a property of the trace ID, not the replica count.
+
+Effects 1 and 2 exist independent of gateway replica count; effect 3 is specific to the
+load-balanced gateway topology in §7.
+
+**Why `propagate` is kept anyway:** the browser telemetry path
+(`charts/kasm-helm/templates/proxy-configmaps.yaml:301-305`, `/otel-config.js`, `serviceName:
+"kasm-web"`) is a client-generated-trace design on purpose — the browser starts the trace so that
+real-user-monitoring spans link end-to-end with the backend spans of the same page load. Switching
+to `otel_trace_context ignore` would sever that linkage.
+
+**The two alternative postures, and their trade-offs** (an operator/backend decision, not a chart
+default — this chart does not choose one for you):
+
+- `otel_trace_context ignore` — nginx mints its own trace ID and disregards any client-supplied
+  one. This is the normal posture for a public edge and closes all three issues above, but it
+  breaks browser-to-backend trace linkage: RUM spans and backend spans of the same request no
+  longer share a trace ID.
+- `otel_trace_context extract` — trusts the inbound `traceparent` for correlation but is only
+  appropriate when the proxy sits behind another trusted reverse proxy that itself strips or
+  regenerates client-supplied trace context before it reaches this chart's ingress; it does not
+  solve the exposure for a directly internet-facing proxy.
+
+If you keep `propagate`, treat inbound trace IDs as untrusted input: apply rate limiting or
+cardinality controls downstream rather than trusting sampling or gateway placement decisions that
+assume good-faith trace IDs.
