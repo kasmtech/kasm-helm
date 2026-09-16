@@ -1521,3 +1521,5 @@ superseded). Reversals, for anyone reading the H-phase docs after the fact:
 
 See `kasm-helm-4ss` for the full decision record, `charts/kasm-helm/docs/observability.md` for the
 as-built architecture, and `docs/otel-integration-plan.md` §3 for the superseded-topology marker.
+The full 22-item decision record, with supersession annotations, is transcribed at
+`docs/otel-execution/DECISION-RECORD.md`.
