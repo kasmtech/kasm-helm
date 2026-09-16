@@ -1781,8 +1781,8 @@
           "type": "object",
           "properties": {
             "enabled": {
-              "default": true,
-              "description": "Serve the browser telemetry runtime configuration so the Kasm web UI reports page loads and user interactions. When false, a stub is served that disables the browser SDK without producing console errors.",
+              "default": false,
+              "description": "Serve the browser telemetry runtime configuration so the Kasm web UI reports page loads and user interactions. When false (the default), a stub is served that disables the browser SDK without producing console errors.",
               "title": "enabled",
               "type": "boolean"
             }

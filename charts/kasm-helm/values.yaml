@@ -1183,9 +1183,9 @@ observability:
   #
   browser:
     # observability.browser.enabled -- Serve the browser telemetry runtime configuration so the Kasm web UI
-    # reports page loads and user interactions. When false, a stub is served that disables the browser SDK
-    # without producing console errors.
-    enabled: true
+    # reports page loads and user interactions. When false (the default), a stub is served that disables
+    # the browser SDK without producing console errors.
+    enabled: false
 
 ####################################
 # Extra Kubernetes config settings #

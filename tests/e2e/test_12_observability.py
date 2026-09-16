@@ -67,8 +67,13 @@ def _low_resource_values(
         clickhouse_obs["database"] = database
     if read_username:
         clickhouse_obs["readUsername"] = read_username
+    # kasm-helm-3gh flipped observability.browser.enabled's default to false (D13); this scenario
+    # asserts on the enabled browser-telemetry stub below, so it must opt in explicitly rather
+    # than relying on a default it no longer gets.
+    observability_obj: dict = {"browser": {"enabled": True}}
     if clickhouse_obs:
-        values_obj["observability"] = {"clickhouse": clickhouse_obs}
+        observability_obj["clickhouse"] = clickhouse_obs
+    values_obj["observability"] = observability_obj
     if gateway_replicas is not None:
         values_obj["components"]["otelGateway"]["replicas"] = gateway_replicas
     return values_obj

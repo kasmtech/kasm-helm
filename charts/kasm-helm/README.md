@@ -3247,7 +3247,7 @@ object
 			<td>
 				<div style="max-width: 520px;">
 <pre lang="json">
-enabled: true
+enabled: false
 </pre>
 </div>
 			</td>
@@ -3261,11 +3261,11 @@ bool
 			<td>
 				<div style="max-width: 520px;">
 <pre lang="json">
-true
+false
 </pre>
 </div>
 			</td>
-			<td>Serve the browser telemetry runtime configuration so the Kasm web UI reports page loads and user interactions. When false, a stub is served that disables the browser SDK without producing console errors.</td>
+			<td>Serve the browser telemetry runtime configuration so the Kasm web UI reports page loads and user interactions. When false (the default), a stub is served that disables the browser SDK without producing console errors.</td>
 		</tr>
 		<tr>
 			<td id="observability--clickhouse--caCert"><a href="./values.yaml#L1156">observability.clickhouse.caCert</a></td>

@@ -12,13 +12,23 @@ tests:
           path: data["otel_browser.conf"]
           pattern: "location = /otel-config\\.js \\{"
 
-  - it: enabled:true when observability and browser are both enabled (default)
+  - it: enabled:true when observability and browser are both enabled
+    template: templates/proxy-configmaps.yaml
+    documentIndex: 1
+    set:
+      observability.browser.enabled: true
+    asserts:
+      - matchRegex:
+          path: data["otel_browser.conf"]
+          pattern: '"enabled":true'
+
+  - it: enabled:false when browser.enabled is left at its default (observability on)
     template: templates/proxy-configmaps.yaml
     documentIndex: 1
     asserts:
       - matchRegex:
           path: data["otel_browser.conf"]
-          pattern: '"enabled":true'
+          pattern: '"enabled":false'
 
   - it: enabled:false when browser.enabled=false (observability still on)
     template: templates/proxy-configmaps.yaml
@@ -43,6 +53,8 @@ tests:
   - it: /otel-time present when observability and browser are both enabled
     template: templates/proxy-configmaps.yaml
     documentIndex: 1
+    set:
+      observability.browser.enabled: true
     asserts:
       - matchRegex:
           path: data["otel_browser.conf"]
@@ -71,6 +83,8 @@ tests:
   - it: otel_trace off on both locations when observability is on
     template: templates/proxy-configmaps.yaml
     documentIndex: 1
+    set:
+      observability.browser.enabled: true
     asserts:
       - matchRegex:
           path: data["otel_browser.conf"]
