@@ -1,22 +1,22 @@
 dependencies:
 - name: kasm-agent-operator
   repository: file://../kasm-agent-operator
-  version: 0.1.0
+  version: 1.1200.0-develop
 - name: kasm-otel-collector
   repository: file://../kasm-otel-collector
-  version: 0.1.0
+  version: 1.1200.0-develop
 - name: kasm-agent-instance
   repository: file://../kasm-agent-instance
-  version: 0.1.0
+  version: 1.1200.0-develop
 - name: kasm-node-prep
   repository: file://../kasm-node-prep
-  version: 0.1.0
+  version: 1.1200.0-develop
 - name: kasm-video-device-plugin
   repository: file://../kasm-video-device-plugin
-  version: 0.1.0
+  version: 1.1200.0-develop
 - name: kasm-egress-installer
   repository: file://../kasm-egress-installer
-  version: 0.1.0
+  version: 1.1200.0-develop
 - name: csi-driver-rclone
   repository: oci://ghcr.io/veloxpack/charts
   version: 0.5.0
@@ -26,5 +26,5 @@ dependencies:
 - name: nfs-server-provisioner
   repository: https://kubernetes-sigs.github.io/nfs-ganesha-server-and-external-provisioner/
   version: 1.8.0
-digest: sha256:60a80fb57e864734053e791ed12a2b6efc679827c118fcbc890c6cc58994dd49
-generated: "2026-09-02T17:47:41.705678614Z"
+digest: sha256:a4f64495ecf355b30b6812ee8065185d3f424419d38a631c3319f6e8d231ab67
+generated: "2026-09-16T15:57:56.240337-05:00"

@@ -82,10 +82,10 @@ cadence. A published archive embeds every dependency, so an install from it cont
 The job log shows one line per archive:
 
 ```
-PUBLISH    kasm-agent 0.1.0 -- not yet in kasmweb/
-PUBLISH    kasm-platform 0.1.0 -- not yet in kasmweb/
-PUBLISH    kasm-agent-crds 0.1.0 -- not yet in kasmweb/
-PUBLISH    kasm-egress-installer 0.1.0 -- not yet in kasmweb/
+PUBLISH    kasm-agent 1.1200.0-develop -- not yet in kasmweb/
+PUBLISH    kasm-platform 1.1200.0-develop -- not yet in kasmweb/
+PUBLISH    kasm-agent-crds 1.1200.0-develop -- not yet in kasmweb/
+PUBLISH    kasm-egress-installer 1.1200.0-develop -- not yet in kasmweb/
 ```
 
 A `REFUSED` line fails the job and prints the bump-or-force instructions; `REPUBLISH` means

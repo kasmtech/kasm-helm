@@ -1,6 +1,6 @@
 # Kasm Egress Installer
 
-![Version: 0.1.0](https://img.shields.io/badge/Version-0.1.0-informational?style=flat-square) ![AppVersion: develop](https://img.shields.io/badge/AppVersion-develop-informational?style=flat-square)
+![Version: 1.1200.0-develop](https://img.shields.io/badge/Version-1.1200.0--develop-informational?style=flat-square) ![AppVersion: develop](https://img.shields.io/badge/AppVersion-develop-informational?style=flat-square)
 
 Privileged DaemonSet that chains a CNI shim into every node's active CNI conflist and, on request, brings up an OpenVPN, WireGuard, or Ziti tunnel inside a Kasm Workspaces session's network namespace for per-session egress routing.
 

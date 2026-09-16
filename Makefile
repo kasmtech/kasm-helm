@@ -247,7 +247,7 @@ CRANE_ARCH := $(subst amd64,x86_64,$(ARCH))
 CLOUD_PROVIDER_KIND_PID_FILE ?= $(CURDIR)/.kind/cloud-provider-kind.pid
 CLOUD_PROVIDER_KIND_LOG ?= $(CURDIR)/.kind/cloud-provider-kind.log
 
-.PHONY: tools lint render kubeconform kyverno unittest readme readme-check readme-all readme-check-all changelog changelog-llm changelog-console changelog-console-llm changelog-check changelog-check-all docs linkcheck images-check test build-pytest kind-up kind-down kind-recreate kind-ensure kind-load-images kind-load-old-images kind-clean-namespace kind-prep pytest-docker e2e e2e-basic e2e-trustedca e2e-multizone e2e-externaldb e2e-backup e2e-backup-pss e2e-pss e2e-json-logging e2e-upgrade e2e-upgrade-included e2e-upgrade-standalone e2e-settle e2e-preseed validate-preseed extract-old-chart clean deps-agent lint-agent unittest-agent crds-sync-check version-check-agent render-agent package-agent package-agent-all images-agent kmm-install kmm-install-mirrored kmm-uninstall
+.PHONY: tools lint render kubeconform kyverno unittest readme readme-check readme-all readme-check-all set-version changelog changelog-llm changelog-console changelog-console-llm changelog-check changelog-check-all docs linkcheck images-check test build-pytest kind-up kind-down kind-recreate kind-ensure kind-load-images kind-load-old-images kind-clean-namespace kind-prep pytest-docker e2e e2e-basic e2e-trustedca e2e-multizone e2e-externaldb e2e-backup e2e-backup-pss e2e-pss e2e-json-logging e2e-upgrade e2e-upgrade-included e2e-upgrade-standalone e2e-settle e2e-preseed validate-preseed extract-old-chart clean deps-agent lint-agent unittest-agent crds-sync-check version-check-agent render-agent package-agent package-agent-all images-agent kmm-install kmm-install-mirrored kmm-uninstall
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*## "; printf "\nUsage: make \033[36m<target>\033[0m\n"} \
@@ -744,6 +744,25 @@ readme: $(HELM_DOCS) ## Regenerate charts/kasm-helm/README.md (+ optionally bump
 	fi
 	cd $(CHART_DIR) && $(HELM_DOCS) $(HELM_DOCS_TEMPLATES_FROM_CHART)
 
+# One release bump across every chart in the repo -- the self-maintaining counterpart to
+# `make readme CHART_VERSION=...`, which moves only kasm-helm. In order: kasm-helm moves on the Kasm
+# Workspaces release scheme (scripts/set_versions.py: version -> appVersion -> README badges ->
+# useImageTags); scripts/agent_versions.py --align sets the agent-family and umbrella charts, and
+# every file:// pin, to that same version; every README is regenerated; and the vendored dependency
+# archives + Chart.lock files are rebuilt so charts/*/charts/ names the new version. `make
+# version-check-agent` passes afterwards because every version agrees.
+set-version: $(HELM) $(HELM_DOCS) ## Bump EVERY chart to CHART_VERSION (kasm-helm scheme + agent-family aligned to it) and regenerate READMEs + deps
+	@if [ -z "$(CHART_VERSION)" ]; then \
+	  echo "Usage: make set-version CHART_VERSION=1.1201.0-develop [APP_VERSION=develop]"; exit 2; \
+	fi
+	python3 scripts/set_versions.py --chart-version "$(CHART_VERSION)" $(if $(APP_VERSION),--app-version "$(APP_VERSION)",)
+	python3 scripts/agent_versions.py --align --write
+	$(HELM_DOCS) --chart-search-root charts $(HELM_DOCS_TEMPLATES_FROM_ROOT)
+	$(HELM) dependency update $(AGENT_CHART_DIR)
+	$(HELM) dependency update $(PLATFORM_CHART_DIR)
+	@echo ""
+	@echo "set-version: every chart is now $(CHART_VERSION). Update the CHANGELOGs (make changelog-check-all) and run 'make test'."
+
 # Fails (non-zero exit) if the committed README.md files are out of date:
 #   - charts/kasm-helm/README.md vs. values.yaml + README.md.gotmpl (helm-docs)
 #   - README.md version badges/install snippets/"This branch" line vs. Chart.yaml
@@ -770,9 +789,10 @@ readme-check: $(HELM_DOCS) ## Verify both README.md files are up to date (use `m
 # Regenerates README.md for every chart in the repo (kasm-helm + all 9 kasm-agent-family charts) in
 # a single helm-docs pass. --chart-search-root recursively discovers every directory under charts/
 # that has a Chart.yaml, so this needs no per-chart loop and automatically picks up future charts.
-# Unlike `readme`, this has no CHART_VERSION/APP_VERSION coupling -- that bump is specific to
-# kasm-helm's own release-version scheme (see scripts/set_versions.py) and doesn't apply to the
-# agent-family charts, which are independently versioned starting at 0.1.0.
+# Unlike `readme`, this has no CHART_VERSION/APP_VERSION coupling of its own -- kasm-helm's release
+# bump is scripts/set_versions.py, and the agent-family charts are aligned to that version by
+# scripts/agent_versions.py --align. `make set-version CHART_VERSION=...` chains both with this
+# regeneration; this target on its own just refreshes every README from values.yaml + README.md.gotmpl.
 readme-all: $(HELM_DOCS) ## Regenerate README.md for every chart (kasm-helm + all kasm-agent-family charts) from its values.yaml + README.md.gotmpl
 	$(HELM_DOCS) --chart-search-root charts $(HELM_DOCS_TEMPLATES_FROM_ROOT)
 

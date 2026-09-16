@@ -1,6 +1,6 @@
 # kasm-agent
 
-![Version: 0.1.0](https://img.shields.io/badge/Version-0.1.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: develop](https://img.shields.io/badge/AppVersion-develop-informational?style=flat-square)
+![Version: 1.1200.0-develop](https://img.shields.io/badge/Version-1.1200.0--develop-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: develop](https://img.shields.io/badge/AppVersion-develop-informational?style=flat-square)
 
 Umbrella chart for the Kasm Workspaces Kubernetes agent: operator, telemetry collector, agent instance, and optional per-feature cluster infrastructure
 
@@ -119,7 +119,7 @@ agent:
 
 ```console
 helm install kasm-agent oci://registry-1.docker.io/kasmweb/kasm-agent \
-  --version 0.1.0 --namespace kasm-agent --create-namespace --values values.yaml
+  --version 1.1200.0-develop --namespace kasm-agent --create-namespace --values values.yaml
 kubectl get agents.agent.kasm.com -n kasm-agent   # PHASE reaches Ready once the manager accepts it
 ```
 
@@ -259,12 +259,12 @@ See [Publish the charts](../../docs/how-to/publish-charts.md).
 
 | Repository | Name | Version |
 |------------|------|---------|
-| file://../kasm-agent-instance | agent(kasm-agent-instance) | 0.1.0 |
-| file://../kasm-agent-operator | operator(kasm-agent-operator) | 0.1.0 |
-| file://../kasm-egress-installer | egressInstaller(kasm-egress-installer) | 0.1.0 |
-| file://../kasm-node-prep | nodePrep(kasm-node-prep) | 0.1.0 |
-| file://../kasm-otel-collector | otelCollector(kasm-otel-collector) | 0.1.0 |
-| file://../kasm-video-device-plugin | videoDevicePlugin(kasm-video-device-plugin) | 0.1.0 |
+| file://../kasm-agent-instance | agent(kasm-agent-instance) | 1.1200.0-develop |
+| file://../kasm-agent-operator | operator(kasm-agent-operator) | 1.1200.0-develop |
+| file://../kasm-egress-installer | egressInstaller(kasm-egress-installer) | 1.1200.0-develop |
+| file://../kasm-node-prep | nodePrep(kasm-node-prep) | 1.1200.0-develop |
+| file://../kasm-otel-collector | otelCollector(kasm-otel-collector) | 1.1200.0-develop |
+| file://../kasm-video-device-plugin | videoDevicePlugin(kasm-video-device-plugin) | 1.1200.0-develop |
 | https://helm.ngc.nvidia.com/nvidia | gpuOperator(gpu-operator) | v26.7.0 |
 | https://kubernetes-sigs.github.io/nfs-ganesha-server-and-external-provisioner/ | nfs-server-provisioner | 1.8.0 |
 | oci://ghcr.io/veloxpack/charts | csiRclone(csi-driver-rclone) | 0.5.0 |

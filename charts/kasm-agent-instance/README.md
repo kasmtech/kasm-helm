@@ -1,6 +1,6 @@
 # Kasm Agent Instance
 
-![Version: 0.1.0](https://img.shields.io/badge/Version-0.1.0-informational?style=flat-square) ![AppVersion: develop](https://img.shields.io/badge/AppVersion-develop-informational?style=flat-square)
+![Version: 1.1200.0-develop](https://img.shields.io/badge/Version-1.1200.0--develop-informational?style=flat-square) ![AppVersion: develop](https://img.shields.io/badge/AppVersion-develop-informational?style=flat-square)
 
 Creates the Agent custom resource (agent.kasm.com/v1alpha1) that the Kasm agent operator reconciles into a Kubernetes-native Kasm agent and session proxy, plus its satellite objects - the manager token Secret, a cert-manager Certificate, a KasmImagePuller, and a Gateway API HTTPRoute, a classic Ingress or an OpenShift Route. Deployed as a subchart of the kasm-agent umbrella chart under the `agent` alias.
 

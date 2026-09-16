@@ -14,7 +14,7 @@ keywords:
 maintainers:
   - name: Kasm Technologies, Inc.
     url: https://github.com/kasmtech/kasm-helm
-version: 0.1.0
+version: 1.1200.0-develop
 appVersion: "develop"
 dependencies:
   # The Kasm Workspaces control plane: the web UI, the manager/API services, the session proxy,
@@ -38,6 +38,6 @@ dependencies:
   # conditions stay reachable from here as `kasm-agent.operator.enabled`,
   # `kasm-agent.nodePrep.enabled`, and so on.
   - name: kasm-agent
-    version: 0.1.0
+    version: 1.1200.0-develop
     repository: file://../kasm-agent
     condition: kasm-agent.enabled

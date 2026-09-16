@@ -1,6 +1,6 @@
 # Kasm Agent CRDs
 
-![Version: 0.1.0](https://img.shields.io/badge/Version-0.1.0-informational?style=flat-square) ![AppVersion: develop](https://img.shields.io/badge/AppVersion-develop-informational?style=flat-square)
+![Version: 1.1200.0-develop](https://img.shields.io/badge/Version-1.1200.0--develop-informational?style=flat-square) ![AppVersion: develop](https://img.shields.io/badge/AppVersion-develop-informational?style=flat-square)
 
 The CustomResourceDefinitions the Kasm Agent operator owns — agents, kasmworkspaces and kasmimagepullers in the agent.kasm.com group, warmpools and warmpoolinstances in pools.kasm.ai — and nothing else. It ships them as ordinary Helm templates so that a release of this chart owns their lifecycle and `helm upgrade` applies schema changes, for fleets that would rather upgrade CRDs through Helm than through the documented kubectl side channel. The kasm-agent-operator chart keeps its own copy in crds/ for one-command installs; install and upgrade this release before the kasm-agent or kasm-platform releases.
 

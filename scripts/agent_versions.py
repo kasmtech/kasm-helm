@@ -4,8 +4,9 @@
 charts/kasm-helm is versioned on the Kasm Workspaces release line, and
 scripts/set_versions.py drives that coupling (chart version -> app version ->
 README badges -> useImageTags).  The agent-family charts are different: they are
-independently SemVer'd, all currently 0.1.0 with appVersion "develop", and
-nothing derives one from another.  What couples *them* is Helm's ``file://``
+hand-versioned, all currently 1.1200.0-develop with appVersion "develop" -- aligned
+to kasm-helm's release line, but nothing *derives* one from another the way
+set_versions.py drives kasm-helm.  What couples *them* is Helm's ``file://``
 dependency mechanism:
 
   charts/kasm-agent      pins six local subcharts by exact version
@@ -33,12 +34,20 @@ answers.
 
 Usage:
     python3 scripts/agent_versions.py --check
-    python3 scripts/agent_versions.py --bump kasm-agent-instance 0.2.0
-    python3 scripts/agent_versions.py --bump kasm-agent-instance 0.2.0 --write
+    python3 scripts/agent_versions.py --bump kasm-agent-instance 1.1201.0-develop
+    python3 scripts/agent_versions.py --bump kasm-agent-instance 1.1201.0-develop --write
+    python3 scripts/agent_versions.py --align            # every agent-family chart
+    python3 scripts/agent_versions.py --align --write    #   to kasm-helm's version
 
 ``--bump`` rewrites the named chart's own ``version:`` *and* every parent pin
-that references it, so the two never drift apart in the first place.  It is a
-dry run until ``--write`` is given.
+that references it, so the two never drift apart in the first place.  ``--align``
+does the same for every agent-family chart at once, setting each to whatever
+version charts/kasm-helm currently declares (kasm-helm's own version stays
+set_versions.py's; its pin in charts/kasm-platform is aligned like any other).
+That is the release-bump path: run it right after set_versions.py moves
+kasm-helm, or via ``make set-version CHART_VERSION=...`` which chains both plus
+the README and dependency-archive refresh.  Both modes are a dry run until
+``--write`` is given.
 
 Pure stdlib, and deliberately line-based rather than YAML-round-tripped: these
 Chart.yaml files carry a lot of explanatory comment, every edit here is a
@@ -432,6 +441,91 @@ def bump(chart_name: str, new_version: str, write: bool) -> int:
 
 
 # --------------------------------------------------------------------------
+# --align
+# --------------------------------------------------------------------------
+
+
+def plan_align(charts: dict[str, Chart]) -> tuple[str, list[Edit]]:
+    """Every agent-family chart, and every file:// pin, set to kasm-helm's version.
+
+    kasm-helm is the anchor because set_versions.py already moves it on the Kasm
+    Workspaces release line; this brings the rest of the repo to the same number
+    in one pass, which is what keeps ``--check`` green after a release bump.
+    """
+    anchor = charts.get("kasm-helm")
+    if anchor is None:
+        raise ChartError("charts/kasm-helm not found; --align has nothing to align to")
+    version = anchor.version
+    if not SEMVER_RE.match(version):
+        raise ChartError(
+            f"charts/kasm-helm declares {version!r}, which is not a SemVer 2 version"
+        )
+
+    edits: list[Edit] = []
+    # Own versions -- every chart except the ones another tool owns.  kasm-helm's
+    # own version is set_versions.py's (and already the anchor); its pin below is
+    # still ours to move.
+    for chart in sorted(charts.values(), key=lambda c: c.name):
+        if chart.name in EXTERNALLY_VERSIONED_CHARTS or chart.version == version:
+            continue
+        edits.append(
+            Edit(chart.chart_yaml, chart.version_line,
+                 chart.lines[chart.version_line - 1],
+                 replace_scalar(chart.lines[chart.version_line - 1], version),
+                 f"{chart.name}'s own version (aligned to kasm-helm)")
+        )
+    # Every file:// pin, charts/kasm-platform's pin on kasm-helm included.
+    for parent in sorted(charts.values(), key=lambda c: c.name):
+        for dep in parent.local_dependencies():
+            if dep.version == version:
+                continue
+            edits.append(
+                Edit(parent.chart_yaml, dep.version_line,
+                     parent.lines[dep.version_line - 1],
+                     replace_scalar(parent.lines[dep.version_line - 1], version),
+                     f"{parent.name}'s pin on {dep.name}")
+            )
+    return version, edits
+
+
+def align(write: bool) -> int:
+    charts = load_charts()
+    version, edits = plan_align(charts)
+
+    if not edits:
+        print(f"Nothing to do: every agent-family chart and pin already matches kasm-helm at {version}.")
+        return 0
+
+    verb = "Applying" if write else "Would apply"
+    print(f"{verb} {len(edits)} edit(s) to align every agent-family chart to kasm-helm's {version}:")
+    print("")
+    for edit in edits:
+        rel = edit.path.relative_to(REPO_ROOT)
+        print(f"  {rel}:{edit.line_no}  ({edit.why})")
+        print(f"    - {edit.before.strip()}")
+        print(f"    + {edit.after.strip()}")
+    print("")
+
+    if not write:
+        print("Dry run -- nothing written.  Re-run with --write to apply.")
+        return 0
+
+    for edit in edits:
+        chart = next(c for c in charts.values() if c.chart_yaml == edit.path)
+        chart.lines[edit.line_no - 1] = edit.after
+    for path in dict.fromkeys(e.path for e in edits):
+        next(c for c in charts.values() if c.chart_yaml == path).write()
+
+    print(f"Wrote {len({e.path for e in edits})} Chart.yaml file(s).")
+    print("")
+    print("Next: refresh the lock files, which still name the old version --")
+    print("  ./bin/helm dependency update charts/kasm-agent")
+    print("  ./bin/helm dependency update charts/kasm-platform")
+    print("(`make set-version CHART_VERSION=...` runs this whole sequence for you.)")
+    return 0
+
+
+# --------------------------------------------------------------------------
 
 
 def main() -> int:
@@ -450,22 +544,29 @@ def main() -> int:
         help="set CHART's version to VERSION and update every pin that names it",
     )
     parser.add_argument(
+        "--align",
+        action="store_true",
+        help="set every agent-family chart (and pin) to charts/kasm-helm's current version",
+    )
+    parser.add_argument(
         "--write",
         action="store_true",
-        help="with --bump, actually write the files (default: dry run)",
+        help="with --bump or --align, actually write the files (default: dry run)",
     )
     args = parser.parse_args()
 
-    if args.check and args.bump:
-        parser.error("--check and --bump are mutually exclusive")
-    if args.write and not args.bump:
-        parser.error("--write only applies to --bump")
-    if not args.check and not args.bump:
-        parser.error("one of --check or --bump is required")
+    if sum(bool(m) for m in (args.check, args.bump, args.align)) > 1:
+        parser.error("--check, --bump and --align are mutually exclusive")
+    if args.write and not (args.bump or args.align):
+        parser.error("--write only applies to --bump or --align")
+    if not (args.check or args.bump or args.align):
+        parser.error("one of --check, --bump or --align is required")
 
     try:
         if args.check:
             return check()
+        if args.align:
+            return align(args.write)
         return bump(args.bump[0], args.bump[1], args.write)
     except ChartError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

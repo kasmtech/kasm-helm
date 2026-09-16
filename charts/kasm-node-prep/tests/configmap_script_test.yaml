@@ -973,7 +973,7 @@ tests:
           value: Helm
       - equal:
           path: metadata.labels["helm.sh/chart"]
-          value: kasm-node-prep-0.1.0
+          value: kasm-node-prep-1.1200.0-develop
 
   - it: single-quotes every value that lands in the script so shell metacharacters stay literal
     set:

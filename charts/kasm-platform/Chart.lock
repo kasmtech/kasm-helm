@@ -4,6 +4,6 @@ dependencies:
   version: 1.1200.0-develop
 - name: kasm-agent
   repository: file://../kasm-agent
-  version: 0.1.0
-digest: sha256:ddf8b8277b9a73646f98794853359490a9d770494fd201c2cbf11161d6edc3f7
-generated: "2026-09-15T07:21:57.036809-05:00"
+  version: 1.1200.0-develop
+digest: sha256:b9bb440ab5aeaa6893573000fbe27ebbc35aad06a2bb7e4ddb71bf12848db75c
+generated: "2026-09-16T15:58:11.779185-05:00"

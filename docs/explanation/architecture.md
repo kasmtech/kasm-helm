@@ -127,8 +127,10 @@ namespaces, and one cluster or many, are [Deployment topologies](topologies.md).
 ## Versions and history
 
 kasm-helm is versioned on the Kasm Workspaces release cadence - currently chart
-`1.1190.6` / app `1.19.0`, GA. The agent-family and umbrella charts are versioned
-independently and are currently `0.1.0` (app `develop`), a developer preview. For
+`1.1190.6` / app `1.19.0`, GA. The agent-family and umbrella charts were versioned
+independently at `0.1.0`; they now carry the Kasm Workspaces release version too -
+chart `1.1200.0-develop` (app `develop`) on this develop branch, a developer preview -
+kept in lockstep by `scripts/agent_versions.py`. For
 release history, see each chart's `CHANGELOG.md` - for example,
 [charts/kasm-helm/CHANGELOG.md](../../charts/kasm-helm/CHANGELOG.md). There is no
 repository-wide changelog.
