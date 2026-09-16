@@ -12,6 +12,12 @@ Kasm is a platform specializing in providing secure browser-based workspaces for
 | ---- | ------ | --- |
 | Kasm Technologies, Inc. |  | <https://github.com/kasmtech/kasm-helm> |
 
+## Requirements
+
+| Repository | Name | Version |
+|------------|------|---------|
+| file://../kasm-common | kasm-common | 0.1.0 |
+
 <!-- This README.md.gotmpl is used by helm-docs to generate README.md which in turn generates the information on https://artifacthub.io/packages/helm/nautobot/nautobot so there are parts of this which are duplicated from `docs` -->
 ## Documentation
 

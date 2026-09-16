@@ -17,12 +17,11 @@ so in-memory offsets would silently lose everything written while the pod was do
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  {{- include "kasm.metadata" (dict "context" . "component" "otel-db-sidecar" "resource" "configMap" "include" "all") | indent 2 }}
+  {{- include "kasm.common.metadata" (dict "context" . "component" "otel-db-sidecar" "resource" "configMap" "include" "all") | indent 2 }}
 data:
   config.yaml: |
     extensions:
-      health_check:
-        endpoint: "0.0.0.0:{{ $constants.otel.health }}"
+      {{- include "kasm.common.otelHealthCheckExtension" (dict "port" $constants.otel.health) | nindent 6 }}
 
       file_storage/checkpoints:
         directory: /var/lib/otelcol/checkpoints
@@ -57,27 +56,12 @@ data:
             value: kasm-db
 
     processors:
-      batch:
-        send_batch_size: 5000
-        timeout: 10s
+      {{- include "kasm.common.otelBatchProcessor" . | nindent 6 }}
 
-      memory_limiter:
-        check_interval: 5s
-        limit_mib: 96
-        spike_limit_mib: 32
+{{ include "kasm.common.otelMemoryLimiter" (dict "limitMib" 96 "spikeLimitMib" 32) | indent 6 }}
 
     exporters:
-      otlphttp:
-        endpoint: "${env:OTEL_EXPORTER_OTLP_ENDPOINT}"
-        retry_on_failure:
-          enabled: true
-          initial_interval: 5s
-          max_interval: 30s
-          max_elapsed_time: 300s
-        sending_queue:
-          enabled: true
-          num_consumers: 2
-          queue_size: 500
+      {{- include "kasm.common.otelOtlphttpExporterToForwarder" . | nindent 6 }}
 
     service:
       extensions: [health_check, file_storage/checkpoints]

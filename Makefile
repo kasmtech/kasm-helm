@@ -264,10 +264,13 @@ helm-unittest: $(HELM)
 
 ##@ Static Analysis
 
-lint: $(HELM) ## Lint the primary Helm chart
+chart-deps: $(HELM) $(CHART_DIR)/Chart.yaml charts/kasm-common/Chart.yaml ## Vendor the kasm-common file:// dependency into charts/kasm-helm/charts/
+	$(HELM) dependency build $(CHART_DIR)
+
+lint: chart-deps ## Lint the primary Helm chart
 	$(HELM) lint $(CHART_DIR)
 
-render: $(HELM) ## Render all test scenario values to .rendered/
+render: chart-deps ## Render all test scenario values to .rendered/
 	@rm -rf .rendered
 	@mkdir -p .rendered
 	@set -euo pipefail; \
@@ -292,10 +295,10 @@ kyverno: tools render ## Apply Kyverno policies against rendered manifests
 	    $(KYVERNO) apply $$policies -r $$rendered_manifest; \
 	  done
 
-unittest: tools ## Run helm-unittest test suites
+unittest: tools chart-deps ## Run helm-unittest test suites
 	HELM_PLUGINS="$(HELM_PLUGINS_DIR)" $(HELM) unittest $(CHART_DIR)
 
-otel-validate: tools $(HELM) ## Validate rendered OTel Collector configs with the collector's own `validate` command
+otel-validate: tools chart-deps $(HELM) ## Validate rendered OTel Collector configs with the collector's own `validate` command
 	@set -euo pipefail; \
 	command -v docker >/dev/null 2>&1 || { echo "otel-validate: docker is required to run 'otelcol-contrib validate' and was not found in PATH" >&2; exit 1; }; \
 	tmp_dir=$$(mktemp -d); \
@@ -584,7 +587,7 @@ kind-clean-namespace: ## Delete E2E_NAMESPACE from kind and wait for removal
 	$(KUBECTL) --kubeconfig $(KIND_KUBECONFIG) delete namespace $(E2E_NAMESPACE) --ignore-not-found
 	$(KUBECTL) --kubeconfig $(KIND_KUBECONFIG) wait --for=delete namespace/$(E2E_NAMESPACE) --timeout=300s || true
 
-kind-prep: kind-ensure kind-load-images kind-clean-namespace ## Prepare kind for a scenario: ensure cluster, load images, clean namespace
+kind-prep: chart-deps kind-ensure kind-load-images kind-clean-namespace ## Prepare kind for a scenario: ensure cluster, load images, clean namespace
 
 # Pause between scenarios in the umbrella target so the cluster has
 # time to clean up the previous namespace before the next install starts.

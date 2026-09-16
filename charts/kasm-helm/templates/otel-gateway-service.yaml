@@ -21,10 +21,10 @@ No external Service variant: out-of-cluster senders use the forwarder's external
 apiVersion: v1
 kind: Service
 metadata:
-  {{- include "kasm.metadata" (dict "context" $ "component" "otel-gateway" "resource" "service" "include" "all") | indent 2 }}
+  {{- include "kasm.common.metadata" (dict "context" $ "component" "otel-gateway" "resource" "service" "include" "all") | indent 2 }}
 spec:
   selector:
-    {{- include "kasm.metadata" (dict "context" $ "component" "otel-gateway" "resource" "service" "include" "match") | indent 4 }}
+    {{- include "kasm.common.metadata" (dict "context" $ "component" "otel-gateway" "resource" "service" "include" "match") | indent 4 }}
   ports:
     - name: otlp-grpc
       protocol: TCP
@@ -39,14 +39,14 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  {{- include "kasm.metadata" (dict "context" $ "component" "otel-gateway" "resource" "service" "name" $constants.otel.gatewayHeadlessSvc "include" "all") | indent 2 }}
+  {{- include "kasm.common.metadata" (dict "context" $ "component" "otel-gateway" "resource" "service" "name" $constants.otel.gatewayHeadlessSvc "include" "all") | indent 2 }}
 spec:
   clusterIP: None
   # Report every pod, ready or not, so the forwarder's hash ring is stable across a rolling update
   # instead of reshuffling every time a readiness probe flaps.
   publishNotReadyAddresses: true
   selector:
-    {{- include "kasm.metadata" (dict "context" $ "component" "otel-gateway" "resource" "service" "include" "match") | indent 4 }}
+    {{- include "kasm.common.metadata" (dict "context" $ "component" "otel-gateway" "resource" "service" "include" "match") | indent 4 }}
   ports:
     - name: otlp-grpc
       protocol: TCP

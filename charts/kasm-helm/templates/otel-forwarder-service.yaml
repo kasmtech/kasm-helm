@@ -12,10 +12,10 @@ unauthenticated ingest at all.
 apiVersion: v1
 kind: Service
 metadata:
-  {{- include "kasm.metadata" (dict "context" . "component" "otel-forwarder" "resource" "service" "include" "all") | indent 2 }}
+  {{- include "kasm.common.metadata" (dict "context" . "component" "otel-forwarder" "resource" "service" "include" "all") | indent 2 }}
 spec:
   selector:
-    {{- include "kasm.metadata" (dict "context" . "component" "otel-forwarder" "resource" "service" "include" "match") | indent 4 }}
+    {{- include "kasm.common.metadata" (dict "context" . "component" "otel-forwarder" "resource" "service" "include" "match") | indent 4 }}
   ports:
     - name: otlp-http
       protocol: TCP
@@ -34,11 +34,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  {{- include "kasm.metadata" (dict "context" . "component" "otel-forwarder-ext" "resource" "service" "name" (printf "%s-otel-forwarder-external" .Release.Name) "include" "all") | indent 2 }}
+  {{- include "kasm.common.metadata" (dict "context" . "component" "otel-forwarder-ext" "resource" "service" "name" (printf "%s-otel-forwarder-external" .Release.Name) "include" "all") | indent 2 }}
 spec:
   type: {{ $obs.collector.forwarder.externalService.type }}
   selector:
-    {{- include "kasm.metadata" (dict "context" . "component" "otel-forwarder" "resource" "service" "include" "match") | indent 4 }}
+    {{- include "kasm.common.metadata" (dict "context" . "component" "otel-forwarder" "resource" "service" "include" "match") | indent 4 }}
   ports:
     - name: otlp-grpc
       protocol: TCP

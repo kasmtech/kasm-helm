@@ -121,9 +121,9 @@ otel:
   gatewaySvc: {{ printf "%s-otel-gateway" .Release.Name }}
   gatewayHeadlessSvc: {{ printf "%s-otel-gateway-headless" .Release.Name }}
   gatewayHeadlessFqdn: {{ printf "%s-otel-gateway-headless.%s.svc.%s" .Release.Name .Release.Namespace .Values.clusterDomain }}
-  image: {{ printf "%s/%s:%s" .Values.components.otelForwarder.image.registry .Values.components.otelForwarder.image.repository .Values.components.otelForwarder.image.tag }}
-  gatewayImage: {{ printf "%s/%s:%s" .Values.components.otelGateway.image.registry .Values.components.otelGateway.image.repository .Values.components.otelGateway.image.tag }}
-  sidecarImage: {{ printf "%s/%s:%s" .Values.components.otelSidecar.image.registry .Values.components.otelSidecar.image.repository .Values.components.otelSidecar.image.tag }}
+  image: {{ include "kasm.common.imageRef" .Values.components.otelForwarder.image }}
+  gatewayImage: {{ include "kasm.common.imageRef" .Values.components.otelGateway.image }}
+  sidecarImage: {{ include "kasm.common.imageRef" .Values.components.otelSidecar.image }}
   otlpHttp: 4318
   otlpGrpc: 4317
   otlpNginx: 4316
@@ -147,9 +147,11 @@ proxyStubStatus: 8090
   Normalize a zone name to a DNS-safe label component.
   Mirrors the normalization used by `kasm.name` so hostnames built inline
   (proxy upstreams, init containers, env vars) match the actual Service names.
+  Delegates to kasm.common.zoneName (charts/kasm-common); see that chart's _helpers.tpl for the
+  real implementation.
 */}}
 {{- define "kasm.zoneName" -}}
-{{- regexReplaceAll "[^a-zA-Z0-9]+" . "-" | lower -}}
+{{- include "kasm.common.zoneName" . -}}
 {{- end -}}
 
 {{/*
@@ -390,33 +392,11 @@ true
 
 {{/*
   Full resource name
+  Delegates to kasm.common.name (charts/kasm-common); see that chart's _helpers.tpl for the real
+  implementation.
 */}}
 {{- define "kasm.name" -}}
-{{- $context := index . 0 -}}
-{{- $component := kebabcase (index . 1) -}}
-
-{{- $resource := "" -}}
-{{- if ge (len .) 3 -}}
-  {{- $resource = index . 2 -}}
-{{- end -}}
-
-{{- $zone := "" -}}
-{{- if ge (len .) 4 -}}
-  {{- $zone = index . 3 -}}
-{{- end -}}
-
-{{- $extra := "" -}}
-{{- if ge (len .) 5 -}}
-  {{- $extra = index . 4 -}}
-{{- end -}}
-
-{{- if $extra -}}
-  {{- printf "%s-%s-%s-%s" $context.Release.Name $component (include "kasm.zoneName" $zone) $extra -}}
-{{- else if $zone -}}
-  {{- printf "%s-%s-%s" $context.Release.Name $component (include "kasm.zoneName" $zone) -}}
-{{- else -}}
-  {{- printf "%s-%s" $context.Release.Name $component -}}
-{{- end -}}
+{{- include "kasm.common.name" . -}}
 {{- end -}}
 
 {{/*
@@ -430,250 +410,11 @@ Where:
   .zone      = (optional) zone name for Kasm zone-scoped resources
   .include   = (optional) if set to "la", includes only labels and annotations; otherwise emits all
   .name      = (optional) overrides name generation
+  Delegates to kasm.common.metadata (charts/kasm-common); see that chart's _helpers.tpl for the
+  real implementation.
 */}}
 {{- define "kasm.metadata" -}}
-{{- $ctx := .context -}}
-{{- $component := .component -}}
-{{- $resource := .resource -}}
-{{- $zone := .zone | default "" -}}
-{{- $include := .include | default "" -}}
-{{- $nameOrig := .name | default "" -}}
-
-{{/* Name Resolution */}}
-{{- $constants := include "kasm.constants" $ctx | fromYaml -}}
-
-{{- $labelName := "" -}}
-{{- if $zone -}}
-  {{- $labelName = include "kasm.name" (list $ctx $component "" $zone) -}}
-{{- else -}}
-  {{- $labelName = include "kasm.name" (list $ctx $component) -}}
-{{- end -}}
-
-{{- $name := "" -}}
-{{- if $nameOrig -}}
-  {{- $name = $nameOrig -}}
-{{- else if and (eq $component "db") (eq $resource "statefulSet") -}}
-  {{- $name = printf "%s-db-%s" $ctx.Release.Name ($ctx.Chart.AppVersion | replace "." "-") | trunc 63 | trimSuffix "-" -}}
-{{- else if and (eq $component "pre-upgrade-backup") (eq $resource "pvc") -}}
-  {{- $name = include "kasm.dbUpgradeBackupPvcName" $ctx -}}
-{{- else if $zone -}}
-  {{- $name = include "kasm.name" (list $ctx $component "" $zone) -}}
-{{- else -}}
-  {{- $name = include "kasm.name" (list $ctx $component) -}}
-{{- end -}}
-
-{{/* Labels */}}
-{{- $labels := dict -}}
-
-{{- with $ctx.Values.labels -}}
-  {{- $labels = merge $labels . -}}
-{{- end -}}
-
-{{- with (get $ctx.Values.components .component) -}}
-  {{- with .labels -}}
-    {{- $labels = merge $labels . -}}
-  {{- end -}}
-{{- end -}}
-
-{{- if $resource -}}
-  {{- with (get $ctx.Values.extraLabels $resource) -}}
-    {{- $labels = merge $labels . -}}
-  {{- end -}}
-{{- end -}}
-
-{{- if eq $resource "ingress" -}}
-  {{- with $ctx.Values.ingress.labels -}}
-    {{- $labels = merge $labels . -}}
-  {{- end -}}
-{{- end -}}
-
-{{- if eq $resource "route" -}}
-  {{- with $ctx.Values.route.labels -}}
-    {{- $labels = merge $labels . -}}
-  {{- end -}}
-{{- end -}}
-
-{{- if eq $component "cert-manager" -}}
-  {{- with $ctx.Values.certificate.certManager.labels -}}
-    {{- $labels = merge $labels . -}}
-  {{- end -}}
-{{- end -}}
-
-{{- if eq $component "db" -}}
-  {{- with $ctx.Values.database.labels -}}
-    {{- $labels = merge $labels . -}}
-  {{- end -}}
-{{- end -}}
-
-{{- if eq $component "image-pull" -}}
-  {{- with $ctx.Values.imagePullSecrets.labels -}}
-    {{- $labels = merge $labels . -}}
-  {{- end -}}
-{{- end -}}
-
-{{- if eq $component "secrets" -}}
-  {{- with $ctx.Values.kasmSecrets.labels -}}
-    {{- $labels = merge $labels . -}}
-  {{- end -}}
-{{- end -}}
-
-{{- if and (or (eq $component "proxy") (eq $component "proxy-ext")) (eq $resource "service") -}}
-  {{- with $ctx.Values.proxyService.labels -}}
-    {{- $labels = merge $labels . -}}
-  {{- end -}}
-{{- end -}}
-
-{{- if eq $component "otel-forwarder-ext" -}}
-  {{- with $ctx.Values.observability.collector.forwarder.externalService.labels -}}
-    {{- $labels = merge $labels . -}}
-  {{- end -}}
-{{- end -}}
-
-{{- $labels = merge $labels (dict
-  "kasm.com/version" $ctx.Chart.AppVersion
-  "app.kubernetes.io/name" $labelName
-  "app.kubernetes.io/component" (kebabcase $component)
-  "app.kubernetes.io/instance" $ctx.Release.Name
-  "app.kubernetes.io/version" $ctx.Chart.AppVersion
-  "app.kubernetes.io/managed-by" "Helm"
-  "helm.sh/chart" (printf "%s-%s" $ctx.Chart.Name $ctx.Chart.Version)
-  "app.kubernetes.io/part-of" "kasm"
-) -}}
-
-
-{{/* Annotations */}}
-{{- $annotations := dict -}}
-
-{{- with $ctx.Values.annotations -}}
-  {{- $annotations = merge $annotations . -}}
-{{- end -}}
-
-{{- if eq $resource "ingress" -}}
-  {{- with $ctx.Values.ingress.annotations -}}
-    {{- $annotations = merge $annotations . -}}
-  {{- end -}}
-{{- end -}}
-
-{{- with (get $ctx.Values.components .component) -}}
-  {{- with .annotations }}
-    {{- $annotations = merge $annotations . -}}
-  {{- end }}
-{{- end }}
-
-{{- if .resource -}}
-  {{- with (get $ctx.Values.extraAnnotations .resource) -}}
-    {{- $annotations = merge $annotations . -}}
-  {{- end }}
-{{- end -}}
-
-{{- if and (or (eq $component "proxy") (eq $component "proxy-ext")) (eq $resource "service") -}}
-  {{- with $ctx.Values.proxyService.annotations -}}
-    {{- $annotations = merge $annotations . -}}
-  {{- end -}}
-{{- end -}}
-
-{{- if eq $component "otel-forwarder-ext" -}}
-  {{- with $ctx.Values.observability.collector.forwarder.externalService.annotations -}}
-    {{- $annotations = merge $annotations . -}}
-  {{- end -}}
-{{- end -}}
-
-{{- if eq $resource "route" -}}
-  {{- with $ctx.Values.route.annotations -}}
-    {{- $annotations = merge $annotations . -}}
-  {{- end -}}
-{{- end -}}
-
-{{- if eq $component "cert-manager" -}}
-  {{- with $ctx.Values.certificate.certManager.annotations -}}
-    {{- $annotations = merge $annotations . -}}
-  {{- end -}}
-{{- end -}}
-
-{{- if eq $component "db" -}}
-  {{- with $ctx.Values.database.annotations -}}
-    {{- $annotations = merge $annotations . -}}
-  {{- end -}}
-{{- end -}}
-
-{{- if eq $component "image-pull" -}}
-  {{- with $ctx.Values.imagePullSecrets.annotations -}}
-    {{- $annotations = merge $annotations . -}}
-  {{- end -}}
-{{- end -}}
-
-{{- if eq $component "secrets" -}}
-  {{- with $ctx.Values.kasmSecrets.annotations -}}
-    {{- $annotations = merge $annotations . -}}
-  {{- end -}}
-{{- end -}}
-
-{{/*
-  Caller-supplied ad-hoc annotations (e.g. a checksum/config annotation computed by the calling
-  template). Merged in like every other annotation source above rather than emitted as a second
-  "annotations:" block, which would be a duplicate YAML key.
-*/}}
-{{- with .extraAnnotations -}}
-  {{- $annotations = merge $annotations . -}}
-{{- end -}}
-
-{{/* Special Cases */}}
-
-{{- if and $ctx.Values.applyHealthChecks (has .resource (list "deployment" "pod" "statefulSet" "daemonset" "job" "cronJob" "cronPod")) -}}
-  {{- $annotations = merge $annotations (dict "kasm.com/healthcheck" "true") -}}
-{{- end -}}
-
-{{- if and $ctx.Values.applySecurity (has .resource (list "deployment" "pod" "statefulSet" "daemonset" "job" "cronJob" "cronPod")) -}}
-  {{- $annotations = merge $annotations (dict "kasm.com/security" "true") -}}
-{{- end -}}
-
-{{- if and (eq .component "db-backup") (eq .resource "pvc") -}}
-  {{- $annotations = merge $annotations (dict
-  "helm.sh/resource-policy" "keep"
-  "helm.sh/hook-weight" "100"
-  ) -}}
-{{- end -}}
-
-{{- if (or (eq $component "secrets") (eq $component "image-pull") (eq $component "db-preseed")) -}}
-  {{- $annotations = merge $annotations (dict
-      "helm.sh/hook" "pre-install,pre-upgrade"
-    ) -}}
-{{- end -}}
-
-{{- if (and (eq $component "pre-upgrade-backup") (eq $resource "pvc")) -}}
-  {{- $annotations = merge $annotations (dict
-      "helm.sh/resource-policy" "keep"
-      "helm.sh/hook-weight" "-10"
-      "helm.sh/hook" "pre-upgrade,pre-install"
-    ) -}}
-{{- end -}}
-
-{{- if (and (eq $component "pre-upgrade-backup") (eq $resource "job")) -}}
-  {{- $annotations = merge $annotations (dict
-      "helm.sh/hook-weight" "10"
-      "helm.sh/hook" "pre-upgrade,pre-install"
-    ) -}}
-{{- end -}}
-
-{{/* Output Metadata Block */}}
-
-{{- if eq .include "all" }}
-name: {{ $name }}
-namespace: {{ $ctx.Release.Namespace }}
-{{- end }}
-{{- if or (eq .include "all") (eq .include "la") }}
-labels:
-{{- toYaml $labels | nindent 2 }}
-{{- with $annotations }}
-annotations:
-{{- toYaml . | nindent 2 }}
-{{- end }}
-{{- end }}
-{{- if eq .include "match" }}
-app.kubernetes.io/name: {{ $labelName }}
-app.kubernetes.io/component: {{ (kebabcase $component) }}
-app.kubernetes.io/instance: {{ $ctx.Release.Name }}
-{{- end }}
+{{- include "kasm.common.metadata" . -}}
 {{- end -}}
 
 {{/*
@@ -683,45 +424,11 @@ Usage:
 Where:
   index 1 = runAsUser/runAsGroup integer
   index 2 = context ("pod" or "container")
+  Delegates to kasm.common.securityContext (charts/kasm-common); see that chart's _helpers.tpl for
+  the real implementation.
 */}}
 {{- define "kasm.securityContext" -}}
-{{- $rootContext := index . 0 -}}
-{{- $runAs := index . 1 -}}
-{{- $context := index . 2 -}}
-{{- $ro := true -}}
-{{- if ge (len .) 4 -}}
-  {{- $opts := index . 3 -}}
-  {{- if and $opts (hasKey $opts "readOnlyRootFilesystem") -}}
-    {{- $ro = get $opts "readOnlyRootFilesystem" -}}
-  {{- end -}}
-{{- end -}}
-
-{{- if $rootContext.Values.applySecurity -}}
-securityContext:
-  {{- if eq $context "pod" }}
-    {{- if not $rootContext.Values.isOpenshift }}
-  runAsUser: {{ $runAs }}
-  runAsGroup: {{ $runAs }}
-  fsGroup: {{ $runAs }}
-    {{- end }}
-  fsGroupChangePolicy: OnRootMismatch
-  {{- else if eq $context "container" -}}
-    {{- if not $rootContext.Values.isOpenshift }}
-  runAsUser: {{ $runAs }}
-  runAsGroup: {{ $runAs }}
-    {{- end }}
-  allowPrivilegeEscalation: false
-  readOnlyRootFilesystem: {{ $ro }}
-  runAsNonRoot: true
-  capabilities:
-    drop:
-      - ALL
-  seccompProfile:
-    type: RuntimeDefault
-  {{- else -}}
-    {{- printf "ERROR: Invalid context value '%s'. Allowed values are %s" $context "pod, container" | fail }}
-  {{- end -}}
-{{- end -}}
+{{- include "kasm.common.securityContext" . -}}
 {{- end -}}
 
 {{/*
@@ -782,89 +489,12 @@ securityContext:
             "path" "/healthz"
             "portName" "api"
           ) | nindent 6 }}
+
+  Delegates to health.common.probe (charts/kasm-common); see that chart's _helpers.tpl for the real
+  implementation.
 */}}
 {{- define "health.probe" -}}
-{{- $root := required "health.probe requires root" .root -}}
-{{- $componentName := required "health.probe requires component" .component -}}
-{{- $probeType := required "health.probe requires probeType" .probeType -}}
-{{- $probeKind := required "health.probe requires type: http, https, tcp, or command" .type | lower -}}
-
-{{- $healthCheckParent := dict -}}
-
-{{- if hasKey . "timingParent" -}}
-  {{- $healthCheckParent = .timingParent | default dict -}}
-{{- else if eq $componentName "db" -}}
-  {{- $healthCheckParent = get $root.Values "database" | default dict -}}
-{{- else -}}
-  {{- $components := get $root.Values "components" | default dict -}}
-  {{- $component := get $components $componentName | default dict -}}
-
-  {{- if hasKey . "timingScope" -}}
-    {{- $timingScope := .timingScope -}}
-    {{- $healthCheckParent = get $component $timingScope | default dict -}}
-  {{- else -}}
-    {{- $healthCheckParent = $component -}}
-  {{- end -}}
-{{- end -}}
-
-{{- $healthCheckTiming := get $healthCheckParent "healthCheckTiming" | default dict -}}
-{{- $timing := get $healthCheckTiming $probeType | default dict -}}
-
-{{- $timeoutSeconds := get $timing "timeoutSeconds" | default 5 -}}
-{{- $initialDelaySeconds := get $timing "initialDelaySeconds" | default 10 -}}
-{{- $periodSeconds := get $timing "periodSeconds" | default 30 -}}
-{{- $failureThreshold := get $timing "failureThreshold" | default 3 -}}
-{{- $successThreshold := get $timing "successThreshold" | default 1 -}}
-
-{{- if or (eq $probeKind "http") (eq $probeKind "https") -}}
-{{- $path := required "health.probe type http/https requires path" .path -}}
-{{- $port := "" -}}
-{{- if hasKey . "port" -}}
-  {{- $port = .port -}}
-{{- else if hasKey . "portName" -}}
-  {{- $port = .portName -}}
-{{- else -}}
-  {{- fail "health.probe type http/https requires port or portName" -}}
-{{- end -}}
-httpGet:
-  path: {{ $path | quote }}
-  port: {{ $port }}
-{{- if eq $probeKind "https" }}
-  scheme: HTTPS
-{{- end }}
-
-{{- else if eq $probeKind "tcp" -}}
-{{- $port := "" -}}
-{{- if hasKey . "port" -}}
-  {{- $port = .port -}}
-{{- else if hasKey . "portName" -}}
-  {{- $port = .portName -}}
-{{- else -}}
-  {{- fail "health.probe type tcp requires port or portName" -}}
-{{- end -}}
-tcpSocket:
-  port: {{ $port }}
-
-{{- else if eq $probeKind "command" -}}
-{{- $command := required "health.probe type command requires command" .command -}}
-exec:
-  command:
-{{- if kindIs "slice" $command }}
-{{ toYaml $command | nindent 4 }}
-{{- else }}
-    - /bin/sh
-    - -c
-    - {{ $command | quote }}
-{{- end }}
-
-{{- else -}}
-{{- fail (printf "health.probe received unsupported type %q. Allowed values: http, https, tcp, command" $probeKind) -}}
-{{- end }}
-timeoutSeconds: {{ $timeoutSeconds }}
-initialDelaySeconds: {{ $initialDelaySeconds }}
-periodSeconds: {{ $periodSeconds }}
-failureThreshold: {{ $failureThreshold }}
-successThreshold: {{ $successThreshold }}
+{{- include "health.common.probe" . -}}
 {{- end -}}
 
 {{/*
@@ -1843,40 +1473,12 @@ Dedup rules:
   Usage:
     operators:
       {{- include "kasm.otelNginxAccessLogOperators" (dict "context" . "serviceName" "kasm-proxy") | nindent 8 }}
+
+  Delegates to kasm.common.otelNginxAccessLogOperators (charts/kasm-common); see that chart's
+  _helpers.tpl for the real implementation.
 */}}
 {{- define "kasm.otelNginxAccessLogOperators" -}}
-{{- $serviceName := .serviceName -}}
-- type: json_parser
-  parse_from: attributes.message
-  timestamp:
-    parse_from: attributes.time_iso8601
-    layout: "%Y-%m-%dT%H:%M:%S%z"
-- type: severity_parser
-  parse_from: attributes.http_status
-  overwrite_text: true
-  mapping:
-    error: "5xx"
-    warn:  "4xx"
-    info:  "2xx"
-    debug: "3xx"
-- type: add
-  field: body
-  value: EXPR(attributes["request"] + '" ' + attributes["http_status"] + ' ' + attributes["body_bytes_sent"] + ' "' + attributes["http_user_agent"] + '"')
-- type: move
-  from: attributes.request_method
-  to:   attributes.http.request.method
-- type: move
-  from: attributes.uri
-  to:   attributes.url.path
-- type: move
-  from: attributes.http_status
-  to:   attributes.http.response.status_code
-- type: add
-  field: resource["service.name"]
-  value: {{ $serviceName }}
-- type: add
-  field: attributes["application"]
-  value: {{ $serviceName }}
+{{- include "kasm.common.otelNginxAccessLogOperators" . -}}
 {{- end -}}
 
 {{/*
@@ -1892,27 +1494,12 @@ Dedup rules:
   Usage:
     operators:
       {{- include "kasm.otelNginxErrorLogOperators" (dict "context" . "serviceName" "kasm-proxy") | nindent 8 }}
+
+  Delegates to kasm.common.otelNginxErrorLogOperators (charts/kasm-common); see that chart's
+  _helpers.tpl for the real implementation.
 */}}
 {{- define "kasm.otelNginxErrorLogOperators" -}}
-{{- $serviceName := .serviceName -}}
-- type: regex_parser
-  parse_from: attributes.message
-  regex: '^(?P<timestamp>\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}) \[(?P<level>\w+)\] (?P<pid>\d+)#\d+: (?:\*\d+ )?(?P<message>.+)$'
-  timestamp:
-    parse_from: attributes.timestamp
-    layout: "%Y/%m/%d %H:%M:%S"
-- type: severity_parser
-  parse_from: attributes.level
-  overwrite_text: true
-  mapping:
-    fatal:  crit
-    error:  [error, alert, emerg]
-    warn:   warn
-    info:   notice
-    debug:  [info, debug]
-- type: add
-  field: resource["service.name"]
-  value: {{ $serviceName }}
+{{- include "kasm.common.otelNginxErrorLogOperators" . -}}
 {{- end -}}
 
 {{/*

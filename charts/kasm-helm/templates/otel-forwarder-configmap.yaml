@@ -12,15 +12,14 @@ credentials on the one workload that writes to it.
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  {{- include "kasm.metadata" (dict "context" . "component" "otel-forwarder" "resource" "configMap" "include" "all") | indent 2 }}
+  {{- include "kasm.common.metadata" (dict "context" . "component" "otel-forwarder" "resource" "configMap" "include" "all") | indent 2 }}
 data:
   config.yaml: |
     extensions:
       bearertokenauth/server:
         token: "${env:OTEL_BEARER_TOKEN}"
 
-      health_check:
-        endpoint: "0.0.0.0:13133"
+{{ include "kasm.common.otelHealthCheckExtension" (dict "port" 13133) | indent 6 }}
 
     receivers:
       # In-cluster senders (Collector sidecars, and the Kasm services that export directly) send
@@ -48,14 +47,9 @@ data:
 {{- end }}
 
     processors:
-      batch:
-        send_batch_size: 5000
-        timeout: 10s
+      {{- include "kasm.common.otelBatchProcessor" . | nindent 6 }}
 
-      memory_limiter:
-        check_interval: 5s
-        limit_mib: 256
-        spike_limit_mib: 64
+{{ include "kasm.common.otelMemoryLimiter" (dict "limitMib" 256 "spikeLimitMib" 64) | indent 6 }}
 
     exporters:
       # Forward everything to the gateway tier, which makes the sampling decision and writes to

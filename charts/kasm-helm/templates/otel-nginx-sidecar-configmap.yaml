@@ -31,12 +31,11 @@ observability.md's transport caveat).
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  {{- include "kasm.metadata" (dict "context" $ "component" $v.component "resource" "configMap" "include" "all") | indent 2 }}
+  {{- include "kasm.common.metadata" (dict "context" $ "component" $v.component "resource" "configMap" "include" "all") | indent 2 }}
 data:
   config.yaml: |
     extensions:
-      health_check:
-        endpoint: "0.0.0.0:{{ $constants.otel.health }}"
+      {{- include "kasm.common.otelHealthCheckExtension" (dict "port" $constants.otel.health) | nindent 6 }}
 
     receivers:
       nginx/metrics:
@@ -48,14 +47,14 @@ data:
         udp:
           listen_address: "127.0.0.1:{{ $constants.otel.syslogAccess }}"
         operators:
-          {{- include "kasm.otelNginxAccessLogOperators" (dict "context" $ "serviceName" $v.serviceName) | nindent 10 }}
+          {{- include "kasm.common.otelNginxAccessLogOperators" (dict "context" $ "serviceName" $v.serviceName) | nindent 10 }}
 
       syslog/nginx_error:
         protocol: rfc3164
         udp:
           listen_address: "127.0.0.1:{{ $constants.otel.syslogError }}"
         operators:
-          {{- include "kasm.otelNginxErrorLogOperators" (dict "context" $ "serviceName" $v.serviceName) | nindent 10 }}
+          {{- include "kasm.common.otelNginxErrorLogOperators" (dict "context" $ "serviceName" $v.serviceName) | nindent 10 }}
 
       # ngx_otel_module traces. Loopback only.
       otlp/nginx:
@@ -70,27 +69,12 @@ data:
             endpoint: "127.0.0.1:{{ $constants.otel.otlpHttp }}"
 
     processors:
-      batch:
-        send_batch_size: 5000
-        timeout: 10s
+      {{- include "kasm.common.otelBatchProcessor" . | nindent 6 }}
 
-      memory_limiter:
-        check_interval: 5s
-        limit_mib: 96
-        spike_limit_mib: 32
+{{ include "kasm.common.otelMemoryLimiter" (dict "limitMib" 96 "spikeLimitMib" 32) | indent 6 }}
 
     exporters:
-      otlphttp:
-        endpoint: "${env:OTEL_EXPORTER_OTLP_ENDPOINT}"
-        retry_on_failure:
-          enabled: true
-          initial_interval: 5s
-          max_interval: 30s
-          max_elapsed_time: 300s
-        sending_queue:
-          enabled: true
-          num_consumers: 2
-          queue_size: 500
+      {{- include "kasm.common.otelOtlphttpExporterToForwarder" . | nindent 6 }}
 
     service:
       extensions: [health_check]

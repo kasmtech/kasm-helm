@@ -22,7 +22,7 @@ the telemetry itself (see kasm.otelEnv), which is where it belongs.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  {{- include "kasm.metadata" (dict "context" . "component" "otel-forwarder" "resource" "deployment" "include" "all") | indent 2 }}
+  {{- include "kasm.common.metadata" (dict "context" . "component" "otel-forwarder" "resource" "deployment" "include" "all") | indent 2 }}
 spec:
   replicas: {{ $forwarderReplicas }}
   strategy:
@@ -32,21 +32,21 @@ spec:
       maxSurge: {{ add1 $forwarderReplicas }}
   selector:
     matchLabels:
-      {{- include "kasm.metadata" (dict "context" . "component" "otel-forwarder" "resource" "deployment" "include" "match") | indent 6 }}
+      {{- include "kasm.common.metadata" (dict "context" . "component" "otel-forwarder" "resource" "deployment" "include" "match") | indent 6 }}
   template:
     metadata:
       {{- $checksumAnn := dict -}}
       {{- if not $obs.collector.forwarder.existingConfigMap -}}
         {{- $checksumAnn = dict "checksum/config" (include (print $.Template.BasePath "/otel-forwarder-configmap.yaml") $ | sha256sum) -}}
       {{- end -}}
-      {{- include "kasm.metadata" (dict "context" . "component" "otel-forwarder" "resource" "pod" "include" "la" "extraAnnotations" $checksumAnn) | indent 6 }}
+      {{- include "kasm.common.metadata" (dict "context" . "component" "otel-forwarder" "resource" "pod" "include" "la" "extraAnnotations" $checksumAnn) | indent 6 }}
     spec:
       restartPolicy: {{ .Values.restartPolicy }}
       {{- if .Values.imagePullSecrets.enabled }}
       imagePullSecrets:
         - name: {{ .Values.imagePullSecrets.name | default (printf "%s-image-pull-secret" .Release.Name) }}
       {{- end }}
-      {{- include "kasm.securityContext" (list . 10001 "pod") | nindent 6 }}
+      {{- include "kasm.common.securityContext" (list . 10001 "pod") | nindent 6 }}
       {{- with .Values.nodeSelector }}
       nodeSelector: {{ toYaml . | nindent 8 }}
       {{- end }}
@@ -58,7 +58,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
-        - name: {{ include "kasm.name" (list . "otel-forwarder" "container") }}
+        - name: {{ include "kasm.common.name" (list . "otel-forwarder" "container") }}
           image: {{ $constants.otel.image }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           env:
@@ -103,23 +103,23 @@ spec:
             {{- end }}
           {{- if .Values.applyHealthChecks }}
           livenessProbe:
-            {{- include "health.probe" (dict "root" . "component" "otel-forwarder" "probeType" "livenessProbe" "type" "http" "path" "/" "port" 13133) | nindent 12 }}
+            {{- include "health.common.http" (dict "root" . "component" "otel-forwarder" "probeType" "livenessProbe" "path" "/" "port" 13133) | nindent 12 }}
           readinessProbe:
-            {{- include "health.probe" (dict "root" . "component" "otel-forwarder" "probeType" "readinessProbe" "type" "http" "path" "/" "port" 13133) | nindent 12 }}
+            {{- include "health.common.http" (dict "root" . "component" "otel-forwarder" "probeType" "readinessProbe" "path" "/" "port" 13133) | nindent 12 }}
           {{- end }}
           {{- if $fwd.resources }}
           resources: {{- toYaml $fwd.resources | nindent 12 }}
           {{- else }}
           resources: {{- include "resources.preset" (dict "node" "otel-forwarder" "size" .Values.deploymentSize) | nindent 12 }}
           {{- end }}
-          {{- include "kasm.securityContext" (list . 10001 "container") | nindent 10 }}
+          {{- include "kasm.common.securityContext" (list . 10001 "container") | nindent 10 }}
         {{- with $merged.extraContainers }}
           {{- toYaml . | nindent 8 }}
         {{- end }}
       volumes:
         - name: config
           configMap:
-            name: {{ default (include "kasm.name" (list . "otel-forwarder" "configmap")) $obs.collector.forwarder.existingConfigMap }}
+            name: {{ default (include "kasm.common.name" (list . "otel-forwarder" "configmap")) $obs.collector.forwarder.existingConfigMap }}
         - name: tmp
           emptyDir:
             sizeLimit: 64Mi
@@ -129,7 +129,7 @@ spec:
         # TLS using the same certificate as the rest of Kasm.
         - name: otel-forwarder-cert
           secret:
-            secretName: {{ .Values.certificate.secretName | default (include "kasm.name" (list . "cert-manager" "secret")) }}
+            secretName: {{ .Values.certificate.secretName | default (include "kasm.common.name" (list . "cert-manager" "secret")) }}
             defaultMode: 0o600
         {{- end }}
         {{- end }}
