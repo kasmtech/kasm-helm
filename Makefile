@@ -3,6 +3,26 @@ SHELL := /usr/bin/env bash
 CHART_DIR := charts/kasm-helm
 TEST_VALUES_DIR := tests/values
 
+# CHARTS lists every deployable chart (directory name under charts/) that participates in the
+# full static build: chart-deps, lint, render, unittest, otel-validate. Appending a chart name
+# here is all a new chart needs to join those targets. charts/kasm-secondary-region is
+# known-broken (see project CLAUDE.md: do not run `make unittest`/`make test` against it) and
+# must never be added here or to any loop derived from it.
+CHARTS := kasm-helm
+
+# kasm-common is a library chart (type: library): no values.yaml, so render/kubeconform/
+# unittest/otel-validate are meaningless against it. It is still a real chart with a Chart.yaml,
+# so `lint` runs against it too -- kept as its own variable instead of folded into CHARTS so the
+# distinction is explicit rather than an accident of list membership.
+LINT_ONLY_CHARTS := kasm-common
+
+# Per-chart scenario values directory for `render`. Defaults every chart in CHARTS to
+# TEST_VALUES_DIR; a chart with scenarios of its own overrides by defining
+# `<chart>_VALUES_DIR` above this line (e.g. `kasm-otel-router_VALUES_DIR := tests/values-router`)
+# -- no edit to the render recipe itself required. Resolved here, at parse time, into
+# "chart=dir" pairs so the recipe only has to split on "=".
+CHART_VALUES_DIRS := $(foreach chart,$(CHARTS),$(chart)=$(or $($(chart)_VALUES_DIR),$(TEST_VALUES_DIR)))
+
 BIN_DIR := $(CURDIR)/bin
 HELM := $(BIN_DIR)/helm
 KUBECONFORM := $(BIN_DIR)/kubeconform
@@ -264,62 +284,117 @@ helm-unittest: $(HELM)
 
 ##@ Static Analysis
 
-chart-deps: $(HELM) $(CHART_DIR)/Chart.yaml charts/kasm-common/Chart.yaml ## Vendor the kasm-common file:// dependency into charts/kasm-helm/charts/
-	$(HELM) dependency build $(CHART_DIR)
+chart-deps: $(HELM) $(patsubst %,charts/%/Chart.yaml,$(CHARTS)) charts/kasm-common/Chart.yaml ## Vendor the kasm-common file:// dependency into each chart in CHARTS
+	@set -euo pipefail; \
+	  for chart in $(CHARTS); do \
+	    echo "chart-deps: charts/$$chart"; \
+	    $(HELM) dependency build charts/$$chart; \
+	  done
 
-lint: chart-deps ## Lint the primary Helm chart
-	$(HELM) lint $(CHART_DIR)
+lint: chart-deps ## Lint every chart in CHARTS, plus kasm-common (library chart, lint-only)
+	@set -euo pipefail; \
+	  for chart in $(CHARTS) $(LINT_ONLY_CHARTS); do \
+	    echo "lint: charts/$$chart"; \
+	    $(HELM) lint charts/$$chart; \
+	  done
 
-render: chart-deps ## Render all test scenario values to .rendered/
+render: chart-deps ## Render all test scenario values for each chart in CHARTS to .rendered/<chart>/
 	@rm -rf .rendered
 	@mkdir -p .rendered
 	@set -euo pipefail; \
-	  for values_file in $(TEST_VALUES_DIR)/*.yaml; do \
-	    scenario=$$(basename $$values_file .yaml); \
-	    echo "Rendering $$scenario"; \
-	    $(HELM) template kasm-test $(CHART_DIR) -n kasm-test -f $$values_file > .rendered/$$scenario.yaml; \
+	  for pair in $(CHART_VALUES_DIRS); do \
+	    chart=$${pair%%=*}; \
+	    values_dir=$${pair#*=}; \
+	    mkdir -p .rendered/$$chart; \
+	    for values_file in $$values_dir/*.yaml; do \
+	      scenario=$$(basename $$values_file .yaml); \
+	      echo "Rendering $$chart/$$scenario"; \
+	      $(HELM) template kasm-test charts/$$chart -n kasm-test -f $$values_file > .rendered/$$chart/$$scenario.yaml; \
+	    done; \
 	  done
 
+# Rendered output is chart-scoped (.rendered/<chart>/<scenario>.yaml), so this walks the whole
+# tree rather than globbing .rendered/*.yaml -- a second chart's files live one level deeper and
+# must not be silently skipped. Manifests are collected into a file (not a `for f in $(find ...)`
+# word list) so a missing/empty .rendered/ or a failing `find` surfaces as a hard failure instead
+# of being swallowed by command substitution -- an empty result must never look like success.
 kubeconform: tools render ## Validate rendered manifests against Kubernetes schemas
 	@set -euo pipefail; \
-	  for rendered_manifest in .rendered/*.yaml; do \
+	  if [ ! -d .rendered ]; then \
+	    echo "kubeconform: .rendered/ does not exist -- run 'make render' first" >&2; \
+	    exit 1; \
+	  fi; \
+	  manifest_list=$$(mktemp); \
+	  trap 'rm -f "$$manifest_list"' EXIT; \
+	  find .rendered -type f -name '*.yaml' -print0 | sort -z > "$$manifest_list"; \
+	  manifest_count=0; \
+	  while IFS= read -r -d '' rendered_manifest; do \
 	    echo "kubeconform $$rendered_manifest"; \
-	    $(KUBECONFORM) -strict -ignore-missing-schemas -summary $$rendered_manifest; \
-	  done
+	    $(KUBECONFORM) -strict -ignore-missing-schemas -summary "$$rendered_manifest"; \
+	    manifest_count=$$((manifest_count + 1)); \
+	  done < "$$manifest_list"; \
+	  if [ "$$manifest_count" -eq 0 ]; then \
+	    echo "kubeconform: no rendered manifests found under .rendered/ -- run 'make render' first" >&2; \
+	    exit 1; \
+	  fi
 
 kyverno: tools render ## Apply Kyverno policies against rendered manifests
 	@set -euo pipefail; \
+	  if [ ! -d .rendered ]; then \
+	    echo "kyverno: .rendered/ does not exist -- run 'make render' first" >&2; \
+	    exit 1; \
+	  fi; \
 	  policies="$(KYN_POLICIES)"; \
-	  for rendered_manifest in .rendered/*.yaml; do \
+	  manifest_list=$$(mktemp); \
+	  trap 'rm -f "$$manifest_list"' EXIT; \
+	  find .rendered -type f -name '*.yaml' -print0 | sort -z > "$$manifest_list"; \
+	  manifest_count=0; \
+	  while IFS= read -r -d '' rendered_manifest; do \
 	    echo "kyverno $$rendered_manifest"; \
-	    $(KYVERNO) apply $$policies -r $$rendered_manifest; \
+	    $(KYVERNO) apply $$policies -r "$$rendered_manifest"; \
+	    manifest_count=$$((manifest_count + 1)); \
+	  done < "$$manifest_list"; \
+	  if [ "$$manifest_count" -eq 0 ]; then \
+	    echo "kyverno: no rendered manifests found under .rendered/ -- run 'make render' first" >&2; \
+	    exit 1; \
+	  fi
+
+unittest: tools chart-deps ## Run helm-unittest test suites for each chart in CHARTS
+	@set -euo pipefail; \
+	  for chart in $(CHARTS); do \
+	    echo "unittest: charts/$$chart"; \
+	    HELM_PLUGINS="$(HELM_PLUGINS_DIR)" $(HELM) unittest charts/$$chart; \
 	  done
 
-unittest: tools chart-deps ## Run helm-unittest test suites
-	HELM_PLUGINS="$(HELM_PLUGINS_DIR)" $(HELM) unittest $(CHART_DIR)
-
-otel-validate: tools chart-deps $(HELM) ## Validate rendered OTel Collector configs with the collector's own `validate` command
+otel-validate: tools chart-deps $(HELM) ## Validate rendered OTel Collector configs with the collector's own `validate` command, for each chart in CHARTS
 	@set -euo pipefail; \
 	command -v docker >/dev/null 2>&1 || { echo "otel-validate: docker is required to run 'otelcol-contrib validate' and was not found in PATH" >&2; exit 1; }; \
-	tmp_dir=$$(mktemp -d); \
-	trap 'rm -rf "$$tmp_dir"' EXIT; \
-	rendered=$$tmp_dir/rendered.yaml; \
-	manifest=$$tmp_dir/manifest.txt; \
-	$(HELM) template kasm-otel-validate $(CHART_DIR) -n kasm-test -f $(TEST_VALUES_DIR)/default.yaml > $$rendered; \
-	python3 scripts/otel_validate_extract.py $$rendered $$tmp_dir $$manifest; \
-	while IFS='|' read -r cfg_path image; do \
-	  echo "otel-validate: validating $$cfg_path against $$image"; \
-	  docker run --rm -i -e OTEL_BEARER_TOKEN=dummy -e CLICKHOUSE_PASSWORD=dummy \
-	    -e OTEL_FORWARD_TOKEN=dummy -e OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
-	    "$$image" validate --config=/dev/stdin < "$$cfg_path"; \
-	done < "$$manifest"
+	tmp_root=$$(mktemp -d); \
+	trap 'rm -rf "$$tmp_root"' EXIT; \
+	for pair in $(CHART_VALUES_DIRS); do \
+	  chart=$${pair%%=*}; \
+	  values_dir=$${pair#*=}; \
+	  echo "otel-validate: charts/$$chart"; \
+	  tmp_dir=$$tmp_root/$$chart; \
+	  mkdir -p "$$tmp_dir"; \
+	  rendered=$$tmp_dir/rendered.yaml; \
+	  manifest=$$tmp_dir/manifest.txt; \
+	  $(HELM) template kasm-otel-validate charts/$$chart -n kasm-test -f $$values_dir/default.yaml > $$rendered; \
+	  python3 scripts/otel_validate_extract.py $$rendered $$tmp_dir $$manifest; \
+	  while IFS='|' read -r cfg_path image; do \
+	    echo "otel-validate: validating $$cfg_path against $$image"; \
+	    docker run --rm -i -e OTEL_BEARER_TOKEN=dummy -e CLICKHOUSE_PASSWORD=dummy \
+	      -e OTEL_FORWARD_TOKEN=dummy -e OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
+	      "$$image" validate --config=/dev/stdin < "$$cfg_path"; \
+	  done < "$$manifest"; \
+	done
 
 test: lint kubeconform kyverno unittest otel-validate ## Run full static suite: lint + kubeconform + kyverno + unittest + otel-validate
 
 validate-preseed: tools render ## Validate preseed output against the 1.19.0 schema
 	python3 tests/validate_preseed.py \
 	  --schema tests/schemas/1_19_0-schema.yaml \
-	  --rendered .rendered/preseed-validate.yaml
+	  --rendered .rendered/kasm-helm/preseed-validate.yaml
 
 ##@ Docs
 
