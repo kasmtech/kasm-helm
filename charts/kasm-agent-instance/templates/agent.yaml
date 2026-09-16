@@ -170,6 +170,14 @@ spec:
   labels:
     {{- toYaml . | nindent 4 }}
   {{- end }}
+  {{- with .Values.agentLabels }}
+  agentLabels:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.workspaceLabels }}
+  workspaceLabels:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   {{- with .Values.resources }}
   resources:
     {{- toYaml . | nindent 4 }}

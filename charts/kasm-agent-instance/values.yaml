@@ -9,9 +9,24 @@ nameOverride: ""
 #
 fullnameOverride: ""
 
-# commonLabels -- Custom labels to apply to every resource created by this chart.
+# commonLabels -- Custom labels to apply to every resource created by **this chart** (the Agent
+# custom resource, its RBAC, the session-proxy TLS Secret). These do NOT reach the workloads the
+# operator creates from the Agent CR -- use agentLabels and workspaceLabels for those.
 #
 commonLabels: {}
+
+# agentLabels -- Extra Kubernetes labels the operator stamps onto every workload it creates for this
+# agent: the agent Deployment, the session proxy, and their Services and RBAC. Added to each
+# object's metadata.labels, never to the immutable pod selectors. Distinct from workspaceLabels
+# (the session pods), so the agent's own workloads and its workspaces can be tracked separately.
+#
+agentLabels: {}
+
+# workspaceLabels -- Extra Kubernetes labels the operator stamps onto every workspace (session) pod
+# this agent launches, and its resources. A session's own labels layer on top, winning on
+# conflicting keys. Distinct from agentLabels, which target the agent's own workloads.
+#
+workspaceLabels: {}
 
 # commonAnnotations -- Custom annotations to apply to every resource created by this chart.
 #

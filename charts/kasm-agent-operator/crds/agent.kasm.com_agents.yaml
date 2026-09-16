@@ -70,6 +70,18 @@ spec:
               the operator can deploy a Kubernetes-native agent that presents the same
               registration + heartbeat API to any Kasm control plane (K8s or VM-based).
             properties:
+              agentLabels:
+                additionalProperties:
+                  type: string
+                description: |-
+                  AgentLabels are extra Kubernetes labels the operator stamps onto every
+                  workload it creates for this agent: the agent Deployment, the session
+                  proxy, and their Services and RBAC. They are added to each object's
+                  metadata.labels (never to the pod selectors, which must stay immutable),
+                  so they suit cost allocation, NetworkPolicy selection, and monitoring of
+                  the agent's own workloads. Distinct from WorkspaceLabels, which target
+                  the session pods, so the two populations can be tracked separately.
+                type: object
               apiServerURL:
                 description: |-
                   APIServerURL overrides the base URL the agent uses for manager admin calls
@@ -700,6 +712,15 @@ spec:
                   type: object
                   x-kubernetes-map-type: atomic
                 type: array
+              workspaceLabels:
+                additionalProperties:
+                  type: string
+                description: |-
+                  WorkspaceLabels are extra Kubernetes labels the operator stamps onto every
+                  workspace (session) pod and its resources this agent launches. A session's
+                  own labels are layered on top, taking precedence on conflicting keys.
+                  Distinct from AgentLabels, which target the agent's own workloads.
+                type: object
               workspacesNodeSelector:
                 additionalProperties:
                   type: string

@@ -38,6 +38,7 @@ One task per page. Each ends in a Decisions block that is the checklist.
 | [Database](how-to/database.md) | Bundled PostgreSQL or your own, sizing, seeding |
 | [Deploy multiple zones](how-to/multi-zone.md) | Declare zones on the control plane and add one agent release per zone |
 | [Enable agents automatically](how-to/enable-agents-automatically.md) | `auto_agent` by preseed or on an existing database |
+| [Label the agent's workloads](how-to/label-workloads.md) | `commonLabels`, `agentLabels`, `workspaceLabels`: what each one labels |
 | [Day 2](how-to/day-2.md) | Upgrade, uninstall in two steps, backup, restore |
 | [Publish the charts](how-to/publish-charts.md) | Package and push the OCI artifacts |
 
