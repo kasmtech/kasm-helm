@@ -52,6 +52,15 @@ layout; this page adds a hostname and a certificate so it can be kept.
    pod to restart once, because the PostgreSQL StatefulSet mounts the control-plane certificate
    Secret and `certificate.secretName` changed.
 
+   > **Installing from a source checkout instead?** The published `oci://…/kasm-platform` archive
+   > bundles its subcharts, so it needs nothing more. A git checkout does not — the umbrella's
+   > `charts/` directory is staged at package time — so run `make deps-agent` before a
+   > `helm install`/`upgrade` that points at a local `charts/kasm-platform`, and again after any
+   > `git pull` that changes a subchart, since staged subcharts do not refresh on their own (a pin
+   > that still matches on version but changed in content is only half-caught). See
+   > [Publish the charts](../publish-charts.md) for the ordering and the stale-pin trap, and
+   > [Architecture](../../explanation/architecture.md#the-chart-dependency-tree) for why.
+
 3. **Enable the agent and authorize a workspace** in the admin UI, as in
    [Get started](../../tutorials/get-started.md), or seed `auto_agent` first with
    [Enable agents automatically](../enable-agents-automatically.md).
