@@ -478,10 +478,57 @@ def wait_for_pod_ready_by_selector(
     return get_first_pod_by_selector(namespace, label_selector)
 
 
+def _describe_namespace_blockers(namespace: str) -> str:
+    """Best-effort summary of what is keeping a namespace Terminating.
+
+    Lists remaining namespaced resources and any finalizers on the namespace
+    object itself or on those resources (e.g. a PVC held by
+    kubernetes.io/pvc-protection).
+    """
+    lines: list[str] = []
+    ns_result = kubectl(["get", "namespace", namespace, "-o", "json"], namespace=None, check=False)
+    if ns_result.returncode == 0:
+        ns = json.loads(ns_result.stdout)
+        ns_finalizers = ns.get("spec", {}).get("finalizers", [])
+        if ns_finalizers:
+            lines.append(f"namespace finalizers: {ns_finalizers}")
+        conditions = ns.get("status", {}).get("conditions", [])
+        for cond in conditions:
+            lines.append(f"condition {cond.get('type')}: {cond.get('reason')} {cond.get('message')}")
+
+    api_resources = kubectl(
+        ["api-resources", "--verbs=list", "--namespaced", "-o", "name"], namespace=None, check=False
+    )
+    resource_types = [r for r in api_resources.stdout.splitlines() if r.strip()] if api_resources.returncode == 0 else []
+    for resource_type in resource_types:
+        result = kubectl(["get", resource_type, "-o", "json"], namespace=namespace, check=False)
+        if result.returncode != 0:
+            continue
+        try:
+            items = json.loads(result.stdout).get("items", [])
+        except json.JSONDecodeError:
+            continue
+        for item in items:
+            name = item.get("metadata", {}).get("name", "<unknown>")
+            finalizers = item.get("metadata", {}).get("finalizers", [])
+            lines.append(f"{resource_type}/{name} finalizers={finalizers}")
+
+    return "\n".join(lines) if lines else "no remaining resources found (namespace object itself may be stuck)"
+
+
 def reset_namespace(namespace: str) -> None:
     kubectl(["delete", "namespace", namespace, "--ignore-not-found"], namespace=None)
-    kubectl(["wait", "--for=delete", f"namespace/{namespace}", "--timeout=300s"], namespace=None, check=False)
-    kubectl(["create", "namespace", namespace], namespace=None, check=False)
+    wait_result = kubectl(
+        ["wait", "--for=delete", f"namespace/{namespace}", "--timeout=300s"], namespace=None, check=False
+    )
+    still_present = kubectl(["get", "namespace", namespace], namespace=None, check=False)
+    if wait_result.returncode != 0 or still_present.returncode == 0:
+        blockers = _describe_namespace_blockers(namespace)
+        raise AssertionError(
+            f"namespace {namespace} did not finish deleting within 300s; refusing to "
+            f"install into a Terminating namespace. Blocking resources/finalizers:\n{blockers}"
+        )
+    kubectl(["create", "namespace", namespace], namespace=None)
 
 
 def apply_restricted_pod_security(namespace: str) -> None:
@@ -640,7 +687,7 @@ def install_and_wait_with_retry(
                 values_file=values_file,
                 set_args=set_args,
             )
-            wait_for_job_succeeded(namespace, job_name=f"{e2e_config.release_name}-db-init", timeout_seconds=360)
+            wait_for_job_succeeded(namespace, job_name=f"{e2e_config.release_name}-db-init", timeout_seconds=600)
             wait_for_rollouts_complete(namespace, timeout_seconds=1200)
             wait_for_pods_ready(namespace, timeout_seconds=1200, progress=True)
             return

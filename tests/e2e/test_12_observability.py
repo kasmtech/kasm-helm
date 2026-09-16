@@ -327,6 +327,23 @@ def _assert_core_telemetry(namespace: str, database: str) -> None:
         "loopback syslog receiver, or the receiver's operator chain did not match"
     )
 
+    # Restores the check deleted during jg7.10 because the chart couldn't satisfy it then:
+    # OTEL_RESOURCE_ATTRIBUTES is an SDK env var the Collector binary never applies to pipeline
+    # data (DECISIONS.md D4), so a sidecar-collected row was never attributable to a pod. The fix
+    # is a resource processor in the sidecar's own config (kasm.common.otelResourceProcessor); this
+    # queries emitted ClickHouse rows, not the rendered chart, so it actually catches a regression.
+    pod_name_count = _wait_for_query_nonzero(
+        namespace,
+        database,
+        # Exclude 'unknown' as well as empty: the config's ${env:POD_NAME:-unknown} default
+        # exists so `otelcol validate` can run without a pod environment, and a bare != ''
+        # check would be satisfied by that fallback instead of a real pod name.
+        "SELECT count() FROM otel_logs WHERE ServiceName = 'kasm-proxy' "
+        "AND ResourceAttributes['k8s.pod.name'] NOT IN ('', 'unknown')",
+        description="kasm-proxy otel_logs rows carry a real (non-fallback) k8s.pod.name",
+    )
+    LOGGER.info("[observability] kasm-proxy log rows with k8s.pod.name: %s", pod_name_count)
+
     # The filelog operators move fields to semconv names via dotted paths
     # (attributes.http.request.method), which the collector treats as NESTED fields, not as a flat
     # key. ClickHouse therefore stores LogAttributes['http'] = '{"request":{"method":"GET"},...}'
