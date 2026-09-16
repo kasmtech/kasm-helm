@@ -1,0 +1,91 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": true,
+  "type": "object",
+  "properties": {
+    "image": {
+      "additionalProperties": false,
+      "title": "image",
+      "type": "object",
+      "properties": {
+        "registry": { "type": "string" },
+        "repository": { "type": "string" },
+        "tag": { "type": "string" }
+      }
+    },
+    "imagePullPolicy": {
+      "type": "string",
+      "enum": ["Always", "IfNotPresent", "Never"]
+    },
+    "applySecurity": { "type": "boolean" },
+    "isOpenshift": { "type": "boolean" },
+    "applyHealthChecks": { "type": "boolean" },
+    "labels": { "type": "object", "additionalProperties": true },
+    "annotations": { "type": "object", "additionalProperties": true },
+    "extraLabels": { "type": "object", "additionalProperties": true },
+    "extraAnnotations": { "type": "object", "additionalProperties": true },
+    "components": { "type": "object", "additionalProperties": true },
+    "nodeSelector": { "type": "object", "additionalProperties": true },
+    "affinity": { "type": "object", "additionalProperties": true },
+    "resources": { "type": "object", "additionalProperties": true },
+    "ingestAuth": {
+      "additionalProperties": false,
+      "title": "ingestAuth",
+      "type": "object",
+      "required": ["existingSecret"],
+      "properties": {
+        "existingSecret": {
+          "additionalProperties": false,
+          "type": "object",
+          "required": ["name", "key"],
+          "properties": {
+            "name": { "type": "string" },
+            "key": { "type": "string" }
+          }
+        }
+      }
+    },
+    "registrations": {
+      "title": "registrations",
+      "type": "array",
+      "items": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["namespace", "endpoint", "tokenSecret"],
+        "properties": {
+          "namespace": { "type": "string", "minLength": 1 },
+          "endpoint": { "type": "string", "minLength": 1 },
+          "insecure": { "type": "boolean" },
+          "tokenSecret": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": ["name", "key"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "key": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    },
+    "tee": {
+      "additionalProperties": false,
+      "title": "tee",
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "endpoint": { "type": "string" },
+        "insecure": { "type": "boolean" },
+        "tokenSecret": {
+          "additionalProperties": false,
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "key": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}

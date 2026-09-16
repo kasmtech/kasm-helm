@@ -8,7 +8,7 @@ TEST_VALUES_DIR := tests/values
 # here is all a new chart needs to join those targets. charts/kasm-secondary-region is
 # known-broken (see project CLAUDE.md: do not run `make unittest`/`make test` against it) and
 # must never be added here or to any loop derived from it.
-CHARTS := kasm-helm
+CHARTS := kasm-helm kasm-otel-router
 
 # kasm-common is a library chart (type: library): no values.yaml, so render/kubeconform/
 # unittest/otel-validate are meaningless against it. It is still a real chart with a Chart.yaml,
@@ -21,6 +21,8 @@ LINT_ONLY_CHARTS := kasm-common
 # `<chart>_VALUES_DIR` above this line (e.g. `kasm-otel-router_VALUES_DIR := tests/values-router`)
 # -- no edit to the render recipe itself required. Resolved here, at parse time, into
 # "chart=dir" pairs so the recipe only has to split on "=".
+kasm-otel-router_VALUES_DIR := tests/values-router
+
 CHART_VALUES_DIRS := $(foreach chart,$(CHARTS),$(chart)=$(or $($(chart)_VALUES_DIR),$(TEST_VALUES_DIR)))
 
 BIN_DIR := $(CURDIR)/bin

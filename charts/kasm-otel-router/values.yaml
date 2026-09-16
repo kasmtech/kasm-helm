@@ -1,0 +1,83 @@
+# yaml-language-server: $schema=values.schema.json
+
+# image -- Collector image the router Deployment runs. Must be the -contrib distro (not the
+# core otelcol image kasm-helm's sidecars use): the `routing` connector this chart depends on
+# to split telemetry by namespace only ships in -contrib. Same tag as kasm-helm's otelGateway.
+image:
+  registry: docker.io
+  repository: otel/opentelemetry-collector-contrib
+  tag: "0.156.0"
+
+imagePullPolicy: IfNotPresent
+
+# applySecurity -- Apply the restricted pod/container securityContext (non-root, dropped
+# capabilities, seccomp RuntimeDefault). Leave true; false is only for debugging on a
+# cluster that cannot satisfy it.
+applySecurity: true
+# isOpenshift -- Suppress numeric runAsUser/runAsGroup/fsGroup so OpenShift assigns them.
+isOpenshift: false
+# applyHealthChecks -- Add the liveness/readiness probes' kasm.com/healthcheck annotation to the
+# pod template. The probes themselves are always defined; this only controls whether Kyverno's
+# probe policies evaluate this workload. Leave true.
+applyHealthChecks: true
+
+labels: {}
+annotations: {}
+extraLabels: {}
+extraAnnotations: {}
+components: {}
+
+nodeSelector: {}
+affinity: {}
+# resources -- the router does no per-tenant heavy lifting (routing is a stateless per-record
+# lookup), so one fixed size covers it; there is no deploymentSize preset here. Override if a
+# cluster's telemetry volume needs more.
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 384Mi
+
+# ingestAuth -- Bearer token this router requires from anything sending it OTLP. The router
+# creates no secrets; existingSecret must already exist in this chart's release namespace.
+#
+# TENANT-TRUST LIMITATION: this token is shared by every sender, and the routing key
+# (service.namespace) is an attribute the sender itself sets -- the router trusts it. Anyone
+# holding this one token can set service.namespace to another registration's value and have
+# their telemetry routed there using that registration's own gateway credential. This chart is
+# intended for installs under one operator's control (all senders trusted equally), not for
+# routing between mutually distrusting tenants who must not see each other's data.
+ingestAuth:
+  existingSecret:
+    name: ""
+    key: otel-bearer-token
+
+# registrations -- one entry per Kasm install this router forwards telemetry to, keyed by the
+# service.namespace resource attribute that install's senders stamp (kasm-helm
+# _helpers.tpl:1242 for app senders, kasm-common _helpers.tpl:601-603 for Collector sidecars).
+# Each entry's tokenSecret references the Secret holding THAT install's own otel-gateway
+# ingest token (its OTEL_BEARER_TOKEN) -- this router authenticates to each gateway as a client.
+registrations: []
+# - namespace: kasm-prod
+#   endpoint: "otel-gateway.kasm-prod.svc.cluster.local:4317"
+#   tokenSecret:
+#     name: kasm-prod-secrets
+#     key: otel-bearer-token
+#   insecure: false  # skip TLS verification against this gateway. Default false: turning this
+#                    # on sends the registration's bearer token and telemetry with no verification
+#                    # of who is on the other end of `endpoint` -- only set true for a plaintext/
+#                    # dev gateway you control, never across a network boundary you don't.
+
+# tee -- optional copy of everything, regardless of namespace, to a second OTLP/gRPC
+# destination (e.g. a SIEM). Off by default.
+tee:
+  enabled: false
+  endpoint: ""
+  # insecure -- same cost as registrations[].insecure above: skips TLS verification of the tee
+  # destination. Default false.
+  insecure: false
+  tokenSecret:
+    name: ""
+    key: ""

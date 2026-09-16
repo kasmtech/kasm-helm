@@ -1,0 +1,163 @@
+{{/*
+Kasm OTel router ConfigMap — one Collector, cluster-wide, no zone concept.
+
+Receives OTLP from any number of Kasm installs (own namespace or a different cluster/vpc
+reachable from here) and routes each record onward by the `service.namespace` resource
+attribute (D14) to that namespace's own otel-gateway, authenticating to each gateway with
+that gateway's own bearer token. Optionally tees a copy of everything to a second, unrelated
+OTLP destination (e.g. a SIEM).
+
+One `routing/<signal>` connector per signal rather than a single `routing` connector shared
+across all three: a routing connector instance that receives data of more than one signal
+type from its input pipelines fails to build the FIRST signal's downstream pipelines at
+startup (reproduced against the pinned otel/opentelemetry-collector-contrib:0.156.0 binary
+via `otelcol validate` — "pipeline not found: missing consumer"). Splitting by signal sidesteps
+the bug and is otherwise the same shape.
+
+No token value is ever written to this ConfigMap: every registration's and the tee's token
+reaches the Collector as an `${env:...}` placeholder resolved from a Secret-backed env var on
+the Deployment (see deployment.yaml), exactly as charts/kasm-helm/templates/otel-gateway-
+configmap.yaml does for its own bearer/forward tokens.
+*/}}
+{{- if eq (len .Values.registrations) 0 -}}
+{{- fail "kasm-otel-router: registrations is empty -- add at least one entry (namespace, endpoint, tokenSecret) or this router has nowhere to send telemetry." -}}
+{{- end -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  {{- include "kasm.common.metadata" (dict "context" . "component" "otel-router" "resource" "configMap" "include" "all") | indent 2 }}
+data:
+  config.yaml: |
+    extensions:
+      bearertokenauth/server:
+        token: "${env:OTEL_BEARER_TOKEN}"
+
+{{ include "kasm.common.otelHealthCheckExtension" (dict "port" 13133) | indent 6 }}
+
+    receivers:
+      # The router's only ingest point, authenticated the same way as every gateway: senders
+      # (Kasm app SDKs over HTTP, Collector sidecars over gRPC) present the same bearer token.
+      otlp/remote:
+        protocols:
+          grpc:
+            endpoint: "0.0.0.0:4317"
+            auth:
+              authenticator: bearertokenauth/server
+          http:
+            endpoint: "0.0.0.0:4318"
+            auth:
+              authenticator: bearertokenauth/server
+
+    processors:
+      {{- include "kasm.common.otelBatchProcessor" . | nindent 6 }}
+
+{{ include "kasm.common.otelMemoryLimiter" (dict "limitMib" 256 "spikeLimitMib" 64) | indent 6 }}
+
+    connectors:
+{{- range $signal := list "traces" "logs" "metrics" }}
+      routing/{{ $signal }}:
+        error_mode: ignore
+        default_pipelines: [{{ $signal }}/unrouted]
+        table:
+{{- range $i, $reg := $.Values.registrations }}
+          - context: resource
+            condition: attributes["service.namespace"] == {{ $reg.namespace | quote }}
+            pipelines: [{{ $signal }}/{{ $reg.namespace }}]
+{{- end }}
+{{- end }}
+
+    exporters:
+      # Telemetry whose service.namespace matches no registration falls through to
+      # default_pipelines above rather than being silently dropped (defect: an unregistered or
+      # misconfigured tenant previously lost all its telemetry with no signal anywhere). The
+      # debug exporter logs each unrouted record and, more importantly, counts them in this
+      # Collector's own self-metrics (otelcol_exporter_sent_*{exporter="debug/unrouted"} on the
+      # :8888 prometheus endpoint below) -- an operator can alert on that metric being nonzero.
+      debug/unrouted:
+        verbosity: normal
+{{- range $i, $reg := .Values.registrations }}
+      otlp/{{ $reg.namespace }}:
+        endpoint: {{ $reg.endpoint | quote }}
+        headers:
+          Authorization: "Bearer ${env:OTEL_TOKEN_{{ $i }}}"
+        tls:
+          insecure: {{ $reg.insecure | default false }}
+        retry_on_failure:
+          enabled: true
+          initial_interval: 5s
+          max_interval: 30s
+          max_elapsed_time: 300s
+        sending_queue:
+          enabled: true
+          num_consumers: 2
+          queue_size: 500
+{{- end }}
+{{- if .Values.tee.enabled }}
+      otlp/tee:
+        endpoint: {{ .Values.tee.endpoint | quote }}
+        headers:
+          Authorization: "Bearer ${env:OTEL_TEE_TOKEN}"
+        tls:
+          insecure: {{ .Values.tee.insecure }}
+        retry_on_failure:
+          enabled: true
+          initial_interval: 5s
+          max_interval: 30s
+          max_elapsed_time: 300s
+        sending_queue:
+          enabled: true
+          num_consumers: 2
+          queue_size: 500
+{{- end }}
+
+    service:
+      extensions: [bearertokenauth/server, health_check]
+
+      pipelines:
+        traces/in:
+          receivers: [otlp/remote]
+          processors: [memory_limiter, batch]
+          exporters: [routing/traces]
+        logs/in:
+          receivers: [otlp/remote]
+          processors: [memory_limiter, batch]
+          exporters: [routing/logs]
+        metrics/in:
+          receivers: [otlp/remote]
+          processors: [memory_limiter, batch]
+          exporters: [routing/metrics]
+{{- range $reg := .Values.registrations }}
+{{- $exporters := list (printf "otlp/%s" $reg.namespace) }}
+{{- if $.Values.tee.enabled }}
+{{- $exporters = append $exporters "otlp/tee" }}
+{{- end }}
+        traces/{{ $reg.namespace }}:
+          receivers: [routing/traces]
+          exporters: [{{ join ", " $exporters }}]
+        logs/{{ $reg.namespace }}:
+          receivers: [routing/logs]
+          exporters: [{{ join ", " $exporters }}]
+        metrics/{{ $reg.namespace }}:
+          receivers: [routing/metrics]
+          exporters: [{{ join ", " $exporters }}]
+{{- end }}
+        traces/unrouted:
+          receivers: [routing/traces]
+          exporters: [debug/unrouted]
+        logs/unrouted:
+          receivers: [routing/logs]
+          exporters: [debug/unrouted]
+        metrics/unrouted:
+          receivers: [routing/metrics]
+          exporters: [debug/unrouted]
+
+      telemetry:
+        logs:
+          level: info
+        metrics:
+          readers:
+            - pull:
+                exporter:
+                  prometheus:
+                    host: "0.0.0.0"
+                    port: 8888

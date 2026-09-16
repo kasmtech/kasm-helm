@@ -1,0 +1,92 @@
+{{/*
+Kasm OTel router Deployment — single replica (this is pass 1 of kasm-helm-l0r; D17). Routing is
+stateless per-record (keyed on the `service.namespace` resource attribute already on every
+record), so nothing here requires the single-writer discipline the otel-gateway's tail_sampling
+does -- one replica is just the sane default for optional, low-volume routing infrastructure.
+*/}}
+{{- $image := include "kasm.common.imageRef" .Values.image -}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  {{- include "kasm.common.metadata" (dict "context" . "component" "otel-router" "resource" "deployment" "include" "all") | indent 2 }}
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "kasm.common.metadata" (dict "context" . "component" "otel-router" "resource" "deployment" "include" "match") | indent 6 }}
+  template:
+    metadata:
+      {{- $checksumAnn := dict "checksum/config" (include (print .Template.BasePath "/configmap.yaml") . | sha256sum) -}}
+      {{- include "kasm.common.metadata" (dict "context" . "component" "otel-router" "resource" "pod" "include" "la" "extraAnnotations" $checksumAnn) | indent 6 }}
+    spec:
+      {{- include "kasm.common.securityContext" (list . 10001 "pod") | nindent 6 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ include "kasm.common.name" (list . "otel-router" "container") }}
+          image: {{ $image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          env:
+            - name: OTEL_BEARER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.ingestAuth.existingSecret.name }}
+                  key: {{ .Values.ingestAuth.existingSecret.key }}
+{{- range $i, $reg := .Values.registrations }}
+            - name: OTEL_TOKEN_{{ $i }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $reg.tokenSecret.name }}
+                  key: {{ $reg.tokenSecret.key }}
+{{- end }}
+{{- if .Values.tee.enabled }}
+            - name: OTEL_TEE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.tee.tokenSecret.name }}
+                  key: {{ .Values.tee.tokenSecret.key }}
+{{- end }}
+          ports:
+            - name: otlp-grpc
+              containerPort: 4317
+              protocol: TCP
+            - name: otlp-http
+              containerPort: 4318
+              protocol: TCP
+            - name: health
+              containerPort: 13133
+              protocol: TCP
+            - name: self-metrics
+              containerPort: 8888
+              protocol: TCP
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otelcol-contrib/config.yaml
+              subPath: config.yaml
+            - name: tmp
+              mountPath: /tmp
+          livenessProbe:
+            {{- include "health.common.http" (dict "root" . "component" "otel-router" "probeType" "livenessProbe" "path" "/" "port" 13133) | nindent 12 }}
+          readinessProbe:
+            {{- include "health.common.http" (dict "root" . "component" "otel-router" "probeType" "readinessProbe" "path" "/" "port" 13133) | nindent 12 }}
+          {{- with .Values.resources }}
+          resources: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- include "kasm.common.securityContext" (list . 10001 "container") | nindent 10 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "kasm.common.name" (list . "otel-router" "configmap") }}
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi

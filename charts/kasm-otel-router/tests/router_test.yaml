@@ -1,0 +1,240 @@
+suite: kasm-otel-router — routing connector config, tee, security
+
+templates:
+  - templates/configmap.yaml
+  - templates/deployment.yaml
+
+set:
+  ingestAuth.existingSecret.name: kasm-otel-router-secrets
+  ingestAuth.existingSecret.key: otel-bearer-token
+  registrations:
+    - namespace: kasm-prod
+      endpoint: "otel-gateway.kasm-prod.svc.cluster.local:4317"
+      tokenSecret:
+        name: kasm-prod-secrets
+        key: otel-bearer-token
+    - namespace: kasm-dev
+      endpoint: "otel-gateway.kasm-dev.svc.cluster.local:4317"
+      tokenSecret:
+        name: kasm-dev-secrets
+        key: otel-bearer-token
+
+tests:
+  # ---------- one route + one exporter per registration ----------
+  - it: renders one routing table entry per registration, per signal
+    template: templates/configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'condition: attributes\["service\.namespace"\] == "kasm-prod"\s*\n\s*pipelines: \[traces/kasm-prod\]'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'condition: attributes\["service\.namespace"\] == "kasm-dev"\s*\n\s*pipelines: \[traces/kasm-dev\]'
+
+  - it: renders one otlp exporter per registration, pointed at that registration's endpoint
+    template: templates/configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'otlp/kasm-prod:\s*\n\s*endpoint: "otel-gateway\.kasm-prod\.svc\.cluster\.local:4317"'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'otlp/kasm-dev:\s*\n\s*endpoint: "otel-gateway\.kasm-dev\.svc\.cluster\.local:4317"'
+
+  # ---------- no secret material in the ConfigMap ----------
+  - it: no token value appears in the rendered ConfigMap, only env placeholders
+    template: templates/configmap.yaml
+    asserts:
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: 'Bearer (kasm-prod-secrets|kasm-dev-secrets|otel-bearer-token)'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'Authorization: "Bearer \$\{env:OTEL_TOKEN_0\}"'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'Authorization: "Bearer \$\{env:OTEL_TOKEN_1\}"'
+
+  - it: the Deployment sources every token from a Secret, never a literal value
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_TOKEN_0")].valueFrom.secretKeyRef.name
+          value: kasm-prod-secrets
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_TOKEN_1")].valueFrom.secretKeyRef.name
+          value: kasm-dev-secrets
+      - notExists:
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_TOKEN_0")].value
+
+  # ---------- tee: absent by default, present when enabled ----------
+  - it: no tee exporter or pipeline reference when tee is disabled (default)
+    template: templates/configmap.yaml
+    asserts:
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: 'otlp/tee'
+
+  - it: tee exporter and env var appear, and every namespace pipeline exports to it, when enabled
+    template: templates/configmap.yaml
+    set:
+      tee.enabled: true
+      tee.endpoint: "siem.example.com:4317"
+      tee.tokenSecret.name: siem-secret
+      tee.tokenSecret.key: token
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'otlp/tee:\s*\n\s*endpoint: "siem\.example\.com:4317"'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'Authorization: "Bearer \$\{env:OTEL_TEE_TOKEN\}"'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'traces/kasm-prod:\s*\n\s*receivers: \[routing/traces\]\s*\n\s*exporters: \[otlp/kasm-prod, otlp/tee\]'
+
+  - it: Deployment only wires OTEL_TEE_TOKEN when tee is enabled
+    template: templates/deployment.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_TEE_TOKEN")]
+
+  - it: Deployment wires OTEL_TEE_TOKEN from the tee's Secret when enabled
+    template: templates/deployment.yaml
+    set:
+      tee.enabled: true
+      tee.endpoint: "siem.example.com:4317"
+      tee.tokenSecret.name: siem-secret
+      tee.tokenSecret.key: token
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_TEE_TOKEN")].valueFrom.secretKeyRef.name
+          value: siem-secret
+
+  # ---------- D18: component labels start with otel- and payload key is config.yaml ----------
+  - it: ConfigMap component label starts with otel- and payload key is config.yaml
+    template: templates/configmap.yaml
+    asserts:
+      - matchRegex:
+          path: metadata.labels["app.kubernetes.io/component"]
+          pattern: '^otel-'
+      - exists:
+          path: data["config.yaml"]
+
+  - it: Deployment component label starts with otel- and matches the ConfigMap's
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: otel-router
+
+  # ---------- pod security context (restricted-PSS) ----------
+  - it: pod securityContext is non-root with fsGroup set
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 10001
+      - equal:
+          path: spec.template.spec.securityContext.runAsGroup
+          value: 10001
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 10001
+
+  - it: container securityContext drops all capabilities, denies privilege escalation, read-only root fs
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop[0]
+          value: ALL
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.seccompProfile.type
+          value: RuntimeDefault
+
+  - it: single replica
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 1
+
+  # ---------- defect 1: registration TLS verification defaults on, opt-out per registration ----------
+  - it: registration exporters verify TLS by default (no insecure set on any registration)
+    template: templates/configmap.yaml
+    asserts:
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: 'insecure: true'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'otlp/kasm-prod:\s*\n\s*endpoint: "[^"]*"\s*\n\s*headers:\s*\n\s*Authorization: "[^"]*"\s*\n\s*tls:\s*\n\s*insecure: false'
+
+  - it: setting insecure true on one registration only affects that registration's exporter
+    template: templates/configmap.yaml
+    set:
+      registrations:
+        - namespace: kasm-prod
+          endpoint: "otel-gateway.kasm-prod.svc.cluster.local:4317"
+          insecure: true
+          tokenSecret:
+            name: kasm-prod-secrets
+            key: otel-bearer-token
+        - namespace: kasm-dev
+          endpoint: "otel-gateway.kasm-dev.svc.cluster.local:4317"
+          tokenSecret:
+            name: kasm-dev-secrets
+            key: otel-bearer-token
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'otlp/kasm-prod:\s*\n\s*endpoint: "[^"]*"\s*\n\s*headers:\s*\n\s*Authorization: "[^"]*"\s*\n\s*tls:\s*\n\s*insecure: true'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'otlp/kasm-dev:\s*\n\s*endpoint: "[^"]*"\s*\n\s*headers:\s*\n\s*Authorization: "[^"]*"\s*\n\s*tls:\s*\n\s*insecure: false'
+
+  # ---------- defect 2: telemetry matching no registration is observable, not silently dropped ----------
+  - it: unmatched telemetry routes to an unrouted pipeline exported via debug, not dropped
+    template: templates/configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'routing/traces:\s*\n\s*error_mode: ignore\s*\n\s*default_pipelines: \[traces/unrouted\]'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'routing/logs:\s*\n\s*error_mode: ignore\s*\n\s*default_pipelines: \[logs/unrouted\]'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'routing/metrics:\s*\n\s*error_mode: ignore\s*\n\s*default_pipelines: \[metrics/unrouted\]'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'traces/unrouted:\s*\n\s*receivers: \[routing/traces\]\s*\n\s*exporters: \[debug/unrouted\]'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'debug/unrouted:\s*\n\s*verbosity: normal'
+
+  # ---------- defect 3: healthcheck annotation present so kyverno's probe policy evaluates this pod ----------
+  - it: pod template carries the kasm.com/healthcheck annotation
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["kasm.com/healthcheck"]
+          value: "true"
+
+  # ---------- defect 4: the Deployment renders with real resource requests/limits ----------
+  - it: container has non-empty resource requests and limits
+    template: templates/deployment.yaml
+    asserts:
+      - isNotEmpty:
+          path: spec.template.spec.containers[0].resources.requests
+      - isNotEmpty:
+          path: spec.template.spec.containers[0].resources.limits
