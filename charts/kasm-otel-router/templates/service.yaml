@@ -1,0 +1,30 @@
+{{/*
+Kasm OTel router Service — gives the receiver ports the Deployment declares (deployment.yaml)
+a stable in-cluster address. Cluster-wide, not zone-scoped, matching the Deployment.
+*/}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  {{- include "kasm.common.metadata" (dict "context" . "component" "otel-router" "resource" "service" "include" "all") | indent 2 }}
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    {{- include "kasm.common.metadata" (dict "context" . "component" "otel-router" "resource" "service" "include" "match") | indent 4 }}
+  ports:
+    - name: otlp-grpc
+      protocol: TCP
+      port: 4317
+      targetPort: otlp-grpc
+    - name: otlp-http
+      protocol: TCP
+      port: 4318
+      targetPort: otlp-http
+    - name: health
+      protocol: TCP
+      port: 13133
+      targetPort: health
+    - name: self-metrics
+      protocol: TCP
+      port: 8888
+      targetPort: self-metrics

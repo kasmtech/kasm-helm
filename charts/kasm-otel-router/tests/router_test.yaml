@@ -3,6 +3,7 @@ suite: kasm-otel-router — routing connector config, tee, security
 templates:
   - templates/configmap.yaml
   - templates/deployment.yaml
+  - templates/service.yaml
 
 set:
   ingestAuth.existingSecret.name: kasm-otel-router-secrets
@@ -238,3 +239,49 @@ tests:
           path: spec.template.spec.containers[0].resources.requests
       - isNotEmpty:
           path: spec.template.spec.containers[0].resources.limits
+
+  # ---------- Service: reachability (was missing entirely; router had no stable address) ----------
+  - it: Service renders as ClusterIP by default
+    template: templates/service.yaml
+    asserts:
+      - equal:
+          path: spec.type
+          value: ClusterIP
+
+  - it: Service carries both receiver ports the Deployment declares, name and number matching
+    template: templates/service.yaml
+    asserts:
+      - equal:
+          path: spec.ports[?(@.name=="otlp-grpc")].port
+          value: 4317
+      - equal:
+          path: spec.ports[?(@.name=="otlp-grpc")].targetPort
+          value: otlp-grpc
+      - equal:
+          path: spec.ports[?(@.name=="otlp-http")].port
+          value: 4318
+      - equal:
+          path: spec.ports[?(@.name=="otlp-http")].targetPort
+          value: otlp-http
+
+  - it: Service selector equals the Deployment's pod labels
+    asserts:
+      - equal:
+          path: spec.selector
+          value:
+            app.kubernetes.io/name: RELEASE-NAME-otel-router
+            app.kubernetes.io/component: otel-router
+            app.kubernetes.io/instance: RELEASE-NAME
+        template: templates/service.yaml
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/name"]
+          value: RELEASE-NAME-otel-router
+        template: templates/deployment.yaml
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/component"]
+          value: otel-router
+        template: templates/deployment.yaml
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+        template: templates/deployment.yaml

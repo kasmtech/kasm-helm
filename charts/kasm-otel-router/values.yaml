@@ -27,6 +27,12 @@ extraLabels: {}
 extraAnnotations: {}
 components: {}
 
+# service -- the router's own Service. This is the in-cluster address a sender's exporter
+# config points at: "<release-name>-otel-router.<namespace>.svc.cluster.local", OTLP/gRPC on
+# :4317 or OTLP/HTTP on :4318 (same two receiver ports the Deployment exposes).
+service:
+  type: ClusterIP
+
 nodeSelector: {}
 affinity: {}
 # resources -- the router does no per-tenant heavy lifting (routing is a stateless per-record

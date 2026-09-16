@@ -25,6 +25,18 @@
     "extraLabels": { "type": "object", "additionalProperties": true },
     "extraAnnotations": { "type": "object", "additionalProperties": true },
     "components": { "type": "object", "additionalProperties": true },
+    "service": {
+      "additionalProperties": false,
+      "title": "service",
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["ClusterIP", "NodePort", "LoadBalancer", "ExternalName"]
+        }
+      }
+    },
     "nodeSelector": { "type": "object", "additionalProperties": true },
     "affinity": { "type": "object", "additionalProperties": true },
     "resources": { "type": "object", "additionalProperties": true },

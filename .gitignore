@@ -25,8 +25,9 @@ charts/kasm-helm/tests/__snapshot__/
 validation_errors.log
 example_properties.yaml
 
-## Vendored Helm file:// dependencies (charts/kasm-helm/Chart.lock is committed; rebuild via `make chart-deps`)
+## Vendored Helm file:// dependencies (each chart's Chart.lock is committed; rebuild via `make chart-deps`)
 charts/kasm-helm/charts/
+charts/kasm-otel-router/charts/
 
 ## Tooling / build outputs
 bin/
