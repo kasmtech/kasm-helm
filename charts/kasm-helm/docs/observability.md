@@ -13,7 +13,9 @@ that powers the reporting views in the Kasm Admin UI. It is enabled by default.
   and connection metrics are collected by an always-on sidecar — see §4.
 - **PostgreSQL logs**, collected by an always-on sidecar in the DB pod. **PostgreSQL metrics are
   not collected** — deferred; see §4.
-- **Browser telemetry** from the Kasm web UI (page loads, user interactions).
+- **Browser telemetry** from the Kasm web UI (page loads, user interactions). Off by default
+  (`observability.browser.enabled: false`) — set it `true` to serve the real browser SDK config
+  instead of the disabled stub.
 - **ClickHouse-backed reporting** in the Kasm Admin UI — the same data these signals produce is
   what the reporting views read back.
 
@@ -271,6 +273,20 @@ forward only, with no ClickHouse store. What's not supported is setting neither:
 if `observability.enabled` is true, no ClickHouse destination is configured, and
 `forward.endpoint` is empty, since the gateway would otherwise have nowhere to send telemetry.
 
+### Receiving telemetry from a third-party collector
+
+The chart also renders a `<release>-otel-forward-snippet` ConfigMap (whenever the gateway itself
+renders) holding a paste-ready OTLP/HTTP exporter fragment for the opposite direction: a
+collector you run elsewhere that should send telemetry **into** this release's gateway, rather
+than the gateway forwarding **out**. It targets the gateway's OTLP/HTTP receiver on `:4318`
+(plain HTTP — TLS is not terminated on this port) and names the exact credential it needs:
+`this release's gateway INGEST token`, i.e. the same secret value the chart injects into the
+gateway as `OTEL_BEARER_TOKEN`. That is deliberately **not** `forward.token`/`OTEL_FORWARD_TOKEN`
+above — the forward token authenticates the gateway's own outbound exporter to *your* backend;
+the ingest token authenticates something sending *into* the gateway. Using the wrong one fails
+auth silently from the sender's point of view (a rejected request, not a helpful error naming the
+mismatch).
+
 ## 9. Bringing your own Collector config
 
 Take full ownership of the gateway's Collector configuration with an `existingConfigMap`:
@@ -327,6 +343,14 @@ views in the Admin UI that read telemetry return empty results.**
   otherwise added a `debug` exporter, remember it duplicates every signal into the gateway pod's
   own stdout — a busy gateway with `debug` enabled will have much higher pod log volume than one
   without it, which is normal for that path and not itself a problem to chase.
+- **A brief CrashLoopBackOff on the gateway right after a fresh install is expected, not a
+  misconfiguration.** ClickHouse's Service DNS record can lag a few seconds behind the gateway
+  container starting, and the gateway fails to start its ClickHouse exporter if it can't resolve
+  the hostname yet (`create database: dial tcp: lookup <clickhouse-service> ... no such host`).
+  It self-heals on Kubernetes' own restart backoff once DNS catches up, typically within one or
+  two restarts. If it does not clear after a few minutes, that's when to treat it as a real
+  problem — check whether ClickHouse itself is `Running` and whether cluster DNS is healthy more
+  broadly.
 
 ## 12. Upgrading from Kasm 1.19 or earlier
 
@@ -417,3 +441,10 @@ if their threat model differs from the default above. Changing either one requir
 If you keep `propagate`, treat inbound trace IDs as untrusted input: apply rate limiting or
 cardinality controls downstream rather than trusting sampling or gateway placement decisions that
 assume good-faith trace IDs.
+
+## 14. Routing telemetry between installs
+
+Sending one Kasm install's telemetry to *another* install's gateway, teeing a copy to a SIEM, or
+centralizing several installs' Kubernetes events is not something this chart does — it's a
+separate, optional chart, `charts/kasm-otel-router`. See that chart's own README for what it does
+and its trust model; nothing here changes if you don't deploy it.

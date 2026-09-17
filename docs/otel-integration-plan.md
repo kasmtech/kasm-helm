@@ -1,7 +1,8 @@
 # Helm Chart OpenTelemetry Integration Plan
 
 > **Superseded in part.** This plan documents the design as originally proposed and executed
-> through `docs/otel-execution/` (H0–H7). Several of its decisions were reversed in a later
+> through a now-deleted execution-log directory (tasks H0-H7, work finished and shipped).
+> Several of its decisions were reversed in a later
 > design review recorded in bead `kasm-helm-4ss` (Decision record: OTEL architecture reversals) —
 > most visibly the topology in §3 below, which this doc's own text now supersedes. For the
 > as-built architecture, read `charts/kasm-helm/docs/observability.md` and the chart templates
@@ -126,8 +127,9 @@ reversals were:
 - **The forwarder's port-4316 receiver was deleted.** nginx now speaks to its pod-local sidecar
   over loopback instead of to a cluster-reachable unauthenticated receiver on the forwarder.
 - **`observability.fileLogs` was deleted outright**, and `logFormat` was deleted (not just
-  narrowed) for API/Manager — see the `kasm-helm-4ss` record for the full rationale on both, and
-  `docs/otel-execution/PROGRESS.md` for the reversal log.
+  narrowed) for API/Manager — see the `kasm-helm-4ss` record for the full rationale on both; the
+  execution-log directory that once recorded the reversal has since been deleted, but the
+  reversal itself is preserved in the `kasm-helm-4ss` record and in git history.
 
 The rest of §3 is left unedited below as the historical proposal that these points supersede.
 
