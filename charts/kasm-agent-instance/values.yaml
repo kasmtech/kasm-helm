@@ -318,16 +318,6 @@ workspacesNodeSelector: {}
 #
 workspacesTolerations: []
 
-# labels -- Kasm server labels this agent advertises to the manager on every heartbeat, replacing whatever
-# the manager's server record holds. A workspace's include/exclude labels are matched against them, so
-# per-workspace targeting of this agent is configured here rather than by editing the server in the admin
-# UI. `key=value` strings; a label may not contain a comma. Omitted when empty.
-# Example:
-#   labels:
-#     - kasm.com/pool=a
-#
-labels: []
-
 # workspaceImagePullSecrets -- Pull secrets the agent injects into launched workspace pods, for private
 # workspace images. Distinct from `imagePullSecrets`, which pulls the agent and proxy images. Omitted from the
 # Agent resource entirely when empty.

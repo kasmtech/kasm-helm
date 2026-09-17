@@ -26,9 +26,10 @@ pods it spawns can be told apart by a selector, even though both are operator-ma
 
 ## Not the same as server labels
 
-`agent.labels` is a different feature: it is the list of **Kasm server labels** the agent advertises to
-the manager for per-workspace *targeting* (matched against a workspace's include/exclude labels). Those
-never become Kubernetes labels. See [Scope workspaces to nodes](nodes/scope-workspaces-to-nodes.md).
+Don't confuse these with **Kasm server labels** — a separate feature for per-workspace *targeting*,
+matched against a workspace's include/exclude labels. Those are set on the server in the Kasm admin UI
+(or the `update_server` admin API), never become Kubernetes labels, and are not a chart value. See
+[Scope workspaces to nodes](nodes/scope-workspaces-to-nodes.md).
 
 ## Set them
 

@@ -166,10 +166,6 @@ spec:
   workspacesTolerations:
     {{- toYaml . | nindent 4 }}
   {{- end }}
-  {{- with .Values.labels }}
-  labels:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
   {{- with .Values.agentLabels }}
   agentLabels:
     {{- toYaml . | nindent 4 }}

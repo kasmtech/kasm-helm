@@ -331,18 +331,6 @@ spec:
                   type: object
                   x-kubernetes-map-type: atomic
                 type: array
-              labels:
-                description: |-
-                  Labels are the Kasm server labels this agent advertises to the manager on
-                  every heartbeat (KASM_SERVER_LABELS), replacing whatever the manager's
-                  server record currently holds. They are what a workspace's include/exclude
-                  labels match against, so per-workspace targeting of this agent is
-                  configured here instead of by hand-editing the server in the admin UI.
-                  Labels may not contain commas.
-                items:
-                  type: string
-                type: array
-                x-kubernetes-list-type: set
               logLevel:
                 default: INFO
                 description: LogLevel is the agent log level (LOG_LEVEL).
