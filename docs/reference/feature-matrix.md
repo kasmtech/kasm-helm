@@ -165,7 +165,7 @@ per-session VPN sidecar remains available on the workspace resource and needs no
 | **Webcam passthrough** | 🔧 | Loadable kernel modules on nodes, a `privileged` namespace, and either kernel headers and a toolchain or the KMM operator and a registry · [how-to](../how-to/nodes/webcam-kernel-modules.md) | `nodePrep.enabled=true`<br>`nodePrep.modules.v4l2loopback.enabled=true`<br>`videoDevicePlugin.enabled=true` |
 | **Microphone** | ✅ | A workspace image with PulseAudio - the stock Kasm images have it | Nothing |
 | **Audio playback** | ✅ | Nothing | Nothing |
-| **Gamepad** | ✅ | Nothing | Nothing |
+| **Gamepad** | ❌ | Not supported by the Kubernetes agent: passthrough relies on host `/dev/input` and `/run/udev/data` mounts (and udev) that the agent does not wire into session pods | — |
 
 **GPU.** Both values, always: the GPU Operator on its own advertises GPUs that nothing asks for.
 The GPU Operator is cluster-scoped - install it once per cluster, not once per agent release, and

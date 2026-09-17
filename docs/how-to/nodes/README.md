@@ -6,6 +6,24 @@ Sessions are pods, and some Kasm features need something from the **node** that 
 for: a kernel module, a device plugin, a GPU driver, a relaxed security policy. None of it applies
 to the control plane, which runs as ordinary workloads on any node.
 
+> **You don't need these subcharts unless you want the feature.** Everything on this page is an
+> optional agent add-on, **off by default** — a normal deployment installs none of it. In particular:
+>
+> - **Webcam passthrough** is the only reason to install **`kasm-node-prep`** (for the `v4l2loopback`
+>   module) together with **`kasm-video-device-plugin`**: enable `nodePrep.enabled` +
+>   `nodePrep.modules.v4l2loopback.enabled` + `videoDevicePlugin.enabled`. (`kasm-node-prep` is also
+>   used on its own for node sysctls/swap.)
+> - **GPU workspaces or graphics acceleration** are the only reason to install the third-party **GPU
+>   Operator**: enable `gpuOperator.enabled` (with `agent.gpu.enabled`).
+> - **Per-session VPN egress** (routing a session's traffic through a WireGuard/OpenVPN gateway) is
+>   the only reason to install **`kasm-egress-installer`**: enable `egressInstaller.enabled`.
+> - Leave `nodePrep`, `videoDevicePlugin`, `gpuOperator` and `egressInstaller` **disabled** for any
+>   deployment that does not use webcams, GPUs or per-session egress — the base agent
+>   (`kasm-agent-operator` plus the agent instance) runs without them.
+>
+> **Gamepad passthrough is not supported** by the Kubernetes agent; see the
+> [feature matrix](../../reference/feature-matrix.md#devices-gpu-webcam-audio).
+
 | Page | Task | Key values |
 | ---- | ---- | ---------- |
 | [Scope workspaces to specific nodes](scope-workspaces-to-nodes.md) | Pin sessions and the node-level DaemonSets to a labelled pool, taints included | `agent.workspacesNodeSelector`<br>`nodePrep.nodeSelector` |
