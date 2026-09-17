@@ -255,13 +255,12 @@ sessionProxy:
 #
 heartbeatIntervalSeconds: 5
 
-# metricsIntervalSeconds -- The agent's node/pod metrics scrape interval.
+# imageAvailabilityPolicy -- Which workspace images the agent reports to the manager as available, one of
+# `pulled` or `all`. `pulled` (default) reports only images the puller has actually staged on a node, so the
+# manager routes a workspace here only when it can start with no launch-time pull; `all` also reports catalog
+# images not staged yet, for optimistic routing that pulls the image on demand at launch.
 #
-metricsIntervalSeconds: 30
-
-# imageAvailabilityPolicy -- Controls which workspace images the agent reports to the manager as available.
-#
-imageAvailabilityPolicy: "all"
+imageAvailabilityPolicy: "pulled"
 
 # imagePullPolicy -- Pull policy applied to the agent and session-proxy containers.
 #
@@ -317,12 +316,6 @@ workspacesNodeSelector: {}
 #       effect: NoSchedule
 #
 workspacesTolerations: []
-
-# workspaceImagePullSecrets -- Pull secrets the agent injects into launched workspace pods, for private
-# workspace images. Distinct from `imagePullSecrets`, which pulls the agent and proxy images. Omitted from the
-# Agent resource entirely when empty.
-#
-workspaceImagePullSecrets: []
 
 # storageMappings -- rclone CSI storage mappings for workspace volumes. The whole block is omitted from the
 # Agent resource when it is disabled and no installation ID is set.

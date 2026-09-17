@@ -89,4 +89,4 @@ the Helm release history.
 | NetworkPolicy enforcement | Inert without an enforcing CNI; the manager allow needs the post-DNAT port behind a hostPort ingress | [NetworkPolicy enforcement](../how-to/networking/network-policies.md) |
 | Image provenance and airgap | Four things to mirror, from four places, by four mechanisms | [Registries and airgap](../how-to/registries-and-airgap.md) |
 | Secure Boot | MOK enrolment is a firmware step per node | [Secure Boot](../how-to/nodes/secure-boot.md) |
-| Private registries | `workspaceImagePullSecrets` and `imagePullSecrets` are different values; ECR tokens expire every 12 hours | [Registries and airgap](../how-to/registries-and-airgap.md) |
+| Private registries | Workspace images authenticate from per-image credentials in the manager (separate from the charts' own `imagePullSecrets`); ECR tokens expire every 12 hours | [Registries and airgap](../how-to/registries-and-airgap.md) |

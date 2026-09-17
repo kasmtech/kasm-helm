@@ -393,11 +393,8 @@ tests:
           path: spec.heartbeatIntervalSeconds
           value: 5
       - equal:
-          path: spec.metricsIntervalSeconds
-          value: 30
-      - equal:
           path: spec.imageAvailabilityPolicy
-          value: all
+          value: pulled
       - equal:
           path: spec.imagePullPolicy
           value: IfNotPresent
@@ -422,8 +419,6 @@ tests:
       - isNull:
           path: spec.imagePullSecrets
       - isNull:
-          path: spec.workspaceImagePullSecrets
-      - isNull:
           path: spec.nodeSelector
       - isNull:
           path: spec.workspacesNodeSelector
@@ -436,8 +431,6 @@ tests:
       apiServerURL: https://kasm-proxy.kasm.svc.cluster.local
       imagePullSecrets:
         - name: kasm-registry
-      workspaceImagePullSecrets:
-        - name: workspace-registry
       nodeSelector:
         kubernetes.io/os: linux
       workspacesNodeSelector:
@@ -460,10 +453,6 @@ tests:
           path: spec.imagePullSecrets
           content:
             name: kasm-registry
-      - contains:
-          path: spec.workspaceImagePullSecrets
-          content:
-            name: workspace-registry
       - equal:
           path: spec.nodeSelector["kubernetes.io/os"]
           value: linux

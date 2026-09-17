@@ -188,7 +188,7 @@ attached.
 
 | Feature | Status | What you need | Turn it on |
 | ------- | ------ | ------------- | ---------- |
-| **Private image registries** | ✅ | For workspace images: registry credentials on the image in the Kasm admin UI, which the agent turns into a per-registry pull Secret on every session pod. For the charts' own images: a `kubernetes.io/dockerconfigjson` Secret in the namespace. Known issue: the chart-level `agent.workspaceImagePullSecrets` list is not yet propagated · [how-to](../how-to/registries-and-airgap.md) | `agent.imagePullSecrets` (the agent's own images)<br>`agent.imagePuller.images[].imagePullSecrets` (pre-staged workspace images)<br>`kasm-helm.imagePullSecrets.enabled=true` |
+| **Private image registries** | ✅ | For workspace images: registry credentials on the image in the Kasm admin UI, which the agent turns into a per-registry pull Secret on every session pod. For the charts' own images: a `kubernetes.io/dockerconfigjson` Secret in the namespace · [how-to](../how-to/registries-and-airgap.md) | `agent.imagePullSecrets` (the agent's own images)<br>`agent.imagePuller.images[].imagePullSecrets` (pre-staged workspace images)<br>`kasm-helm.imagePullSecrets.enabled=true` |
 | **Per-workspace registry credentials** | ⚠️ | Nothing | Set on the workspace in the Kasm UI |
 | **Trusted CA certificates** | ✅ | Your CA certificates in PEM · [how-to](../how-to/networking/certificates.md) | `kasm-helm.trustedCaBundle.enabled=true`<br>`kasm-helm.trustedCaBundle.caCerts` |
 | **Secure Boot nodes** | 🔧 | MOK signing keys enrolled in each node's UEFI, and the key pair in a Secret · [how-to](../how-to/nodes/secure-boot.md) | `nodePrep.secureBoot.existingMokSecret`<br>or<br>`nodePrep.modules.v4l2loopback.kmm.sign.enabled=true` |

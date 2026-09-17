@@ -35,7 +35,6 @@ spec:
   imagePullPolicy: {{ .Values.imagePullPolicy }}
   logLevel: {{ .Values.logLevel | quote }}
   heartbeatIntervalSeconds: {{ .Values.heartbeatIntervalSeconds }}
-  metricsIntervalSeconds: {{ .Values.metricsIntervalSeconds }}
   manager:
     hostname: {{ include "kasmAgentInstance.managerHostname" . | quote }}
     port: {{ include "kasmAgentInstance.managerPort" . }}
@@ -148,10 +147,6 @@ spec:
   {{- end }}
   {{- with .Values.imagePullSecrets }}
   imagePullSecrets:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
-  {{- with .Values.workspaceImagePullSecrets }}
-  workspaceImagePullSecrets:
     {{- toYaml . | nindent 4 }}
   {{- end }}
   {{- with .Values.nodeSelector }}

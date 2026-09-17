@@ -171,7 +171,7 @@ status, what the cluster has to supply first, and the limits worth knowing.
 | Workspace network isolation | Nothing — the operator stamps a policy per session. `networkPolicies.enabled=true` adds the namespace baseline |
 | External access to sessions | Only for direct connections. Exactly one of `agent.gatewayRoute.enabled=true` (preferred), `agent.tlsRoute.enabled=true`, `agent.httpRoute.enabled=true`, `agent.ingress.enabled=true`, `agent.route.enabled=true` (OpenShift), or none of them plus `agent.sessionProxy.service.type`; the chart refuses to render more than one of the five |
 | Image pre-pulling | `agent.imagePuller.enabled=true` with `agent.imagePuller.images` |
-| Private workspace registries | `agent.workspaceImagePullSecrets` |
+| Private workspace registries | Registry credentials on the image in the manager (a per-registry Secret on each session pod); `agent.imagePuller.images[].imagePullSecrets` for pre-staged images |
 | Telemetry | `otelCollector.exporters.otlp.*` and/or `otelCollector.exporters.clickhouse.*` |
 
 Two patterns are worth carrying away. Several features need **two** values — the cluster-side

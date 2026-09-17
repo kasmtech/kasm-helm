@@ -27,7 +27,7 @@ the one failures table; the how-to pages link here rather than carrying their ow
 | Session URL is `https://` on an HTTP-only deployment | Container sessions hard-code the `https` scheme; there is no HTTP-only mode | [Certificates](../how-to/networking/certificates.md) |
 | Workspace pod `ImagePullBackOff` / `NotFound` on arm64 | Workspace images are amd64 only | [Supported platforms](../explanation/supported-platforms.md#node-architecture) |
 | Every session fails to launch, control plane healthy | Workspace images unreachable; they come from the **manager's** registry, not from values | [Registries and airgap](../how-to/registries-and-airgap.md) |
-| Session pods `ImagePullBackOff`, agent pods fine | Only `imagePullSecrets` was set; sessions use `agent.workspaceImagePullSecrets` | [Registries and airgap](../how-to/registries-and-airgap.md) |
+| Session pods `ImagePullBackOff`, agent pods fine | Only the charts' `imagePullSecrets` was set; workspace images authenticate from registry credentials on the image in the manager (or a pre-staged `agent.imagePuller` entry) | [Registries and airgap](../how-to/registries-and-airgap.md) |
 | Sessions launch only in one zone, or an agent shows up in the primary zone despite `agent.zone` | An agent joins the zone of the manager it registers with; every agent pointed at `publicAddr` (or the derived `<release>-proxy-default` Service) joins the primary zone, and `agent.zone` alone moves nothing | Set `agent.manager.hostname` to the zone's `proxy_hostname` or its `<release>-proxy-<zone>` Service ([Deploy multiple zones](../how-to/multi-zone.md)) |
 
 ## The agent never becomes Ready

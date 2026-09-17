@@ -1,6 +1,6 @@
 # Registries and airgap
 
-> **Applies to:** both halves · **Charts/values:** `kasm-helm.components.*.image.registry`, `kasm-helm.imagePullSecrets`, `agent.image.registry`, `agent.imagePullSecrets`, `agent.workspaceImagePullSecrets`, `agent.imagePuller.*`, `agent.imageAvailabilityPolicy`, `nodePrep.imagePullSecrets`, `nodePrep.modules.*.method`
+> **Applies to:** both halves · **Charts/values:** `kasm-helm.components.*.image.registry`, `kasm-helm.imagePullSecrets`, `agent.image.registry`, `agent.imagePullSecrets`, `agent.imagePuller.*`, `agent.imageAvailabilityPolicy`, `nodePrep.imagePullSecrets`, `nodePrep.modules.*.method`
 
 ## Why this is needed
 
@@ -166,11 +166,10 @@ Work them in that order; each one's failure hides the next.
    name as given and does not prepend the registry, so a bare `team/chrome:1.19.0` goes to
    Docker Hub.
 
-   > **Warning**
-   > Known issue: the chart-level list `agent.workspaceImagePullSecrets` (a Secret you create
-   > for every session, as an alternative to per-image credentials) reaches the agent as
-   > `KASM_IMAGE_PULL_SECRETS` but is not yet written into the `KasmWorkspace` resources. Until
-   > it is, use the per-image credentials above; or, for a cluster-wide Secret, add it to
+   > **Note**
+   > There is no chart-level "workspace pull secret": the agent authenticates workspace image
+   > pulls only from the per-image credentials above, which it turns into a per-registry Secret
+   > on each session pod. For a cluster-wide credential instead, add a Secret to the
    > `imagePullSecrets` of the ServiceAccount the session pods run as
    > (`kubectl get pod <session pod> -o jsonpath='{.spec.serviceAccountName}'` names it), or
    > pre-stage the images on every node with `agent.imagePuller` (step 1), whose per-entry
@@ -204,7 +203,7 @@ Work them in that order; each one's failure hides the next.
              registry: https://registry.internal.example.com
              imagePullSecrets:
                - name: internal-registry
-       imageAvailabilityPolicy: all      # or any
+       imageAvailabilityPolicy: all      # advertise catalog images before they stage; default 'pulled' waits
    ```
 
 ## Verify
@@ -234,8 +233,6 @@ kasm-agent:
   agent:
     imagePullSecrets:
       - name: internal-registry
-    workspaceImagePullSecrets:
-      - name: internal-registry
     imagePuller:
       enabled: true
       images:
@@ -254,13 +251,13 @@ Installing the charts directly, drop the `kasm-helm:` and `kasm-agent:` keys.
 
 | Symptom | Cause | Fix |
 | ------- | ----- | --- |
-| Agent and operator pods run, **session** pods `ImagePullBackOff` | The workspace image has no registry credentials in the manager, or its name lacks the registry host (a bare name goes to Docker Hub); `agent.workspaceImagePullSecrets` alone is not propagated (known issue, step 3) | Set Docker Registry/Username/Password on the image and use the full image reference; check `kubectl get secret kasm-registry-<host>` exists and is in the session pod's `imagePullSecrets` |
+| Agent and operator pods run, **session** pods `ImagePullBackOff` | The workspace image has no registry credentials in the manager, or its name lacks the registry host (a bare name goes to Docker Hub) | Set Docker Registry/Username/Password on the image and use the full image reference; check `kubectl get secret kasm-registry-<host>` exists and is in the session pod's `imagePullSecrets` |
 | Every session fails to launch, control plane healthy | Workspace images unreachable; they come from the manager's registry, not from values | Re-point them in the manager |
 | Pull works in one namespace, fails in the other | Secrets do not cross namespaces | Create the Secret in both release namespaces |
 | ECR pulls fail every morning | ECR tokens expire after 12 hours | Credential helper, external-secrets, or the node role |
 | `nodePrep` builder image will not pull | `nodePrep.imagePullSecrets` not set, or the Secret is in another namespace | Name the Secret under `nodePrep.imagePullSecrets`; for a KMM build also `nodePrep.modules.v4l2loopback.kmm.imageRepoSecret` |
 | Pre-pull DaemonSet fails on one image only | `imagePuller.images[].image` still names the upstream registry | Rewrite the full reference to the mirror, with that entry's `imagePullSecrets` |
-| A workspace is reported unavailable although some nodes have the image | `agent.imageAvailabilityPolicy: all` requires it on every node | Switch to `any`, or fix the failing node's pull |
+| A workspace is reported unavailable until its image finishes pre-pulling | `imageAvailabilityPolicy` is `pulled` (default): only staged images are advertised | Set `imageAvailabilityPolicy: all` to advertise catalog images before they stage (they pull on demand at launch), or wait for `agent.imagePuller` to finish |
 | One control-plane pod `ImagePullBackOff` | A `components.<name>.image.registry` override missed | Override every component |
 | `gpuOperator` operands fail to pull in an airgap | Not in `dist/kasm-agent-images.txt` | NVIDIA's air-gapped procedure, values passed through as `gpuOperator.*` |
 

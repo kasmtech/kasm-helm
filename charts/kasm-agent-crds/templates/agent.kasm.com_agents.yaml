@@ -299,10 +299,17 @@ spec:
                 minLength: 1
                 type: string
               imageAvailabilityPolicy:
-                default: all
+                default: pulled
                 description: |-
-                  ImageAvailabilityPolicy controls which images the agent reports as
-                  available (KASM_IMAGE_AVAILABILITY_POLICY).
+                  ImageAvailabilityPolicy controls which workspace images the agent reports
+                  to the manager as available in its heartbeat (KASM_IMAGE_AVAILABILITY_POLICY).
+                  "pulled" (default) reports only images the puller has actually staged on a
+                  node, so the manager routes a workspace here only when it can start with no
+                  pull; "all" also reports catalog images not staged yet, for optimistic
+                  routing that pulls on demand at launch.
+                enum:
+                - pulled
+                - all
                 type: string
               imagePullPolicy:
                 default: IfNotPresent
@@ -397,14 +404,6 @@ spec:
                 - hostname
                 - tokenSecretRef
                 type: object
-              metricsIntervalSeconds:
-                default: 30
-                description: |-
-                  MetricsIntervalSeconds is the agent's node/pod metrics scrape interval
-                  (KASM_METRICS_INTERVAL, in seconds).
-                format: int32
-                minimum: 1
-                type: integer
               nodeSelector:
                 additionalProperties:
                   type: string
@@ -679,28 +678,6 @@ spec:
                 required:
                 - enabled
                 type: object
-              workspaceImagePullSecrets:
-                description: |-
-                  WorkspaceImagePullSecrets are pull secrets the agent injects into launched
-                  workspace pods (for private workspace images) via KASM_IMAGE_PULL_SECRETS.
-                  Distinct from ImagePullSecrets, which pulls the agent/proxy images.
-                items:
-                  description: |-
-                    LocalObjectReference contains enough information to let you locate the
-                    referenced object inside the same namespace.
-                  properties:
-                    name:
-                      default: ""
-                      description: |-
-                        Name of the referent.
-                        This field is effectively required, but due to backwards compatibility is
-                        allowed to be empty. Instances of this type with an empty value here are
-                        almost certainly wrong.
-                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                      type: string
-                  type: object
-                  x-kubernetes-map-type: atomic
-                type: array
               workspaceLabels:
                 additionalProperties:
                   type: string
