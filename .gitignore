@@ -25,6 +25,10 @@ charts/kasm-helm/tests/__snapshot__/
 validation_errors.log
 example_properties.yaml
 
+## OTel execution plan docs -- removed from tracking, kept on disk for local reference.
+## They remain in git history; see commit 7219037.
+docs/otel-execution/
+
 ## Vendored Helm file:// dependencies (each chart's Chart.lock is committed; rebuild via `make chart-deps`)
 charts/kasm-helm/charts/
 charts/kasm-otel-router/charts/
