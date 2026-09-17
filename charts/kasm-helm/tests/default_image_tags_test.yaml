@@ -146,3 +146,38 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "Image tag not set"
+
+  # ---------- apiWorker's tag is only resolved when a worker actually renders ----------
+  - it: combined mode with no apiWorker tag renders fine, even with per-component tags set for every other component
+    template: templates/api-deployment.yaml
+    set:
+      apiWorkerMode: combined
+      useImageTags: ""
+      components.api.image.tag: "1.19.0-hotfix"
+      components.proxy.image.tag: "1.19.0-hotfix"
+      database.image.tag: "1.19.0-hotfix"
+      components.connectionProxy.nginx.image.tag: "1.19.0-hotfix"
+      components.connectionProxy.guac.image.tag: "1.19.0-hotfix"
+      components.connectionProxy.rdpGateway.image.tag: "1.19.0-hotfix"
+      components.connectionProxy.rdpHttpsGateway.image.tag: "1.19.0-hotfix"
+      # components.apiWorker.image.tag deliberately left at the values.yaml default ("")
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: docker.io/kasmweb/api:1.19.0-hotfix
+
+  - it: split mode with no apiWorker tag anywhere fails render and names apiWorker
+    set:
+      apiWorkerMode: split
+      useImageTags: ""
+      components.api.image.tag: "1.19.0-hotfix"
+      components.proxy.image.tag: "1.19.0-hotfix"
+      database.image.tag: "1.19.0-hotfix"
+      components.connectionProxy.nginx.image.tag: "1.19.0-hotfix"
+      components.connectionProxy.guac.image.tag: "1.19.0-hotfix"
+      components.connectionProxy.rdpGateway.image.tag: "1.19.0-hotfix"
+      components.connectionProxy.rdpHttpsGateway.image.tag: "1.19.0-hotfix"
+      # components.apiWorker.image.tag deliberately left at the values.yaml default ("")
+    asserts:
+      - failedTemplate:
+          errorPattern: 'Image tag not set for "apiWorker".*\.Values\.components\.apiWorker\.image\.tag'

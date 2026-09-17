@@ -1,0 +1,23 @@
+apiWorkerMode: split
+proxyService:
+  type: ClusterIP
+ingress:
+  enabled: true
+kasmZones:
+  - name: zonea
+    proxyAddress: zonea.kasm.example.com
+    primary: true
+  - name: zoneb
+    proxyAddress: zoneb.kasm.example.com
+components:
+  apiWorker:
+    pools:
+      - name: sessions
+        queues: "session,cast"
+        replicas: 1
+        queueConcurrency:
+          session: 5
+          cast: 2
+      - name: media
+        queues: "media,thumbnails"
+        replicas: 1

@@ -6,6 +6,12 @@
 #
 deploymentSize: "small"
 
+# apiWorkerMode -- Controls whether Kasm API processes also consume BullMQ background job queues.
+#  combined = every API replica also consumes queues (KASM_PROCESS=TRUE); no separate workload.
+#  split    = API replicas stop consuming queues (KASM_PROCESS=FALSE); dedicated worker
+#             deployments defined in `components.apiWorker.pools` consume them instead.
+apiWorkerMode: "combined"
+
 # publicAddr -- Set the access URL to be used for the Kasm deployment. This is the URL you will use to access
 # your Kasm deployment. This URL can be a private address, it just needs to be resolvable by systems you use
 # to interface with Kasm.
@@ -686,6 +692,55 @@ components:
     # components.api.threadPoolLogInterval -- Seconds between background logs of CherryPy thread-pool usage
     #  (Threads/Active/Idle/Queue). Set to 0 to disable. Default is 0.
     threadPoolLogInterval: 0
+
+  # Configuration settings for the Kasm API Worker pools. Only used when apiWorkerMode: split;
+  # ignored entirely (no workload rendered) when apiWorkerMode: combined.
+  #
+  apiWorker:
+    # components.apiWorker.image -- Configure the image repository where the image is stored. Use this to point to an private hosted
+    # container registry instead of our public DockerHub hosted one. This is the same image as components.api.
+    #
+    image:
+      registry: docker.io
+      repository: kasmweb/api
+      # components.apiWorker.image.tag -- Tag for this component's image. Leave empty to fall back to the chart-wide `useImageTags`.
+      tag: ""
+    # components.apiWorker.healthCheckTiming -- Override the pod's default healthcheck timing values for liveness and/or readiness probes.
+    #  Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only
+    #  the timeoutSeconds value of the livenessProbe.
+    healthCheckTiming:
+      livenessProbe: {}
+      readinessProbe: {}
+    # components.apiWorker.annotations -- Custom annotations to add to the Kasm api-worker Deployments
+    annotations: {}
+    # components.apiWorker.resources -- Manually configure resources shared by every worker pool. This overrides the pre-defined
+    #  `deploymentSize` values (which reuse the api component's preset). A pool's own `resources` overrides this.
+    resources: {}
+    # components.apiWorker.labels -- Custom labels to add to the Kasm api-worker Deployments
+    labels: {}
+    # components.apiWorker.extraVolumes -- A list of objects for additional secrets, configmaps, or volume mounts, shared by every
+    #  worker pool. See components.api.extraVolumes for the shape.
+    extraVolumes: []
+    # components.apiWorker.extraVolumeMounts -- See components.api.extraVolumeMounts for the shape.
+    extraVolumeMounts: []
+    # components.apiWorker.extraContainers -- Additional sidecar containers to run in every worker pod.
+    extraContainers: []
+    # components.apiWorker.extraInitContainers -- Additional init containers to run in every worker pod.
+    extraInitContainers: []
+    # components.apiWorker.extraEnv -- A list of raw Kubernetes EnvVar objects (name/value or name/valueFrom) appended to the end of
+    #  every worker container's env list. See components.api.extraEnv for the shape.
+    extraEnv: []
+    # components.apiWorker.pools -- One Deployment is rendered per pool per zone, named
+    #  <release>-api-worker-<pool-name>[-<zone>]. Each entry:
+    #    name             -- (required) pool name; normalized (like a zone name) into the Deployment name.
+    #    queues           -- KASM_WORKER_QUEUES value: a comma-separated queue list, or "all". Default "all".
+    #    replicas         -- Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset (default).
+    #    queueConcurrency -- Optional object, rendered as JSON into KASM_WORKER_QUEUE_CONCURRENCY, to tune per-queue concurrency.
+    #    resources        -- Optional per-pool resources override (wins over components.apiWorker.resources).
+    pools:
+      - name: default
+        queues: all
+        replicas: 0
 
   # Configuration settings for the consolidated Kasm Connection Proxy service. This StatefulSet fronts
   # the Kasm Guac, RDP Gateway, and RDP HTTPS Gateway service containers behind a single nginx container.

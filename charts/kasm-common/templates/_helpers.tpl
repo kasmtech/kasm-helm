@@ -36,6 +36,17 @@ helper-migration ticket, not day-one scope.
 
 {{/*
   Full resource name
+
+  Truncated to 63 chars (trailing '-' trimmed after truncation) so the result is always safe as
+  both a Kubernetes name and a label VALUE (the stricter of the two limits). This is the sole
+  place the name string is assembled, and every caller -- resource metadata.name and the
+  "app.kubernetes.io/name" label value alike (see kasm.common.metadata) -- gets the identical
+  truncated string, which is what keeps a Deployment's selector.matchLabels equal to its own pod
+  template's labels even once the untruncated name would have exceeded 63 chars (selector
+  immutability requires the same input to always produce the same output everywhere). Truncation
+  is not collision-safe: two distinct long names that share the same first 63 characters (or first
+  62 followed by a run of non-alphanumerics on the boundary) truncate to the same string. That is a
+  known, accepted gap -- out of scope here.
 */}}
 {{- define "kasm.common.name" -}}
 {{- $context := index . 0 -}}
@@ -56,13 +67,15 @@ helper-migration ticket, not day-one scope.
   {{- $extra = index . 4 -}}
 {{- end -}}
 
+{{- $name := "" -}}
 {{- if $extra -}}
-  {{- printf "%s-%s-%s-%s" $context.Release.Name $component (include "kasm.common.zoneName" $zone) $extra -}}
+  {{- $name = printf "%s-%s-%s-%s" $context.Release.Name $component (include "kasm.common.zoneName" $zone) $extra -}}
 {{- else if $zone -}}
-  {{- printf "%s-%s-%s" $context.Release.Name $component (include "kasm.common.zoneName" $zone) -}}
+  {{- $name = printf "%s-%s-%s" $context.Release.Name $component (include "kasm.common.zoneName" $zone) -}}
 {{- else -}}
-  {{- printf "%s-%s" $context.Release.Name $component -}}
+  {{- $name = printf "%s-%s" $context.Release.Name $component -}}
 {{- end -}}
+{{- $name | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{/*

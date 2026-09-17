@@ -1,0 +1,53 @@
+suite: apiWorkerMode split scales db-max-connections (kasm-helm-37c)
+# Split apart from api_worker_test.yaml: this suite's only declared template
+# (db-configmap.yaml) also calls kasm.apiWorkerPools indirectly via resources.preset, so any
+# guard-failure test sharing a suite with api-worker-deployment.yaml (which independently
+# calls the same helper) confuses helm-unittest's per-template failedTemplate attribution.
+
+templates:
+  - templates/db-configmap.yaml
+
+tests:
+  - it: combined mode leaves db-max-connections unchanged from the deploymentSize preset
+    set:
+      deploymentSize: small
+    asserts:
+      - matchRegex:
+          path: data["postgresql.conf"]
+          pattern: "max_connections = 200"
+
+  - it: split mode scales db-max-connections by total worker replicas across pools and zones
+    set:
+      deploymentSize: small
+      apiWorkerMode: split
+      components:
+        apiWorker:
+          pools:
+            - name: sessions
+              replicas: 2
+            - name: media
+              replicas: 3
+    asserts:
+      # 200 base + (2+3) replicas * 1 zone * 30 (pool_size 10 + max_overflow 20) = 350
+      - matchRegex:
+          path: data["postgresql.conf"]
+          pattern: "max_connections = 350"
+
+  - it: split mode multiplies the worker headroom by zone count
+    values:
+      - ../../../tests/values/multizone-config.yaml
+    set:
+      deploymentSize: small
+      apiWorkerMode: split
+      components:
+        apiWorker:
+          pools:
+            - name: sessions
+              replicas: 2
+            - name: media
+              replicas: 3
+    asserts:
+      # 200 base + (2+3) replicas * 2 zones * 30 (pool_size 10 + max_overflow 20) = 500
+      - matchRegex:
+          path: data["postgresql.conf"]
+          pattern: "max_connections = 500"

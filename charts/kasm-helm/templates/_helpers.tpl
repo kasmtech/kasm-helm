@@ -67,6 +67,13 @@ api:
   portName: api-pt
   image: {{ printf "%s/%s:%s" .Values.components.api.image.registry .Values.components.api.image.repository (include "kasm.imageTag" (list . .Values.components.api.image.tag "api")) }}
   port: 8080
+  livenessPortName: api-live-pt
+  livenessPort: 8081
+apiWorker:
+  component: apiWorker
+  {{- if eq (include "kasm.apiWorkerMode" .Values) "split" }}
+  image: {{ printf "%s/%s:%s" .Values.components.apiWorker.image.registry .Values.components.apiWorker.image.repository (include "kasm.imageTag" (list . .Values.components.apiWorker.image.tag "apiWorker")) }}
+  {{- end }}
 proxy:
   component: proxy
   svc: {{ printf "%s-proxy" .Release.Name }}
@@ -779,6 +786,76 @@ Where:
 {{- end -}}
 
 {{/*
+  Resolve and validate the top-level apiWorkerMode toggle.
+  Usage: {{ include "kasm.apiWorkerMode" $.Values }}
+  Fails if set to anything other than "combined" or "split".
+*/}}
+{{- define "kasm.apiWorkerMode" -}}
+{{- $mode := default "combined" .apiWorkerMode -}}
+{{- $allowed := list "combined" "split" -}}
+{{- if not (has $mode $allowed) -}}
+  {{- fail (printf "apiWorkerMode must be one of %s, got %q" (join ", " $allowed) $mode) -}}
+{{- end -}}
+{{- $mode -}}
+{{- end -}}
+
+{{/*
+  Resolve, normalize, and validate components.apiWorker.pools.
+  Usage: {{ include "kasm.apiWorkerPools" $.Values | fromYamlArray }}
+  Returns an empty YAML list in "combined" mode (pools are unused). In "split" mode, returns
+  one entry per pool: {name, slug, queues, replicas, queueConcurrency, resources}, where slug is
+  the pool name normalized via kasm.zoneName (mirrors how zone names get slugged into resource
+  names) and replicas resolves the 0 = deploymentSize-preset convention using the "api" node's
+  replicas.preset (worker pools are just API processes, so they share the api preset).
+  Fails if: split mode with an empty pools list; any pool missing 'name'; two pools normalizing
+  to the same slug.
+*/}}
+{{- define "kasm.apiWorkerPools" -}}
+{{- $vals := . -}}
+{{- $mode := include "kasm.apiWorkerMode" $vals -}}
+{{- if eq $mode "split" -}}
+  {{/*
+    No client-side fallback here: values.yaml ships a non-empty default
+    (components.apiWorker.pools: [{name: default, queues: all, replicas: 0}]), so an empty list
+    at this point means the user explicitly emptied it, which is the "split with empty pools"
+    failure below, not a signal to fall back to a built-in default.
+  */}}
+  {{- $awComponents := default dict (index $vals "components") -}}
+  {{- $awComponent := default dict (index $awComponents "apiWorker") -}}
+  {{- $pools := index $awComponent "pools" -}}
+  {{- if not $pools -}}
+    {{- fail "apiWorkerMode: split requires at least one entry in components.apiWorker.pools" -}}
+  {{- end -}}
+  {{- $seen := dict -}}
+  {{- $result := list -}}
+  {{- range $i, $p := $pools -}}
+    {{- if not $p.name -}}
+      {{- fail (printf "components.apiWorker.pools[%d] is missing required field 'name'" $i) -}}
+    {{- end -}}
+    {{- $slug := include "kasm.zoneName" $p.name -}}
+    {{- if hasKey $seen $slug -}}
+      {{- fail (printf "components.apiWorker.pools has duplicate normalized name %q (pool %q collides with an earlier pool)" $slug $p.name) -}}
+    {{- end -}}
+    {{- $_ := set $seen $slug true -}}
+    {{- $poolReplicas := default 0 $p.replicas -}}
+    {{- $replicas := ternary (int $poolReplicas) (include "replicas.preset" (dict "node" "api" "size" $vals.deploymentSize) | int) (gt (int $poolReplicas) 0) -}}
+    {{- $entry := dict
+        "name" $p.name
+        "slug" $slug
+        "queues" (default "all" $p.queues)
+        "replicas" $replicas
+        "queueConcurrency" (default dict $p.queueConcurrency)
+        "resources" $p.resources
+      -}}
+    {{- $result = append $result $entry -}}
+  {{- end -}}
+  {{- toYaml $result -}}
+{{- else -}}
+  {{- toYaml (list) -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
   Return a resource request/limit object based on given presets
   Example usage:
   {{- include "resources.preset" (dict "node" "proxy" "size" "small" "context" .) -}}
@@ -786,6 +863,17 @@ Where:
 {{- define "resources.preset" }}
   {{- $context := default (dict) .context -}}
   {{- $zoneCount := len (default (list 1) (index $context "kasmZones")) -}}
+  {{/*
+    Extra Postgres connection headroom for split-mode worker pods. Each worker pod is a full API
+    process (POSTGRES_POOL_SIZE 10 + POSTGRES_MAX_OVERFLOW 20 = 30 possible connections), running
+    once per pool per zone, so headroom = 30 * (sum of every pool's replica count) * zoneCount.
+    Zero in combined mode (no separate worker pods exist; the base preset already covers the api
+    pods either way).
+  */}}
+  {{- $workerConnHeadroom := 0 -}}
+  {{- range $p := (include "kasm.apiWorkerPools" $context | fromYamlArray) -}}
+    {{- $workerConnHeadroom = add $workerConnHeadroom (mul (mul (int $p.replicas) $zoneCount) 30) -}}
+  {{- end -}}
   {{- $presetSizes := dict
     "proxy" (dict
       "small" (dict 
@@ -802,7 +890,11 @@ Where:
       )
     )
     "proxy-processes" (dict "small" 2 "medium" 6 "large" 12)
-    "db-max-connections" (dict "small" 200 "medium" (mul 400 $zoneCount) "large" (mul 600 $zoneCount))
+    "db-max-connections" (dict
+      "small" (add 200 $workerConnHeadroom)
+      "medium" (add (mul 400 $zoneCount) $workerConnHeadroom)
+      "large" (add (mul 600 $zoneCount) $workerConnHeadroom)
+    )
     "db" (dict
       "small" (dict 
         "requests" (dict "cpu" "750m" "memory" "512Mi" "ephemeral-storage" "50Mi")

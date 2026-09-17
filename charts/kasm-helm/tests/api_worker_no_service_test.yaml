@@ -1,0 +1,35 @@
+suite: split mode api-worker has no Service (kasm-helm-37c)
+# Split apart from api_worker_test.yaml (same reason as D016/api_worker_db_max_connections_test.yaml
+# -- this suite needs its own `templates:` list, which is fixed per-suite in helm-unittest and
+# would otherwise collide with api_worker_test.yaml's).
+#
+# Scoped to every template that actually emits `kind: Service` in this chart, not to
+# templates/api-worker-deployment.yaml -- that file has no Service block at all, so the original
+# assertion (`kind != Service`, scoped only to that file) was vacuously true and caught nothing.
+# This scan actually inspects every real Service document and would catch a worker Service added
+# under any of these existing template names.
+
+templates:
+  - templates/api-service.yaml
+  - templates/clickhouse-service.yaml
+  - templates/connection-proxy-services.yaml
+  - templates/db-service.yaml
+  - templates/otel-gateway-service.yaml
+  - templates/proxy-service-external.yaml
+  - templates/proxy-service.yaml
+
+tests:
+  - it: no rendered Service document anywhere carries the api-worker component label
+    values:
+      - ../../../tests/values/multizone-config.yaml
+    set:
+      apiWorkerMode: split
+      components:
+        apiWorker:
+          pools:
+            - name: sessions
+            - name: media
+    asserts:
+      - notEqual:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: api-worker

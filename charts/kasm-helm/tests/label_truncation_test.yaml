@@ -1,0 +1,191 @@
+suite: label VALUE truncation at 63 chars (D019, kasm-helm-37c)
+# kasm.common.name (charts/kasm-common) truncates the assembled name to 63 chars (trailing '-'
+# trimmed) so it's always safe as both a Kubernetes name and a label VALUE. api-worker is the
+# component most likely to hit this in practice: <release>-api-worker-<pool>-<zone> stacks a
+# release name, a pool name, AND a zone name into one label value, where every other component
+# only stacks a zone name. A 40-char release name x 3 pools x 2 zones overflows 63 chars for
+# every pool here. This suite proves truncation happens and that the SAME truncated value lands
+# in both spec.selector.matchLabels and spec.template.metadata.labels (selector immutability
+# requires that, per D013/D019) -- not that every pool-zone combination stays distinct after
+# truncation. Two of the six combinations below (thumbnails-alpha, thumbnails-beta) truncate to
+# the identical string; that collision is a known, accepted gap (see kasm.common.name's comment),
+# out of scope here.
+
+templates:
+  - templates/api-worker-deployment.yaml
+
+tests:
+  - it: doc 0 (sessions/alpha) truncates to <=63 chars, selector matches pod labels
+    documentIndex: 0
+    release:
+      name: kasm-release-name-forty-characters-longg
+    set:
+      apiWorkerMode: split
+      kasmZones:
+        - name: alpha
+          proxyAddress: alpha.example.com
+          primary: true
+        - name: beta
+          proxyAddress: beta.example.com
+      components:
+        apiWorker:
+          pools:
+            - name: sessions
+              replicas: 1
+            - name: media
+              replicas: 1
+            - name: thumbnails
+              replicas: 1
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/name"]
+          value: kasm-release-name-forty-characters-longg-api-worker-sessions-al
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/name"]
+          value: kasm-release-name-forty-characters-longg-api-worker-sessions-al
+
+  - it: doc 1 (sessions/beta) truncates to <=63 chars, selector matches pod labels
+    documentIndex: 1
+    release:
+      name: kasm-release-name-forty-characters-longg
+    set:
+      apiWorkerMode: split
+      kasmZones:
+        - name: alpha
+          proxyAddress: alpha.example.com
+          primary: true
+        - name: beta
+          proxyAddress: beta.example.com
+      components:
+        apiWorker:
+          pools:
+            - name: sessions
+              replicas: 1
+            - name: media
+              replicas: 1
+            - name: thumbnails
+              replicas: 1
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/name"]
+          value: kasm-release-name-forty-characters-longg-api-worker-sessions-be
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/name"]
+          value: kasm-release-name-forty-characters-longg-api-worker-sessions-be
+
+  - it: doc 2 (media/alpha) truncates to <=63 chars, selector matches pod labels
+    documentIndex: 2
+    release:
+      name: kasm-release-name-forty-characters-longg
+    set:
+      apiWorkerMode: split
+      kasmZones:
+        - name: alpha
+          proxyAddress: alpha.example.com
+          primary: true
+        - name: beta
+          proxyAddress: beta.example.com
+      components:
+        apiWorker:
+          pools:
+            - name: sessions
+              replicas: 1
+            - name: media
+              replicas: 1
+            - name: thumbnails
+              replicas: 1
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/name"]
+          value: kasm-release-name-forty-characters-longg-api-worker-media-alpha
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/name"]
+          value: kasm-release-name-forty-characters-longg-api-worker-media-alpha
+
+  - it: doc 3 (media/beta) fits in 63 chars untouched, selector matches pod labels
+    documentIndex: 3
+    release:
+      name: kasm-release-name-forty-characters-longg
+    set:
+      apiWorkerMode: split
+      kasmZones:
+        - name: alpha
+          proxyAddress: alpha.example.com
+          primary: true
+        - name: beta
+          proxyAddress: beta.example.com
+      components:
+        apiWorker:
+          pools:
+            - name: sessions
+              replicas: 1
+            - name: media
+              replicas: 1
+            - name: thumbnails
+              replicas: 1
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/name"]
+          value: kasm-release-name-forty-characters-longg-api-worker-media-beta
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/name"]
+          value: kasm-release-name-forty-characters-longg-api-worker-media-beta
+
+  - it: doc 4 (thumbnails/alpha) truncates to <=63 chars, selector matches pod labels
+    documentIndex: 4
+    release:
+      name: kasm-release-name-forty-characters-longg
+    set:
+      apiWorkerMode: split
+      kasmZones:
+        - name: alpha
+          proxyAddress: alpha.example.com
+          primary: true
+        - name: beta
+          proxyAddress: beta.example.com
+      components:
+        apiWorker:
+          pools:
+            - name: sessions
+              replicas: 1
+            - name: media
+              replicas: 1
+            - name: thumbnails
+              replicas: 1
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/name"]
+          value: kasm-release-name-forty-characters-longg-api-worker-thumbnails
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/name"]
+          value: kasm-release-name-forty-characters-longg-api-worker-thumbnails
+
+  - it: doc 5 (thumbnails/beta) truncates to <=63 chars, selector matches pod labels (collides
+      with doc 4 post-truncation -- accepted gap, not asserted here)
+    documentIndex: 5
+    release:
+      name: kasm-release-name-forty-characters-longg
+    set:
+      apiWorkerMode: split
+      kasmZones:
+        - name: alpha
+          proxyAddress: alpha.example.com
+          primary: true
+        - name: beta
+          proxyAddress: beta.example.com
+      components:
+        apiWorker:
+          pools:
+            - name: sessions
+              replicas: 1
+            - name: media
+              replicas: 1
+            - name: thumbnails
+              replicas: 1
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/name"]
+          value: kasm-release-name-forty-characters-longg-api-worker-thumbnails
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/name"]
+          value: kasm-release-name-forty-characters-longg-api-worker-thumbnails
