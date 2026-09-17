@@ -41,52 +41,39 @@ def _router_release(release_name: str) -> str:
     return f"{release_name}-router"
 
 
-def _install_router(
-    *, e2e_config, namespace: str, temp_workdir: Path, ingest_token: str | None = None
-) -> tuple[str, str, str]:
-    """Install the router into its own namespace, registered at the Kasm install above.
+def _put_literal_secret(namespace: str, secret_name: str, literal: str) -> None:
+    """Create/replace a single-key literal Secret. Shared by _install_router (single-registration)
+    and test_18's multi-registration install (kasm-helm-6a7, which needs one gateway-token-copy
+    Secret per release rather than the single one below)."""
+    kubectl(["delete", "secret", secret_name, "--ignore-not-found"], namespace=namespace, check=False)
+    kubectl(["create", "secret", "generic", secret_name, f"--from-literal={literal}"], namespace=namespace)
 
-    `ingest_token` lets a caller (test_17's roundtrip scenario, kasm-helm-xc8 part 2) pin the
-    router's ingest credential to a value it already handed to a kasm-helm install's
-    `observability.collector.upstream.token` before this router install runs. Defaults to
-    generating one, as before, when the caller has no such requirement (test_14 itself).
 
-    Returns (router_namespace, router_service_dns, ingest_token). Requires the Kasm release at
-    `namespace` to already exist: it reads that release's own gateway bearer token (via the
-    `-secrets` Secret) to authenticate the router's registration back to that release's gateway.
+def install_router_with_registrations(
+    *,
+    router_ns: str,
+    router_release: str,
+    ingest_token_secret: str,
+    registrations: list[dict],
+    temp_workdir: Path,
+    k8s_events: bool = True,
+) -> str:
+    """Install (or upgrade) the router with a caller-built `registrations[]` list.
+
+    Generalizes `_install_router` below (which derives everything from a single Kasm install) so
+    test_18's multi-tenant isolation scenario (kasm-helm-6a7) can register two releases against
+    one router without duplicating the namespace/helm/wait plumbing. Caller creates the ingest
+    Secret (named by `ingest_token_secret`) and every registration's own tokenSecret Secret
+    beforehand -- this function only builds the values file and installs.
+
+    Returns the router's Service DNS.
     """
-    router_ns = _router_ns(namespace)
-    router_release = _router_release(e2e_config.release_name)
     kubectl(["create", "namespace", router_ns], namespace=None, check=False)
 
-    gateway_token = _get_secret_value(namespace, f"{e2e_config.release_name}-secrets", "otel-bearer-token")
-    ingest_token = ingest_token or uuid.uuid4().hex
-
-    for secret_name, literal in (
-        ("otel-router-ingest-token", f"token={ingest_token}"),
-        ("otel-gateway-token-copy", f"otel-bearer-token={gateway_token}"),
-    ):
-        kubectl(["delete", "secret", secret_name, "--ignore-not-found"], namespace=router_ns, check=False)
-        kubectl(
-            ["create", "secret", "generic", secret_name, f"--from-literal={literal}"],
-            namespace=router_ns,
-        )
-
     router_values = {
-        "ingestAuth": {"existingSecret": {"name": "otel-router-ingest-token", "key": "token"}},
-        "registrations": [
-            {
-                "namespace": namespace,
-                "endpoint": f"{e2e_config.release_name}-otel-gateway.{namespace}.svc.cluster.local:4317",
-                "tokenSecret": {"name": "otel-gateway-token-copy", "key": "otel-bearer-token"},
-                # The gateway's otlp/remote grpc receiver has no tls block (plaintext, in-cluster,
-                # bearer-token auth only) -- see charts/kasm-helm/templates/otel-gateway-configmap.yaml.
-                # Without this, the router's exporter defaults to tls.insecure: false and attempts a
-                # TLS handshake against a plaintext receiver, so the export silently never succeeds.
-                "insecure": True,
-            }
-        ],
-        "k8sEvents": {"enabled": True},
+        "ingestAuth": {"existingSecret": {"name": ingest_token_secret, "key": "token"}},
+        "registrations": registrations,
+        "k8sEvents": {"enabled": k8s_events},
     }
     values_path = temp_workdir / "router-values.yaml"
     values_path.write_text(yaml.safe_dump(router_values, sort_keys=False))
@@ -111,7 +98,53 @@ def _install_router(
     wait_for_deployments_rolled_out(router_ns, timeout_seconds=300)
     wait_for_pods_ready(router_ns, timeout_seconds=300)
 
-    router_service_dns = f"{router_release}-otel-router.{router_ns}.svc.cluster.local"
+    return f"{router_release}-otel-router.{router_ns}.svc.cluster.local"
+
+
+def _install_router(
+    *, e2e_config, namespace: str, temp_workdir: Path, ingest_token: str | None = None
+) -> tuple[str, str, str]:
+    """Install the router into its own namespace, registered at the Kasm install above.
+
+    `ingest_token` lets a caller (test_17's roundtrip scenario, kasm-helm-xc8 part 2) pin the
+    router's ingest credential to a value it already handed to a kasm-helm install's
+    `observability.collector.upstream.token` before this router install runs. Defaults to
+    generating one, as before, when the caller has no such requirement (test_14 itself).
+
+    Returns (router_namespace, router_service_dns, ingest_token). Requires the Kasm release at
+    `namespace` to already exist: it reads that release's own gateway bearer token (via the
+    `-secrets` Secret) to authenticate the router's registration back to that release's gateway.
+    """
+    router_ns = _router_ns(namespace)
+    router_release = _router_release(e2e_config.release_name)
+
+    gateway_token = _get_secret_value(namespace, f"{e2e_config.release_name}-secrets", "otel-bearer-token")
+    ingest_token = ingest_token or uuid.uuid4().hex
+
+    kubectl(["create", "namespace", router_ns], namespace=None, check=False)
+    _put_literal_secret(router_ns, "otel-router-ingest-token", f"token={ingest_token}")
+    _put_literal_secret(router_ns, "otel-gateway-token-copy", f"otel-bearer-token={gateway_token}")
+
+    router_service_dns = install_router_with_registrations(
+        router_ns=router_ns,
+        router_release=router_release,
+        ingest_token_secret="otel-router-ingest-token",
+        registrations=[
+            {
+                "namespace": namespace,
+                "endpoint": f"{e2e_config.release_name}-otel-gateway.{namespace}.svc.cluster.local:4317",
+                "tokenSecret": {"name": "otel-gateway-token-copy", "key": "otel-bearer-token"},
+                # The gateway's otlp/remote grpc receiver has no tls block (plaintext, in-cluster,
+                # bearer-token auth only) -- see charts/kasm-helm/templates/otel-gateway-configmap.yaml.
+                # Without this, the router's exporter defaults to tls.insecure: false and attempts a
+                # TLS handshake against a plaintext receiver, so the export silently never succeeds.
+                "insecure": True,
+            }
+        ],
+        temp_workdir=temp_workdir,
+        k8s_events=True,
+    )
+
     return router_ns, router_service_dns, ingest_token
 
 
