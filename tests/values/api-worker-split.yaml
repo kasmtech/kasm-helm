@@ -13,11 +13,11 @@ components:
   apiWorker:
     pools:
       - name: sessions
-        queues: "session,cast"
+        queues: "session,heartbeat"
         replicas: 1
         queueConcurrency:
           session: 5
-          cast: 2
-      - name: media
-        queues: "media,thumbnails"
+          heartbeat: 2
+      - name: housekeeping
+        queues: "monitoring,maintenance"
         replicas: 1

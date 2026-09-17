@@ -42,9 +42,9 @@ data:
             endpoint: "0.0.0.0:4317"
             auth:
               authenticator: bearertokenauth/server
-          # Kasm's api/manager services export over OTLP/HTTP, the Collector sidecars over
-          # gRPC. Both protocols must stay enabled or those services' telemetry is silently
-          # dropped — the chart sends them to :4318.
+          # Kasm's api service exports over OTLP/HTTP, the Collector sidecars over
+          # gRPC. Both protocols must stay enabled or that service's telemetry is silently
+          # dropped — the chart sends it to :4318.
           http:
             endpoint: "0.0.0.0:4318"
             auth:

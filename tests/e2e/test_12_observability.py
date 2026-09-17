@@ -43,7 +43,6 @@ def _low_resource_values(
         "database": {"resources": low_resources},
         "components": {
             "api": {"resources": low_resources},
-            "manager": {"resources": low_resources},
             "proxy": {"resources": low_resources_proxy},
             "connectionProxy": {
                 "nginx": {"resources": low_resources_proxy},
@@ -256,7 +255,7 @@ def _drive_traffic(namespace: str) -> None:
     # A deliberately-bad URL to generate at least one nginx error-log line, in case normal
     # traffic doesn't naturally produce one.
     curl_from_pod(namespace, proxy_pod, "https://localhost:8443/this-path-does-not-exist-404", insecure=True)
-    # Hit the API too so kasm-api/kasm-manager have something to emit besides startup noise.
+    # Hit the API too so kasm-api has something to emit besides startup noise.
     curl_from_pod(namespace, proxy_pod, "https://localhost:8443/api/public/get_token", insecure=True)
 
 
@@ -307,7 +306,6 @@ def _assert_core_telemetry(namespace: str, database: str) -> None:
 
     services = _clickhouse_query(namespace, database, "SELECT DISTINCT ServiceName FROM otel_logs")
     assert "kasm-api" in services, f"kasm-api missing from otel_logs ServiceName values: {services}"
-    assert "kasm-manager" in services, f"kasm-manager missing from otel_logs ServiceName values: {services}"
 
     _assert_connection_proxy_sidecar_services(namespace, database)
     _assert_db_sidecar_logs(namespace, database)
@@ -415,7 +413,7 @@ def test_observability_default_install_end_to_end(installer, temp_workdir: Path)
 
     _assert_core_telemetry(namespace, "kasm_otel")
 
-    # bd kasm-helm-hvx: the RO user (api/manager's credential) must be able to run a real
+    # bd kasm-helm-hvx: the RO user (api credential) must be able to run a real
     # reporting-style SELECT and must NOT be able to write. This is the RISK the ticket flags —
     # an XML grant that's too narrow fails as empty reports, not an error — so it settles it by
     # actually running the query as that user rather than only asserting the grant text.

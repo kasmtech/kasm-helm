@@ -84,7 +84,6 @@ def test_json_log_format(installer, temp_workdir: Path) -> None:
         },
         "components": {
             "api": {"resources": low_resources},
-            "manager": {"resources": low_resources},
             "proxy": {"resources": low_resources_proxy},
             "connectionProxy": {
                 "nginx": {"resources": low_resources_proxy},
@@ -114,7 +113,7 @@ def test_json_log_format(installer, temp_workdir: Path) -> None:
     )
     time.sleep(_POST_READY_SETTLE_SECONDS)
 
-    # Unlike api/manager (which emit periodic JSON diagnostic lines regardless
+    # Unlike api (which emits periodic JSON diagnostic lines regardless
     # of traffic) and rdp-gateway/rdp-https-gateway (whose sampled container is
     # the app binary, not the connection-proxy pod's shared nginx container),
     # the proxy component's only container is nginx itself: its json_combined
@@ -130,13 +129,13 @@ def test_json_log_format(installer, temp_workdir: Path) -> None:
     # connection-proxy pod, so both select on component=connection-proxy but sample different
     # containers.
     #
-    # api and manager are excluded: H2 (see docs/otel-integration-plan.md §4) narrowed
+    # api is excluded: H2 (see docs/otel-integration-plan.md §4) narrowed
     # logFormat's scope by removing api_server/server.py's logging.config.dictConfig call, so
-    # api/manager's console output is always human-readable text now regardless of logFormat —
-    # their structured logs are exported over OpenTelemetry instead (see otel_env_test.yaml /
+    # api's console output is always human-readable text now regardless of logFormat —
+    # its structured logs are exported over OpenTelemetry instead (see otel_env_test.yaml /
     # test_12_observability.py). This did not touch rdp-gateway/rdp-https-gateway's own
     # app-config-driven formatter switch, so those two remain in logFormat's scope. Do not
-    # "fix" this back to include api/manager — see the doc reference above.
+    # "fix" this back to include api — see the doc reference above.
     #
     # Guac is intentionally excluded — its log format is not configurable via logFormat in
     # this release.

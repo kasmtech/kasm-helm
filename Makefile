@@ -145,7 +145,7 @@ CRANE_ARCH := $(subst amd64,x86_64,$(ARCH))
 CLOUD_PROVIDER_KIND_PID_FILE ?= $(CURDIR)/.kind/cloud-provider-kind.pid
 CLOUD_PROVIDER_KIND_LOG ?= $(CURDIR)/.kind/cloud-provider-kind.log
 
-.PHONY: tools lint render kubeconform kyverno unittest otel-validate readme readme-check changelog changelog-llm changelog-console changelog-console-llm changelog-check docs test build-pytest kind-up kind-down kind-recreate kind-ensure kind-load-images kind-load-old-images kind-clean-namespace kind-prep pytest-docker e2e e2e-basic e2e-trustedca e2e-multizone e2e-externaldb e2e-backup e2e-backup-pss e2e-pss e2e-json-logging e2e-observability e2e-observability-off e2e-router e2e-upgrade e2e-upgrade-included e2e-upgrade-standalone e2e-settle e2e-preseed validate-preseed extract-old-chart clean
+.PHONY: tools lint render kubeconform kyverno unittest otel-validate readme readme-check changelog changelog-llm changelog-console changelog-console-llm changelog-check docs test build-pytest kind-up kind-down kind-recreate kind-ensure kind-load-images kind-load-old-images kind-clean-namespace kind-prep pytest-docker e2e e2e-basic e2e-split e2e-trustedca e2e-multizone e2e-externaldb e2e-backup e2e-backup-pss e2e-pss e2e-json-logging e2e-observability e2e-observability-off e2e-router e2e-upgrade e2e-upgrade-included e2e-upgrade-standalone e2e-settle e2e-preseed validate-preseed extract-old-chart clean
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*## "; printf "\nUsage: make \033[36m<target>\033[0m\n"} \
@@ -612,10 +612,21 @@ kind-load-images: $(CRANE) $(HELM) ## Pull and load current chart images into ki
 	chart_images=$$( { $(HELM) template kasm $(KIND_LOAD_CHART_DIR) \
 		--set publicAddr=kind.kasm.local \
 		--set certificate.secretName=kasm-tls; \
-	  $(HELM) template kasm $(KIND_LOAD_CHART_DIR) \
-		--set publicAddr=kind.kasm.local \
-		--set certificate.secretName=kasm-tls \
-		-f tests/values/dev31-images.yaml; \
+	  if [ "$(KIND_LOAD_CHART_DIR)" = "$(CHART_DIR)" ]; then \
+	    $(HELM) template kasm $(KIND_LOAD_CHART_DIR) \
+		  --set publicAddr=kind.kasm.local \
+		  --set certificate.secretName=kasm-tls \
+		  -f tests/values/dev31-images.yaml; \
+	    $(HELM) template kasm $(KIND_LOAD_CHART_DIR) \
+		  --set publicAddr=kind.kasm.local \
+		  --set certificate.secretName=kasm-tls \
+		  -f tests/values/pubsub-images.yaml; \
+	    $(HELM) template kasm $(KIND_LOAD_CHART_DIR) \
+		  --set publicAddr=kind.kasm.local \
+		  --set certificate.secretName=kasm-tls \
+		  --set apiWorkerMode=split \
+		  -f tests/values/pubsub-images.yaml; \
+	  fi; \
 	  } | awk '/^[[:space:]]*image:[[:space:]]/{print $$2}' \
 		| sort -u); \
 	images="$$chart_images $(KIND_EXTRA_IMAGES)"; \
@@ -714,6 +725,9 @@ e2e: ## Run all e2e scenarios sequentially (requires kind cluster)
 	$(MAKE) e2e-settle
 	$(MAKE) e2e-preseed E2E_NAMESPACE=kasm-e2e-preseed
 	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-preseed
+	$(MAKE) e2e-settle
+	$(MAKE) e2e-split E2E_NAMESPACE=kasm-e2e-split
+	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-split
 	@# Final cleanup of host-side artefacts left behind by the
 	@# external-postgres-using tests (e2e-externaldb, e2e-upgrade-standalone)
 	@# and the chart-extraction step from e2e-upgrade-*.
@@ -722,6 +736,13 @@ e2e: ## Run all e2e scenarios sequentially (requires kind cluster)
 
 e2e-basic: kind-prep build-pytest ## Basic install and login page verification
 	$(MAKE) pytest-docker E2E_SCENARIO=e2e-basic PYTEST_ARGS="test_01_basic_deploy.py"
+
+# apiWorkerMode: split depends on the pub/sub backend (API absorbing the manager role,
+# BullMQ-on-PostgreSQL) that only exists on integ/otel-openapi-pubsub — see
+# tests/values/pubsub-images.yaml for the branch-build image overrides this passes alongside its
+# own values (D021, kasm-helm-tzy).
+e2e-split: kind-prep build-pytest ## apiWorkerMode: split — per-pool worker Deployments, no worker Service
+	$(MAKE) pytest-docker E2E_SCENARIO=e2e-split E2E_IMAGE_VALUES=/e2e-values/pubsub-images.yaml PYTEST_ARGS="-m e2e -q test_16_api_worker_split.py"
 
 e2e-trustedca: kind-prep build-pytest ## Install with custom CA bundle
 	$(MAKE) pytest-docker E2E_SCENARIO=e2e-trustedca PYTEST_ARGS="-m e2e -q test_02_trusted_ca.py"

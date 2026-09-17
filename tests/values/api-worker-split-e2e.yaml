@@ -1,0 +1,15 @@
+# Single-zone apiWorkerMode: split scenario sized for a real kind e2e install (test_16_api_worker_
+# split.py / e2e-split target). tests/values/api-worker-split.yaml stays multizone+ingress for the
+# static render/kubeconform/kyverno sweep; this one is deliberately single-zone/ClusterIP-free so
+# it doesn't also require ingress-nginx on the single-node kind cluster.
+deploymentSize: small
+apiWorkerMode: split
+components:
+  apiWorker:
+    pools:
+      - name: primary
+        queues: "all"
+        replicas: 1
+      - name: restricted
+        queues: "session,heartbeat"
+        replicas: 1

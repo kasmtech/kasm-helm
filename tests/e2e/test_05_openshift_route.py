@@ -20,7 +20,7 @@ def test_route_deploys_and_is_accessible_when_openshift(installer, temp_workdir:
     if "routes.route.openshift.io" not in api_resources:
         pytest.skip("OpenShift Route API not available in this cluster")
 
-    # Lower per-component resource requests so all pods (api, manager, proxy,
+    # Lower per-component resource requests so all pods (api, proxy,
     # the consolidated connection-proxy StatefulSet — one nginx plus the
     # guac, rdp-gateway, and rdp-https-gateway service containers — and the
     # bundled db) fit on small test clusters.
@@ -38,7 +38,6 @@ def test_route_deploys_and_is_accessible_when_openshift(installer, temp_workdir:
         "proxyService": {"type": "ClusterIP"},
         "components": {
             "api": {"resources": low_resources},
-            "manager": {"resources": low_resources},
             "proxy": {"resources": low_resources_proxy},
             "connectionProxy": {
                 "nginx": {"resources": low_resources_proxy},

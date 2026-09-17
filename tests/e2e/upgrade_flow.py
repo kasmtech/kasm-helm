@@ -399,7 +399,6 @@ def run_upgrade_flow(
     current_chart_component_values: dict = {
         "components": {
             "api": {"resources": low_resources},
-            "manager": {"resources": low_resources},
             "proxy": {"resources": low_resources_proxy},
             "connectionProxy": {
                 "guac": {"resources": low_resources},
@@ -626,4 +625,18 @@ def run_upgrade_flow(
     )
     assert status_code == 200, f"Expected 200 after upgrade, got {status_code}"
     assert_login_page(body)
+
+    # The 1.18.1 chart installed a manager Deployment; the current chart no
+    # longer templates one (api absorbed its role). Helm's 3-way merge must
+    # prune it on upgrade.
+    release = e2e_config.release_name
+    remaining_manager = kubectl(
+        ["get", "deployment", "-l", "app.kubernetes.io/component=manager", "-o", "name"],
+        namespace=namespace,
+    )
+    assert remaining_manager.stdout.strip() == "", (
+        f"Expected the 1.18.1 manager Deployment for release {release} to be pruned "
+        f"by helm upgrade, but found: {remaining_manager.stdout.strip()}"
+    )
+
     LOGGER.info("[upgrade] upgrade flow complete — system healthy after upgrade")

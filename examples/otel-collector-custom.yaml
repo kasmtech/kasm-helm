@@ -7,7 +7,7 @@
 # There is no forwarder tier and no `observability.collector.forwarder.*` values — those keys
 # were removed and are now rejected by the values schema.
 #
-# Keep BOTH ingest protocols on `otlp/remote` below: api and manager export over OTLP/HTTP to
+# Keep BOTH ingest protocols on `otlp/remote` below: api exports over OTLP/HTTP to
 # :4318, the Collector sidecars over gRPC to :4317. Dropping either one silently blackholes
 # that half of your telemetry — there is no render-time error for it.
 #
@@ -55,7 +55,7 @@ data:
         endpoint: "0.0.0.0:13133"
 
     receivers:
-      # Every sender in the release addresses this receiver: api and manager over HTTP :4318,
+      # Every sender in the release addresses this receiver: api over HTTP :4318,
       # the Collector sidecars over gRPC :4317. The sidecars' own otlp/local and otlp/nginx
       # listeners are loopback-bound and pod-internal — they are not this tier's concern.
       otlp/remote:
@@ -64,9 +64,9 @@ data:
             endpoint: "0.0.0.0:4317"
             auth:
               authenticator: bearertokenauth/server
-          # Kasm's api/manager services export over OTLP/HTTP, the Collector sidecars over
-          # gRPC. Both protocols must stay enabled or those services' telemetry is silently
-          # dropped — the chart sends them to :4318.
+          # Kasm's api service exports over OTLP/HTTP, the Collector sidecars over
+          # gRPC. Both protocols must stay enabled or that service's telemetry is silently
+          # dropped — the chart sends it to :4318.
           http:
             endpoint: "0.0.0.0:4318"
             auth:

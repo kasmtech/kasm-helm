@@ -36,7 +36,7 @@ stringData:
 
     kubectl(["apply", "-f", str(temp_workdir / "secret.yaml")], namespace=namespace)
 
-    # Lower per-component resource requests so all pods (api, manager, proxy,
+    # Lower per-component resource requests so all pods (api, proxy,
     # the consolidated connection-proxy StatefulSet — one nginx plus the
     # guac, rdp-gateway, and rdp-https-gateway service containers) fit on the
     # single-node kind cluster in gitlab runner. DB is external in this
@@ -76,7 +76,6 @@ stringData:
         },
         "components": {
             "api": {"resources": low_resources},
-            "manager": {"resources": low_resources},
             "proxy": {"resources": low_resources_proxy},
             "connectionProxy": {
                 "nginx": {"resources": low_resources_proxy},

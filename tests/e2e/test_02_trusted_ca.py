@@ -147,7 +147,7 @@ spec:
     apply_nginx_trust()
 
     # Install Kasm with trusted CA enabled and CA injected as configmap data.
-    # Lower per-component resource requests so all pods (api, manager, proxy,
+    # Lower per-component resource requests so all pods (api, proxy,
     # the consolidated connection-proxy StatefulSet — one nginx plus the
     # guac, rdp-gateway, and rdp-https-gateway service containers — and the
     # bundled db) fit on the single-node kind cluster in gitlab runner.
@@ -169,7 +169,6 @@ spec:
         },
         "components": {
             "api": {"resources": low_resources},
-            "manager": {"resources": low_resources},
             "proxy": {"resources": low_resources_proxy},
             "connectionProxy": {
                 "nginx": {"resources": low_resources_proxy},
@@ -205,7 +204,7 @@ spec:
     # shared by the guac, rdp-gateway, and rdp-https-gateway service
     # containers (kasm.trustedCaInit is invoked once for the whole pod), so
     # it only needs to be checked once, not once per service.
-    for component in ("proxy", "api", "manager", "connection-proxy"):
+    for component in ("proxy", "api", "connection-proxy"):
         pod = get_first_pod_by_selector(namespace, f"app.kubernetes.io/component={component}")
         status = kubectl(
             [
@@ -257,9 +256,9 @@ spec:
     # Python trust: the original customer bug was requests/certifi not honoring
     # the OS trust store. trustedCaEnv sets SSL_CERT_FILE (read by urllib via
     # ssl.create_default_context) AND REQUESTS_CA_BUNDLE (read by requests) — so
-    # exercise BOTH, and on api AND manager (both get the env; the prior test
-    # only covered api+urllib).
-    for component in ("api", "manager"):
+    # exercise BOTH on api (manager's role was absorbed into api; the prior
+    # test only covered api+urllib).
+    for component in ("api",):
         pod = get_first_pod_by_selector(namespace, f"app.kubernetes.io/component={component}")
         urllib_result = exec_in_pod(
             namespace,

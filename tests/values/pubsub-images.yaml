@@ -1,0 +1,46 @@
+# Branch-build image overrides for the pub/sub e2e scenarios (test_16_api_worker_split.py and
+# any other scenario exercising the manager-removal / apiWorkerMode rework). This chart change
+# depends on backend code that only exists on integ/otel-openapi-pubsub (API absorbing the
+# manager role, BullMQ-on-PostgreSQL pub/sub, apiWorkerMode split), so those scenarios must run
+# against branch builds rather than the released tags the other e2e scenarios use.
+#
+# There is no `postgres-private:integ-otel-openapi-pubsub` build, so `database.image` is
+# deliberately left untouched here — it stays on the chart's default released `kasmweb/postgres`
+# tag (D021).
+#
+# Supersedes tests/values/dev31-images.yaml (DEV-31 backend merged into this integ branch, see
+# D021) for pub/sub scenarios. dev31-images.yaml stays as-is for the OTel-only scenarios
+# (test_12/13/14) that don't need the pub/sub rework.
+#
+# Tags verified present on this host (2026-09-17):
+#   kasmweb/{api,proxy,kasm-guac,rdp-gateway,rdp-https-gateway}-private:integ-otel-openapi-pubsub
+components:
+  api:
+    image:
+      repository: kasmweb/api-private
+      tag: "integ-otel-openapi-pubsub"
+  apiWorker:
+    image:
+      repository: kasmweb/api-private
+      tag: "integ-otel-openapi-pubsub"
+  proxy:
+    image:
+      repository: kasmweb/proxy-private
+      tag: "integ-otel-openapi-pubsub"
+  connectionProxy:
+    nginx:
+      image:
+        repository: kasmweb/proxy-private
+        tag: "integ-otel-openapi-pubsub"
+    guac:
+      image:
+        repository: kasmweb/kasm-guac-private
+        tag: "integ-otel-openapi-pubsub"
+    rdpGateway:
+      image:
+        repository: kasmweb/rdp-gateway-private
+        tag: "integ-otel-openapi-pubsub"
+    rdpHttpsGateway:
+      image:
+        repository: kasmweb/rdp-https-gateway-private
+        tag: "integ-otel-openapi-pubsub"

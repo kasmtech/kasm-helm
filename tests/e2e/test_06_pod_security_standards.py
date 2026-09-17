@@ -28,7 +28,7 @@ def test_chart_installs_in_restricted_namespace_and_rejects_noncompliant_pods(
 
     apply_restricted_pod_security(namespace)
 
-    # Lower per-component resource requests so all pods (api, manager, proxy,
+    # Lower per-component resource requests so all pods (api, proxy,
     # the consolidated connection-proxy StatefulSet — one nginx plus the
     # guac, rdp-gateway, and rdp-https-gateway service containers — bundled
     # db, and the manual db-backup job) fit on the single-node kind cluster
@@ -53,7 +53,6 @@ def test_chart_installs_in_restricted_namespace_and_rejects_noncompliant_pods(
         },
         "components": {
             "api": {"resources": low_resources},
-            "manager": {"resources": low_resources},
             "proxy": {"resources": low_resources_proxy},
             "connectionProxy": {
                 "nginx": {"resources": low_resources_proxy},

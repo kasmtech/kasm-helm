@@ -41,7 +41,6 @@ def test_observability_disabled_stays_deployable(installer, temp_workdir: Path) 
         "certificate": {"secretName": "kasm-deployment-tls"},
         "components": {
             "api": {"resources": low_resources},
-            "manager": {"resources": low_resources},
             "proxy": {"resources": low_resources_proxy},
             "connectionProxy": {
                 "nginx": {"resources": low_resources_proxy},
