@@ -18,6 +18,8 @@ The three independent replica counts (`components.guac.replicas`, `components.rd
 
 See [Migrating to connection-proxy](./README.md#migrating-to-connection-proxy) for the full old-key-to-new-key mapping.
 
+- **The Kasm Manager service is removed.** The API absorbs its functions. `templates/manager-deployment.yaml` and `templates/manager-service.yaml` are deleted, and `components.manager` is removed from `values.yaml` and `values.schema.json` (the schema now rejects it). nginx keeps the `/manager_api/` agent-facing path, but it now proxies to the API service instead of a separate Manager upstream. See [Manager removed](./README.md#manager-removed).
+
 ### Added
 
 - Built-in OpenTelemetry observability stack, enabled by default: a single cluster-wide gateway Collector and a bundled ClickHouse StatefulSet that back logs, traces, metrics, and the Kasm Admin UI's reporting views. See the new `charts/kasm-helm/docs/observability.md`.

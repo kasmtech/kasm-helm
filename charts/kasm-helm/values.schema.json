@@ -936,166 +936,6 @@
             "extraInitContainers"
           ]
         },
-        "manager": {
-          "additionalProperties": false,
-          "description": " ",
-          "properties": {
-            "annotations": {
-              "additionalProperties": true,
-              "description": "Custom annotations to add to the Kasm Manager Deployment",
-              "title": "annotations",
-              "type": "object"
-            },
-            "extraContainers": {
-              "description": "Additional sidecar containers to run in the pod\nExample\n - name: sidecar-example\n   image: busybox\n   command: [/bin/sh, -c, 'echo \"Hello world\"']",
-              "title": "extraContainers",
-              "type": "array"
-            },
-            "extraInitContainers": {
-              "description": "Additional sidecar containers to run in the pod\nExample\n - name: init-example\n   image: busybox\n   command: [/bin/sh, -c, 'echo \"Hello world\"']",
-              "title": "extraInitContainers",
-              "type": "array"
-            },
-            "extraVolumeMounts": {
-              "description": "A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things\n like custom SSL certificates, config files, or data volumes Kasm Manager container\nExample: \n  extraVolumeMounts:\n    - mountPath: /etc/ssl/certs/ca-certificates.crt\n      name: pkichain\n      readOnly: true\n      subPath: ca.crt",
-              "title": "extraVolumeMounts",
-              "type": "array"
-            },
-            "extraVolumes": {
-              "description": "A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things\n like custom SSL certificates, config files, or data volumes to the Kasm Manager container\nExample:\n  extraVolumes:\n    - secret:\n        defaultMode: 420\n        secretName: kasm-custom-tls\n      name: pkichain",
-              "title": "extraVolumes",
-              "type": "array"
-            },
-            "healthCheckTiming": {
-              "description": "Override the pod's default healthcheck timing values for liveness and/or readiness probes.\n Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only\n the timeoutSeconds value of the livenessProbe.",
-              "title": "healthCheckTiming",
-              "type": "object",
-              "properties": {
-                "livenessProbe": {
-                  "title": "livenessProbe",
-                  "type": "object",
-                  "properties": {
-                    "timeoutSeconds": {
-                      "title": "timeoutSeconds",
-                      "type": "integer"
-                    },
-                    "initialDelaySeconds": {
-                      "title": "initialDelaySeconds",
-                      "type": "integer"
-                    },
-                    "periodSeconds": {
-                      "title": "periodSeconds",
-                      "type": "integer"
-                    },
-                    "failureThreshold": {
-                      "title": "failureThreshold",
-                      "type": "integer"
-                    },
-                    "successThreshold": {
-                      "title": "successThreshold",
-                      "type": "integer"
-                    }
-                  }
-                },
-                "readinessProbe": {
-                  "title": "livenessProbe",
-                  "type": "object",
-                  "properties": {
-                    "timeoutSeconds": {
-                      "title": "timeoutSeconds",
-                      "type": "integer"
-                    },
-                    "initialDelaySeconds": {
-                      "title": "initialDelaySeconds",
-                      "type": "integer"
-                    },
-                    "periodSeconds": {
-                      "title": "periodSeconds",
-                      "type": "integer"
-                    },
-                    "failureThreshold": {
-                      "title": "failureThreshold",
-                      "type": "integer"
-                    },
-                    "successThreshold": {
-                      "title": "successThreshold",
-                      "type": "integer"
-                    }
-                  }
-                }
-              }
-            },
-            "image": {
-              "additionalProperties": false,
-              "description": "Configure the image repository where the image is stored. Use this to point to an private hosted container registry instead of our public DockerHub hosted one.",
-              "properties": {
-                "registry": {
-                  "default": "docker.io",
-                  "title": "registry",
-                  "type": "string"
-                },
-                "repository": {
-                  "default": "kasmweb/manager",
-                  "title": "repository",
-                  "type": "string"
-                },
-                "tag": {
-                  "title": "tag",
-                  "type": "string"
-                }
-              },
-              "title": "image",
-              "type": "object",
-              "required": [
-                "registry",
-                "repository",
-                "tag"
-              ]
-            },
-            "labels": {
-              "additionalProperties": true,
-              "description": "Custom labels to add to the Kasm Manager Deployment",
-              "title": "labels",
-              "type": "object"
-            },
-            "replicas": {
-              "description": "Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset.",
-              "title": "replicas",
-              "type": "integer"
-            },
-            "resources": {
-              "additionalProperties": true,
-              "description": "Manually configure the Kasm Manager Deployment resources. This overrides the pre-defined `deploymentSize` values.",
-              "title": "resources",
-              "type": "object"
-            },
-            "updateTimer": {
-              "description": "Configures the delay (in seconds) between checking for updates, when automatic updates are enabled. Default value is 86400s, which equals 24 hours.",
-              "title": "updateTimer",
-              "type": "integer",
-              "default": 86400
-            },
-            "supportBundleTimer": {
-              "description": "Configures the batching interval (in seconds) for generating support bundles. This value determines how often the system checks for support bundle completion and expiration. Default value is 60s.",
-              "title": "supportBundleTimer",
-              "type": "integer",
-              "default": 60
-            }
-          },
-          "title": "manager",
-          "type": "object",
-          "required": [
-            "image",
-            "annotations",
-            "resources",
-            "labels",
-            "healthCheckTiming",
-            "extraVolumes",
-            "extraVolumeMounts",
-            "extraContainers",
-            "extraInitContainers"
-          ]
-        },
         "proxy": {
           "additionalProperties": false,
           "description": " ",
@@ -1561,7 +1401,6 @@
       "required": [
         "proxy",
         "api",
-        "manager",
         "connectionProxy"
       ],
       "title": "components",
@@ -1689,7 +1528,7 @@
             },
             "readUsername": {
               "default": "",
-              "description": "ClickHouse user api/manager use to read reports, holding only GRANT SELECT ON <db>.* instead of `username`'s full access. When the chart manages ClickHouse (`enabled: true`, `standalone: false`), leaving this empty still gets you a read-only user: it defaults to `kasm_otel_ro`. For a `standalone` external ClickHouse, leaving this empty instead keeps api/manager on `username` (no read-only user is rendered) unless you set this to a read-only user you have provisioned there yourself.",
+              "description": "ClickHouse user api uses to read reports, holding only GRANT SELECT ON <db>.* instead of `username`'s full access. When the chart manages ClickHouse (`enabled: true`, `standalone: false`), leaving this empty still gets you a read-only user: it defaults to `kasm_otel_ro`. For a `standalone` external ClickHouse, leaving this empty instead keeps api on `username` (no read-only user is rendered) unless you set this to a read-only user you have provisioned there yourself.",
               "title": "readUsername",
               "type": "string"
             },
@@ -1724,7 +1563,7 @@
             },
             "caCert": {
               "default": "",
-              "description": "PEM-encoded CA certificate trusted when connecting to a standalone ClickHouse over TLS (e.g. `httpEndpoint: https://...` behind a private or self-signed CA). Ignored for the bundled ClickHouse, which already uses the shared Kasm certificate. clickhouse_connect (the Python client Kasm's api/manager use) requires an explicit CA file - it does not consult SSL_CERT_FILE/REQUESTS_CA_BUNDLE or this chart's trustedCaBundle mechanism - so setting this renders a dedicated ConfigMap and mounts it into the api/manager containers. Leave empty to use the system trust store, or set `tlsVerify: false` to skip verification instead. Mutually exclusive with `caCertConfigMap`.",
+              "description": "PEM-encoded CA certificate trusted when connecting to a standalone ClickHouse over TLS (e.g. `httpEndpoint: https://...` behind a private or self-signed CA). Ignored for the bundled ClickHouse, which already uses the shared Kasm certificate. clickhouse_connect (the Python client Kasm's api uses) requires an explicit CA file - it does not consult SSL_CERT_FILE/REQUESTS_CA_BUNDLE or this chart's trustedCaBundle mechanism - so setting this renders a dedicated ConfigMap and mounts it into the api container. Leave empty to use the system trust store, or set `tlsVerify: false` to skip verification instead. Mutually exclusive with `caCertConfigMap`.",
               "title": "caCert",
               "type": "string"
             },
@@ -1736,7 +1575,7 @@
             },
             "tlsVerify": {
               "default": true,
-              "description": "Whether the api/manager containers verify a standalone ClickHouse's TLS certificate at all. Set to false to skip verification (not recommended). Ignored when `caCert` or `caCertConfigMap` is set (an explicit CA always wins), and for the bundled ClickHouse, whose certificate is always verified.",
+              "description": "Whether the api container verifies a standalone ClickHouse's TLS certificate at all. Set to false to skip verification (not recommended). Ignored when `caCert` or `caCertConfigMap` is set (an explicit CA always wins), and for the bundled ClickHouse, whose certificate is always verified.",
               "title": "tlsVerify",
               "type": "boolean"
             },

@@ -4,7 +4,7 @@ self-signed CA. Only rendered when observability.clickhouse.standalone is true, 
 caCertConfigMap (an existing ConfigMap) is not — the latter means the operator already manages the
 certificate themselves.
 
-Not zone-scoped: api/manager containers in every zone mount the same CA cert.
+Not zone-scoped: api containers in every zone mount the same CA cert.
 
 This holds only public certificate bytes, never a password or private key, so a ConfigMap (not a
 Secret) is the right primitive here.

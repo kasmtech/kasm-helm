@@ -140,6 +140,10 @@ Guac, RDP Gateway, and RDP HTTPS Gateway are consolidated into a single `connect
 | *(new)* | `directRdpService.perServiceSettings` | New list, one entry per connection-proxy replica, with per-entry `rdpAccessURL` (required), `zone` (required with more than one primary-region zone), `loadBalancerPort`, `annotations`, `labels` (all optional) |
 | `directRdpService.rdpAccessURL` | `directRdpService.rdpAccessURL` (unchanged key, changed semantics) | Kept as a deprecated legacy singular; only honored at 1 replica when `perServiceSettings` is empty |
 
+## Manager removed
+
+The Kasm Manager service is removed. The API absorbs its functions, and nginx keeps the `/manager_api/` agent-facing path but now proxies it to the API service instead. Delete `components.manager` from `values.yaml` — the schema rejects it if present.
+
 ## Direct RDP Service
 
 Set `directRdpService.enabled: true` to expose the Kasm RDP Gateway on port 3389 for native RDP clients, alongside the browser-based paths already served by the connection proxy.

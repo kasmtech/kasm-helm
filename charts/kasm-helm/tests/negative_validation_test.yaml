@@ -341,3 +341,14 @@ tests:
       observability.logFormat: json
     asserts:
       - failedTemplate: {}
+
+  # D005: components.manager was hard-removed (manager-deployment.yaml/manager-service.yaml
+  # deleted, /manager_api/ retargeted to the api service). The schema's
+  # additionalProperties: false on components rejects the old key at the values interface,
+  # same shape as the observability keys above.
+  - it: components.manager is rejected as an unknown key
+    template: templates/connection-proxy-services.yaml
+    set:
+      components.manager.image.tag: "1.2.3"
+    asserts:
+      - failedTemplate: {}

@@ -11,17 +11,13 @@
 # by hand: helm upgrade --install ... -f tests/values/observability-*.yaml -f tests/values/dev31-images.yaml
 #
 # Tags verified present on this host (2026-08-10) against the running DEV-31 Docker install:
-#   kasmweb/{api,manager,kasm-guac,proxy,rdp-gateway,rdp-https-gateway}-private:feature_DEV-31
+#   kasmweb/{api,kasm-guac,proxy,rdp-gateway,rdp-https-gateway}-private:feature_DEV-31
 # `kasmweb/api:develop` and friends do NOT contain the telemetry code (no `kasm_telemetry` module),
-# so running these scenarios on released/develop tags yields zero api/manager logs and traces.
+# so running these scenarios on released/develop tags yields zero api logs and traces.
 components:
   api:
     image:
       repository: kasmweb/api-private
-      tag: "feature_DEV-31"
-  manager:
-    image:
-      repository: kasmweb/manager-private
       tag: "feature_DEV-31"
   proxy:
     image:

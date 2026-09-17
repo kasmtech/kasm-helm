@@ -67,12 +67,6 @@ data:
       keepalive {{ $serviceKeepalive }};
     }
 
-  upstream_manager.conf: |
-    upstream {{ printf $constants.manager.svc }} {
-      server {{ printf "%s:%s" (printf "%s-%s" $constants.manager.svc (include "kasm.zoneName" $zone.name)) ($constants.manager.port | toString) }};
-      keepalive {{ $serviceKeepalive }};
-    }
-
   {{- if $.Values.observability.enabled }}
   otel.conf: |
     # http-context OTel tracing. Exports to the Collector sidecar in this pod over loopback:
@@ -113,7 +107,10 @@ data:
       otel_trace off;
       {{- end }}
       default_type application/json;
-      if (-f /opt/kasm/current/tmp/manager/kasm_manager_draining) {
+      # Zone-health flag: separate from the agent drain below so an operator can
+      # shed agent traffic without pulling this node out of the LB/zone-health pool
+      # mid in-flight-request.
+      if (-f /opt/kasm/current/tmp/api/kasm_api_draining) {
         add_header Retry-After "30" always;
         add_header Cache-Control "no-store" always;
         return 503 '{"status": "disabled"}';
@@ -172,6 +169,10 @@ data:
     }
 
   manager_api.conf: |
+    # The agent-facing surface. The path is preserved from when a separate manager
+    # service served it: deployed agents hold /manager_api/... in their own config
+    # and upgrade independently of the deployment, so it is a contract rather than
+    # an implementation detail. The API mounts its agent routes at the same paths.
     location /manager_api/ {
       {{- if $.Values.observability.enabled }}
       otel_span_name "$request_method /manager_api/";
@@ -179,6 +180,15 @@ data:
       otel_span_attr http.target $request_uri;
       otel_span_attr http.status $status;
       {{- end }}
+
+      # Agent drain, withdrawn before /health: a node being replaced sheds
+      # agent traffic to a peer while its in-flight user requests finish.
+      if (-f /opt/kasm/current/tmp/api/kasm_agent_draining) {
+        add_header Retry-After "30" always;
+        add_header Cache-Control "no-store" always;
+        return 503;
+      }
+
       proxy_http_version	    1.1;
       proxy_set_header	      Host $host;
       proxy_set_header	      Upgrade $http_upgrade;
@@ -186,7 +196,7 @@ data:
       proxy_set_header	      X-Real-IP $remote_addr;
       proxy_set_header	      X-Forwarded-For $proxy_add_x_forwarded_for;
       proxy_set_header	      X-Forwarded-Proto $scheme;
-      proxy_pass	            {{ printf "http://%s" $constants.manager.svc }}/;
+      proxy_pass	            {{ printf "http://%s" $constants.api.svc }};
     }
 
   subscription_api.conf: |

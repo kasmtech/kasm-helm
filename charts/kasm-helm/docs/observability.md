@@ -6,7 +6,7 @@ that powers the reporting views in the Kasm Admin UI. It is enabled by default.
 
 ## 1. What you get
 
-- **Structured logs, traces, and metrics** from every Kasm service (`api`, `manager`, `guac`,
+- **Structured logs, traces, and metrics** from every Kasm service (`api`, `guac`,
   `rdp-gateway`, `rdp-https-gateway`), exported over OTLP.
 - **nginx as the trace root.** The Kasm Proxy's nginx is instrumented (`ngx_otel_module`), so a
   request's trace starts at the proxy and continues into the service that handles it. nginx logs
@@ -23,7 +23,7 @@ that powers the reporting views in the Kasm Admin UI. It is enabled by default.
   browser --OTLP--> +-----------------------------------------------+
                     | Kasm namespace                                |
                     |                                               |
-                    | nginx (proxy) --trace root--> api / manager   |
+                    | nginx (proxy) --trace root--> api             |
                     |    |                              |           |
                     |    | sidecar (logs, conn metrics) OTLP        |
                     |    v                              |           |
@@ -64,7 +64,7 @@ There are two ways to get Kasm's logs, in order of recommendation:
 
 **Important:** `logFormat` was removed from the chart. Every service's stdout is now
 human-readable text; structured logs go out over OTLP instead (see §4 for how nginx and DB logs
-are collected). If you were scraping JSON from `api`/`manager` pod stdout, switch to OTLP
+are collected). If you were scraping JSON from `api` pod stdout, switch to OTLP
 collection. The root values schema does not reject unknown top-level keys, so a leftover
 `logFormat` in your values file is a silent no-op, not a render error — remove it rather than
 relying on a schema error to catch it. Separately, the Proxy's access log is forced to JSON
@@ -91,8 +91,8 @@ Each sidecar is that pod's single egress point to the gateway:
 - The DB sidecar tails PostgreSQL's JSON log file from the data PVC. **It does not collect
   PostgreSQL metrics** — a `postgresql` receiver would need database credentials inside the DB
   pod, and that is deliberately deferred until there is a concrete need for it. Request rate,
-  error, and query-log visibility for the DB come from these logs and from the API/Manager's own
-  traces of their DB calls, not from DB-side metrics.
+  error, and query-log visibility for the DB come from these logs and from the API's own
+  traces of its DB calls, not from DB-side metrics.
 
 **Known early-startup caveat.** PostgreSQL starts writing to its log file as soon as its container
 starts, which can be before the sidecar container in the same pod is ready. The DB sidecar's
@@ -140,7 +140,7 @@ either unset fails the render.
 
 Credentials note: with the bundled ClickHouse, the chart's generated Secret carries two keys —
 `clickhouse-password` (writer, used by the gateway and retention Job) and `clickhouse-ro-password`
-(the read-only `kasm_otel_ro` user api/manager query reports with). If you supply your own chart
+(the read-only `kasm_otel_ro` user the api's query reports with). If you supply your own chart
 Secret (`kasmSecrets.create: false`), it must carry both keys, or point
 `observability.clickhouse.existingSecret` (and `readKey` for the read-only side) at a Secret you
 manage. External ClickHouse deployments default to the single writer credential unless
@@ -160,7 +160,7 @@ restarting ClickHouse, not running a `GRANT`.
 
 If your standalone ClickHouse presents a certificate from a private or self-signed CA, set
 `observability.clickhouse.caCert` (a literal PEM) or `caCertConfigMap` (an existing ConfigMap with
-a `ca.crt` key) so the Kasm API/Manager can verify it when reading reports over HTTPS. Set
+a `ca.crt` key) so the Kasm API can verify it when reading reports over HTTPS. Set
 `tlsVerify: false` instead only if you cannot distribute a CA certificate — this disables
 verification and is not recommended.
 
@@ -235,7 +235,7 @@ trace in one process. Every Kasm service, every sidecar, and any out-of-cluster 
 straight to the gateway's plain `<release>-otel-gateway` ClusterIP Service — there is no forwarder
 tier in front of it any more, and nothing partitions traces by ID before they reach it. The
 gateway authenticates both of its receivers with the same bearer token: Collector sidecars (nginx,
-DB) use OTLP/gRPC on `:4317`, while the Kasm app services (api, manager) use OTLP/HTTP on `:4318`
+DB) use OTLP/gRPC on `:4317`, while the Kasm app services (api) use OTLP/HTTP on `:4318`
 because that is the protocol their SDKs are wired to send, not a choice this chart makes.
 
 **`components.otelGateway.replicas` is pinned to 1.** `deploymentSize` never raises it (the
@@ -361,7 +361,7 @@ token and endpoint (via a Secret — see that file's header comment, not a liter
 `observability.collector.gateway.existingConfigMap` to it. This does not happen automatically;
 until you do this, Splunk forwarding stops on upgrade.
 
-**`logFormat: json`** no longer affects the API or Manager services — see §3 above.
+**`logFormat: json`** no longer affects the API service — see §3 above.
 
 **If you are upgrading from an early feature build of this chart** that had per-zone forwarders,
 a `hostLogs` DaemonSet, `observability.fileLogs`, or a gateway hard-limited to one replica: those

@@ -5,7 +5,6 @@ tests:
   - it: explicit components.api.image.tag wins for api, other components stay on useImageTags
     set:
       components.api.image.tag: "1.19.0-hotfix"
-      components.manager.image.tag: ""
       components.proxy.image.tag: ""
       components.connectionProxy.nginx.image.tag: ""
       components.connectionProxy.guac.image.tag: ""
@@ -20,10 +19,6 @@ tests:
           value: docker.io/kasmweb/api:1.19.0-hotfix
         template: templates/api-deployment.yaml
       # other components: untouched, fall back to useImageTags
-      - equal:
-          path: spec.template.spec.containers[0].image
-          value: docker.io/kasmweb/manager:1.19.0-rolling
-        template: templates/manager-deployment.yaml
       - equal:
           path: spec.template.spec.containers[0].image
           value: docker.io/kasmweb/proxy:1.19.0-rolling
@@ -53,7 +48,6 @@ tests:
   - it: useImageTags applies to every component when per-component tag is empty
     set:
       components.api.image.tag: ""
-      components.manager.image.tag: ""
       components.proxy.image.tag: ""
       components.connectionProxy.nginx.image.tag: ""
       components.connectionProxy.guac.image.tag: ""
@@ -66,10 +60,6 @@ tests:
           path: spec.template.spec.containers[0].image
           value: docker.io/kasmweb/api:1.19.0-rolling
         template: templates/api-deployment.yaml
-      - equal:
-          path: spec.template.spec.containers[0].image
-          value: docker.io/kasmweb/manager:1.19.0-rolling
-        template: templates/manager-deployment.yaml
       - equal:
           path: spec.template.spec.containers[0].image
           value: docker.io/kasmweb/proxy:1.19.0-rolling
@@ -125,7 +115,6 @@ tests:
       components.api.image.tag: "1.19.0-hotfix"
       # Other components left at the values.yaml defaults (which set tag: "")
       # would also fail render, so set them too:
-      components.manager.image.tag: "1.19.0-hotfix"
       components.proxy.image.tag: "1.19.0-hotfix"
       database.image.tag: "1.19.0-hotfix"
       components.connectionProxy.nginx.image.tag: "1.19.0-hotfix"
@@ -142,17 +131,16 @@ tests:
     set:
       useImageTags: ""
       components.api.image.tag: "1.19.0"
-      # manager + others left empty -> helper has no tag to resolve for them
+      # proxy + others left empty -> helper has no tag to resolve for them
     asserts:
       - failedTemplate:
-          errorPattern: 'Image tag not set for "manager".*\.Values\.components\.manager\.image\.tag'
+          errorPattern: 'Image tag not set for "proxy".*\.Values\.components\.proxy\.image\.tag'
 
   # ---------- fail when both empty ----------
   - it: empty useImageTags AND empty per-component tag fails render
     set:
       useImageTags: ""
       components.api.image.tag: ""
-      components.manager.image.tag: ""
       components.proxy.image.tag: ""
       database.image.tag: ""
     asserts:

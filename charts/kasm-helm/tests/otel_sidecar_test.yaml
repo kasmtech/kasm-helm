@@ -3,7 +3,6 @@ suite: otel-sidecar — Collector sidecars in the nginx and DB pods
 templates:
   - templates/proxy-deployment.yaml
   - templates/api-deployment.yaml
-  - templates/manager-deployment.yaml
   - templates/connection-proxy-statefulset.yaml
   - templates/db-statefulset.yaml
   - templates/otel-nginx-sidecar-configmap.yaml
@@ -12,7 +11,7 @@ templates:
 tests:
   # ---------- where sidecars go, and where they deliberately do not ----------
   # A sidecar exists only where telemetry can be read solely from inside the pod: nginx log files
-  # and PostgreSQL log files. API and Manager export OTLP themselves and get none.
+  # and PostgreSQL log files. API exports OTLP itself and gets none.
   - it: proxy pod gets a sidecar by default
     template: templates/proxy-deployment.yaml
     documentIndex: 0
@@ -47,16 +46,12 @@ tests:
           path: spec.template.spec.containers[1].name
           value: otel-sidecar
 
-  - it: api and manager get no sidecar, because they export OTLP directly
+  - it: api gets no sidecar, because it exports OTLP directly
     asserts:
       - lengthEqual:
           path: spec.template.spec.containers
           count: 1
         template: templates/api-deployment.yaml
-      - lengthEqual:
-          path: spec.template.spec.containers
-          count: 1
-        template: templates/manager-deployment.yaml
 
   # ---------- uid: the DB sidecar cannot use the collector image's user ----------
   # PostgreSQL writes its log files 0600 owned by uid 70, so a sidecar running as 10001 would

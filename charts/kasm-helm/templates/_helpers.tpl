@@ -8,7 +8,7 @@
 
   Call with a three-element list: (list <root context> <componentTag> <componentName>)
   where <componentTag> is e.g. .Values.components.api.image.tag and <componentName>
-  is the values-path component name used in the fail message ("api", "manager",
+  is the values-path component name used in the fail message ("api",
   "proxy", "connectionProxy.nginx", "connectionProxy.guac", "connectionProxy.rdpGateway",
   "connectionProxy.rdpHttpsGateway", or "database").
 */}}
@@ -67,12 +67,6 @@ api:
   portName: api-pt
   image: {{ printf "%s/%s:%s" .Values.components.api.image.registry .Values.components.api.image.repository (include "kasm.imageTag" (list . .Values.components.api.image.tag "api")) }}
   port: 8080
-manager:
-  component: manager
-  svc: {{ printf "%s-manager" .Release.Name }}
-  portName: manager-pt
-  image: {{ printf "%s/%s:%s" .Values.components.manager.image.registry .Values.components.manager.image.repository (include "kasm.imageTag" (list . .Values.components.manager.image.tag "manager")) }}
-  port: 8181
 proxy:
   component: proxy
   svc: {{ printf "%s-proxy" .Release.Name }}
@@ -760,11 +754,6 @@ Where:
     "medium" 2
     "large" 3
   )
-  "manager" (dict
-    "small" 1
-    "medium" 2
-    "large" 3
-  )
   "connection-proxy" (dict
     "small" 1
     "medium" 2
@@ -829,20 +818,6 @@ Where:
       )
     )
     "api" (dict
-      "small" (dict 
-        "requests" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "500m" "memory" "1Gi" "ephemeral-storage" "2Gi")
-      )
-      "medium" (dict 
-        "requests" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "500m" "memory" "1Gi" "ephemeral-storage" "2Gi")
-      )
-      "large" (dict 
-        "requests" (dict "cpu" "500m" "memory" "1Gi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "500m" "memory" "2Gi" "ephemeral-storage" "2Gi")
-      )
-    )
-    "manager" (dict
       "small" (dict 
         "requests" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "50Mi")
         "limits" (dict "cpu" "500m" "memory" "1Gi" "ephemeral-storage" "2Gi")
@@ -1190,7 +1165,7 @@ Dedup rules:
     sidecar     = (optional bool) set true for containers in a pod that runs a Collector sidecar
                   (Connection Proxy). Those export to the sidecar over loopback and the sidecar is the
                   pod's single egress point; everything else exports straight to the gateway Service.
-    python      = (optional bool) set true for the Python services (api, manager) to also emit
+    python      = (optional bool) set true for the Python services (api) to also emit
                   OTEL_PYTHON_EXCLUDED_URLS.
   Emits a YAML list fragment suitable for splicing into a container's `env:`.
 */}}
@@ -1256,7 +1231,7 @@ Dedup rules:
 {{- end }}
 
 {{/*
-  ClickHouse HTTP(S) endpoint Kasm (api/manager) reads reports from.
+  ClickHouse HTTP(S) endpoint Kasm (api) reads reports from.
   Usage:
     {{ include "kasm.clickhouseHttpEndpoint" (dict "context" $) }}
 */}}
@@ -1293,7 +1268,7 @@ Dedup rules:
 {{- end -}}
 
 {{/*
-  ClickHouse reporting read-path env vars for the Kasm api/manager containers.
+  ClickHouse reporting read-path env vars for the Kasm api container.
   Emits nothing when observability is disabled, or when there is no store to read
   (clickhouse.enabled is false and standalone is false).
   Usage:
@@ -1308,7 +1283,7 @@ Dedup rules:
 {{- $endpoint := include "kasm.clickhouseHttpEndpoint" (dict "context" $ctx) -}}
 {{- $secretName := default $constants.secrets.name $ch.existingSecret.name -}}
 {{- $secretKey := default "clickhouse-password" $ch.existingSecret.key -}}
-{{- /* api/manager read as the RO user when one is configured. An unset readUsername defaults to
+{{- /* api reads as the RO user when one is configured. An unset readUsername defaults to
      "kasm_otel_ro" when the chart manages ClickHouse (enabled && !standalone) — a stock install
      gets the read-only split without extra values. A standalone external ClickHouse has no
      RO user provisioned unless readUsername is set explicitly, so an unset value there falls

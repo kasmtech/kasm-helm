@@ -295,7 +295,7 @@ data:
       proxy_pass http://kasm_guac/guac_login;
     }
 
-    # Wildcard for control-plane calls the manager makes to the guac app under
+    # Wildcard for control-plane calls the API makes to the guac app under
     # the /guac/ prefix (e.g. /guac/__healthcheck, /guac/vm_disconnect, and the
     # support-bundle collect endpoint /guac/api/v1/support_bundle_request). The
     # trailing slash on proxy_pass strips the /guac/ prefix so the app sees the

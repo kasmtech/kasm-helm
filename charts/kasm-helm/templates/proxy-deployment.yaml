@@ -39,7 +39,6 @@ spec:
       initContainers:
         {{- include "kasm.trustedCaInit" (list $ "proxy") | nindent 8 }}
         {{- include "kasm.initContainer" (dict "context" $ "serviceName" (printf "%s-%s" $constants.api.svc (include "kasm.zoneName" $zone.name)) "servicePort" $constants.api.port "path" "/api/__healthcheck" "schema" "http" "image" $constants.api.image "component" "api") | nindent 8 }}
-        {{- include "kasm.initContainer" (dict "context" $ "serviceName" (printf "%s-%s" $constants.manager.svc (include "kasm.zoneName" $zone.name)) "servicePort" $constants.manager.port "path" "/__healthcheck" "schema" "http" "image" $constants.api.image "component" "manager") | nindent 8 }}
         {{- with $merged.extraInitContainers }}
           {{- toYaml . | nindent 8 }}
         {{- end }}

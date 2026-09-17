@@ -6,7 +6,6 @@ templates:
   - templates/clickhouse-configmap.yaml
   - templates/clickhouse-retention-job.yaml
   - templates/api-deployment.yaml
-  - templates/manager-deployment.yaml
   - templates/otel-gateway-configmap.yaml
 
 tests:
@@ -29,14 +28,6 @@ tests:
 
   - it: api KASM_CLICKHOUSE_ENDPOINT equals the standalone httpEndpoint
     template: templates/api-deployment.yaml
-    values:
-      - ../../../tests/values/observability-external-ch.yaml
-    asserts:
-      - exists:
-          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_ENDPOINT" && @.value=="https://ch.example.test:8443")]
-
-  - it: manager KASM_CLICKHOUSE_ENDPOINT equals the standalone httpEndpoint
-    template: templates/manager-deployment.yaml
     values:
       - ../../../tests/values/observability-external-ch.yaml
     asserts:

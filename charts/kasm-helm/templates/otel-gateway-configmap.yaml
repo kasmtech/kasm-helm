@@ -54,7 +54,7 @@ data:
       # is the gateway's only ingest point.
       #
       # Two protocols, same auth: the Collector sidecars (nginx/db) speak gRPC natively via the
-      # Collector's own otlp exporter. The Kasm app SDKs (api, manager) are wired to the OTLP HTTP
+      # Collector's own otlp exporter. The Kasm app SDKs (api) are wired to the OTLP HTTP
       # exporter — that choice lives in kasm_backend, not this chart — so the gateway must also
       # accept HTTP on a separate port for those senders. See kasm.otelEnv.
       otlp/remote:

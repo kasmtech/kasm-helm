@@ -7,7 +7,6 @@ templates:
   - templates/db-upgrade-backup-job.yaml
   - templates/db-upgrade-job.yaml
   - templates/connection-proxy-statefulset.yaml
-  - templates/manager-deployment.yaml
   - templates/proxy-deployment.yaml
 
 tests:
@@ -16,7 +15,6 @@ tests:
       - templates/api-deployment.yaml
       - templates/db-init-job.yaml
       - templates/db-statefulset.yaml
-      - templates/manager-deployment.yaml
       - templates/proxy-deployment.yaml
     set:
       ingress:
@@ -54,7 +52,6 @@ tests:
     templates:
       - templates/api-deployment.yaml
       - templates/db-init-job.yaml
-      - templates/manager-deployment.yaml
       - templates/proxy-deployment.yaml
     set:
       ingress:

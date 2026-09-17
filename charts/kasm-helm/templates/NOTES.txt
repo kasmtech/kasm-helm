@@ -35,6 +35,9 @@ kubectl get secret --namespace {{ .Release.Namespace }} {{ .Release.Name }}-secr
 Retrieve Kasm Service Registration Token:
 kubectl get secret --namespace {{ .Release.Namespace }} {{ .Release.Name }}-secrets -o jsonpath="{.data.service-token}" | base64 -d; echo
 
+The Kasm Manager service is removed; the API now handles its functions. Delete
+components.manager from your values if you still set it -- the schema rejects it.
+
 {{- $obs := .Values.observability }}
 {{- $useClickhouse := or $obs.clickhouse.enabled $obs.clickhouse.standalone }}
 {{- if and $obs.enabled (or $obs.collector.gateway.existingConfigMap $useClickhouse (ne $obs.collector.gateway.forward.endpoint "")) }}

@@ -2,7 +2,6 @@ suite: kasm.otelEnv — per-workload OTel/logging env vars
 
 templates:
   - templates/api-deployment.yaml
-  - templates/manager-deployment.yaml
   - templates/connection-proxy-statefulset.yaml
   - templates/db-init-job.yaml
   - templates/otel-gateway-configmap.yaml
@@ -150,12 +149,6 @@ tests:
       - exists:
           path: spec.template.spec.containers[0].env[?(@.name=="OTEL_SERVICE_NAME" && @.value=="kasm-api")]
 
-  - it: manager container gets OTEL_SERVICE_NAME=kasm-manager
-    template: templates/manager-deployment.yaml
-    asserts:
-      - exists:
-          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_SERVICE_NAME" && @.value=="kasm-manager")]
-
   - it: guac application container gets OTEL_SERVICE_NAME=kasm-guac
     template: templates/connection-proxy-statefulset.yaml
     documentIndex: 0
@@ -237,15 +230,9 @@ tests:
       - exists:
           path: spec.template.spec.containers[3].env[?(@.name=="OTEL_EXPORTER_OTLP_ENDPOINT" && @.value=="http://localhost:4318")]
 
-  # ---------- OTEL_PYTHON_EXCLUDED_URLS only on api+manager ----------
+  # ---------- OTEL_PYTHON_EXCLUDED_URLS only on api ----------
   - it: OTEL_PYTHON_EXCLUDED_URLS present on api
     template: templates/api-deployment.yaml
-    asserts:
-      - exists:
-          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_PYTHON_EXCLUDED_URLS")]
-
-  - it: OTEL_PYTHON_EXCLUDED_URLS present on manager
-    template: templates/manager-deployment.yaml
     asserts:
       - exists:
           path: spec.template.spec.containers[0].env[?(@.name=="OTEL_PYTHON_EXCLUDED_URLS")]
@@ -293,14 +280,6 @@ tests:
       - exists:
           path: spec.template.spec.containers[0].env[?(@.name=="OTEL_SDK_DISABLED" && @.value=="true")]
 
-  - it: KASM_LOG_FILE_ENABLED=false is still emitted when observability.enabled=false (manager)
-    template: templates/manager-deployment.yaml
-    set:
-      observability.enabled: false
-    asserts:
-      - exists:
-          path: spec.template.spec.containers[0].env[?(@.name=="KASM_LOG_FILE_ENABLED" && @.value=="false")]
-
   - it: KASM_LOG_FILE_ENABLED=false is still emitted when observability.enabled=false (guac)
     template: templates/connection-proxy-statefulset.yaml
     documentIndex: 0
@@ -338,15 +317,9 @@ tests:
       - notExists:
           path: spec.template.spec.containers[1].env[?(@.name=="KASM_LOG_FILE_PATH")]
 
-  # ---------- KASM_CLICKHOUSE_* on api+manager only ----------
+  # ---------- KASM_CLICKHOUSE_* on api only ----------
   - it: KASM_CLICKHOUSE_ENDPOINT present on api
     template: templates/api-deployment.yaml
-    asserts:
-      - exists:
-          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_ENDPOINT")]
-
-  - it: KASM_CLICKHOUSE_ENDPOINT present on manager
-    template: templates/manager-deployment.yaml
     asserts:
       - exists:
           path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_ENDPOINT")]
@@ -377,12 +350,6 @@ tests:
           path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_PASSWORD")].valueFrom.secretKeyRef.key
           value: clickhouse-ro-password
 
-  - it: manager KASM_CLICKHOUSE_USER defaults to kasm_otel_ro when the chart manages ClickHouse (D4)
-    template: templates/manager-deployment.yaml
-    asserts:
-      - exists:
-          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_USER" && @.value=="kasm_otel_ro")]
-
   - it: api KASM_CLICKHOUSE_USER falls back to the writer username on a standalone external ClickHouse
     template: templates/api-deployment.yaml
     set:
@@ -406,14 +373,6 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_PASSWORD")].valueFrom.secretKeyRef.key
           value: clickhouse-ro-password
-
-  - it: manager switches to a custom RO user when readUsername is set
-    template: templates/manager-deployment.yaml
-    set:
-      observability.clickhouse.readUsername: kasm_otel_custom_ro
-    asserts:
-      - exists:
-          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_USER" && @.value=="kasm_otel_custom_ro")]
 
   # ---------- KASM_CLICKHOUSE_PASSWORD key wiring: existingSecret + readUsername + readKey ----------
   - it: api uses the writer key for RO password when existingSecret is set and readKey is unset
@@ -441,33 +400,6 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_PASSWORD")].valueFrom.secretKeyRef.key
           value: ch-ro-pass
-
-  - it: manager uses the writer key for RO password when existingSecret is set and readKey is unset
-    template: templates/manager-deployment.yaml
-    set:
-      observability.clickhouse.readUsername: kasm_otel_ro
-      observability.clickhouse.existingSecret.name: my-ch-secret
-      observability.clickhouse.existingSecret.key: ch-pass
-    asserts:
-      - equal:
-          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_PASSWORD")].valueFrom.secretKeyRef.name
-          value: my-ch-secret
-      - equal:
-          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_PASSWORD")].valueFrom.secretKeyRef.key
-          value: ch-pass
-
-  - it: manager uses readKey for RO password when existingSecret and readKey are both set
-    template: templates/manager-deployment.yaml
-    set:
-      observability.clickhouse.readUsername: kasm_otel_ro
-      observability.clickhouse.existingSecret.name: my-ch-secret
-      observability.clickhouse.existingSecret.key: ch-pass
-      observability.clickhouse.existingSecret.readKey: ch-ro-pass
-    asserts:
-      - equal:
-          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_PASSWORD")].valueFrom.secretKeyRef.key
-          value: ch-ro-pass
-
 
   # ---------- KASM_LOG_CONSOLE_COLOR ----------
   - it: KASM_LOG_CONSOLE_COLOR=false on api
