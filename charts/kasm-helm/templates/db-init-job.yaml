@@ -2,6 +2,7 @@
 Initialize the DB
 */}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $merged := fromYaml (include "kasm.mergedValues" (dict "root" . "componentName" "database")) -}}
 {{- if .Values.dbManagement.initialize }}
 {{- $passwordSecretName := $constants.secrets.name }}
 {{- $preseedSecretName := printf "%s-db-preseed" .Release.Name }}
@@ -203,6 +204,9 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.database.postgresMasterUser.secret.name }}
                   key: {{ .Values.database.postgresMasterUser.secret.key }}
+            {{- end }}
+            {{- with $merged.extraEnv }}
+              {{- toYaml . | nindent 12 }}
             {{- end }}
           resources: {{- include "resources.preset" (dict "node" "api" "size" "small") | nindent 12 }}
           command:

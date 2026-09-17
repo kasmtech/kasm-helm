@@ -1,0 +1,347 @@
+suite: extraEnv (global + per-component env vars)
+# kasm-helm-2cm: extraEnv follows the same global + components.<name>.extraEnv merge shape as
+# the existing extraVolumes flow (kasm.mergedValues in _helpers.tpl), keyed by env var .name
+# with the component-scoped entry winning on collision. Appended to the END of each main
+# container's existing env block, so a user-supplied name that collides with a chart-set var
+# overrides it (Kubernetes uses the last-declared entry with a given name).
+
+templates:
+  - templates/api-deployment.yaml
+  - templates/proxy-deployment.yaml
+  - templates/connection-proxy-statefulset.yaml
+  - templates/db-statefulset.yaml
+  - templates/clickhouse-configmap.yaml
+  - templates/clickhouse-statefulset.yaml
+  - templates/otel-gateway-configmap.yaml
+  - templates/otel-gateway-deployment.yaml
+  - templates/clickhouse-retention-job.yaml
+  - templates/db-backup-cron.yaml
+  - templates/db-init-job.yaml
+  - templates/db-upgrade-job.yaml
+  - templates/db-upgrade-backup-job.yaml
+
+tests:
+  - it: global extraEnv lands on the api container
+    template: templates/api-deployment.yaml
+    set:
+      extraEnv:
+        - name: GLOBAL_ONLY
+          value: "global"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="GLOBAL_ONLY")].value
+          value: "global"
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="POSTGRES_HOST")]
+
+  - it: component-only extraEnv lands on the api container
+    template: templates/api-deployment.yaml
+    set:
+      components:
+        api:
+          extraEnv:
+            - name: API_ONLY
+              value: "api"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="API_ONLY")].value
+          value: "api"
+
+  - it: component-scoped extraEnv wins over global on a name collision
+    template: templates/api-deployment.yaml
+    set:
+      extraEnv:
+        - name: SHARED_VAR
+          value: "global-value"
+      components:
+        api:
+          extraEnv:
+            - name: SHARED_VAR
+              value: "api-value"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="SHARED_VAR")].value
+          value: "api-value"
+      - notEqual:
+          path: spec.template.spec.containers[0].env[?(@.name=="SHARED_VAR")].value
+          value: "global-value"
+
+  - it: extraEnv supports valueFrom.secretKeyRef
+    template: templates/api-deployment.yaml
+    set:
+      extraEnv:
+        - name: FROM_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: my-secret
+              key: my-key
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="FROM_SECRET")].valueFrom.secretKeyRef.name
+          value: my-secret
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="FROM_SECRET")].valueFrom.secretKeyRef.key
+          value: my-key
+
+  - it: extraEnv values are rendered through tpl
+    template: templates/api-deployment.yaml
+    set:
+      extraEnv:
+        - name: RELEASE_TPL
+          value: "{{ .Release.Name }}-suffix"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="RELEASE_TPL")].value
+          value: "RELEASE-NAME-suffix"
+
+  - it: extraEnv is additive and does not remove chart-set env vars
+    template: templates/api-deployment.yaml
+    set:
+      extraEnv:
+        - name: TAIL_VAR
+          value: "tail"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="TAIL_VAR")].value
+          value: "tail"
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="POSTGRES_HOST")]
+
+  - it: proxy container gets an extraEnv-driven env block (none exists by default)
+    template: templates/proxy-deployment.yaml
+    set:
+      components:
+        proxy:
+          extraEnv:
+            - name: PROXY_ONLY
+              value: "proxy"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="PROXY_ONLY")].value
+          value: "proxy"
+
+  - it: proxy container renders no env block when extraEnv is empty
+    template: templates/proxy-deployment.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].env
+
+  - it: connectionProxy extraEnv reaches guac, rdp-gateway, and rdp-https-gateway, not the nginx container
+    template: templates/connection-proxy-statefulset.yaml
+    values:
+      - ../../../tests/values/components-all.yaml
+    set:
+      components:
+        connectionProxy:
+          extraEnv:
+            - name: CP_ONLY
+              value: "cp"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].env[?(@.name=="CP_ONLY")].value
+          value: "cp"
+      - equal:
+          path: spec.template.spec.containers[2].env[?(@.name=="CP_ONLY")].value
+          value: "cp"
+      - equal:
+          path: spec.template.spec.containers[3].env[?(@.name=="CP_ONLY")].value
+          value: "cp"
+      - notExists:
+          path: spec.template.spec.containers[0].env
+
+  - it: database extraEnv reaches the db statefulset container
+    template: templates/db-statefulset.yaml
+    set:
+      database:
+        extraEnv:
+          - name: DB_ONLY
+            value: "db"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="DB_ONLY")].value
+          value: "db"
+
+  - it: clickhouse extraEnv reaches the clickhouse statefulset container
+    template: templates/clickhouse-statefulset.yaml
+    set:
+      components:
+        clickhouse:
+          extraEnv:
+            - name: CH_ONLY
+              value: "ch"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="CH_ONLY")].value
+          value: "ch"
+
+  - it: otelGateway extraEnv reaches the gateway collector container
+    template: templates/otel-gateway-deployment.yaml
+    set:
+      components:
+        otelGateway:
+          extraEnv:
+            - name: OTEL_ONLY
+              value: "otel"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_ONLY")].value
+          value: "otel"
+
+  - it: clickhouse extraEnv reaches the clickhouse-retention job container
+    template: templates/clickhouse-retention-job.yaml
+    set:
+      extraEnv:
+        - name: RETENTION_GLOBAL
+          value: "global"
+      components:
+        clickhouse:
+          extraEnv:
+            - name: RETENTION_COMPONENT
+              value: "component"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="RETENTION_GLOBAL")].value
+          value: "global"
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="RETENTION_COMPONENT")].value
+          value: "component"
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="CLICKHOUSE_HOST")]
+
+  - it: database extraEnv reaches the db-backup-cron job container
+    template: templates/db-backup-cron.yaml
+    set:
+      dbManagement:
+        backupCron:
+          enabled: true
+          schedule: "0 2 * * *"
+      database:
+        extraEnv:
+          - name: CRON_ONLY
+            value: "cron"
+    asserts:
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env[?(@.name=="CRON_ONLY")].value
+          value: "cron"
+
+  - it: database extraEnv reaches the db-init job container
+    template: templates/db-init-job.yaml
+    set:
+      dbManagement:
+        initialize: true
+        upgrade:
+          enable: false
+      database:
+        extraEnv:
+          - name: INIT_ONLY
+            value: "init"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="INIT_ONLY")].value
+          value: "init"
+
+  - it: database extraEnv reaches the db-upgrade job container
+    template: templates/db-upgrade-job.yaml
+    set:
+      dbManagement:
+        initialize: false
+        upgrade:
+          enable: true
+      database:
+        extraEnv:
+          - name: UPGRADE_ONLY
+            value: "upgrade"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="UPGRADE_ONLY")].value
+          value: "upgrade"
+
+  - it: database extraEnv reaches the pre-upgrade db backup job container
+    template: templates/db-upgrade-backup-job.yaml
+    set:
+      dbManagement:
+        initialize: false
+        upgrade:
+          enable: true
+      database:
+        extraEnv:
+          - name: PRE_UPGRADE_BACKUP_ONLY
+            value: "backup"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="PRE_UPGRADE_BACKUP_ONLY")].value
+          value: "backup"
+        documentIndex: 1
+
+  - it: extraEnv entry missing name fails schema validation
+    template: templates/api-deployment.yaml
+    set:
+      extraEnv:
+        - value: "no-name"
+    asserts:
+      - failedTemplate:
+          errorMessage: "values don't meet the specifications of the schema(s) in the following chart(s):\nkasm-helm:\n- at '/extraEnv/0': missing property 'name'\n"
+
+  - it: a user extraEnv entry that collides with a chart-set var is appended after it (k8s last-wins)
+    template: templates/api-deployment.yaml
+    set:
+      extraEnv:
+        - name: POSTGRES_HOST
+          value: "overridden-host"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[-1]
+          value:
+            name: POSTGRES_HOST
+            value: "overridden-host"
+
+  - it: extraEnv output order is deterministic and preserves values order (global then component)
+    template: templates/api-deployment.yaml
+    set:
+      extraEnv:
+        - name: ORDER_A
+          value: "a"
+        - name: ORDER_B
+          value: "b"
+        - name: ORDER_C
+          value: "c"
+      components:
+        api:
+          extraEnv:
+            - name: ORDER_D
+              value: "d"
+            - name: ORDER_E
+              value: "e"
+            - name: ORDER_F
+              value: "f"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[-6]
+          value:
+            name: ORDER_A
+            value: "a"
+      - equal:
+          path: spec.template.spec.containers[0].env[-5]
+          value:
+            name: ORDER_B
+            value: "b"
+      - equal:
+          path: spec.template.spec.containers[0].env[-4]
+          value:
+            name: ORDER_C
+            value: "c"
+      - equal:
+          path: spec.template.spec.containers[0].env[-3]
+          value:
+            name: ORDER_D
+            value: "d"
+      - equal:
+          path: spec.template.spec.containers[0].env[-2]
+          value:
+            name: ORDER_E
+            value: "e"
+      - equal:
+          path: spec.template.spec.containers[0].env[-1]
+          value:
+            name: ORDER_F
+            value: "f"

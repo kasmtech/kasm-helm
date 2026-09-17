@@ -94,6 +94,9 @@ spec:
                 {{- end }}
             {{- include "kasm.otelEnv" (dict "context" $ "serviceName" "kasm-api" "zone" $zone.name "python" true) | nindent 12 }}
             {{- include "kasm.clickhouseEnv" (dict "context" $) | nindent 12 }}
+            {{- with $merged.extraEnv }}
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
           ports:
             - name: {{ $constants.api.portName }}
               containerPort: {{ $constants.api.port }}

@@ -6,6 +6,7 @@ Backup the DB
 {{- end -}}
 {{- $kasmSecrets := (default (printf "%s-secrets" .Release.Name) .Values.dbManagement.upgrade.oldDbSecretsName) }}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $merged := fromYaml (include "kasm.mergedValues" (dict "root" . "componentName" "database")) -}}
 {{- $dbHost := "kasm-db" -}}
 {{- if and .Values.database.standalone .Values.database.hostname -}}
   {{- $dbHost = .Values.database.hostname -}}
@@ -87,6 +88,9 @@ spec:
                   name: {{ $kasmSecrets }}
                   key: "db-password"
                 {{- end }}
+            {{- with $merged.extraEnv }}
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- include "kasm.securityContext" (list . 1000 "container") | nindent 10 }}
           resources: {{- include "resources.preset" (dict "node" "api" "size" "small") | nindent 12 }}
           command:

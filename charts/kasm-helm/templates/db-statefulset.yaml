@@ -71,6 +71,9 @@ spec:
                   name: {{ $constants.secrets.name }}
                   key: "db-password"
                 {{- end }}
+            {{- with $merged.extraEnv }}
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
           ports:
             - name: {{ $constants.db.portName }}
               containerPort: {{ $constants.db.port }}

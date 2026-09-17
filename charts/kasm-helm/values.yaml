@@ -417,6 +417,21 @@ database:
   #    image: busybox
   #    command: [/bin/sh, -c, 'echo "Hello world"']
   extraInitContainers: []
+  # database.extraEnv -- A list of raw Kubernetes EnvVar objects (name/value or name/valueFrom) appended to the
+  #  end of the Kasm Database container's env list (and the db-backup/db-init/db-upgrade Job containers, which
+  #  share this same field). Values are rendered through `tpl`, so chart values/functions (e.g. {{ .Release.Name }})
+  #  are available. Kubernetes uses the last-declared entry for a given name, and extraEnv is always appended last,
+  #  so a name here that collides with a chart-set var overrides it.
+  # Example:
+  #   extraEnv:
+  #     - name: MY_CUSTOM_VAR
+  #       value: "hello"
+  #     - name: MY_SECRET_VAR
+  #       valueFrom:
+  #         secretKeyRef:
+  #           name: my-secret
+  #           key: my-key
+  extraEnv: []
 
 # Configure the Kasm Database management functions
 #
@@ -569,6 +584,21 @@ components:
     #    image: busybox
     #    command: [/bin/sh, -c, 'echo "Hello world"']
     extraInitContainers: []
+    # components.proxy.extraEnv -- A list of raw Kubernetes EnvVar objects (name/value or name/valueFrom)
+    #  appended to the end of the Kasm Proxy container's env list. Values are rendered through `tpl`, so
+    #  chart values/functions (e.g. {{ .Release.Name }}) are available. Kubernetes uses the last-declared
+    #  entry for a given name, and extraEnv is always appended last, so a name here that collides with a
+    #  chart-set var overrides it.
+    # Example:
+    #   extraEnv:
+    #     - name: MY_CUSTOM_VAR
+    #       value: "hello"
+    #     - name: MY_SECRET_VAR
+    #       valueFrom:
+    #         secretKeyRef:
+    #           name: my-secret
+    #           key: my-key
+    extraEnv: []
 
   # Configuration settings for the Kasm API service
   #
@@ -635,6 +665,21 @@ components:
     #    image: busybox
     #    command: [/bin/sh, -c, 'echo "Hello world"']
     extraInitContainers: []
+    # components.api.extraEnv -- A list of raw Kubernetes EnvVar objects (name/value or name/valueFrom)
+    #  appended to the end of the Kasm API container's env list. Values are rendered through `tpl`, so
+    #  chart values/functions (e.g. {{ .Release.Name }}) are available. Kubernetes uses the last-declared
+    #  entry for a given name, and extraEnv is always appended last, so a name here that collides with a
+    #  chart-set var overrides it.
+    # Example:
+    #   extraEnv:
+    #     - name: MY_CUSTOM_VAR
+    #       value: "hello"
+    #     - name: MY_SECRET_VAR
+    #       valueFrom:
+    #         secretKeyRef:
+    #           name: my-secret
+    #           key: my-key
+    extraEnv: []
     # components.api.threadPool -- Number of CherryPy worker threads for the API server.
     #  Increase under high concurrency. Default is 20.
     threadPool: 20
@@ -836,6 +881,21 @@ components:
     #    image: busybox
     #    command: [/bin/sh, -c, 'echo "Hello world"']
     extraInitContainers: []
+    # components.connectionProxy.extraEnv -- A list of raw Kubernetes EnvVar objects (name/value or name/valueFrom)
+    #  appended to the end of the Kasm Guac, RDP Gateway, and RDP HTTPS Gateway containers' env lists (not the
+    #  nginx container, which has no env of its own). Values are rendered through `tpl`, so chart values/functions
+    #  (e.g. {{ .Release.Name }}) are available. Kubernetes uses the last-declared entry for a given name, and
+    #  extraEnv is always appended last, so a name here that collides with a chart-set var overrides it.
+    # Example:
+    #   extraEnv:
+    #     - name: MY_CUSTOM_VAR
+    #       value: "hello"
+    #     - name: MY_SECRET_VAR
+    #       valueFrom:
+    #         secretKeyRef:
+    #           name: my-secret
+    #           key: my-key
+    extraEnv: []
 
   # Configuration settings for the OpenTelemetry gateway Collector. This is the only OTel Collector
   # tier in the chart: every Kasm service, every Collector sidecar, and any out-of-cluster senders
@@ -878,6 +938,12 @@ components:
     extraContainers: []
     # components.otelGateway.extraInitContainers -- Additional init containers to run in the pod
     extraInitContainers: []
+    # components.otelGateway.extraEnv -- A list of raw Kubernetes EnvVar objects (name/value or name/valueFrom)
+    #  appended to the end of the gateway Collector container's env list. Values are rendered through `tpl`, so
+    #  chart values/functions (e.g. {{ .Release.Name }}) are available. Kubernetes uses the last-declared entry
+    #  for a given name, and extraEnv is always appended last, so a name here that collides with a chart-set var
+    #  overrides it.
+    extraEnv: []
 
   # Configuration settings for the OpenTelemetry Collector sidecar. A sidecar runs in every pod that
   # produces telemetry only readable from inside the pod: the Kasm Proxy and Connection Proxy (nginx
@@ -953,6 +1019,12 @@ components:
     extraContainers: []
     # components.clickhouse.extraInitContainers -- Additional init containers to run in the pod
     extraInitContainers: []
+    # components.clickhouse.extraEnv -- A list of raw Kubernetes EnvVar objects (name/value or name/valueFrom)
+    #  appended to the end of the ClickHouse container's env list. Values are rendered through `tpl`, so chart
+    #  values/functions (e.g. {{ .Release.Name }}) are available. Kubernetes uses the last-declared entry for a
+    #  given name, and extraEnv is always appended last, so a name here that collides with a chart-set var
+    #  overrides it.
+    extraEnv: []
 
 # Configure the Kasm observability stack (OpenTelemetry Collector + ClickHouse). Kasm services emit
 # logs, traces, and metrics over OTLP to a Collector, which stores them in ClickHouse where they back
@@ -1281,6 +1353,27 @@ extraContainers: []
 #    image: busybox
 #    command: [/bin/sh, -c, 'echo "Hello world"']
 extraInitContainers: []
+
+# extraEnv -- A list of raw Kubernetes EnvVar objects (name/value or name/valueFrom) appended to the end of
+#  every main container's env list across every component (api, proxy, connectionProxy's guac/rdp-gateway/
+#  rdp-https-gateway, db, clickhouse, otel gateway, and the db backup/init/upgrade Jobs). Values are rendered
+#  through `tpl`, so chart values/functions (e.g. {{ .Release.Name }}) are available; a literal `{{` in a
+#  value must be escaped, e.g. `{{ "{{" }}` or a backtick-quoted string, or the render fails. Merges with the
+#  matching components.<name>.extraEnv (or database.extraEnv), keyed by name; the component-scoped entry wins
+#  on a name collision. Kubernetes uses the last-declared entry for a given name, and extraEnv is always
+#  appended last, so a name here that collides with a chart-set var overrides it. Output order is
+#  deterministic: global entries keep their values-order position unless overridden by a component entry of
+#  the same name, in which case that entry is emitted at its component-list position instead.
+# Example:
+#   extraEnv:
+#     - name: MY_CUSTOM_VAR
+#       value: "hello"
+#     - name: MY_SECRET_VAR
+#       valueFrom:
+#         secretKeyRef:
+#           name: my-secret
+#           key: my-key
+extraEnv: []
 
 # extraObjects -- Deploy additional Kubernetes manifests.
 # This field is expected to be either a multi-line string, a list of strings, or a list of objects.

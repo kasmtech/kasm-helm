@@ -152,6 +152,9 @@ spec:
             - name: KASM_EPHEMERAL
               value: "true"
             {{- include "kasm.otelEnv" (dict "context" $ "serviceName" "kasm-guac" "zone" $zone.name "sidecar" true) | nindent 12 }}
+            {{- with $merged.extraEnv }}
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
           ports:
             - name: {{ $constants.connectionProxy.guac.portName }}
               containerPort: {{ $constants.connectionProxy.guac.port }}
@@ -258,6 +261,9 @@ spec:
             - name: FORWARD_LOGS
               value: "true"
             {{- include "kasm.otelEnv" (dict "context" $ "serviceName" "kasm-rdp-gateway" "zone" $zone.name "sidecar" true) | nindent 12 }}
+            {{- with $merged.extraEnv }}
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
           ports:
             - name: {{ $constants.connectionProxy.rdpGateway.portName }}
               containerPort: {{ $constants.connectionProxy.rdpGateway.port }}
@@ -356,6 +362,9 @@ spec:
             - name: FORWARD_LOGS
               value: "true"
             {{- include "kasm.otelEnv" (dict "context" $ "serviceName" "kasm-rdp-https-gateway" "zone" $zone.name "sidecar" true) | nindent 12 }}
+            {{- with $merged.extraEnv }}
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- if $.Values.applyHealthChecks }}
           livenessProbe:
             {{- include "health.probe" (dict "root" $ "component" "connectionProxy" "timingScope" "rdpHttpsGateway" "probeType" "livenessProbe" "type" "tcp" "port" $constants.connectionProxy.rdpHttpsGateway.port) | nindent 12 }}

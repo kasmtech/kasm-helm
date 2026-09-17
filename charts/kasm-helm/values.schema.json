@@ -2,6 +2,32 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "additionalProperties": true,
   "type": "object",
+  "definitions": {
+    "envVar": {
+      "title": "envVar",
+      "description": "A raw Kubernetes EnvVar object: name/value, or name/valueFrom.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "title": "name",
+          "type": "string"
+        },
+        "value": {
+          "title": "value",
+          "type": "string"
+        },
+        "valueFrom": {
+          "title": "valueFrom",
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    }
+  },
   "properties": {
     "affinity": {
       "additionalProperties": true,
@@ -250,6 +276,14 @@
               "title": "extraContainers",
               "type": "array"
             },
+            "extraEnv": {
+              "description": "A list of raw Kubernetes EnvVar objects (name/value or name/valueFrom) appended to the end of this component's main container env list. Rendered through `tpl`. The component-scoped entry wins over a top-level extraEnv entry with the same name.",
+              "title": "extraEnv",
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/envVar"
+              }
+            },
             "extraInitContainers": {
               "description": "Additional sidecar containers to run in the pod\nExample\n - name: init-example\n   image: busybox\n   command: [/bin/sh, -c, 'echo \"Hello world\"']",
               "title": "extraInitContainers",
@@ -392,6 +426,7 @@
             "extraVolumes",
             "extraVolumeMounts",
             "extraContainers",
+            "extraEnv",
             "extraInitContainers"
           ]
         },
@@ -914,6 +949,14 @@
               "title": "extraContainers",
               "type": "array"
             },
+            "extraEnv": {
+              "description": "A list of raw Kubernetes EnvVar objects (name/value or name/valueFrom) appended to the end of this component's main container env list. Rendered through `tpl`. The component-scoped entry wins over a top-level extraEnv entry with the same name.",
+              "title": "extraEnv",
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/envVar"
+              }
+            },
             "extraInitContainers": {
               "description": "Additional sidecar containers to run in the pod\nExample\n - name: init-example\n   image: busybox\n   command: [/bin/sh, -c, 'echo \"Hello world\"']",
               "title": "extraInitContainers",
@@ -933,6 +976,7 @@
             "extraVolumes",
             "extraVolumeMounts",
             "extraContainers",
+            "extraEnv",
             "extraInitContainers"
           ]
         },
@@ -950,6 +994,14 @@
               "description": "components.proxy.extraContainers Additional sidecar containers to run in the pod\nExample\n - name: sidecar-example\n   image: busybox\n   command: [/bin/sh, -c, 'echo \"Hello world\"']",
               "title": "extraContainers",
               "type": "array"
+            },
+            "extraEnv": {
+              "description": "A list of raw Kubernetes EnvVar objects (name/value or name/valueFrom) appended to the end of this component's main container env list. Rendered through `tpl`. The component-scoped entry wins over a top-level extraEnv entry with the same name.",
+              "title": "extraEnv",
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/envVar"
+              }
             },
             "extraInitContainers": {
               "description": "components.proxy.extraInitContainers Additional sidecar containers to run in the pod\nExample\n - name: init-example\n   image: busybox\n   command: [/bin/sh, -c, 'echo \"Hello world\"']",
@@ -1081,6 +1133,7 @@
             "extraVolumes",
             "extraVolumeMounts",
             "extraContainers",
+            "extraEnv",
             "extraInitContainers"
           ]
         },
@@ -1161,6 +1214,14 @@
               },
               "title": "extraContainers",
               "type": "array"
+            },
+            "extraEnv": {
+              "description": "A list of raw Kubernetes EnvVar objects (name/value or name/valueFrom) appended to the end of this component's main container env list. Rendered through `tpl`. The component-scoped entry wins over a top-level extraEnv entry with the same name.",
+              "title": "extraEnv",
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/envVar"
+              }
             },
             "extraInitContainers": {
               "description": "Additional init containers to run in the pod",
@@ -1386,6 +1447,14 @@
               },
               "title": "extraContainers",
               "type": "array"
+            },
+            "extraEnv": {
+              "description": "A list of raw Kubernetes EnvVar objects (name/value or name/valueFrom) appended to the end of this component's main container env list. Rendered through `tpl`. The component-scoped entry wins over a top-level extraEnv entry with the same name.",
+              "title": "extraEnv",
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/envVar"
+              }
             },
             "extraInitContainers": {
               "description": "Additional init containers to run in the pod",
@@ -1644,6 +1713,14 @@
           "title": "extraContainers",
           "type": "array"
         },
+        "extraEnv": {
+          "description": "A list of raw Kubernetes EnvVar objects (name/value or name/valueFrom) appended to the end of this component's main container env list. Rendered through `tpl`. The component-scoped entry wins over a top-level extraEnv entry with the same name.",
+          "title": "extraEnv",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/envVar"
+          }
+        },
         "extraInitContainers": {
           "description": "Additional sidecar containers to run in the pod\nExample\n - name: init-example\n   image: busybox\n   command: [/bin/sh, -c, 'echo \"Hello world\"']",
           "title": "extraInitContainers",
@@ -1893,6 +1970,7 @@
         "extraVolumes",
         "extraVolumeMounts",
         "extraContainers",
+        "extraEnv",
         "extraInitContainers"
       ]
     },
@@ -2155,6 +2233,14 @@
       "description": "Additional sidecar containers to run in every pod\nExample\n - name: sidecar-example\n   image: busybox\n   command: [/bin/sh, -c, 'echo \"Hello world\"']",
       "title": "extraContainers",
       "type": "array"
+    },
+    "extraEnv": {
+      "description": "A list of raw Kubernetes EnvVar objects (name/value or name/valueFrom) appended to the end of this component's main container env list. Rendered through `tpl`. The component-scoped entry wins over a top-level extraEnv entry with the same name.",
+      "title": "extraEnv",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/envVar"
+      }
     },
     "extraInitContainers": {
       "description": "Additional sidecar containers to run in every pod\nExample\n - name: init-example\n   image: busybox\n   command: [/bin/sh, -c, 'echo \"Hello world\"']",

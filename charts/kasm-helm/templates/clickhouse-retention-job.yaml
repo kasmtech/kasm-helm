@@ -15,6 +15,7 @@ to alter, mirroring apply_clickhouse_retention_tiers' own self-guard in upgrade.
 {{- if and .Values.observability.enabled .Values.observability.clickhouse.enabled (not .Values.observability.clickhouse.standalone) }}
 {{- $ch := .Values.observability.clickhouse }}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $merged := fromYaml (include "kasm.mergedValues" (dict "root" . "componentName" "clickhouse")) -}}
 {{- $secretName := default $constants.secrets.name $ch.existingSecret.name -}}
 {{- $secretKey := default "clickhouse-password" $ch.existingSecret.key -}}
 {{- $hookAnnotations := dict
@@ -75,6 +76,9 @@ spec:
               value: {{ $ch.retention.tracesDays | quote }}
             - name: OTEL_METRICS_RETENTION_DAYS
               value: {{ $ch.retention.metricsDays | quote }}
+            {{- with $merged.extraEnv }}
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
           command:
             - /bin/bash
             - -c

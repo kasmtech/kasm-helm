@@ -29,6 +29,7 @@ See [Migrating to connection-proxy](./README.md#migrating-to-connection-proxy) f
 - Configurable ClickHouse database name (`observability.clickhouse.database`, default `kasm_otel`), independent of the ClickHouse username, threaded through the Collector's exporters, schema initialization, the ClickHouse user's grant, and the Kasm API's read path — needed for a tenant-specific database on a shared, multi-tenant external ClickHouse.
 - An always-on Collector sidecar in the Kasm DB pod collecting PostgreSQL JSON logs (PostgreSQL metrics are not collected — deferred, no receiver ships today).
 - Three worked example Collector configs under `examples/`: `otel-collector-custom.yaml`, `otel-collector-splunk.yaml` (Splunk HEC forwarding), and `otel-collector-debug.yaml` (stdout debug exporter).
+- New top-level `extraEnv` and per-component `components.<name>.extraEnv` (and `database.extraEnv`) values let operators inject arbitrary environment variables (`name`/`value` or `name`/`valueFrom`) into the API, Proxy, Connection Proxy (Guac/RDP Gateway/RDP HTTPS Gateway), Database, ClickHouse, and gateway Collector main containers, as well as the DB backup/init/upgrade Jobs. Follows the same global+component merge-by-name semantics as the existing `extraVolumes` family, with the component-scoped entry winning on a name collision; values are rendered through `tpl`.
 
 ### Changed
 

@@ -46,6 +46,10 @@ spec:
         - name: {{ include "kasm.name" (list $ "proxy" "container" $zone.name) }}
           image: {{ $constants.proxy.image }}
           imagePullPolicy: {{ $.Values.imagePullPolicy }}
+          {{- with $merged.extraEnv }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           {{- if $.Values.components.proxy.resources }}
           resources: {{- toYaml $.Values.components.proxy.resources | nindent 12 }}
           {{- else }}

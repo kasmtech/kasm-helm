@@ -16,6 +16,7 @@ base image's docker-entrypoint.sh has non-obvious behavior around these):
 {{- $ch := .Values.observability.clickhouse }}
 {{- $chc := .Values.components.clickhouse }}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $merged := fromYaml (include "kasm.mergedValues" (dict "root" . "componentName" "clickhouse")) -}}
 {{- $secretName := default $constants.secrets.name $ch.existingSecret.name -}}
 {{- $secretKey := default "clickhouse-password" $ch.existingSecret.key -}}
 {{- /* Bundled ClickHouse always renders the RO user (see clickhouse-configmap.yaml), regardless
@@ -89,6 +90,9 @@ spec:
                 secretKeyRef:
                   name: {{ $secretName }}
                   key: {{ $roSecretKey }}
+            {{- with $merged.extraEnv }}
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
           ports:
             - name: ch-http
               containerPort: {{ $constants.clickhouse.http }}

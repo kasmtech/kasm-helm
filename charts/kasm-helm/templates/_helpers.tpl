@@ -971,10 +971,13 @@ Returns a single YAML object with:
 - initMounts:         deduped []corev1.VolumeMount  (for init containers)
 - extraContainers:    deduped []corev1.Container    (sidecars)
 - extraInitContainers:deduped []corev1.Container    (init sidecars)
+- extraEnv:           deduped []corev1.EnvVar       (main container only, this round)
 Dedup rules:
 - Containers: by .name (component overrides global on same name)
 - VolumeMounts: by "<name>|<mountPath>" (separate sets for init vs main)
 - Volumes: by a stable synthetic key (secret/configmap/pvc/emptyDir/name)
+- EnvVar: by .name (component overrides global on same name); each entry is passed through
+  `tpl` against the root context before merging, so values can reference e.g. {{ .Release.Name }}
 */}}
 {{- define "kasm.volumeKey" -}}
   {{- if .secret -}}
@@ -1006,12 +1009,14 @@ Dedup rules:
       "extraInitMounts"      (default (list) $root.Values.extraInitVolumeMounts)
       "extraContainers"      (default (list) $root.Values.extraContainers)
       "extraInitContainers"  (default (list) $root.Values.extraInitContainers)
+      "extraEnv"             (default (list) $root.Values.extraEnv)
     -}}
   {{- $componentLevel := dict
       "extraVolumes"         (default (list) $component.extraVolumes)
       "extraContainerMounts" (default (list) $component.extraVolumeMounts)
       "extraContainers"      (default (list) $component.extraContainers)
       "extraInitContainers"  (default (list) $component.extraInitContainers)
+      "extraEnv"             (default (list) $component.extraEnv)
       "nginxSidecarVolumes"  (default (list) (dig "nginxSidecar" "extraVolumes" (list) $component))
       "nginxSidecarMounts"   (default (list) (dig "nginxSidecar" "extraVolumeMounts" (list) $component))
     -}}
@@ -1066,6 +1071,46 @@ Dedup rules:
     {{- $_ := set $initCtrMap $containers.name $containers -}}
   {{- end -}}
 
+  {{/*
+    extraEnv order must be deterministic (sprig `values` on a map returns randomized Go map
+    order, which would reshuffle the container env list on every render/upgrade). Scheme:
+    global entries keep their values-order position unless a component entry overrides the
+    same name, in which case that name is dropped from the global position and re-emitted at
+    its component-list position instead. Ties within a single list (duplicate names) keep the
+    first occurrence's position.
+  */}}
+  {{- $envMap := dict -}}
+  {{- $envOrder := list -}}
+  {{- $envSeen := dict -}}
+  {{- $compEnvNames := dict -}}
+  {{- range $e := get $componentLevel "extraEnv" -}}
+    {{- if $e.name -}}
+      {{- $_ := set $compEnvNames $e.name true -}}
+    {{- end -}}
+  {{- end -}}
+  {{- range $e := get $global "extraEnv" -}}
+    {{- if not $e.name -}} {{- fail "extraEnv entries must define 'name'" -}} {{- end -}}
+    {{- $tplE := tpl ($e | toYaml) $root | fromYaml -}}
+    {{- $_ := set $envMap $tplE.name $tplE -}}
+    {{- if and (not (hasKey $compEnvNames $tplE.name)) (not (hasKey $envSeen $tplE.name)) -}}
+      {{- $envOrder = append $envOrder $tplE.name -}}
+      {{- $_ := set $envSeen $tplE.name true -}}
+    {{- end -}}
+  {{- end -}}
+  {{- range $e := get $componentLevel "extraEnv" -}}
+    {{- if not $e.name -}} {{- fail "extraEnv entries must define 'name'" -}} {{- end -}}
+    {{- $tplE := tpl ($e | toYaml) $root | fromYaml -}}
+    {{- $_ := set $envMap $tplE.name $tplE -}}
+    {{- if not (hasKey $envSeen $tplE.name) -}}
+      {{- $envOrder = append $envOrder $tplE.name -}}
+      {{- $_ := set $envSeen $tplE.name true -}}
+    {{- end -}}
+  {{- end -}}
+  {{- $envList := list -}}
+  {{- range $n := $envOrder -}}
+    {{- $envList = append $envList (get $envMap $n) -}}
+  {{- end -}}
+
   {{/* Convert maps back to lists in a single object; emit YAML once */}}
   {{- $out := dict -}}
   {{- $_ := set $out "volumes"            (values $volMap) -}}
@@ -1074,6 +1119,7 @@ Dedup rules:
   {{- $_ := set $out "extraContainers"    (values $sidecarMap) -}}
   {{- $_ := set $out "extraInitContainers" (values $initCtrMap) -}}
   {{- $_ := set $out "nginxSidecarMounts" (values $sidecarMountMap) -}}
+  {{- $_ := set $out "extraEnv"           $envList -}}
   {{- toYaml $out -}}
 {{- end -}}
 
