@@ -145,7 +145,7 @@ CRANE_ARCH := $(subst amd64,x86_64,$(ARCH))
 CLOUD_PROVIDER_KIND_PID_FILE ?= $(CURDIR)/.kind/cloud-provider-kind.pid
 CLOUD_PROVIDER_KIND_LOG ?= $(CURDIR)/.kind/cloud-provider-kind.log
 
-.PHONY: tools lint render kubeconform kyverno unittest otel-validate readme readme-check changelog changelog-llm changelog-console changelog-console-llm changelog-check docs test build-pytest kind-up kind-down kind-recreate kind-ensure kind-load-images kind-load-old-images kind-clean-namespace kind-prep pytest-docker e2e e2e-basic e2e-split e2e-trustedca e2e-multizone e2e-externaldb e2e-backup e2e-backup-pss e2e-pss e2e-json-logging e2e-observability e2e-observability-off e2e-router e2e-upgrade e2e-upgrade-included e2e-upgrade-standalone e2e-settle e2e-preseed validate-preseed extract-old-chart clean
+.PHONY: tools lint render kubeconform kyverno unittest otel-validate readme readme-check changelog changelog-llm changelog-console changelog-console-llm changelog-check docs test build-pytest kind-up kind-down kind-recreate kind-ensure kind-load-images kind-load-old-images kind-clean-namespace kind-prep pytest-docker e2e e2e-basic e2e-split e2e-trustedca e2e-multizone e2e-externaldb e2e-backup e2e-backup-pss e2e-pss e2e-json-logging e2e-observability e2e-observability-off e2e-router e2e-otel-roundtrip e2e-upgrade e2e-upgrade-included e2e-upgrade-standalone e2e-settle e2e-preseed validate-preseed extract-old-chart clean
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*## "; printf "\nUsage: make \033[36m<target>\033[0m\n"} \
@@ -717,6 +717,9 @@ e2e: ## Run all e2e scenarios sequentially (requires kind cluster)
 	$(MAKE) e2e-observability-off E2E_NAMESPACE=kasm-e2e-observability-off
 	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-observability-off
 	$(MAKE) e2e-settle
+	$(MAKE) e2e-otel-roundtrip E2E_NAMESPACE=kasm-e2e-otel-roundtrip
+	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-otel-roundtrip
+	$(MAKE) e2e-settle
 	$(MAKE) e2e-upgrade-included E2E_NAMESPACE=kasm-e2e-upgrade-included
 	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-upgrade-included
 	$(MAKE) e2e-settle
@@ -797,6 +800,13 @@ e2e-observability-off: kind-prep build-pytest ## observability.enabled=false sta
 
 e2e-router: kind-prep build-pytest ## kasm-otel-router chart: routes OTLP and k8s events to a registered install's ClickHouse
 	$(MAKE) pytest-docker E2E_SCENARIO=e2e-router E2E_IMAGE_VALUES=/e2e-values/dev31-images.yaml PYTEST_ARGS="-m e2e -q test_14_otel_router.py"
+
+# Round trip: a kasm-helm release's telemetry, routed through kasm-otel-router, lands back in
+# that SAME release's ClickHouse (kasm-helm-xc8). Uses pubsub-images.yaml (D021) rather than
+# dev31-images.yaml since this branch's api/proxy images are the pub/sub rebuild, and the
+# observability code both branch-build overlays carry is unaffected by that rework.
+e2e-otel-roundtrip: kind-prep build-pytest ## kasm-helm -> kasm-otel-router -> kasm-helm's own gateway -> its own ClickHouse
+	$(MAKE) pytest-docker E2E_SCENARIO=e2e-otel-roundtrip E2E_IMAGE_VALUES=/e2e-values/pubsub-images.yaml PYTEST_ARGS="-m e2e -q test_17_otel_roundtrip.py"
 
 ##@ Upgrade Helpers
 

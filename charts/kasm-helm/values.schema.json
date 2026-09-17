@@ -1718,6 +1718,44 @@
                   }
                 }
               }
+            },
+            "upstream": {
+              "additionalProperties": false,
+              "description": "Redirect the Kasm app services that export straight to the local gateway (currently API and the API worker pools; see kasm.otelEnv) to an external OTLP/HTTP collector instead -- e.g. a router in front of several Kasm releases. Collector sidecars (Proxy nginx, Connection Proxy, DB Postgres) are unaffected: they always export to this release's own gateway and are not rerouted by this setting. Leave empty to keep today's default (local gateway for everyone).",
+              "title": "upstream",
+              "type": "object",
+              "properties": {
+                "endpoint": {
+                  "default": "",
+                  "description": "OTLP/HTTP endpoint the API/API-worker exporters should send to instead of the local gateway (e.g. `http://otel-router.otel-router.svc.cluster.local:4318`). Leave empty to keep exporting to the local gateway.",
+                  "title": "endpoint",
+                  "type": "string"
+                },
+                "token": {
+                  "default": "",
+                  "description": "Bearer token for the upstream endpoint. Prefer `existingSecret` over putting a credential in values.",
+                  "title": "token",
+                  "type": "string"
+                },
+                "existingSecret": {
+                  "additionalProperties": false,
+                  "description": "Read the upstream bearer token from an existing Secret instead of `token`. Both `name` and `key` are required when used.",
+                  "title": "existingSecret",
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "default": "",
+                      "title": "name",
+                      "type": "string"
+                    },
+                    "key": {
+                      "default": "",
+                      "title": "key",
+                      "type": "string"
+                    }
+                  }
+                }
+              }
             }
           }
         },

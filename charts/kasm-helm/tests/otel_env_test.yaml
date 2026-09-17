@@ -2,6 +2,7 @@ suite: kasm.otelEnv — per-workload OTel/logging env vars
 
 templates:
   - templates/api-deployment.yaml
+  - templates/api-worker-deployment.yaml
   - templates/connection-proxy-statefulset.yaml
   - templates/db-init-job.yaml
   - templates/otel-gateway-configmap.yaml
@@ -436,3 +437,77 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].env[?(@.name=="KASM_LOG_FILE_ENABLED")].value
           value: "false"
+
+  # ---------- observability.collector.upstream override (kasm-helm-xc8 part 2) ----------
+  # Redirects the non-sidecar senders (api, api-worker) at an external collector instead of the
+  # local gateway. Default (empty) leaves them byte-identical to the pre-existing behaviour
+  # already asserted above ("api exports straight to the gateway Service over HTTP, authenticated").
+  - it: upstream.endpoint with a literal token redirects the api exporter's endpoint and bearer token
+    template: templates/api-deployment.yaml
+    set:
+      observability.collector.upstream.endpoint: "http://otel-router.otel-router.svc.cluster.local:4318"
+      observability.collector.upstream.token: "router-literal-token"
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_EXPORTER_OTLP_ENDPOINT" && @.value=="http://otel-router.otel-router.svc.cluster.local:4318")]
+      - notExists:
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_EXPORTER_OTLP_ENDPOINT" && @.value=="http://RELEASE-NAME-otel-gateway:4318")]
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_BEARER_TOKEN")].value
+          value: "router-literal-token"
+      - notExists:
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_BEARER_TOKEN")].valueFrom
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_EXPORTER_OTLP_HEADERS" && @.value=="Authorization=Bearer $(OTEL_BEARER_TOKEN)")]
+
+  - it: upstream.existingSecret redirects the api exporter's bearer token to that Secret, not a literal
+    template: templates/api-deployment.yaml
+    set:
+      observability.collector.upstream.endpoint: "http://otel-router.otel-router.svc.cluster.local:4318"
+      observability.collector.upstream.existingSecret.name: my-router-token
+      observability.collector.upstream.existingSecret.key: token
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_BEARER_TOKEN")].valueFrom.secretKeyRef.name
+          value: my-router-token
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_BEARER_TOKEN")].valueFrom.secretKeyRef.key
+          value: token
+      - notExists:
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_BEARER_TOKEN")].value
+
+  - it: upstream override also redirects the api-worker exporter (split mode)
+    template: templates/api-worker-deployment.yaml
+    set:
+      apiWorkerMode: split
+      observability.collector.upstream.endpoint: "http://otel-router.otel-router.svc.cluster.local:4318"
+      observability.collector.upstream.token: "router-literal-token"
+    documentIndex: 0
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_EXPORTER_OTLP_ENDPOINT" && @.value=="http://otel-router.otel-router.svc.cluster.local:4318")]
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="OTEL_BEARER_TOKEN")].value
+          value: "router-literal-token"
+
+  - it: upstream override leaves the connection-proxy sidecar senders on the local gateway (unaffected)
+    template: templates/connection-proxy-statefulset.yaml
+    documentIndex: 0
+    set:
+      observability.collector.upstream.endpoint: "http://otel-router.otel-router.svc.cluster.local:4318"
+      observability.collector.upstream.token: "router-literal-token"
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[1].env[?(@.name=="OTEL_EXPORTER_OTLP_ENDPOINT" && @.value=="http://localhost:4318")]
+      - exists:
+          path: spec.template.spec.containers[2].env[?(@.name=="OTEL_EXPORTER_OTLP_ENDPOINT" && @.value=="http://localhost:4318")]
+      - exists:
+          path: spec.template.spec.containers[3].env[?(@.name=="OTEL_EXPORTER_OTLP_ENDPOINT" && @.value=="http://localhost:4318")]
+
+  - it: upstream.existingSecret requires both name and key
+    template: templates/otel-gateway-deployment.yaml
+    set:
+      observability.collector.upstream.existingSecret.name: my-router-token
+    asserts:
+      - failedTemplate:
+          errorMessage: "observability.collector.upstream.existingSecret requires both 'name' and 'key' to be set."

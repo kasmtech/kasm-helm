@@ -1135,6 +1135,27 @@ observability:
           name: ""
           key: ""
 
+    # observability.collector.upstream -- Redirect the Kasm app services that export straight to the local
+    # gateway (currently API and the API worker pools; see kasm.otelEnv) to an external OTLP/HTTP collector
+    # instead -- e.g. a router in front of several Kasm releases. Collector sidecars (Proxy nginx,
+    # Connection Proxy, DB Postgres) are unaffected: they always export to this release's own gateway
+    # (kasm.otelSidecar hardcodes that endpoint) and are not rerouted by this setting. Leave empty to keep
+    # today's default (local gateway for everyone).
+    #
+    upstream:
+      # observability.collector.upstream.endpoint -- OTLP/HTTP endpoint the API/API-worker exporters should
+      # send to instead of the local gateway (e.g. `http://otel-router.otel-router.svc.cluster.local:4318`).
+      # Leave empty to keep exporting to the local gateway.
+      endpoint: ""
+      # observability.collector.upstream.token -- Bearer token for the upstream endpoint. Prefer
+      # `existingSecret` over putting a credential in values.
+      token: ""
+      # observability.collector.upstream.existingSecret -- Read the upstream bearer token from an existing
+      # Secret instead of `token`. Both `name` and `key` are required when used.
+      existingSecret:
+        name: ""
+        key: ""
+
   # Configure ClickHouse, the telemetry store that backs Kasm reporting.
   #
   clickhouse:

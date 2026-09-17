@@ -1317,6 +1317,8 @@ Dedup rules:
 {{- else }}
 {{- $constants := include "kasm.constants" $ctx | fromYaml -}}
 {{- $zone := .zone | default "" -}}
+{{- $upstream := $obs.collector.upstream -}}
+{{- $upstreamEnabled := ne $upstream.endpoint "" -}}
 {{- $endpoint := "" -}}
 {{- $protocol := "" -}}
 {{- if .sidecar -}}
@@ -1327,18 +1329,38 @@ Dedup rules:
        tier between them), authenticated with the same bearer token the gateway's
        bearertokenauth/server extension checks. HTTP, not gRPC: the Kasm app SDKs are wired to
        the OTLP HTTP exporter (that choice lives in kasm_backend, not this chart), so the gateway
-       exposes an authenticated HTTP receiver alongside the gRPC one the Collector sidecars use. */}}
-  {{- $endpoint = printf "http://%s:%v" $constants.otel.gatewaySvc $constants.otel.otlpHttp -}}
+       exposes an authenticated HTTP receiver alongside the gRPC one the Collector sidecars use.
+       observability.collector.upstream overrides this endpoint (and its bearer token) to redirect
+       these senders at an external collector instead; Collector sidecars are untouched by that
+       override (see values.yaml doc). */}}
+  {{- if $upstreamEnabled -}}
+    {{- $endpoint = $upstream.endpoint -}}
+  {{- else -}}
+    {{- $endpoint = printf "http://%s:%v" $constants.otel.gatewaySvc $constants.otel.otlpHttp -}}
+  {{- end -}}
   {{- $protocol = "http/protobuf" -}}
 {{- end }}
 - name: OTEL_SERVICE_NAME
   value: {{ $serviceName | quote }}
 {{- if not .sidecar }}
+{{- if $upstreamEnabled }}
+{{- if $upstream.existingSecret.name }}
+- name: OTEL_BEARER_TOKEN
+  valueFrom:
+    secretKeyRef:
+      name: {{ $upstream.existingSecret.name }}
+      key: {{ $upstream.existingSecret.key }}
+{{- else }}
+- name: OTEL_BEARER_TOKEN
+  value: {{ $upstream.token | quote }}
+{{- end }}
+{{- else }}
 - name: OTEL_BEARER_TOKEN
   valueFrom:
     secretKeyRef:
       name: {{ $constants.secrets.name }}
       key: otel-bearer-token
+{{- end }}
 - name: OTEL_EXPORTER_OTLP_HEADERS
   value: "Authorization=Bearer $(OTEL_BEARER_TOKEN)"
 {{- end }}
@@ -1503,6 +1525,11 @@ Dedup rules:
 {{- $forwardSecretKeySet := ne $collector.gateway.forward.existingSecret.key "" -}}
 {{- if and (or $forwardSecretNameSet $forwardSecretKeySet) (not (and $forwardSecretNameSet $forwardSecretKeySet)) -}}
   {{- fail "observability.collector.gateway.forward.existingSecret requires both 'name' and 'key' to be set." -}}
+{{- end -}}
+{{- $upstreamSecretNameSet := ne $collector.upstream.existingSecret.name "" -}}
+{{- $upstreamSecretKeySet := ne $collector.upstream.existingSecret.key "" -}}
+{{- if and (or $upstreamSecretNameSet $upstreamSecretKeySet) (not (and $upstreamSecretNameSet $upstreamSecretKeySet)) -}}
+  {{- fail "observability.collector.upstream.existingSecret requires both 'name' and 'key' to be set." -}}
 {{- end -}}
 {{- $chSecretNameSet := ne $ch.existingSecret.name "" -}}
 {{- $chSecretKeySet := ne $ch.existingSecret.key "" -}}

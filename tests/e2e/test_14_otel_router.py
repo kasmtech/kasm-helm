@@ -41,17 +41,26 @@ def _router_release(release_name: str) -> str:
     return f"{release_name}-router"
 
 
-def _install_router(*, e2e_config, namespace: str, temp_workdir: Path) -> tuple[str, str, str]:
+def _install_router(
+    *, e2e_config, namespace: str, temp_workdir: Path, ingest_token: str | None = None
+) -> tuple[str, str, str]:
     """Install the router into its own namespace, registered at the Kasm install above.
 
-    Returns (router_namespace, router_service_dns, ingest_token).
+    `ingest_token` lets a caller (test_17's roundtrip scenario, kasm-helm-xc8 part 2) pin the
+    router's ingest credential to a value it already handed to a kasm-helm install's
+    `observability.collector.upstream.token` before this router install runs. Defaults to
+    generating one, as before, when the caller has no such requirement (test_14 itself).
+
+    Returns (router_namespace, router_service_dns, ingest_token). Requires the Kasm release at
+    `namespace` to already exist: it reads that release's own gateway bearer token (via the
+    `-secrets` Secret) to authenticate the router's registration back to that release's gateway.
     """
     router_ns = _router_ns(namespace)
     router_release = _router_release(e2e_config.release_name)
     kubectl(["create", "namespace", router_ns], namespace=None, check=False)
 
     gateway_token = _get_secret_value(namespace, f"{e2e_config.release_name}-secrets", "otel-bearer-token")
-    ingest_token = uuid.uuid4().hex
+    ingest_token = ingest_token or uuid.uuid4().hex
 
     for secret_name, literal in (
         ("otel-router-ingest-token", f"token={ingest_token}"),
