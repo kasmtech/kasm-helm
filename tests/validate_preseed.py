@@ -340,6 +340,12 @@ def validate(schema, config, debug=False, partial=False):
                                 cert_type = CERTIFICATE_FIELDS[field_key]
                                 if not validate_certificate_field(val, cert_type):
                                     errors.append(f"[item {idx}] Field '{field}' is not a valid {cert_type.replace('_', ' ').upper()} format.")
+                    # Unknown-key detection: rendered fields absent from this section's
+                    # schema indicate a stale template field or a removed backend column.
+                    if isinstance(item, dict):
+                        unknown_keys = set(item.keys()) - set(section_fields.keys())
+                        if unknown_keys:
+                            errors.append(f"[item {idx}] Unknown field(s) {sorted(unknown_keys)} not present in schema for section '{section_name}'.")
         if errors:
             overall_passed = False
             print(f"❌ {section_name.capitalize()} configuration failed!")

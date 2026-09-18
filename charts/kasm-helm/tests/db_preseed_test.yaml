@@ -91,6 +91,135 @@ tests:
           path: stringData["custom_properties.yaml"]
           pattern: "zone_name: my-zone"
 
+  - it: does not render primary_manager_id (removed from the Zone model with the Manager component; the API rejects it during preseed import)
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: my-zone
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+    asserts:
+      - documentIndex: 1
+        notMatchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "primary_manager_id"
+
+  - it: does not render aggressive_scaling or hooks on autoscale_configs (removed from the AutoScaleConfig model; the API rejects them during preseed import)
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: my-zone
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.server_pools:
+        - name: my-pool
+          server_pool_type: Docker
+      kasmConfig.config.autoscale:
+        - autoscale_config_name: my-autoscale
+          pool_name: my-pool
+          zone_name: my-zone
+    asserts:
+      - documentIndex: 1
+        notMatchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "aggressive_scaling"
+      - documentIndex: 1
+        notMatchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "\\bhooks:"
+
+  - it: does not render vsphere_datastore or vsphere_datastore_cluster_name (not columns on VsphereVMConfig; the API rejects them during preseed import)
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: my-zone
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.vsphere_vm_configs:
+        - config_name: my-vsphere
+          max_instances: 5
+          vsphere_datacenter_name: dc1
+          vsphere_installed_OS_type: windows
+          vsphere_os_username: admin
+          vsphere_os_password: os-secret
+          vsphere_template_name: template1
+          vsphere_vcenter_address: vcenter.example.com
+          vsphere_vcenter_port: 443
+          vsphere_vcenter_username: vcadmin
+          vsphere_vcenter_password: vcenter-secret
+          vsphere_datastore_name: datastore1
+          vsphere_use_datastore_cluster: true
+          vsphere_memory_bytes: 4294967296
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "vsphere_memory_bytes: 4294967296"
+      - documentIndex: 1
+        notMatchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "vsphere_datastore:"
+      - documentIndex: 1
+        notMatchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "vsphere_datastore_cluster_name"
+      - documentIndex: 1
+        notMatchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "vsphere_memoryMB"
+
+  - it: renders vsphere_datastore_name and vsphere_use_datastore_cluster from vsphere_vm_configs
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: my-zone
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.vsphere_vm_configs:
+        - config_name: my-vsphere
+          max_instances: 5
+          vsphere_datacenter_name: dc1
+          vsphere_installed_OS_type: windows
+          vsphere_os_username: admin
+          vsphere_os_password: os-secret
+          vsphere_template_name: template1
+          vsphere_vcenter_address: vcenter.example.com
+          vsphere_vcenter_port: 443
+          vsphere_vcenter_username: vcadmin
+          vsphere_vcenter_password: vcenter-secret
+          vsphere_datastore_name: datastore1
+          vsphere_use_datastore_cluster: true
+          vsphere_memory_bytes: 4294967296
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "vsphere_memory_bytes: 4294967296"
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "vsphere_datastore_name: \"datastore1\""
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "vsphere_use_datastore_cluster: true"
+
   - it: prefers proxy_hostname when a zone sets both proxyAddress and proxy_hostname
     set:
       publicAddr: kasm.example.com
