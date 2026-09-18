@@ -179,18 +179,28 @@ rules:
   - update
 # The operator holds only `bind` on these ClusterRoles, not the permissions they grant. It creates
 # the per-Agent bindings that reference them by name, so the names below must match the ClusterRoles in
-# kasm-agent-clusterrole.yaml, kasm-nginx-sidecar-clusterrole.yaml and
-# kasm-seccomp-installer-clusterrole.yaml exactly.
+# kasm-agent-clusterrole.yaml, kasm-agent-seccomp-spo-clusterrole.yaml,
+# kasm-nginx-sidecar-clusterrole.yaml and kasm-seccomp-installer-clusterrole.yaml exactly.
 - apiGroups:
   - rbac.authorization.k8s.io
   resourceNames:
   - kasm-agent
+  - kasm-agent-seccomp-spo
   - kasm-nginx-sidecar
   - kasm-seccomp-installer
   resources:
   - clusterroles
   verbs:
   - bind
+# The operator itself lists and deletes cluster-scoped SeccompProfiles for the "spo" seccomp backend's
+# finalizer and health probe (the agent creates them; the operator reaps them when the Agent is deleted).
+- apiGroups:
+  - security-profiles-operator.x-k8s.io
+  resources:
+  - seccompprofiles
+  verbs:
+  - delete
+  - list
 - apiGroups:
   - rbac.authorization.k8s.io
   resources:

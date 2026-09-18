@@ -453,50 +453,66 @@ tests:
           path: spec.imagePuller.resources.requests.memory
           value: 32Mi
 
-  - it: renders no seccomp installer by default
+  - it: renders no seccomp block by default
     asserts:
       - isNull:
-          path: spec.seccompInstaller
+          path: spec.seccomp
 
-  - it: renders the seccomp installer block when enabled
+  - it: renders the installer backend when enabled
     set:
-      seccompInstaller:
+      seccomp:
         enabled: true
-        image:
-          registry: registry.example.com
-          repository: kasmweb/kasm-seccomp-installer
-          tag: "1.2.3"
-        imagePullPolicy: Always
-        kubeletSeccompDir: /var/lib/rancher/k3s/agent/kubelet/seccomp
-        resources:
-          requests:
-            cpu: 10m
-            memory: 32Mi
+        installer:
+          image:
+            registry: registry.example.com
+            repository: kasmweb/kasm-seccomp-installer
+            tag: "1.2.3"
+          imagePullPolicy: Always
+          kubeletSeccompDir: /var/lib/rancher/k3s/agent/kubelet/seccomp
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
     asserts:
       - equal:
-          path: spec.seccompInstaller.enabled
-          value: true
+          path: spec.seccomp.backend
+          value: installer
       - equal:
-          path: spec.seccompInstaller.image
+          path: spec.seccomp.installer.image
           value: registry.example.com/kasmweb/kasm-seccomp-installer:1.2.3
       - equal:
-          path: spec.seccompInstaller.imagePullPolicy
+          path: spec.seccomp.installer.imagePullPolicy
           value: Always
       - equal:
-          path: spec.seccompInstaller.kubeletSeccompDir
+          path: spec.seccomp.installer.kubeletSeccompDir
           value: /var/lib/rancher/k3s/agent/kubelet/seccomp
       - equal:
-          path: spec.seccompInstaller.resources.requests.memory
+          path: spec.seccomp.installer.resources.requests.memory
           value: 32Mi
+      # the CRD forbids an enabled field; make sure the old one is gone
+      - isNull:
+          path: spec.seccomp.installer.enabled
 
-  - it: falls the seccomp installer image tag back to the chart appVersion
+  - it: falls the installer image tag back to the chart appVersion
     set:
-      seccompInstaller:
+      seccomp:
         enabled: true
     asserts:
       - matchRegex:
-          path: spec.seccompInstaller.image
+          path: spec.seccomp.installer.image
           pattern: ^docker\.io/kasmweb/kasm-seccomp-installer:.+
+
+  - it: renders the spo backend with no installer block
+    set:
+      seccomp:
+        enabled: true
+        backend: spo
+    asserts:
+      - equal:
+          path: spec.seccomp.backend
+          value: spo
+      - isNull:
+          path: spec.seccomp.installer
 
   - it: omits every optional field that is left empty
     asserts:

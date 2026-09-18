@@ -1,6 +1,6 @@
 {{/*
   ClusterRole for the kasm-seccomp-installer DaemonSet the operator deploys per Agent when
-  `spec.seccompInstaller` is set. The installer watches the agent's `seccomp-profiles` ConfigMap and
+  `spec.seccomp.backend` is `installer`. The installer watches the agent's `seccomp-profiles` ConfigMap and
   mirrors every profile onto each node under the kubelet's seccomp directory, so a workspace whose image
   carries an inline `security_opt: seccomp=<json>` can reference it by localhost path.
 

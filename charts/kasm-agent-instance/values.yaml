@@ -415,35 +415,43 @@ imagePuller:
   # idle to hold the image resident). Omitted when empty.
   resources: {}
 
-# seccompInstaller -- Deploy a per-agent DaemonSet that mirrors inline workspace seccomp profiles onto the
-# session nodes, so a Docker workspace image carrying `security_opt: seccomp=<json>` gets that profile applied
-# under Kubernetes (which can only reference a profile already on the node's disk). The agent hashes each inline
-# profile into a per-agent ConfigMap and points the session pod at `Localhost <prefix>/<digest>.json`; the
-# installer writes those profiles under the kubelet's seccomp directory. Off by default: the installer runs as
-# root with a hostPath mount into the kubelet seccomp directory, so the agent namespace must admit the
-# `privileged` Pod Security level and the nodes must allow hostPath (rules out e.g. GKE Autopilot). With it off,
-# an inline profile falls back to `Unconfined`. Follows `workspacesNodeSelector`/`workspacesTolerations`.
+# seccomp -- Let a workspace run under its image's inline seccomp profile (`security_opt: seccomp=<json>`, as the
+# Nix bubblewrap images carry) instead of `Unconfined`. Kubernetes can only reference a profile already on the
+# node's disk, so the agent content-hashes each inline profile and a backend gets it onto the nodes. Off by
+# default (`seccomp.enabled`); with it off an inline profile falls back to `Unconfined`.
 #
-seccompInstaller:
-  # seccompInstaller.enabled -- Deploy the seccomp-profile installer DaemonSet.
+seccomp:
+  # seccomp.enabled -- Turn on seccomp-profile installation (renders `spec.seccomp` on the Agent).
   enabled: false
-  # seccompInstaller.image -- The kasm-seccomp-installer image.
-  image:
-    # seccompInstaller.image.registry -- Registry that hosts the installer image.
-    registry: docker.io
-    # seccompInstaller.image.repository -- Repository of the installer image, without the registry or tag.
-    repository: kasmweb/kasm-seccomp-installer
-    # seccompInstaller.image.tag -- Tag of the installer image. Leave empty to fall back to the chart's `appVersion`.
-    tag: ""
-  # seccompInstaller.imagePullPolicy -- Pull policy for the installer image.
-  imagePullPolicy: IfNotPresent
-  # seccompInstaller.kubeletSeccompDir -- The kubelet's seccomp root on the node, which the installer writes
-  # profiles under (and mounts by hostPath). The default suits a stock kubelet; override it where the kubelet
-  # root is relocated — k3s (`/var/lib/rancher/k3s/agent/kubelet/seccomp`), microk8s
-  # (`/var/snap/microk8s/common/var/lib/kubelet/seccomp`).
-  kubeletSeccompDir: /var/lib/kubelet/seccomp
-  # seccompInstaller.resources -- Compute resources for the installer DaemonSet's container. Omitted when empty.
-  resources: {}
+  # seccomp.backend -- How profiles reach the nodes, one of `installer` or `spo`.
+  # `installer` (default) deploys the bundled `kasm-seccomp-installer` DaemonSet (configured under
+  # `seccomp.installer`); it runs as root with a hostPath mount into the kubelet seccomp directory, so the agent
+  # namespace must admit the `privileged` Pod Security level and the nodes must allow hostPath (rules out e.g. GKE
+  # Autopilot), and it follows `workspacesNodeSelector`/`workspacesTolerations`.
+  # `spo` instead has the agent create cluster-scoped `SeccompProfile` resources for the external
+  # [Security Profiles Operator](https://github.com/kubernetes-sigs/security-profiles-operator) (1.0+) to install
+  # — no hostPath or privileged namespace, but SPO must already be running in the cluster (this chart does not
+  # install it) or the Agent reports Degraded. The `seccomp.installer` block is ignored for `spo`.
+  backend: installer
+  # seccomp.installer -- Configures the `installer` backend (ignored when `backend` is `spo`).
+  installer:
+    # seccomp.installer.image -- The kasm-seccomp-installer image.
+    image:
+      # seccomp.installer.image.registry -- Registry that hosts the installer image.
+      registry: docker.io
+      # seccomp.installer.image.repository -- Repository of the installer image, without the registry or tag.
+      repository: kasmweb/kasm-seccomp-installer
+      # seccomp.installer.image.tag -- Tag of the installer image. Leave empty to fall back to the chart's `appVersion`.
+      tag: ""
+    # seccomp.installer.imagePullPolicy -- Pull policy for the installer image.
+    imagePullPolicy: IfNotPresent
+    # seccomp.installer.kubeletSeccompDir -- The kubelet's seccomp root on the node, which the installer writes
+    # profiles under (and mounts by hostPath). The default suits a stock kubelet; override it where the kubelet
+    # root is relocated — k3s (`/var/lib/rancher/k3s/agent/kubelet/seccomp`), microk8s
+    # (`/var/snap/microk8s/common/var/lib/kubelet/seccomp`).
+    kubeletSeccompDir: /var/lib/kubelet/seccomp
+    # seccomp.installer.resources -- Compute resources for the installer DaemonSet's container. Omitted when empty.
+    resources: {}
 
 # httpRoute -- Optionally expose the operator-created session-proxy Service through a Gateway API Gateway.
 #

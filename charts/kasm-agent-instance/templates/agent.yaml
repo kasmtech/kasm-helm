@@ -156,17 +156,21 @@ spec:
     resources:
       {{- toYaml . | nindent 6 }}
     {{- end }}
-  {{- /* The seccomp installer's image is a required CRD field, so the whole block
-         is rendered only when enabled - never with an empty image. */}}
-  {{- if .Values.seccompInstaller.enabled }}
-  seccompInstaller:
-    enabled: true
-    image: {{ include "kasmAgentInstance.joinImage" (dict "image" .Values.seccompInstaller.image "defaultTag" .Chart.AppVersion "path" "seccompInstaller.image") | quote }}
-    imagePullPolicy: {{ .Values.seccompInstaller.imagePullPolicy }}
-    kubeletSeccompDir: {{ .Values.seccompInstaller.kubeletSeccompDir | quote }}
-    {{- with .Values.seccompInstaller.resources }}
-    resources:
-      {{- toYaml . | nindent 6 }}
+  {{- /* spec.seccomp is rendered only when enabled. The CRD requires the installer
+         block (with a non-empty image) for backend "installer", and takes no block
+         for backend "spo" - so render the installer sub-block only for installer. */}}
+  {{- if .Values.seccomp.enabled }}
+  seccomp:
+    backend: {{ .Values.seccomp.backend }}
+    {{- if eq .Values.seccomp.backend "installer" }}
+    installer:
+      image: {{ include "kasmAgentInstance.joinImage" (dict "image" .Values.seccomp.installer.image "defaultTag" .Chart.AppVersion "path" "seccomp.installer.image") | quote }}
+      imagePullPolicy: {{ .Values.seccomp.installer.imagePullPolicy }}
+      kubeletSeccompDir: {{ .Values.seccomp.installer.kubeletSeccompDir | quote }}
+      {{- with .Values.seccomp.installer.resources }}
+      resources:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
     {{- end }}
   {{- end }}
   {{- with .Values.imagePullSecrets }}

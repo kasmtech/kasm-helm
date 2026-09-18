@@ -1,0 +1,27 @@
+{{/*
+  ClusterRole for the "spo" seccomp backend. When an Agent sets `spec.seccomp.backend: spo`, the
+  operator binds this ClusterRole to that agent's ServiceAccount, letting the agent create and delete
+  the cluster-scoped `SeccompProfile` resources the external Security Profiles Operator installs on the
+  nodes. (The agent creates the profiles, not the operator; the operator only binds this role and, via
+  manager-role, lists/deletes profiles for its own finalizer.)
+
+  Translated from config/rbac/agent_seccomp_spo_clusterrole.yaml in the kasm-agent-operator repo.
+
+  It is a ClusterRole (not a Role) so the operator can create the per-Agent binding while holding only
+  `bind` on it (escalation prevention). The `kasm-agent-seccomp-spo` name below MUST NOT be templated
+  or fullname-prefixed - the operator references it by that exact name and `manager-role` grants `bind`
+  on that exact resourceName. Renaming it breaks the spo backend at runtime, and it is why this chart
+  is a cluster singleton.
+
+  `SeccompProfile` is cluster-scoped, so this role is not namespace-scopable.
+*/}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kasm-agent-seccomp-spo
+  labels:
+    {{- include "kasmAgentOperator.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["security-profiles-operator.x-k8s.io"]
+    resources: ["seccompprofiles"]
+    verbs: ["get", "list", "watch", "create", "delete"]

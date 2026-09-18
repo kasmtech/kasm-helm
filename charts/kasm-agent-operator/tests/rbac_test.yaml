@@ -8,6 +8,7 @@ templates:
   - templates/rbac/kasm-agent-clusterrole.yaml
   - templates/rbac/kasm-nginx-sidecar-clusterrole.yaml
   - templates/rbac/kasm-seccomp-installer-clusterrole.yaml
+  - templates/rbac/kasm-agent-seccomp-spo-clusterrole.yaml
   - templates/rbac/aggregate-roles.yaml
 
 tests:
@@ -94,12 +95,23 @@ tests:
               - rbac.authorization.k8s.io
             resourceNames:
               - kasm-agent
+              - kasm-agent-seccomp-spo
               - kasm-nginx-sidecar
               - kasm-seccomp-installer
             resources:
               - clusterroles
             verbs:
               - bind
+      - contains:
+          path: rules
+          content:
+            apiGroups:
+              - security-profiles-operator.x-k8s.io
+            resources:
+              - seccompprofiles
+            verbs:
+              - delete
+              - list
 
   - it: grants the manager the custom resource groups it reconciles
     template: templates/rbac/manager-role.yaml
@@ -299,6 +311,29 @@ tests:
           path: rules[*].verbs
           content: create
 
+  - it: names the spo cluster role kasm-agent-seccomp-spo verbatim, seccompprofiles only
+    template: templates/rbac/kasm-agent-seccomp-spo-clusterrole.yaml
+    asserts:
+      - equal:
+          path: metadata.name
+          value: kasm-agent-seccomp-spo
+      - contains:
+          path: rules
+          content:
+            apiGroups:
+              - security-profiles-operator.x-k8s.io
+            resources:
+              - seccompprofiles
+            verbs:
+              - get
+              - list
+              - watch
+              - create
+              - delete
+      - lengthEqual:
+          path: rules
+          count: 1
+
   - it: leaves the runtime-bound cluster role names untouched by nameOverride
     set:
       nameOverride: something-else
@@ -316,6 +351,10 @@ tests:
           path: metadata.name
           value: kasm-seccomp-installer
         template: templates/rbac/kasm-seccomp-installer-clusterrole.yaml
+      - equal:
+          path: metadata.name
+          value: kasm-agent-seccomp-spo
+        template: templates/rbac/kasm-agent-seccomp-spo-clusterrole.yaml
       - equal:
           path: metadata.name
           value: manager-role
@@ -506,5 +545,5 @@ tests:
               - watch
       - lengthEqual:
           path: rules
-          count: 15
+          count: 16
 
