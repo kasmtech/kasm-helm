@@ -32,6 +32,7 @@ to the control plane, which runs as ordinary workloads on any node.
 | [Webcam and kernel modules](webcam-kernel-modules.md) | Webcam passthrough (`v4l2loopback`), WireGuard on older kernels | `nodePrep.modules.v4l2loopback.*`<br>`videoDevicePlugin.enabled` |
 | [Secure Boot](secure-boot.md) | Sign modules so they load on Secure Boot nodes | `nodePrep.secureBoot.existingMokSecret`<br>`nodePrep.modules.v4l2loopback.kmm.sign.enabled` |
 | [Node tuning and swap](tuning-and-swap.md) | Node sysctls and swap, kubelet first | `nodePrep.tuning.swap.enabled`<br>`nodePrep.tuning.sysctls.enabled` |
+| [Workspace seccomp profiles](seccomp-profiles.md) | Honour a workspace image's inline seccomp profile by installing it on the nodes | `agent.seccompInstaller.enabled`<br>`agent.seccompInstaller.kubeletSeccompDir` |
 
 Two decisions come before any of them. **Which nodes run sessions:** `agent.workspacesNodeSelector`
 pins sessions, and the module installer and device plugin that follow them, to a labelled pool;

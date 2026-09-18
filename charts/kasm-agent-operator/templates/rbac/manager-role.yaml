@@ -177,14 +177,16 @@ rules:
   - delete
   - get
   - update
-# The operator holds only `bind` on these two ClusterRoles, not the permissions they grant. It creates
+# The operator holds only `bind` on these ClusterRoles, not the permissions they grant. It creates
 # the per-Agent bindings that reference them by name, so the names below must match the ClusterRoles in
-# kasm-agent-clusterrole.yaml and kasm-nginx-sidecar-clusterrole.yaml exactly.
+# kasm-agent-clusterrole.yaml, kasm-nginx-sidecar-clusterrole.yaml and
+# kasm-seccomp-installer-clusterrole.yaml exactly.
 - apiGroups:
   - rbac.authorization.k8s.io
   resourceNames:
   - kasm-agent
   - kasm-nginx-sidecar
+  - kasm-seccomp-installer
   resources:
   - clusterroles
   verbs:

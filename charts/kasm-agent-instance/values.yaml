@@ -415,6 +415,36 @@ imagePuller:
   # idle to hold the image resident). Omitted when empty.
   resources: {}
 
+# seccompInstaller -- Deploy a per-agent DaemonSet that mirrors inline workspace seccomp profiles onto the
+# session nodes, so a Docker workspace image carrying `security_opt: seccomp=<json>` gets that profile applied
+# under Kubernetes (which can only reference a profile already on the node's disk). The agent hashes each inline
+# profile into a per-agent ConfigMap and points the session pod at `Localhost <prefix>/<digest>.json`; the
+# installer writes those profiles under the kubelet's seccomp directory. Off by default: the installer runs as
+# root with a hostPath mount into the kubelet seccomp directory, so the agent namespace must admit the
+# `privileged` Pod Security level and the nodes must allow hostPath (rules out e.g. GKE Autopilot). With it off,
+# an inline profile falls back to `Unconfined`. Follows `workspacesNodeSelector`/`workspacesTolerations`.
+#
+seccompInstaller:
+  # seccompInstaller.enabled -- Deploy the seccomp-profile installer DaemonSet.
+  enabled: false
+  # seccompInstaller.image -- The kasm-seccomp-installer image.
+  image:
+    # seccompInstaller.image.registry -- Registry that hosts the installer image.
+    registry: docker.io
+    # seccompInstaller.image.repository -- Repository of the installer image, without the registry or tag.
+    repository: kasmweb/kasm-seccomp-installer
+    # seccompInstaller.image.tag -- Tag of the installer image. Leave empty to fall back to the chart's `appVersion`.
+    tag: ""
+  # seccompInstaller.imagePullPolicy -- Pull policy for the installer image.
+  imagePullPolicy: IfNotPresent
+  # seccompInstaller.kubeletSeccompDir -- The kubelet's seccomp root on the node, which the installer writes
+  # profiles under (and mounts by hostPath). The default suits a stock kubelet; override it where the kubelet
+  # root is relocated — k3s (`/var/lib/rancher/k3s/agent/kubelet/seccomp`), microk8s
+  # (`/var/snap/microk8s/common/var/lib/kubelet/seccomp`).
+  kubeletSeccompDir: /var/lib/kubelet/seccomp
+  # seccompInstaller.resources -- Compute resources for the installer DaemonSet's container. Omitted when empty.
+  resources: {}
+
 # httpRoute -- Optionally expose the operator-created session-proxy Service through a Gateway API Gateway.
 #
 httpRoute:

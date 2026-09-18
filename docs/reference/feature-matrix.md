@@ -193,6 +193,7 @@ attached.
 | **Trusted CA certificates** | ✅ | Your CA certificates in PEM · [how-to](../how-to/networking/certificates.md) | `kasm-helm.trustedCaBundle.enabled=true`<br>`kasm-helm.trustedCaBundle.caCerts` |
 | **Secure Boot nodes** | 🔧 | MOK signing keys enrolled in each node's UEFI, and the key pair in a Secret · [how-to](../how-to/nodes/secure-boot.md) | `nodePrep.secureBoot.existingMokSecret`<br>or<br>`nodePrep.modules.v4l2loopback.kmm.sign.enabled=true` |
 | **WireGuard on kernels older than 5.6** | 🔧 | Kernel headers, `/lib/modules` and `/usr/src` on the node, and a `privileged` namespace · [how-to](../how-to/nodes/webcam-kernel-modules.md) | `nodePrep.enabled=true`<br>`nodePrep.modules.wireguard.enabled=true` |
+| **Workspace seccomp profiles** | 🔧 | A `privileged` namespace and hostPath nodes (the installer writes under the kubelet's seccomp dir as root) · [how-to](../how-to/nodes/seccomp-profiles.md) | `agent.seccompInstaller.enabled=true`<br>`agent.seccompInstaller.image.*`<br>`agent.seccompInstaller.kubeletSeccompDir` (k3s/microk8s) |
 | **Multi-tenancy / namespace isolation** | ⚠️ | NetworkPolicy enforcement, Pod Security Standards, ResourceQuota and LimitRange · [how-to](../how-to/networking/network-policies.md) | `networkPolicies.enabled=true`, one agent release per tenant |
 
 **Anything that touches a node needs a privileged namespace.** Webcam, WireGuard, Secure Boot and

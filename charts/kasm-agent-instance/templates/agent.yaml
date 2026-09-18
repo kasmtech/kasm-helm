@@ -156,6 +156,19 @@ spec:
     resources:
       {{- toYaml . | nindent 6 }}
     {{- end }}
+  {{- /* The seccomp installer's image is a required CRD field, so the whole block
+         is rendered only when enabled - never with an empty image. */}}
+  {{- if .Values.seccompInstaller.enabled }}
+  seccompInstaller:
+    enabled: true
+    image: {{ include "kasmAgentInstance.joinImage" (dict "image" .Values.seccompInstaller.image "defaultTag" .Chart.AppVersion "path" "seccompInstaller.image") | quote }}
+    imagePullPolicy: {{ .Values.seccompInstaller.imagePullPolicy }}
+    kubeletSeccompDir: {{ .Values.seccompInstaller.kubeletSeccompDir | quote }}
+    {{- with .Values.seccompInstaller.resources }}
+    resources:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+  {{- end }}
   {{- with .Values.imagePullSecrets }}
   imagePullSecrets:
     {{- toYaml . | nindent 4 }}

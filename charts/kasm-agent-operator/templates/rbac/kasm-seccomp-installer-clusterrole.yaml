@@ -1,0 +1,26 @@
+{{/*
+  ClusterRole for the kasm-seccomp-installer DaemonSet the operator deploys per Agent when
+  `spec.seccompInstaller` is set. The installer watches the agent's `seccomp-profiles` ConfigMap and
+  mirrors every profile onto each node under the kubelet's seccomp directory, so a workspace whose image
+  carries an inline `security_opt: seccomp=<json>` can reference it by localhost path.
+
+  Translated from config/rbac/seccomp_installer_clusterrole.yaml in the kasm-agent-operator repo.
+
+  It is a ClusterRole (not a Role) so the operator can create namespaced RoleBindings referencing it
+  while holding only `bind` on it (escalation prevention).
+
+  The `kasm-seccomp-installer` name below MUST NOT be templated or fullname-prefixed. The operator
+  references it by that exact name when reconciling an Agent CR, and `manager-role` grants `bind` on
+  that exact resourceName. Renaming it breaks seccomp-installer reconciliation at runtime, and it is why
+  this chart is a cluster singleton.
+*/}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kasm-seccomp-installer
+  labels:
+    {{- include "kasmAgentOperator.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]

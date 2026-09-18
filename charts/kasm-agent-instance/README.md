@@ -253,7 +253,7 @@ string
 			<td>Fully override the generated name prefix for the satellite objects. When set, those names are derived from this instead of from the release name and the chart name. </td>
 		</tr>
 		<tr>
-			<td id="gatewayRoute"><a href="./values.yaml#L590">gatewayRoute</a></td>
+			<td id="gatewayRoute"><a href="./values.yaml#L616">gatewayRoute</a></td>
 			<td>
 object
 </td>
@@ -272,7 +272,7 @@ parentRef:
 			<td>Optionally have the OPERATOR create the Gateway API TLSRoute, rather than rendering one from this chart. Same end result as `tlsRoute` - SNI-based TLS passthrough to the session proxy's own certificate - but the operator owns the route: it creates it, reconciles it, and keeps it aligned with the session-proxy Service it also owns, so the two cannot drift apart. `tlsRoute` is the chart-managed equivalent, for operator builds that predate this field or when the route has to live in the Helm release (owned by it, torn down with it, patched by other release tooling) rather than under the operator's ownership. Prefer this one whenever the operator supports it. The whole block is omitted from the Agent resource when disabled. </td>
 		</tr>
 		<tr>
-			<td id="gatewayRoute--enabled"><a href="./values.yaml#L597">gatewayRoute.enabled</a></td>
+			<td id="gatewayRoute--enabled"><a href="./values.yaml#L623">gatewayRoute.enabled</a></td>
 			<td>
 bool
 </td>
@@ -286,7 +286,7 @@ false
 			<td>Have the operator create the TLSRoute. Same cluster-side prerequisites as `tlsRoute`: the TLSRoute CRD (standard channel since Gateway API 1.5), and a Gateway with a `protocol: TLS` / `tls.mode: Passthrough` listener whose `allowedRoutes` admits this namespace. `httpRoute`, `ingress`, `route`, `tlsRoute` and `gatewayRoute` are alternatives - enable at most one of the five, since all of them point at the same session-proxy Service. Between the two passthrough options, prefer `gatewayRoute` when the operator supports it and fall back to `tlsRoute` when it does not.</td>
 		</tr>
 		<tr>
-			<td id="gatewayRoute--hostnames"><a href="./values.yaml#L621">gatewayRoute.hostnames</a></td>
+			<td id="gatewayRoute--hostnames"><a href="./values.yaml#L647">gatewayRoute.hostnames</a></td>
 			<td>
 list
 </td>
@@ -300,7 +300,7 @@ list
 			<td>SNI hostnames the route matches. Unlike `tlsRoute.hostnames`, which this chart defaults, these are defaulted by the *operator* to `[publicHostname]`, so leaving this empty is the normal case - it is omitted from the Agent resource and the operator fills it in. The session proxy's own certificate (`sessionProxy.certSecretName`) still has to cover whatever names end up in force, since the connection reaches it undecrypted. Example:   hostnames:     - agent.example.com     - alt.example.com</td>
 		</tr>
 		<tr>
-			<td id="gatewayRoute--parentRef"><a href="./values.yaml#L600">gatewayRoute.parentRef</a></td>
+			<td id="gatewayRoute--parentRef"><a href="./values.yaml#L626">gatewayRoute.parentRef</a></td>
 			<td>
 object
 </td>
@@ -316,7 +316,7 @@ sectionName: ""
 			<td>The single Gateway the operator attaches the TLSRoute to. Note the shape differs from `tlsRoute.parentRefs`: the CRD takes one reference, not a list.</td>
 		</tr>
 		<tr>
-			<td id="gatewayRoute--parentRef--name"><a href="./values.yaml#L603">gatewayRoute.parentRef.name</a></td>
+			<td id="gatewayRoute--parentRef--name"><a href="./values.yaml#L629">gatewayRoute.parentRef.name</a></td>
 			<td>
 string
 </td>
@@ -330,7 +330,7 @@ string
 			<td>REQUIRED when `gatewayRoute.enabled` is true. Name of the Gateway resource. Templating fails when it is empty, since the CRD rejects the resource without it.</td>
 		</tr>
 		<tr>
-			<td id="gatewayRoute--parentRef--namespace"><a href="./values.yaml#L606">gatewayRoute.parentRef.namespace</a></td>
+			<td id="gatewayRoute--parentRef--namespace"><a href="./values.yaml#L632">gatewayRoute.parentRef.namespace</a></td>
 			<td>
 string
 </td>
@@ -344,7 +344,7 @@ string
 			<td>Namespace of the Gateway. Omitted from the Agent resource when empty, which lets the operator default it to the Agent's own namespace.</td>
 		</tr>
 		<tr>
-			<td id="gatewayRoute--parentRef--sectionName"><a href="./values.yaml#L611">gatewayRoute.parentRef.sectionName</a></td>
+			<td id="gatewayRoute--parentRef--sectionName"><a href="./values.yaml#L637">gatewayRoute.parentRef.sectionName</a></td>
 			<td>
 string
 </td>
@@ -400,7 +400,7 @@ int
 			<td>How often the agent heartbeats the manager. </td>
 		</tr>
 		<tr>
-			<td id="httpRoute"><a href="./values.yaml#L424">httpRoute</a></td>
+			<td id="httpRoute"><a href="./values.yaml#L450">httpRoute</a></td>
 			<td>
 object
 </td>
@@ -417,7 +417,7 @@ parentRefs: []
 			<td>Optionally expose the operator-created session-proxy Service through a Gateway API Gateway. </td>
 		</tr>
 		<tr>
-			<td id="httpRoute--backendPort"><a href="./values.yaml#L442">httpRoute.backendPort</a></td>
+			<td id="httpRoute--backendPort"><a href="./values.yaml#L468">httpRoute.backendPort</a></td>
 			<td>
 int
 </td>
@@ -431,7 +431,7 @@ int
 			<td>Port on the session-proxy Service to forward to. The default, 4445, is the proxy's plain-HTTP listener; TLS for the public hostname is expected to terminate at the Gateway. Use 4444 to forward to the proxy's own HTTPS listener instead.</td>
 		</tr>
 		<tr>
-			<td id="httpRoute--enabled"><a href="./values.yaml#L428">httpRoute.enabled</a></td>
+			<td id="httpRoute--enabled"><a href="./values.yaml#L454">httpRoute.enabled</a></td>
 			<td>
 bool
 </td>
@@ -445,7 +445,7 @@ false
 			<td>Render the HTTPRoute. Requires the Gateway API CRDs and a Gateway in the cluster. `httpRoute`, `ingress`, `route`, `tlsRoute` and `gatewayRoute` are alternatives - enable at most one of the five, since all of them point at the same operator-created session-proxy Service.</td>
 		</tr>
 		<tr>
-			<td id="httpRoute--hostnames"><a href="./values.yaml#L438">httpRoute.hostnames</a></td>
+			<td id="httpRoute--hostnames"><a href="./values.yaml#L464">httpRoute.hostnames</a></td>
 			<td>
 list
 </td>
@@ -459,7 +459,7 @@ list
 			<td>Hostnames the route matches. Defaults to a single-entry list holding `publicHostname` when empty.</td>
 		</tr>
 		<tr>
-			<td id="httpRoute--parentRefs"><a href="./values.yaml#L435">httpRoute.parentRefs</a></td>
+			<td id="httpRoute--parentRefs"><a href="./values.yaml#L461">httpRoute.parentRefs</a></td>
 			<td>
 list
 </td>
@@ -573,69 +573,38 @@ list
 			<td>Pull secrets for the agent and session-proxy images, as a list of `{name: <secret>}` references. Omitted from the Agent resource entirely when empty. </td>
 		</tr>
 		<tr>
-			<td id="imagePuller"><a href="./values.yaml#L388">imagePuller</a></td>
+			<td id="imagePuller"><a href="./values.yaml#L390">imagePuller</a></td>
 			<td>
 object
 </td>
 			<td>
 				<div style="max-width: 520px;">
 <pre lang="json">
-affinity: {}
-enabled: false
-imagePullPolicy: IfNotPresent
-images: []
-nodeSelector: {}
+enabled: true
+extraImages: []
+refreshIntervalSeconds: 0
 resources: {}
-tolerations: []
 </pre>
 </div>
 			</td>
-			<td>Optionally pre-pull workspace images onto every targeted node with a KasmImagePuller resource, so the first session on a node does not wait for a cold image pull. </td>
+			<td>Pre-pull workspace images onto the session nodes, so the first session using an image on a node starts without a cold registry pull. The agent maintains one KasmImagePuller for this agent, from the manager's advertised catalog plus any `extraImages`; the operator reconciles it into a DaemonSet on the same nodes workspaces run on (`workspacesNodeSelector`/`workspacesTolerations`). </td>
 		</tr>
 		<tr>
-			<td id="imagePuller--affinity"><a href="./values.yaml#L420">imagePuller.affinity</a></td>
-			<td>
-object
-</td>
-			<td>
-				<div style="max-width: 520px;">
-<pre lang="json">
-{}
-</pre>
-</div>
-			</td>
-			<td>Node affinity for the puller pods, passed through verbatim. The resource takes a node affinity directly (`requiredDuringSchedulingIgnoredDuringExecution` right under `affinity`, no `nodeAffinity` wrapper); the operator merges its per-node back-off exclusions into it.</td>
-		</tr>
-		<tr>
-			<td id="imagePuller--enabled"><a href="./values.yaml#L390">imagePuller.enabled</a></td>
+			<td id="imagePuller--enabled"><a href="./values.yaml#L397">imagePuller.enabled</a></td>
 			<td>
 bool
 </td>
 			<td>
 				<div style="max-width: 520px;">
 <pre lang="json">
-false
+true
 </pre>
 </div>
 			</td>
-			<td>Render the KasmImagePuller resource.</td>
+			<td>Pre-pull workspace images. Keep this on (the default): it is what makes session start fast and pull-free, and the default `imageAvailabilityPolicy: pulled` depends on it (the manager only sends a session to a node once the image is staged there, so with the puller off no node ever reports an image and sessions stop scheduling). Turn it off only to run on demand — set `imageAvailabilityPolicy: all` alongside — e.g. to relieve node disk pressure from a large catalog, or when images are already resident on the nodes (a baked node image or a local registry mirror).</td>
 		</tr>
 		<tr>
-			<td id="imagePuller--imagePullPolicy"><a href="./values.yaml#L392">imagePuller.imagePullPolicy</a></td>
-			<td>
-string
-</td>
-			<td>
-				<div style="max-width: 520px;">
-<pre lang="json">
-IfNotPresent
-</pre>
-</div>
-			</td>
-			<td>Pull policy for the staged images.</td>
-		</tr>
-		<tr>
-			<td id="imagePuller--images"><a href="./values.yaml#L405">imagePuller.images</a></td>
+			<td id="imagePuller--extraImages"><a href="./values.yaml#L413">imagePuller.extraImages</a></td>
 			<td>
 list
 </td>
@@ -646,10 +615,24 @@ list
 </pre>
 </div>
 			</td>
-			<td>Catalog of images to stage, as a list of `{image, registry, imagePullSecrets}` objects passed through to the resource verbatim. `image` is the full reference and is authoritative for the pull; `registry` is informational; `imagePullSecrets` is an optional per-image list of `{name: <secret>}` references. Example:   images:     - image: kasmweb/chrome:1.18.0       registry: https://index.docker.io/v1/     - image: registry.example.com/team/custom-workspace:1.0       registry: https://registry.example.com       imagePullSecrets:         - name: example-registry</td>
+			<td>Images to stage in addition to the manager's advertised catalog, to pre-seed a custom workspace image the manager has not listed yet. A list of `{image, registry, imagePullSecrets}` objects: `image` is the full reference and is authoritative for the pull; `registry` is informational; `imagePullSecrets` is an optional per-image list of `{name: <secret>}` references. Example:   extraImages:     - image: registry.example.com/team/custom-workspace:1.0       registry: https://registry.example.com       imagePullSecrets:         - name: example-registry</td>
 		</tr>
 		<tr>
-			<td id="imagePuller--nodeSelector"><a href="./values.yaml#L413">imagePuller.nodeSelector</a></td>
+			<td id="imagePuller--refreshIntervalSeconds"><a href="./values.yaml#L402">imagePuller.refreshIntervalSeconds</a></td>
+			<td>
+int
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+0
+</pre>
+</div>
+			</td>
+			<td>Re-pull the staged images on this cadence, so a mutable tag (`:develop`, or a rebuilt `:1.2.3` whose digest changed but tag did not) is refreshed on the nodes. 0 (the default) never re-pulls: an image is fetched only when it first enters the catalog. A refresh rolls the puller DaemonSet, so keep it comfortably longer than a pull takes — 3600 (hourly) is a sensible start.</td>
+		</tr>
+		<tr>
+			<td id="imagePuller--resources"><a href="./values.yaml#L416">imagePuller.resources</a></td>
 			<td>
 object
 </td>
@@ -660,35 +643,7 @@ object
 </pre>
 </div>
 			</td>
-			<td>Node labels the puller pods must match, passed through to the resource verbatim. Give it the session pool's selector (the same map as `agent.workspacesNodeSelector`) so images are staged where sessions can run and nowhere else; empty, the puller DaemonSet runs on every schedulable node.</td>
-		</tr>
-		<tr>
-			<td id="imagePuller--resources"><a href="./values.yaml#L408">imagePuller.resources</a></td>
-			<td>
-object
-</td>
-			<td>
-				<div style="max-width: 520px;">
-<pre lang="json">
-{}
-</pre>
-</div>
-			</td>
-			<td>Compute resources for the image-puller DaemonSet's containers, passed through verbatim. Omitted from the resource when empty.</td>
-		</tr>
-		<tr>
-			<td id="imagePuller--tolerations"><a href="./values.yaml#L416">imagePuller.tolerations</a></td>
-			<td>
-list
-</td>
-			<td>
-				<div style="max-width: 520px;">
-<pre lang="json">
-[]
-</pre>
-</div>
-			</td>
-			<td>Tolerations for the puller pods, so a tainted pool node is staged too. Passed through verbatim.</td>
+			<td>Compute resources for the puller DaemonSet's idle containers (kept tiny — they only idle to hold the image resident). Omitted when empty.</td>
 		</tr>
 		<tr>
 			<td id="inClusterControlPlane"><a href="./values.yaml#L52">inClusterControlPlane</a></td>
@@ -705,7 +660,7 @@ false
 			<td>Derive the control-plane connection from a `kasm-helm` release installed under the **same release name and namespace** - which is what the `kasm-platform` umbrella does.  When true, three values that otherwise have no default and fail the render are derived instead:  * `manager.hostname` becomes `<release>-proxy-default.<namespace>.svc.cluster.local` * the manager token is read from the `<release>-secrets` Secret the control plane generates,   under its `manager-token` key * `publicHostname` becomes `<name>-session-proxy.<namespace>.svc.cluster.local`  Anything you set explicitly still wins. The derived `manager.hostname` assumes the default zone; set it yourself when `kasm-helm.kasmZones` names something else.  The derived `publicHostname` is an in-cluster address, so it only works while the control plane relays session traffic (`proxy_connections: true`, Kasm's default). Publishing sessions directly to browsers needs a real external hostname here - see the networking documentation. </td>
 		</tr>
 		<tr>
-			<td id="ingress"><a href="./values.yaml#L447">ingress</a></td>
+			<td id="ingress"><a href="./values.yaml#L473">ingress</a></td>
 			<td>
 object
 </td>
@@ -724,7 +679,7 @@ tls: []
 			<td>Optionally expose the operator-created session-proxy Service through a classic `networking.k8s.io/v1` Ingress, for clusters without the Gateway API. </td>
 		</tr>
 		<tr>
-			<td id="ingress--annotations"><a href="./values.yaml#L463">ingress.annotations</a></td>
+			<td id="ingress--annotations"><a href="./values.yaml#L489">ingress.annotations</a></td>
 			<td>
 object
 </td>
@@ -738,7 +693,7 @@ object
 			<td>Annotations for the Ingress, merged over `commonAnnotations`. This is where the controller-specific websocket and timeout settings go - without them sessions are cut off at the controller's default read timeout (60s on ingress-nginx). Example (ingress-nginx):   annotations:     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"</td>
 		</tr>
 		<tr>
-			<td id="ingress--backendPort"><a href="./values.yaml#L482">ingress.backendPort</a></td>
+			<td id="ingress--backendPort"><a href="./values.yaml#L508">ingress.backendPort</a></td>
 			<td>
 int
 </td>
@@ -752,7 +707,7 @@ int
 			<td>Port on the session-proxy Service to forward to. The default, 4445, is the proxy's plain-HTTP listener; TLS for the public hostname is expected to terminate at the Ingress. Use 4444 to forward to the proxy's own HTTPS listener instead, which on most controllers also needs a backend-protocol annotation (`nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"` on ingress-nginx).</td>
 		</tr>
 		<tr>
-			<td id="ingress--className"><a href="./values.yaml#L455">ingress.className</a></td>
+			<td id="ingress--className"><a href="./values.yaml#L481">ingress.className</a></td>
 			<td>
 string
 </td>
@@ -766,7 +721,7 @@ string
 			<td>`ingressClassName` of the controller that should serve this Ingress. Omitted from the resource when empty, which leaves the cluster's default IngressClass to claim it.</td>
 		</tr>
 		<tr>
-			<td id="ingress--enabled"><a href="./values.yaml#L452">ingress.enabled</a></td>
+			<td id="ingress--enabled"><a href="./values.yaml#L478">ingress.enabled</a></td>
 			<td>
 bool
 </td>
@@ -780,7 +735,7 @@ false
 			<td>Render the Ingress. `httpRoute`, `ingress`, `route`, `tlsRoute` and `gatewayRoute` are alternatives - enable at most one of the five, since all point at the same operator-created session-proxy Service. Kasm sessions are long-lived VNC websockets, so whichever controller backs this ingress class must allow websocket upgrades and use read and send timeouts of at least 3600s; see `ingress.annotations` below.</td>
 		</tr>
 		<tr>
-			<td id="ingress--hosts"><a href="./values.yaml#L469">ingress.hosts</a></td>
+			<td id="ingress--hosts"><a href="./values.yaml#L495">ingress.hosts</a></td>
 			<td>
 list
 </td>
@@ -794,7 +749,7 @@ list
 			<td>Hostnames the Ingress serves, as a list of strings. Each gets one `/` `Prefix` rule to the session-proxy Service. Defaults to a single-entry list holding `publicHostname` when empty. Example:   hosts:     - agent.example.com</td>
 		</tr>
 		<tr>
-			<td id="ingress--tls"><a href="./values.yaml#L477">ingress.tls</a></td>
+			<td id="ingress--tls"><a href="./values.yaml#L503">ingress.tls</a></td>
 			<td>
 list
 </td>
@@ -1153,7 +1108,7 @@ object
 			<td>Compute resources for the agent container, passed through to `spec.resources` verbatim. Omitted from the Agent resource when empty, in which case the operator applies its own defaults. </td>
 		</tr>
 		<tr>
-			<td id="route"><a href="./values.yaml#L487">route</a></td>
+			<td id="route"><a href="./values.yaml#L513">route</a></td>
 			<td>
 object
 </td>
@@ -1177,7 +1132,7 @@ tls:
 			<td>Optionally expose the operator-created session-proxy Service through an OpenShift Route, the native option on OpenShift clusters. </td>
 		</tr>
 		<tr>
-			<td id="route--annotations"><a href="./values.yaml#L503">route.annotations</a></td>
+			<td id="route--annotations"><a href="./values.yaml#L529">route.annotations</a></td>
 			<td>
 object
 </td>
@@ -1191,7 +1146,7 @@ object
 			<td>Annotations for the Route, merged over `commonAnnotations`. The router timeout belongs here: without it OpenShift closes idle session websockets after 30 seconds. Example:   annotations:     haproxy.router.openshift.io/timeout: "3600s"</td>
 		</tr>
 		<tr>
-			<td id="route--backendPort"><a href="./values.yaml#L507">route.backendPort</a></td>
+			<td id="route--backendPort"><a href="./values.yaml#L533">route.backendPort</a></td>
 			<td>
 string
 </td>
@@ -1205,7 +1160,7 @@ string
 			<td>Port on the session-proxy Service to route to. Leave empty to pick it from `route.tls.termination`: 4444, the proxy's own HTTPS listener, for `passthrough` and `reencrypt`; 4445, its plain-HTTP listener, for `edge`. Set it only to override that pairing.</td>
 		</tr>
 		<tr>
-			<td id="route--enabled"><a href="./values.yaml#L493">route.enabled</a></td>
+			<td id="route--enabled"><a href="./values.yaml#L519">route.enabled</a></td>
 			<td>
 bool
 </td>
@@ -1219,7 +1174,7 @@ false
 			<td>Render the Route. Requires OpenShift (the `route.openshift.io` API). `httpRoute`, `ingress`, `route`, `tlsRoute` and `gatewayRoute` are alternatives - enable at most one of the five, since all of them point at the same operator-created session-proxy Service. Kasm sessions are long-lived VNC websockets and the OpenShift router's default connection timeout is 30s, so a timeout annotation is effectively mandatory; see `route.annotations` below.</td>
 		</tr>
 		<tr>
-			<td id="route--host"><a href="./values.yaml#L497">route.host</a></td>
+			<td id="route--host"><a href="./values.yaml#L523">route.host</a></td>
 			<td>
 string
 </td>
@@ -1233,7 +1188,7 @@ string
 			<td>Hostname the Route serves. Defaults to `publicHostname` when empty. Under the default passthrough termination this hostname is matched against the session proxy's own certificate, so that certificate has to cover it.</td>
 		</tr>
 		<tr>
-			<td id="route--tls"><a href="./values.yaml#L509">route.tls</a></td>
+			<td id="route--tls"><a href="./values.yaml#L535">route.tls</a></td>
 			<td>
 object
 </td>
@@ -1252,7 +1207,7 @@ termination: passthrough
 			<td>TLS settings for the Route.</td>
 		</tr>
 		<tr>
-			<td id="route--tls--caCertificate"><a href="./values.yaml#L535">route.tls.caCertificate</a></td>
+			<td id="route--tls--caCertificate"><a href="./values.yaml#L561">route.tls.caCertificate</a></td>
 			<td>
 string
 </td>
@@ -1266,7 +1221,7 @@ string
 			<td>PEM CA certificate that signed `certificate`. Omitted when empty.</td>
 		</tr>
 		<tr>
-			<td id="route--tls--certificate"><a href="./values.yaml#L533">route.tls.certificate</a></td>
+			<td id="route--tls--certificate"><a href="./values.yaml#L559">route.tls.certificate</a></td>
 			<td>
 string
 </td>
@@ -1280,7 +1235,7 @@ string
 			<td>PEM certificate the router serves, for `edge` and `reencrypt`. Omitted when empty.</td>
 		</tr>
 		<tr>
-			<td id="route--tls--destinationCACertificate"><a href="./values.yaml#L538">route.tls.destinationCACertificate</a></td>
+			<td id="route--tls--destinationCACertificate"><a href="./values.yaml#L564">route.tls.destinationCACertificate</a></td>
 			<td>
 string
 </td>
@@ -1294,7 +1249,7 @@ string
 			<td>PEM CA certificate the router uses to validate the session proxy's certificate on a `reencrypt` Route. Omitted when empty.</td>
 		</tr>
 		<tr>
-			<td id="route--tls--insecureEdgeTerminationPolicy"><a href="./values.yaml#L526">route.tls.insecureEdgeTerminationPolicy</a></td>
+			<td id="route--tls--insecureEdgeTerminationPolicy"><a href="./values.yaml#L552">route.tls.insecureEdgeTerminationPolicy</a></td>
 			<td>
 string
 </td>
@@ -1308,7 +1263,7 @@ string
 			<td>What the Route does with plain-HTTP requests - `Redirect`, `Allow`, or `None`. Omitted from the Route when empty. `Redirect` is the usual choice for `edge`; `passthrough` supports only `Redirect` and `None`.</td>
 		</tr>
 		<tr>
-			<td id="route--tls--key"><a href="./values.yaml#L530">route.tls.key</a></td>
+			<td id="route--tls--key"><a href="./values.yaml#L556">route.tls.key</a></td>
 			<td>
 string
 </td>
@@ -1322,7 +1277,7 @@ string
 			<td>PEM private key the router serves, for `edge` and `reencrypt`. Omitted when empty. This lands in the Helm release history in plaintext - prefer letting the router use its own certificate, or passthrough with a cert-manager-issued proxy certificate.</td>
 		</tr>
 		<tr>
-			<td id="route--tls--termination"><a href="./values.yaml#L522">route.tls.termination</a></td>
+			<td id="route--tls--termination"><a href="./values.yaml#L548">route.tls.termination</a></td>
 			<td>
 string
 </td>
@@ -1334,6 +1289,141 @@ passthrough
 </div>
 			</td>
 			<td>Where TLS terminates - `passthrough`, `edge` or `reencrypt`. The default, `passthrough`, gives end-to-end TLS: the router forwards the connection untouched and browsers see the session proxy's own certificate from `sessionProxy.certSecretName`. Use `edge` to terminate at the router instead, in which case supply `key`/`certificate` below or let the router serve its default certificate. Example (terminate TLS at the OpenShift router instead of at the session proxy):   route:     enabled: true     annotations:       haproxy.router.openshift.io/timeout: "3600s"     tls:       termination: edge       insecureEdgeTerminationPolicy: Redirect</td>
+		</tr>
+		<tr>
+			<td id="seccompInstaller"><a href="./values.yaml#L427">seccompInstaller</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+enabled: false
+image:
+    registry: docker.io
+    repository: kasmweb/kasm-seccomp-installer
+    tag: ""
+imagePullPolicy: IfNotPresent
+kubeletSeccompDir: /var/lib/kubelet/seccomp
+resources: {}
+</pre>
+</div>
+			</td>
+			<td>Deploy a per-agent DaemonSet that mirrors inline workspace seccomp profiles onto the session nodes, so a Docker workspace image carrying `security_opt: seccomp=<json>` gets that profile applied under Kubernetes (which can only reference a profile already on the node's disk). The agent hashes each inline profile into a per-agent ConfigMap and points the session pod at `Localhost <prefix>/<digest>.json`; the installer writes those profiles under the kubelet's seccomp directory. Off by default: the installer runs as root with a hostPath mount into the kubelet seccomp directory, so the agent namespace must admit the `privileged` Pod Security level and the nodes must allow hostPath (rules out e.g. GKE Autopilot). With it off, an inline profile falls back to `Unconfined`. Follows `workspacesNodeSelector`/`workspacesTolerations`. </td>
+		</tr>
+		<tr>
+			<td id="seccompInstaller--enabled"><a href="./values.yaml#L429">seccompInstaller.enabled</a></td>
+			<td>
+bool
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+false
+</pre>
+</div>
+			</td>
+			<td>Deploy the seccomp-profile installer DaemonSet.</td>
+		</tr>
+		<tr>
+			<td id="seccompInstaller--image"><a href="./values.yaml#L431">seccompInstaller.image</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+registry: docker.io
+repository: kasmweb/kasm-seccomp-installer
+tag: ""
+</pre>
+</div>
+			</td>
+			<td>The kasm-seccomp-installer image.</td>
+		</tr>
+		<tr>
+			<td id="seccompInstaller--image--registry"><a href="./values.yaml#L433">seccompInstaller.image.registry</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+docker.io
+</pre>
+</div>
+			</td>
+			<td>Registry that hosts the installer image.</td>
+		</tr>
+		<tr>
+			<td id="seccompInstaller--image--repository"><a href="./values.yaml#L435">seccompInstaller.image.repository</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+kasmweb/kasm-seccomp-installer
+</pre>
+</div>
+			</td>
+			<td>Repository of the installer image, without the registry or tag.</td>
+		</tr>
+		<tr>
+			<td id="seccompInstaller--image--tag"><a href="./values.yaml#L437">seccompInstaller.image.tag</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+""
+</pre>
+</div>
+			</td>
+			<td>Tag of the installer image. Leave empty to fall back to the chart's `appVersion`.</td>
+		</tr>
+		<tr>
+			<td id="seccompInstaller--imagePullPolicy"><a href="./values.yaml#L439">seccompInstaller.imagePullPolicy</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+IfNotPresent
+</pre>
+</div>
+			</td>
+			<td>Pull policy for the installer image.</td>
+		</tr>
+		<tr>
+			<td id="seccompInstaller--kubeletSeccompDir"><a href="./values.yaml#L444">seccompInstaller.kubeletSeccompDir</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+/var/lib/kubelet/seccomp
+</pre>
+</div>
+			</td>
+			<td>The kubelet's seccomp root on the node, which the installer writes profiles under (and mounts by hostPath). The default suits a stock kubelet; override it where the kubelet root is relocated — k3s (`/var/lib/rancher/k3s/agent/kubelet/seccomp`), microk8s (`/var/snap/microk8s/common/var/lib/kubelet/seccomp`).</td>
+		</tr>
+		<tr>
+			<td id="seccompInstaller--resources"><a href="./values.yaml#L446">seccompInstaller.resources</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+{}
+</pre>
+</div>
+			</td>
+			<td>Compute resources for the installer DaemonSet's container. Omitted when empty.</td>
 		</tr>
 		<tr>
 			<td id="serverID"><a href="./values.yaml#L348">serverID</a></td>
@@ -1920,7 +2010,7 @@ string
 			<td>Scopes the derived StorageClass and Secret names. Defaults to the Agent resource name when empty.</td>
 		</tr>
 		<tr>
-			<td id="tlsRoute"><a href="./values.yaml#L544">tlsRoute</a></td>
+			<td id="tlsRoute"><a href="./values.yaml#L570">tlsRoute</a></td>
 			<td>
 object
 </td>
@@ -1938,7 +2028,7 @@ parentRefs: []
 			<td>Optionally expose the operator-created session-proxy Service through a Gateway API TLSRoute: SNI-based TLS passthrough, giving end-to-end TLS to the session proxy's own certificate the way an OpenShift `passthrough` Route does, but on any cluster with the Gateway API rather than only on OpenShift. </td>
 		</tr>
 		<tr>
-			<td id="tlsRoute--apiVersion"><a href="./values.yaml#L579">tlsRoute.apiVersion</a></td>
+			<td id="tlsRoute--apiVersion"><a href="./values.yaml#L605">tlsRoute.apiVersion</a></td>
 			<td>
 string
 </td>
@@ -1952,7 +2042,7 @@ string
 			<td>API version to render the TLSRoute with. Empty (the default) picks `gateway.networking.k8s.io/v1` when the cluster serves it (Gateway API 1.5+ standard channel), falls back to `gateway.networking.k8s.io/v1alpha2` when only the older experimental-channel CRD is served, and uses `v1` when rendering without a cluster (`helm template`). Set it to override that choice, for example when rendering offline for a cluster that still serves only `v1alpha2`.</td>
 		</tr>
 		<tr>
-			<td id="tlsRoute--backendPort"><a href="./values.yaml#L573">tlsRoute.backendPort</a></td>
+			<td id="tlsRoute--backendPort"><a href="./values.yaml#L599">tlsRoute.backendPort</a></td>
 			<td>
 int
 </td>
@@ -1966,7 +2056,7 @@ int
 			<td>Port on the session-proxy Service to forward to. The default, 4444, is the proxy's own HTTPS listener - the only port that makes sense under passthrough, since nothing terminates TLS before the connection gets there.</td>
 		</tr>
 		<tr>
-			<td id="tlsRoute--enabled"><a href="./values.yaml#L555">tlsRoute.enabled</a></td>
+			<td id="tlsRoute--enabled"><a href="./values.yaml#L581">tlsRoute.enabled</a></td>
 			<td>
 bool
 </td>
@@ -1980,7 +2070,7 @@ false
 			<td>Render the TLSRoute from this chart. Requires the TLSRoute CRD - standard channel as `v1` since Gateway API 1.5 (Kubernetes 1.31+); older experimental-channel installs serve only `v1alpha2`, which the chart falls back to (see `tlsRoute.apiVersion`) - and a Gateway that has a listener with `protocol: TLS` and `tls.mode: Passthrough` whose `allowedRoutes` admits this namespace. `httpRoute`, `ingress`, `route`, `tlsRoute` and `gatewayRoute` are alternatives - enable at most one of the five, since all of them point at the same operator-created session-proxy Service. `gatewayRoute` below produces the same passthrough route but has the operator create and reconcile it; prefer that when the operator supports it, and reach for this chart-managed one otherwise. Nothing decrypts the connection on the way, so the Gateway sets no timeouts and applies no HTTP rules: Kasm's long-lived session websockets are bounded only by the layer-4 idle timeout of the Gateway's data plane and of anything in front of it.</td>
 		</tr>
 		<tr>
-			<td id="tlsRoute--hostnames"><a href="./values.yaml#L569">tlsRoute.hostnames</a></td>
+			<td id="tlsRoute--hostnames"><a href="./values.yaml#L595">tlsRoute.hostnames</a></td>
 			<td>
 list
 </td>
@@ -1994,7 +2084,7 @@ list
 			<td>SNI hostnames the route matches. Defaults to a single-entry list holding `publicHostname` when empty. Because the connection is passed through untouched, the browser validates the session proxy's own certificate (`sessionProxy.certSecretName`) against these names, so that certificate has to cover them - enable `sessionProxy.certificate` or provision the Secret out of band.</td>
 		</tr>
 		<tr>
-			<td id="tlsRoute--parentRefs"><a href="./values.yaml#L564">tlsRoute.parentRefs</a></td>
+			<td id="tlsRoute--parentRefs"><a href="./values.yaml#L590">tlsRoute.parentRefs</a></td>
 			<td>
 list
 </td>

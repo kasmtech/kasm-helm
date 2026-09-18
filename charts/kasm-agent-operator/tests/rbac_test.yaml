@@ -7,6 +7,7 @@ templates:
   - templates/rbac/metrics-roles.yaml
   - templates/rbac/kasm-agent-clusterrole.yaml
   - templates/rbac/kasm-nginx-sidecar-clusterrole.yaml
+  - templates/rbac/kasm-seccomp-installer-clusterrole.yaml
   - templates/rbac/aggregate-roles.yaml
 
 tests:
@@ -82,7 +83,7 @@ tests:
             name: kasm-operator-sa
             namespace: NAMESPACE
 
-  - it: grants the manager bind on the two runtime-bound cluster roles only
+  - it: grants the manager bind on the runtime-bound cluster roles only
     template: templates/rbac/manager-role.yaml
     documentIndex: 0
     asserts:
@@ -94,6 +95,7 @@ tests:
             resourceNames:
               - kasm-agent
               - kasm-nginx-sidecar
+              - kasm-seccomp-installer
             resources:
               - clusterroles
             verbs:
@@ -273,6 +275,30 @@ tests:
           path: rules[*].verbs
           content: delete
 
+  - it: names the seccomp installer cluster role kasm-seccomp-installer verbatim, reads only
+    template: templates/rbac/kasm-seccomp-installer-clusterrole.yaml
+    asserts:
+      - equal:
+          path: metadata.name
+          value: kasm-seccomp-installer
+      - contains:
+          path: rules
+          content:
+            apiGroups:
+              - ""
+            resources:
+              - configmaps
+            verbs:
+              - get
+              - list
+              - watch
+      - lengthEqual:
+          path: rules
+          count: 1
+      - notContains:
+          path: rules[*].verbs
+          content: create
+
   - it: leaves the runtime-bound cluster role names untouched by nameOverride
     set:
       nameOverride: something-else
@@ -286,6 +312,10 @@ tests:
           path: metadata.name
           value: kasm-nginx-sidecar
         template: templates/rbac/kasm-nginx-sidecar-clusterrole.yaml
+      - equal:
+          path: metadata.name
+          value: kasm-seccomp-installer
+        template: templates/rbac/kasm-seccomp-installer-clusterrole.yaml
       - equal:
           path: metadata.name
           value: manager-role

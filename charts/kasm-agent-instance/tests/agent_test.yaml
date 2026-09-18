@@ -453,6 +453,51 @@ tests:
           path: spec.imagePuller.resources.requests.memory
           value: 32Mi
 
+  - it: renders no seccomp installer by default
+    asserts:
+      - isNull:
+          path: spec.seccompInstaller
+
+  - it: renders the seccomp installer block when enabled
+    set:
+      seccompInstaller:
+        enabled: true
+        image:
+          registry: registry.example.com
+          repository: kasmweb/kasm-seccomp-installer
+          tag: "1.2.3"
+        imagePullPolicy: Always
+        kubeletSeccompDir: /var/lib/rancher/k3s/agent/kubelet/seccomp
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+    asserts:
+      - equal:
+          path: spec.seccompInstaller.enabled
+          value: true
+      - equal:
+          path: spec.seccompInstaller.image
+          value: registry.example.com/kasmweb/kasm-seccomp-installer:1.2.3
+      - equal:
+          path: spec.seccompInstaller.imagePullPolicy
+          value: Always
+      - equal:
+          path: spec.seccompInstaller.kubeletSeccompDir
+          value: /var/lib/rancher/k3s/agent/kubelet/seccomp
+      - equal:
+          path: spec.seccompInstaller.resources.requests.memory
+          value: 32Mi
+
+  - it: falls the seccomp installer image tag back to the chart appVersion
+    set:
+      seccompInstaller:
+        enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.seccompInstaller.image
+          pattern: ^docker\.io/kasmweb/kasm-seccomp-installer:.+
+
   - it: omits every optional field that is left empty
     asserts:
       - isNull:
