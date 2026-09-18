@@ -23,10 +23,9 @@ tests:
     values:
       - ../../../tests/values/multizone-config.yaml
     set:
-      apiWorkerMode: split
       components:
-        apiWorker:
-          pools:
+        api:
+          workerPool:
             - name: sessions
             - name: media
     asserts:

@@ -1,24 +1,27 @@
 {{/*
-Kasm API Worker Deployment definitions (apiWorkerMode: split only).
+Kasm API Worker Deployment definitions (components.api.workerPool non-empty only).
 
 One Deployment per pool per zone. Each worker pod clones the api-deployment pod structure
 (same init containers, security context, POSTGRES_ and SERVER_ env, image) but always sets
 KASM_PROCESS=TRUE and adds the KASM_WORKER_* queue-consumption env vars. There is no Service:
 workers only consume BullMQ queues, they are never addressed directly.
+
+Resource names are shortened to <release>-api-<pool>[-<zone>] (D002); the selector/pod labels
+still carry the "apiWorker" component (kebab: api-worker) so they stay distinct from the api
+Deployment's own pods.
 */}}
-{{- $apiWorkerMode := include "kasm.apiWorkerMode" .Values -}}
-{{- if eq $apiWorkerMode "split" }}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
-{{- $merged := fromYaml (include "kasm.mergedValues" (dict "root" . "componentName" "apiWorker")) -}}
+{{- $merged := fromYaml (include "kasm.mergedValues" (dict "root" . "componentName" "api")) -}}
 {{- $pools := (include "kasm.apiWorkerPools" .Values | fromYamlArray) -}}
 {{- range $pool := $pools }}
 {{- range $idx, $zone := (include "kasm.zones" $ | fromYamlArray) }}
 {{- $poolZone := printf "%s-%s" $pool.slug $zone.name }}
+{{- $workerName := include "kasm.name" (list $ "api" "" $poolZone) }}
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  {{- include "kasm.metadata" (dict "context" $ "component" "apiWorker" "resource" "deployment" "zone" $poolZone "include" "all") | indent 2 }}
+  {{- include "kasm.metadata" (dict "context" $ "component" "apiWorker" "resource" "deployment" "zone" $poolZone "include" "all" "name" $workerName) | indent 2 }}
 spec:
   replicas: {{ $pool.replicas }}
   strategy:
@@ -54,7 +57,7 @@ spec:
         {{- end }}
       containers:
         - name: {{ include "kasm.name" (list $ "apiWorker" "container" $poolZone) }}
-          image: {{ $constants.apiWorker.image }}
+          image: {{ $constants.api.image }}
           imagePullPolicy: {{ $.Values.imagePullPolicy }}
           env:
             - name: PYTHONWARNINGS
@@ -125,14 +128,14 @@ spec:
             {{- include "kasm.clickhouseCaVolumeMount" $ | nindent 12 }}
           {{- if $.Values.applyHealthChecks }}
           livenessProbe:
-            {{- include "health.probe" (dict "root" $ "component" "apiWorker" "probeType" "livenessProbe" "type" "http" "path" "/livez" "portName" $constants.api.livenessPortName) | nindent 12 }}
+            {{- include "health.probe" (dict "root" $ "component" "api" "probeType" "livenessProbe" "type" "http" "path" "/livez" "portName" $constants.api.livenessPortName) | nindent 12 }}
           readinessProbe:
-            {{- include "health.probe" (dict "root" $ "component" "apiWorker" "probeType" "readinessProbe" "type" "http" "path" "/api/__healthcheck" "portName" $constants.api.portName) | nindent 12 }}
+            {{- include "health.probe" (dict "root" $ "component" "api" "probeType" "readinessProbe" "type" "http" "path" "/api/__healthcheck" "portName" $constants.api.portName) | nindent 12 }}
           {{- end }}
           {{- if $pool.resources }}
           resources: {{- toYaml $pool.resources | nindent 12 }}
-          {{- else if $.Values.components.apiWorker.resources }}
-          resources: {{- toYaml $.Values.components.apiWorker.resources | nindent 12 }}
+          {{- else if $.Values.components.api.resources }}
+          resources: {{- toYaml $.Values.components.api.resources | nindent 12 }}
           {{- else }}
           resources: {{- include "resources.preset" (dict "node" $constants.api.component "size" $.Values.deploymentSize) | nindent 12 }}
           {{- end }}
@@ -149,6 +152,5 @@ spec:
       {{- end }}
       {{- include "kasm.trustedCaVolumes" $ | nindent 8 }}
       {{- include "kasm.clickhouseCaVolume" $ | nindent 8 }}
-{{- end }}
 {{- end }}
 {{- end }}

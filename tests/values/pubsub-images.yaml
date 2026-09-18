@@ -1,8 +1,9 @@
 # Branch-build image overrides for the pub/sub e2e scenarios (test_16_api_worker_split.py and
-# any other scenario exercising the manager-removal / apiWorkerMode rework). This chart change
-# depends on backend code that only exists on integ/otel-openapi-pubsub (API absorbing the
-# manager role, BullMQ-on-PostgreSQL pub/sub, apiWorkerMode split), so those scenarios must run
-# against branch builds rather than the released tags the other e2e scenarios use.
+# any other scenario exercising the manager-removal / components.api.workerPool rework). This
+# chart change depends on backend code that only exists on integ/otel-openapi-pubsub (API
+# absorbing the manager role, BullMQ-on-PostgreSQL pub/sub, a non-empty workerPool), so those
+# scenarios must run against branch builds rather than the released tags the other e2e
+# scenarios use.
 #
 # There is no `postgres-private:integ-otel-openapi-pubsub` build, so `database.image` is
 # deliberately left untouched here — it stays on the chart's default released `kasmweb/postgres`
@@ -16,10 +17,6 @@
 #   kasmweb/{api,proxy,kasm-guac,rdp-gateway,rdp-https-gateway}-private:integ-otel-openapi-pubsub
 components:
   api:
-    image:
-      repository: kasmweb/api-private
-      tag: "integ-otel-openapi-pubsub"
-  apiWorker:
     image:
       repository: kasmweb/api-private
       tag: "integ-otel-openapi-pubsub"

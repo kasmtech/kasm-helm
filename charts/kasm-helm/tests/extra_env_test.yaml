@@ -7,6 +7,7 @@ suite: extraEnv (global + per-component env vars)
 
 templates:
   - templates/api-deployment.yaml
+  - templates/api-worker-deployment.yaml
   - templates/proxy-deployment.yaml
   - templates/connection-proxy-statefulset.yaml
   - templates/db-statefulset.yaml
@@ -106,6 +107,27 @@ tests:
           value: "tail"
       - exists:
           path: spec.template.spec.containers[0].env[?(@.name=="POSTGRES_HOST")]
+
+  - it: global and components.api extraEnv both reach the api-worker container (workers share the api component)
+    template: templates/api-worker-deployment.yaml
+    set:
+      extraEnv:
+        - name: GLOBAL_ONLY
+          value: "global"
+      components:
+        api:
+          extraEnv:
+            - name: API_ONLY
+              value: "api"
+          workerPool:
+            - name: default
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="GLOBAL_ONLY")].value
+          value: "global"
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="API_ONLY")].value
+          value: "api"
 
   - it: proxy container gets an extraEnv-driven env block (none exists by default)
     template: templates/proxy-deployment.yaml

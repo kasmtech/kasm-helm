@@ -1,9 +1,9 @@
 """
-E2E test for apiWorkerMode: split (kasm-helm-37c / kasm-helm-tzy).
+E2E test for components.api.workerPool (kasm-helm-37c / kasm-helm-tzy).
 
 Installs the chart from tests/values/api-worker-split-e2e.yaml (single zone, no
 ingress, so it fits the single-node kind cluster without also standing up
-ingress-nginx) with two apiWorker pools (a full-queue "primary" pool and a
+ingress-nginx) with two workerPool entries (a full-queue "primary" pool and a
 restricted-queue "restricted" pool, layered here with kind-sized resource
 requests) and verifies the resulting Deployment fan-out: worker pods run
 KASM_PROCESS=TRUE with the pool's queue list, api itself publishes only
@@ -53,18 +53,19 @@ def test_api_worker_split_mode(installer, temp_workdir: Path) -> None:
     namespace = installer["namespace"]
 
     # tests/values/api-worker-split-e2e.yaml is the single source for the
-    # scenario topology (deploymentSize, apiWorkerMode, pools); this only
-    # layers on the kind-sized resource requests and install-time fields
-    # that fixture deliberately leaves out (see its header comment).
+    # scenario topology (deploymentSize, workerPool); this only layers on the
+    # kind-sized resource requests and install-time fields that fixture
+    # deliberately leaves out (see its header comment).
     fixture_path = Path("/e2e-values/api-worker-split-e2e.yaml")
     values_obj = yaml.safe_load(fixture_path.read_text())
     values_obj["publicAddr"] = "kasm.example.com"
     values_obj["certificate"] = {"secretName": "kasm-deployment-tls"}
     values_obj["components"] = {
-        "api": {"resources": _LOW},
-        "apiWorker": {
-            "pools": [
-                {**pool, "resources": _LOW} for pool in values_obj["components"]["apiWorker"]["pools"]
+        "api": {
+            "resources": _LOW,
+            "workerPool": [
+                {**pool, "resources": _LOW}
+                for pool in values_obj["components"]["api"]["workerPool"]
             ],
         },
         "proxy": {"resources": _LOW_PROXY},
@@ -89,12 +90,16 @@ def test_api_worker_split_mode(installer, temp_workdir: Path) -> None:
 
     # install_and_wait_with_retry already blocked until every pod in the namespace
     # (api, both worker pools, proxy, connection-proxy, db) is Running and Ready —
-    # which for api/apiWorker means their readinessProbe (/api/__healthcheck) and,
+    # which for api/api-worker means their readinessProbe (/api/__healthcheck) and,
     # transitively, their livenessProbe (/livez) both already passed. Per-pool
     # worker Deployments exist and are Ready (single default zone, so no zone
-    # suffix beyond the pool name).
+    # suffix beyond the pool name). D002: the Deployment's own name is shortened
+    # to <release>-api-<pool>-default, but its pods still carry the
+    # app.kubernetes.io/name selector label from the "apiWorker" component
+    # (<release>-api-worker-<pool>-default) to stay distinct from the api pods.
     for pool in ("primary", "restricted"):
-        deployment_name = f"{release}-api-worker-{pool}-default"
+        deployment_name = f"{release}-api-{pool}-default"
+        label_name = f"{release}-api-worker-{pool}-default"
         status = kubectl(
             ["get", "deployment", deployment_name, "-o", "jsonpath={.status.readyReplicas}"],
             namespace=namespace,
@@ -106,7 +111,7 @@ def test_api_worker_split_mode(installer, temp_workdir: Path) -> None:
         # worker's own liveness endpoint (D008: /livez:8081) directly so the
         # docstring's "liveness endpoint respond[s]" claim is actually checked.
         pod = get_first_pod_by_selector(
-            namespace, f"app.kubernetes.io/name={deployment_name}"
+            namespace, f"app.kubernetes.io/name={label_name}"
         )
         status_code, _ = curl_from_pod(namespace, pod, "http://localhost:8081/livez")
         assert status_code == 200, f"{deployment_name} pod {pod} /livez returned {status_code}"
@@ -117,7 +122,7 @@ def test_api_worker_split_mode(installer, temp_workdir: Path) -> None:
         namespace=namespace,
     )
     assert worker_services.stdout.strip() == "", (
-        f"Expected no apiWorker Service, found: {worker_services.stdout.strip()}"
+        f"Expected no api-worker Service, found: {worker_services.stdout.strip()}"
     )
 
     # Worker pods: KASM_PROCESS=TRUE and the pool's own queue list.
@@ -134,10 +139,10 @@ def test_api_worker_split_mode(installer, temp_workdir: Path) -> None:
             f"Expected KASM_WORKER_QUEUES={queues!r} on {pool} worker pod {pod}"
         )
 
-    # api itself is split-mode publish-only: KASM_PROCESS=FALSE.
+    # api itself is publish-only with a non-empty workerPool: KASM_PROCESS=FALSE.
     api_pod = get_first_pod_by_selector(namespace, "app.kubernetes.io/component=api")
     assert _pod_env(namespace, api_pod, "KASM_PROCESS") == "FALSE", (
-        f"Expected KASM_PROCESS=FALSE on split-mode api pod {api_pod}"
+        f"Expected KASM_PROCESS=FALSE on publish-only api pod {api_pod}"
     )
 
     # api still serves the login page via the proxy (its /api/__healthcheck

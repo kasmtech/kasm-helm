@@ -413,140 +413,28 @@
               "title": "threadPoolLogInterval",
               "type": "integer",
               "default": 0
-            }
-          },
-          "title": "api",
-          "type": "object",
-          "required": [
-            "image",
-            "annotations",
-            "resources",
-            "labels",
-            "healthCheckTiming",
-            "extraVolumes",
-            "extraVolumeMounts",
-            "extraContainers",
-            "extraEnv",
-            "extraInitContainers"
-          ]
-        },
-        "apiWorker": {
-          "additionalProperties": false,
-          "description": "Configuration settings for the Kasm API Worker pools. Only used when apiWorkerMode: split.",
-          "properties": {
-            "image": {
-              "additionalProperties": false,
-              "description": "Configure the image repository where the image is stored. Use this to point to an private hosted container registry instead of our public DockerHub hosted one. This is the same image as components.api.",
-              "properties": {
-                "registry": {
-                  "default": "docker.io",
-                  "title": "registry",
-                  "type": "string"
-                },
-                "repository": {
-                  "default": "kasmweb/api",
-                  "title": "repository",
-                  "type": "string"
-                },
-                "tag": {
-                  "title": "tag",
-                  "type": "string"
-                }
-              },
-              "title": "image",
-              "type": "object",
-              "required": [
-                "registry",
-                "repository",
-                "tag"
-              ]
             },
-            "healthCheckTiming": {
-              "description": "Override the pod's default healthcheck timing values for liveness and/or readiness probes.",
-              "title": "healthCheckTiming",
-              "type": "object",
-              "properties": {
-                "livenessProbe": {
-                  "title": "livenessProbe",
-                  "type": "object",
-                  "properties": {
-                    "timeoutSeconds": { "title": "timeoutSeconds", "type": "integer" },
-                    "initialDelaySeconds": { "title": "initialDelaySeconds", "type": "integer" },
-                    "periodSeconds": { "title": "periodSeconds", "type": "integer" },
-                    "failureThreshold": { "title": "failureThreshold", "type": "integer" },
-                    "successThreshold": { "title": "successThreshold", "type": "integer" }
-                  }
-                },
-                "readinessProbe": {
-                  "title": "readinessProbe",
-                  "type": "object",
-                  "properties": {
-                    "timeoutSeconds": { "title": "timeoutSeconds", "type": "integer" },
-                    "initialDelaySeconds": { "title": "initialDelaySeconds", "type": "integer" },
-                    "periodSeconds": { "title": "periodSeconds", "type": "integer" },
-                    "failureThreshold": { "title": "failureThreshold", "type": "integer" },
-                    "successThreshold": { "title": "successThreshold", "type": "integer" }
-                  }
-                }
-              }
+            "queues": {
+              "description": "KASM_WORKER_QUEUES value used when workerPool is empty: a comma-separated queue list, or \"all\".",
+              "title": "queues",
+              "type": "string",
+              "default": "all"
             },
-            "annotations": {
+            "queueConcurrency": {
               "additionalProperties": true,
-              "description": "Custom annotations to add to the Kasm api-worker Deployments",
-              "title": "annotations",
+              "description": "Rendered as JSON into KASM_WORKER_QUEUE_CONCURRENCY when workerPool is empty, to tune per-queue concurrency.",
+              "title": "queueConcurrency",
               "type": "object"
             },
-            "resources": {
-              "additionalProperties": true,
-              "description": "Manually configure resources shared by every worker pool. Overrides the deploymentSize preset. A pool's own `resources` overrides this.",
-              "title": "resources",
-              "type": "object"
-            },
-            "labels": {
-              "additionalProperties": true,
-              "description": "Custom labels to add to the Kasm api-worker Deployments",
-              "title": "labels",
-              "type": "object"
-            },
-            "extraVolumes": {
-              "description": "A list of objects for additional secrets, configmaps, or volume mounts, shared by every worker pool.",
-              "title": "extraVolumes",
-              "type": "array"
-            },
-            "extraVolumeMounts": {
-              "description": "A list of objects for additional secrets, configmaps, or volume mounts, shared by every worker pool.",
-              "title": "extraVolumeMounts",
-              "type": "array"
-            },
-            "extraContainers": {
-              "description": "Additional sidecar containers to run in every worker pod.",
-              "title": "extraContainers",
-              "type": "array"
-            },
-            "extraInitContainers": {
-              "description": "Additional init containers to run in every worker pod.",
-              "title": "extraInitContainers",
-              "type": "array"
-            },
-            "extraEnv": {
-              "description": "A list of raw Kubernetes EnvVar objects (name/value or name/valueFrom) appended to the end of every worker container's env list. The component-scoped entry wins over a top-level extraEnv entry with the same name.",
-              "title": "extraEnv",
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/envVar"
-              }
-            },
-            "pools": {
-              "default": [
-                { "name": "default", "queues": "all", "replicas": 0 }
-              ],
-              "description": "One Deployment is rendered per pool per zone, named <release>-api-worker-<pool-name>[-<zone>].",
-              "title": "pools",
+            "workerPool": {
+              "default": [],
+              "description": "One Deployment is rendered per pool per zone, named <release>-api-<pool-name>[-<zone>], when non-empty. Non-empty also switches the api Deployment itself to publish-only (KASM_PROCESS=FALSE).",
+              "title": "workerPool",
               "type": "array",
               "items": {
                 "additionalProperties": false,
                 "type": "object",
-                "title": "poolsItem",
+                "title": "workerPoolItem",
                 "properties": {
                   "name": {
                     "description": "Pool name; normalized (like a zone name) into the Deployment name.",
@@ -571,7 +459,7 @@
                   },
                   "resources": {
                     "additionalProperties": true,
-                    "description": "Per-pool resources override (wins over components.apiWorker.resources).",
+                    "description": "Per-pool resources override (wins over components.api.resources).",
                     "title": "resources",
                     "type": "object"
                   }
@@ -582,7 +470,7 @@
               }
             }
           },
-          "title": "apiWorker",
+          "title": "api",
           "type": "object",
           "required": [
             "image",
@@ -594,8 +482,7 @@
             "extraVolumeMounts",
             "extraContainers",
             "extraEnv",
-            "extraInitContainers",
-            "pools"
+            "extraInitContainers"
           ]
         },
         "connectionProxy": {
@@ -2328,16 +2215,6 @@
         "small",
         "medium",
         "large"
-      ]
-    },
-    "apiWorkerMode": {
-      "default": "combined",
-      "description": "Controls whether Kasm API processes also consume BullMQ background job queues. combined = every API replica also consumes queues (KASM_PROCESS=TRUE); no separate workload. split = API replicas stop consuming queues (KASM_PROCESS=FALSE); dedicated worker deployments defined in `components.apiWorker.pools` consume them instead.",
-      "title": "apiWorkerMode",
-      "type": "string",
-      "enum": [
-        "combined",
-        "split"
       ]
     },
     "directRdpService": {

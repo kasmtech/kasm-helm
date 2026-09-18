@@ -60,7 +60,7 @@ def test_basic_deployment_pods_ready_and_login_page(installer, temp_workdir: Pat
     assert status_code == 200
     assert_login_page(body)
 
-    # Default apiWorkerMode is combined: api still consumes queues itself, so
+    # Default components.api.workerPool is empty: api still consumes queues itself, so
     # KASM_PROCESS must be explicitly TRUE (manager's absorbed role).
     api_pod = get_first_pod_by_selector(namespace, "app.kubernetes.io/component=api")
     kasm_process = kubectl(

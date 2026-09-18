@@ -147,11 +147,14 @@ tests:
       - failedTemplate:
           errorPattern: "Image tag not set"
 
-  # ---------- apiWorker's tag is only resolved when a worker actually renders ----------
-  - it: combined mode with no apiWorker tag renders fine, even with per-component tags set for every other component
-    template: templates/api-deployment.yaml
+  # ---------- kasm-helm-37c must-fix 1: no separate apiWorker tag exists to forget ----------
+  # components.apiWorker (and its own image.tag) is gone; workers render from components.api's
+  # image, so a non-empty workerPool needs no tag beyond the one every api render already
+  # requires. There is no lazy/deferred tag gate left to prove -- this only proves the worker
+  # deployment doesn't invent a new required tag.
+  - it: non-empty workerPool renders worker deployments using components.api's tag, no extra tag required
+    template: templates/api-worker-deployment.yaml
     set:
-      apiWorkerMode: combined
       useImageTags: ""
       components.api.image.tag: "1.19.0-hotfix"
       components.proxy.image.tag: "1.19.0-hotfix"
@@ -160,24 +163,9 @@ tests:
       components.connectionProxy.guac.image.tag: "1.19.0-hotfix"
       components.connectionProxy.rdpGateway.image.tag: "1.19.0-hotfix"
       components.connectionProxy.rdpHttpsGateway.image.tag: "1.19.0-hotfix"
-      # components.apiWorker.image.tag deliberately left at the values.yaml default ("")
+      components.api.workerPool:
+        - name: default
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
           value: docker.io/kasmweb/api:1.19.0-hotfix
-
-  - it: split mode with no apiWorker tag anywhere fails render and names apiWorker
-    set:
-      apiWorkerMode: split
-      useImageTags: ""
-      components.api.image.tag: "1.19.0-hotfix"
-      components.proxy.image.tag: "1.19.0-hotfix"
-      database.image.tag: "1.19.0-hotfix"
-      components.connectionProxy.nginx.image.tag: "1.19.0-hotfix"
-      components.connectionProxy.guac.image.tag: "1.19.0-hotfix"
-      components.connectionProxy.rdpGateway.image.tag: "1.19.0-hotfix"
-      components.connectionProxy.rdpHttpsGateway.image.tag: "1.19.0-hotfix"
-      # components.apiWorker.image.tag deliberately left at the values.yaml default ("")
-    asserts:
-      - failedTemplate:
-          errorPattern: 'Image tag not set for "apiWorker".*\.Values\.components\.apiWorker\.image\.tag'

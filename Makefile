@@ -624,7 +624,7 @@ kind-load-images: $(CRANE) $(HELM) ## Pull and load current chart images into ki
 	    $(HELM) template kasm $(KIND_LOAD_CHART_DIR) \
 		  --set publicAddr=kind.kasm.local \
 		  --set certificate.secretName=kasm-tls \
-		  --set apiWorkerMode=split \
+		  --set components.api.workerPool[0].name=default \
 		  -f tests/values/pubsub-images.yaml; \
 	  fi; \
 	  } | awk '/^[[:space:]]*image:[[:space:]]/{print $$2}' \
@@ -743,11 +743,11 @@ e2e: ## Run all e2e scenarios sequentially (requires kind cluster)
 e2e-basic: kind-prep build-pytest ## Basic install and login page verification
 	$(MAKE) pytest-docker E2E_SCENARIO=e2e-basic PYTEST_ARGS="test_01_basic_deploy.py"
 
-# apiWorkerMode: split depends on the pub/sub backend (API absorbing the manager role,
-# BullMQ-on-PostgreSQL) that only exists on integ/otel-openapi-pubsub — see
+# A non-empty components.api.workerPool depends on the pub/sub backend (API absorbing the
+# manager role, BullMQ-on-PostgreSQL) that only exists on integ/otel-openapi-pubsub — see
 # tests/values/pubsub-images.yaml for the branch-build image overrides this passes alongside its
 # own values (D021, kasm-helm-tzy).
-e2e-split: kind-prep build-pytest ## apiWorkerMode: split — per-pool worker Deployments, no worker Service
+e2e-split: kind-prep build-pytest ## components.api.workerPool — per-pool worker Deployments, no worker Service
 	$(MAKE) pytest-docker E2E_SCENARIO=e2e-split E2E_IMAGE_VALUES=/e2e-values/pubsub-images.yaml PYTEST_ARGS="-m e2e -q test_16_api_worker_split.py"
 
 e2e-trustedca: kind-prep build-pytest ## Install with custom CA bundle

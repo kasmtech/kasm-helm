@@ -476,10 +476,11 @@ tests:
       - notExists:
           path: spec.template.spec.containers[0].env[?(@.name=="OTEL_BEARER_TOKEN")].value
 
-  - it: upstream override also redirects the api-worker exporter (split mode)
+  - it: upstream override also redirects the api-worker exporter (non-empty workerPool)
     template: templates/api-worker-deployment.yaml
     set:
-      apiWorkerMode: split
+      components.api.workerPool:
+        - name: default
       observability.collector.upstream.endpoint: "http://otel-router.otel-router.svc.cluster.local:4318"
       observability.collector.upstream.token: "router-literal-token"
     documentIndex: 0

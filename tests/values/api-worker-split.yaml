@@ -1,4 +1,3 @@
-apiWorkerMode: split
 proxyService:
   type: ClusterIP
 ingress:
@@ -10,8 +9,8 @@ kasmZones:
   - name: zoneb
     proxyAddress: zoneb.kasm.example.com
 components:
-  apiWorker:
-    pools:
+  api:
+    workerPool:
       - name: sessions
         queues: "session,heartbeat"
         replicas: 1

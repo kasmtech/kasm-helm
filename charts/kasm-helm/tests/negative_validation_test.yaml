@@ -352,3 +352,17 @@ tests:
       components.manager.image.tag: "1.2.3"
     asserts:
       - failedTemplate: {}
+
+  # kasm-helm-37c's apiWorkerMode/components.apiWorker shape was replaced by
+  # components.api.workerPool before ever shipping (see CHANGELOG). components.apiWorker is
+  # hard-removed: the schema's additionalProperties: false on components rejects it at the
+  # values interface, same shape as components.manager above. apiWorkerMode itself is a
+  # top-level key and the root schema allows unknown top-level keys, so it is not rejected --
+  # it is simply unused now (see the "inert no-op" case in api_worker_test.yaml).
+  - it: components.apiWorker is rejected as an unknown key
+    template: templates/connection-proxy-services.yaml
+    set:
+      components.apiWorker.pools:
+        - name: default
+    asserts:
+      - failedTemplate: {}
