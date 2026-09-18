@@ -649,99 +649,118 @@ spec:
                       More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                     type: object
                 type: object
-              seccompInstaller:
+              seccomp:
                 description: |-
-                  SeccompInstaller deploys the node DaemonSet that lets workspaces run
-                  under their image's inline seccomp profile instead of Unconfined. It
-                  follows WorkspacesNodeSelector/WorkspacesTolerations, like the image
-                  puller. Unset means no installer.
+                  Seccomp lets workspaces run under their image's inline seccomp profile
+                  instead of Unconfined. Unset means no backend.
                 properties:
-                  enabled:
-                    default: true
+                  backend:
+                    default: installer
                     description: |-
-                      Enabled turns the installer on. Setting it to false removes the
-                      DaemonSet; new sessions fall back to Unconfined, and profiles already on
-                      the nodes are left in place for the sessions still referencing them.
-                    type: boolean
-                  image:
-                    description: Image is the kasm-seccomp-installer image.
-                    minLength: 1
+                      Backend selects the mechanism.
+
+                      "installer" is a DaemonSet shipped with the operator, configured by the
+                      installer block: nothing else to install, at the price of a root pod with
+                      a hostPath mount on every workspace node.
+
+                      "spo" hands each profile to the Security Profiles Operator
+                      (https://github.com/kubernetes-sigs/security-profiles-operator) as a
+                      cluster-scoped SeccompProfile, and runs nothing of Kasm's on the nodes.
+                      It requires SPO 1.0 or later (the v1, cluster-scoped SeccompProfile)
+                      already installed, which this operator does not do; the Agent reports
+                      Degraded while it is missing. A profile that SeccompProfile can't express
+                      (a defaultErrnoRet other than EPERM, a comparison value above 2^63-1)
+                      fails the launch that needs it.
+                    enum:
+                    - installer
+                    - spo
                     type: string
-                  imagePullPolicy:
-                    description: ImagePullPolicy for the installer container.
-                    type: string
-                  kubeletSeccompDir:
-                    default: /var/lib/kubelet/seccomp
-                    description: |-
-                      KubeletSeccompDir is the node's kubelet seccomp root, which Localhost
-                      profile paths are resolved against: <kubelet root-dir>/seccomp. Change it
-                      only for a distribution that relocates the kubelet root (e.g.
-                      /var/lib/rancher/k3s/agent/kubelet/seccomp or
-                      /var/snap/microk8s/common/var/lib/kubelet/seccomp).
-                    pattern: ^/.+
-                    type: string
-                  resources:
-                    description: Resources are the installer container's requests/limits.
+                  installer:
+                    description: Installer configures the "installer" backend.
                     properties:
-                      claims:
+                      image:
+                        description: Image is the kasm-seccomp-installer image.
+                        minLength: 1
+                        type: string
+                      imagePullPolicy:
+                        description: ImagePullPolicy for the installer container.
+                        type: string
+                      kubeletSeccompDir:
+                        default: /var/lib/kubelet/seccomp
                         description: |-
-                          Claims lists the names of resources, defined in spec.resourceClaims,
-                          that are used by this container.
+                          KubeletSeccompDir is the node's kubelet seccomp root, which Localhost
+                          profile paths are resolved against: <kubelet root-dir>/seccomp. Change it
+                          only for a distribution that relocates the kubelet root (e.g.
+                          /var/lib/rancher/k3s/agent/kubelet/seccomp or
+                          /var/snap/microk8s/common/var/lib/kubelet/seccomp).
+                        pattern: ^/.+
+                        type: string
+                      resources:
+                        description: Resources are the installer container's requests/limits.
+                        properties:
+                          claims:
+                            description: |-
+                              Claims lists the names of resources, defined in spec.resourceClaims,
+                              that are used by this container.
 
-                          This field depends on the
-                          DynamicResourceAllocation feature gate.
+                              This field depends on the
+                              DynamicResourceAllocation feature gate.
 
-                          This field is immutable. It can only be set for containers.
-                        items:
-                          description: ResourceClaim references one entry in PodSpec.ResourceClaims.
-                          properties:
-                            name:
-                              description: |-
-                                Name must match the name of one entry in pod.spec.resourceClaims of
-                                the Pod where this field is used. It makes that resource available
-                                inside a container.
-                              type: string
-                            request:
-                              description: |-
-                                Request is the name chosen for a request in the referenced claim.
-                                If empty, everything from the claim is made available, otherwise
-                                only the result of this request.
-                              type: string
-                          required:
-                          - name
-                          type: object
-                        type: array
-                        x-kubernetes-list-map-keys:
-                        - name
-                        x-kubernetes-list-type: map
-                      limits:
-                        additionalProperties:
-                          anyOf:
-                          - type: integer
-                          - type: string
-                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                          x-kubernetes-int-or-string: true
-                        description: |-
-                          Limits describes the maximum amount of compute resources allowed.
-                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                              This field is immutable. It can only be set for containers.
+                            items:
+                              description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                              properties:
+                                name:
+                                  description: |-
+                                    Name must match the name of one entry in pod.spec.resourceClaims of
+                                    the Pod where this field is used. It makes that resource available
+                                    inside a container.
+                                  type: string
+                                request:
+                                  description: |-
+                                    Request is the name chosen for a request in the referenced claim.
+                                    If empty, everything from the claim is made available, otherwise
+                                    only the result of this request.
+                                  type: string
+                              required:
+                              - name
+                              type: object
+                            type: array
+                            x-kubernetes-list-map-keys:
+                            - name
+                            x-kubernetes-list-type: map
+                          limits:
+                            additionalProperties:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            description: |-
+                              Limits describes the maximum amount of compute resources allowed.
+                              More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                            type: object
+                          requests:
+                            additionalProperties:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            description: |-
+                              Requests describes the minimum amount of compute resources required.
+                              If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                              otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                              More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                            type: object
                         type: object
-                      requests:
-                        additionalProperties:
-                          anyOf:
-                          - type: integer
-                          - type: string
-                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                          x-kubernetes-int-or-string: true
-                        description: |-
-                          Requests describes the minimum amount of compute resources required.
-                          If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
-                          otherwise to an implementation-defined value. Requests cannot exceed Limits.
-                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
-                        type: object
+                    required:
+                    - image
                     type: object
-                required:
-                - image
                 type: object
+                x-kubernetes-validations:
+                - message: backend "installer" requires the installer block
+                  rule: self.backend != 'installer' || has(self.installer)
               serverID:
                 description: |-
                   ServerID is the stable UUID identity this agent registers under. When
