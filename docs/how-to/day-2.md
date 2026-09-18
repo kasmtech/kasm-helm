@@ -127,13 +127,12 @@ kubectl delete agents.agent.kasm.com --all -n kasm --wait
 helm uninstall kasm -n kasm
 ```
 
-Two more things stay behind on the agent side. The operator-created `KasmImagePuller` and its
-DaemonSet are not deleted with the `Agent`; remove them between the second and third commands
-(`kubectl delete kasmimagepullers.agent.kasm.com --all -n kasm`). The `kasm-agent-state`
-ConfigMap keeps the agent's `server_id`, so a reinstall in the same namespace re-registers as the
-same server; delete it when the agent is to register with a **different** control plane
-(`kubectl delete configmap kasm-agent-state -n kasm`). The same order applies to a `helm upgrade`
-that turns the agent half off (`kasm-agent.enabled: false`).
+One thing stays behind on the agent side. The `KasmImagePuller` and its DaemonSet are owner-referenced
+to the `Agent`, so deleting the `Agent` (the second command) garbage-collects them; nothing to remove
+by hand. The `kasm-agent-state` ConfigMap, though, keeps the agent's `server_id`, so a reinstall in
+the same namespace re-registers as the same server; delete it when the agent is to register with a
+**different** control plane (`kubectl delete configmap kasm-agent-state -n kasm`). The same order
+applies to a `helm upgrade` that turns the agent half off (`kasm-agent.enabled: false`).
 
 What survives, by design: the CRDs (Helm never removes a `crds/` CRD, and the `kasm-agent-crds`
 templates carry `helm.sh/resource-policy: keep`), the backup PVCs (the CronJob's volume and every

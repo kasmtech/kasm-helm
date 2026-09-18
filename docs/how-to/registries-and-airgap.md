@@ -48,7 +48,7 @@ Work them in that order; each one's failure hides the next.
   | ---- | --------- | ----- |
   | Kasm component images (agent API, session proxy, operator, collector, plugins) | kubelet, per chart | each chart's own `imagePullSecrets` |
   | **Workspace** images launched as sessions | kubelet, with a pull Secret the agent creates from the credentials the manager sends per image | the workspace image's registry credentials in the Kasm admin UI (not a chart value) |
-  | Pre-staged images on every node | the image-puller DaemonSet via `crictl` | `agent.imagePuller.images[].imagePullSecrets` |
+  | Pre-staged images on the session nodes | the kubelet, pulling for the image-puller DaemonSet | `agent.imagePuller.extraImages[].imagePullSecrets` (for pre-seeded images) |
 
 - `kasm-node-prep` pulls its builder image (`nodePrep.image.*`) with `nodePrep.imagePullSecrets`, a
   list of Secret names in the release namespace like the other components. A KMM in-cluster build
@@ -172,8 +172,8 @@ Work them in that order; each one's failure hides the next.
    > on each session pod. For a cluster-wide credential instead, add a Secret to the
    > `imagePullSecrets` of the ServiceAccount the session pods run as
    > (`kubectl get pod <session pod> -o jsonpath='{.spec.serviceAccountName}'` names it), or
-   > pre-stage the images on every node with `agent.imagePuller` (step 1), whose per-entry
-   > `imagePullSecrets` do work.
+   > pre-stage images on the session nodes with `agent.imagePuller.extraImages` (step 5), whose
+   > per-entry `imagePullSecrets` do work.
 
 4. **Node-prep inputs.** `nodePrep` is the one component that fetches at **run** time, and only in
    some modes:
@@ -187,24 +187,32 @@ Work them in that order; each one's failure hides the next.
    With Secure Boot signing on, KMM also pulls a **sign** image. [Webcam and kernel modules](nodes/webcam-kernel-modules.md)
    and [Secure Boot](nodes/secure-boot.md).
 
-5. **Pre-pull images**, so the first session on a node does not wait for a cold pull. The operator
-   already creates a `KasmImagePuller` from the manager's own workspace list; `agent.imagePuller.*`
-   adds an explicit one for images you want staged regardless. `images[].image` is a full
-   reference used verbatim, so it must already name the mirror.
+5. **Pre-pull images**, so the first session on a node does not wait for a cold pull. Pre-pulling is
+   on by default (`agent.imagePuller.enabled`): the agent maintains one `KasmImagePuller` that stages
+   the manager's advertised catalog on the session nodes. `agent.imagePuller.extraImages` pre-seeds
+   additional images the manager has not listed; each `extraImages[].image` is a full reference used
+   verbatim, so it must already name the mirror. For a mutable tag behind the mirror, set
+   `agent.imagePuller.refreshIntervalSeconds` (e.g. `3600`) so the staged copy is re-pulled on that
+   cadence rather than only when the tag first appears.
 
    ```yaml
    kasm-agent:
      agent:
        imagePuller:
-         enabled: true
-         imagePullPolicy: IfNotPresent
-         images:
+         refreshIntervalSeconds: 3600      # re-pull mutable tags hourly; 0 (default) never re-pulls
+         extraImages:
            - image: registry.internal.example.com/kasmweb/chrome:1.19.0
              registry: https://registry.internal.example.com
              imagePullSecrets:
                - name: internal-registry
        imageAvailabilityPolicy: all      # advertise catalog images before they stage; default 'pulled' waits
    ```
+
+   > **Note**
+   > Turning `agent.imagePuller.enabled=false` deletes the puller, so sessions pull on demand at
+   > launch. Only do this alongside `agent.imageAvailabilityPolicy: all` — with the default `pulled`
+   > policy the manager only routes a session to a node once the image is staged there, so with no
+   > puller no node ever reports an image and sessions stop scheduling.
 
 ## Verify
 
@@ -234,8 +242,7 @@ kasm-agent:
     imagePullSecrets:
       - name: internal-registry
     imagePuller:
-      enabled: true
-      images:
+      extraImages:
         - image: registry.internal.example.com/kasmweb/chrome:1.19.0
           registry: https://registry.internal.example.com
           imagePullSecrets:
@@ -256,7 +263,7 @@ Installing the charts directly, drop the `kasm-helm:` and `kasm-agent:` keys.
 | Pull works in one namespace, fails in the other | Secrets do not cross namespaces | Create the Secret in both release namespaces |
 | ECR pulls fail every morning | ECR tokens expire after 12 hours | Credential helper, external-secrets, or the node role |
 | `nodePrep` builder image will not pull | `nodePrep.imagePullSecrets` not set, or the Secret is in another namespace | Name the Secret under `nodePrep.imagePullSecrets`; for a KMM build also `nodePrep.modules.v4l2loopback.kmm.imageRepoSecret` |
-| Pre-pull DaemonSet fails on one image only | `imagePuller.images[].image` still names the upstream registry | Rewrite the full reference to the mirror, with that entry's `imagePullSecrets` |
+| Pre-pull DaemonSet fails on one pre-seeded image only | `imagePuller.extraImages[].image` still names the upstream registry | Rewrite the full reference to the mirror, with that entry's `imagePullSecrets` |
 | A workspace is reported unavailable until its image finishes pre-pulling | `imageAvailabilityPolicy` is `pulled` (default): only staged images are advertised | Set `imageAvailabilityPolicy: all` to advertise catalog images before they stage (they pull on demand at launch), or wait for `agent.imagePuller` to finish |
 | One control-plane pod `ImagePullBackOff` | A `components.<name>.image.registry` override missed | Override every component |
 | `gpuOperator` operands fail to pull in an airgap | Not in `dist/kasm-agent-images.txt` | NVIDIA's air-gapped procedure, values passed through as `gpuOperator.*` |

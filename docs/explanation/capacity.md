@@ -35,7 +35,7 @@ manager - not from any chart value.
 | `kasm-node-prep` | DaemonSet, **per node** | `100m` / `256Mi` (limits `1000m` / `1Gi` for a module build) |
 | `kasm-video-device-plugin` | DaemonSet, **per node** | `10m` / `32Mi` (limits `50m` / `64Mi`) |
 | `kasm-egress-installer` | DaemonSet, **per node** | `50m` / `64Mi` (limits `500m` / `256Mi`) |
-| Image puller | DaemonSet, **per node** | none by default (`agent.imagePuller.resources` is empty) |
+| Image puller | DaemonSet on the **session nodes** (on by default), one idle container per staged image | tiny idle footprint (`1m` / `8Mi` per container); `agent.imagePuller.resources` overrides |
 | CSI node plugins, KMM workers, cluster system pods | **per node** | cluster-specific - measure |
 
 ## The four ceilings

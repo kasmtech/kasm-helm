@@ -188,7 +188,7 @@ attached.
 
 | Feature | Status | What you need | Turn it on |
 | ------- | ------ | ------------- | ---------- |
-| **Private image registries** | ✅ | For workspace images: registry credentials on the image in the Kasm admin UI, which the agent turns into a per-registry pull Secret on every session pod. For the charts' own images: a `kubernetes.io/dockerconfigjson` Secret in the namespace · [how-to](../how-to/registries-and-airgap.md) | `agent.imagePullSecrets` (the agent's own images)<br>`agent.imagePuller.images[].imagePullSecrets` (pre-staged workspace images)<br>`kasm-helm.imagePullSecrets.enabled=true` |
+| **Private image registries** | ✅ | For workspace images: registry credentials on the image in the Kasm admin UI, which the agent turns into a per-registry pull Secret on every session pod. For the charts' own images: a `kubernetes.io/dockerconfigjson` Secret in the namespace · [how-to](../how-to/registries-and-airgap.md) | `agent.imagePullSecrets` (the agent's own images)<br>`agent.imagePuller.extraImages[].imagePullSecrets` (pre-seeded workspace images)<br>`kasm-helm.imagePullSecrets.enabled=true` |
 | **Per-workspace registry credentials** | ⚠️ | Nothing | Set on the workspace in the Kasm UI |
 | **Trusted CA certificates** | ✅ | Your CA certificates in PEM · [how-to](../how-to/networking/certificates.md) | `kasm-helm.trustedCaBundle.enabled=true`<br>`kasm-helm.trustedCaBundle.caCerts` |
 | **Secure Boot nodes** | 🔧 | MOK signing keys enrolled in each node's UEFI, and the key pair in a Secret · [how-to](../how-to/nodes/secure-boot.md) | `nodePrep.secureBoot.existingMokSecret`<br>or<br>`nodePrep.modules.v4l2loopback.kmm.sign.enabled=true` |
@@ -234,7 +234,7 @@ releases per tenant, and the two-namespace layout in
 | Feature | Status | What you need | Turn it on |
 | ------- | ------ | ------------- | ---------- |
 | **Telemetry (traces, metrics, logs, events)** | 🔧 | An OTLP-speaking backend and/or a ClickHouse instance · [values](../../charts/kasm-otel-collector/README.md) | `otelCollector.enabled=true`<br>`otelCollector.exporters.otlp.enabled=true`<br>`otelCollector.exporters.otlp.endpoint`<br>and/or<br>`otelCollector.exporters.clickhouse.enabled=true`<br>`otelCollector.exporters.clickhouse.endpoint`<br>`otelCollector.receivers.k8sEvents.enabled=true` |
-| **Image pre-pulling** | 🔧 | The container runtime socket reachable from DaemonSet pods, and registry access or a mirror from every node · [how-to](../how-to/registries-and-airgap.md) | `agent.imagePuller.enabled=true`<br>`agent.imagePuller.images`<br>`agent.imageAvailabilityPolicy` |
+| **Image pre-pulling** | ✅ | Registry access or a mirror reachable from every session node · [how-to](../how-to/registries-and-airgap.md) | On by default (`agent.imagePuller.enabled`).<br>`agent.imagePuller.extraImages` to pre-seed<br>`agent.imagePuller.refreshIntervalSeconds` to refresh mutable tags<br>`agent.imageAvailabilityPolicy` |
 | **Node targeting and pools** | ✅ | A consistent node-labelling strategy · [how-to](../how-to/nodes/scope-workspaces-to-nodes.md) | Nothing per workspace.<br>`agent.workspacesNodeSelector` sets a fleet-wide default |
 | **Node tuning and swap** | 🔧 | The node's kubelet configured for swap **first** · [how-to](../how-to/nodes/tuning-and-swap.md) | `nodePrep.tuning.swap.enabled=true`<br>`nodePrep.tuning.sysctls.enabled=true` |
 | **Autoscaling** | ⚠️ | Cluster Autoscaler or Karpenter, against node groups that match workspace pod requests | `operator.enabled=true` |
@@ -244,10 +244,12 @@ releases per tenant, and the two-namespace layout in
 arriving before you point it anywhere real. With `networkPolicies.enabled=true`, open the path out
 with `networkPolicies.otelBackend.cidr`.
 
-**Image pre-pulling.** The operator already stages the manager's own image list without being
-asked; the values above add images you want staged regardless. Either way it is a DaemonSet talking
-to each node's container runtime, which is broad node access - worth a deliberate decision on a
-cluster with tight node policy.
+**Image pre-pulling.** On by default: the agent maintains one puller that stages the manager's
+advertised catalog on the session nodes, and `agent.imagePuller.extraImages` adds images you want
+staged regardless. It is an ordinary DaemonSet that holds each image with an idle container (the
+kubelet does the pull) — no container-runtime socket or privileges. The default
+`imageAvailabilityPolicy: pulled` depends on it, so disable it only alongside
+`imageAvailabilityPolicy: all` (see the how-to).
 
 **Node targeting** needs no value per workspace: the agent turns the manager's own workspace labels
 into a node selector for you. `agent.nodeSelector` targets the agent's own pods, not sessions.

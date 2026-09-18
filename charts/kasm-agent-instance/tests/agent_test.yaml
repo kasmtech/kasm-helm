@@ -408,6 +408,51 @@ tests:
           path: spec.zone
           value: default
 
+  - it: pre-pulls by default with no scheduled refresh
+    asserts:
+      - equal:
+          path: spec.imagePuller.enabled
+          value: true
+      - equal:
+          path: spec.imagePuller.refreshIntervalSeconds
+          value: 0
+      - isNull:
+          path: spec.imagePuller.extraImages
+      - isNull:
+          path: spec.imagePuller.resources
+
+  - it: wires the image puller controls (disable, refresh, pre-seed, resources)
+    set:
+      imagePuller:
+        enabled: false
+        refreshIntervalSeconds: 3600
+        extraImages:
+          - image: registry.example.com/team/custom:1.0
+            registry: https://registry.example.com
+            imagePullSecrets:
+              - name: example-registry
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+    asserts:
+      - equal:
+          path: spec.imagePuller.enabled
+          value: false
+      - equal:
+          path: spec.imagePuller.refreshIntervalSeconds
+          value: 3600
+      - contains:
+          path: spec.imagePuller.extraImages
+          content:
+            image: registry.example.com/team/custom:1.0
+            registry: https://registry.example.com
+            imagePullSecrets:
+              - name: example-registry
+      - equal:
+          path: spec.imagePuller.resources.requests.memory
+          value: 32Mi
+
   - it: omits every optional field that is left empty
     asserts:
       - isNull:

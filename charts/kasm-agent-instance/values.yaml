@@ -382,42 +382,38 @@ gpu:
 #
 env: []
 
-# imagePuller -- Optionally pre-pull workspace images onto every targeted node with a KasmImagePuller resource,
-# so the first session on a node does not wait for a cold image pull.
+# imagePuller -- Pre-pull workspace images onto the session nodes, so the first session using an image on a
+# node starts without a cold registry pull. The agent maintains one KasmImagePuller for this agent, from the
+# manager's advertised catalog plus any `extraImages`; the operator reconciles it into a DaemonSet on the same
+# nodes workspaces run on (`workspacesNodeSelector`/`workspacesTolerations`).
 #
 imagePuller:
-  # imagePuller.enabled -- Render the KasmImagePuller resource.
-  enabled: false
-  # imagePuller.imagePullPolicy -- Pull policy for the staged images.
-  imagePullPolicy: IfNotPresent
-  # imagePuller.images -- Catalog of images to stage, as a list of `{image, registry, imagePullSecrets}`
-  # objects passed through to the resource verbatim. `image` is the full reference and is authoritative for the
-  # pull; `registry` is informational; `imagePullSecrets` is an optional per-image list of
-  # `{name: <secret>}` references.
+  # imagePuller.enabled -- Pre-pull workspace images. Keep this on (the default): it is what makes session start
+  # fast and pull-free, and the default `imageAvailabilityPolicy: pulled` depends on it (the manager only sends a
+  # session to a node once the image is staged there, so with the puller off no node ever reports an image and
+  # sessions stop scheduling). Turn it off only to run on demand — set `imageAvailabilityPolicy: all` alongside —
+  # e.g. to relieve node disk pressure from a large catalog, or when images are already resident on the nodes
+  # (a baked node image or a local registry mirror).
+  enabled: true
+  # imagePuller.refreshIntervalSeconds -- Re-pull the staged images on this cadence, so a mutable tag (`:develop`,
+  # or a rebuilt `:1.2.3` whose digest changed but tag did not) is refreshed on the nodes. 0 (the default) never
+  # re-pulls: an image is fetched only when it first enters the catalog. A refresh rolls the puller DaemonSet, so
+  # keep it comfortably longer than a pull takes — 3600 (hourly) is a sensible start.
+  refreshIntervalSeconds: 0
+  # imagePuller.extraImages -- Images to stage in addition to the manager's advertised catalog, to pre-seed a
+  # custom workspace image the manager has not listed yet. A list of `{image, registry, imagePullSecrets}`
+  # objects: `image` is the full reference and is authoritative for the pull; `registry` is informational;
+  # `imagePullSecrets` is an optional per-image list of `{name: <secret>}` references.
   # Example:
-  #   images:
-  #     - image: kasmweb/chrome:1.18.0
-  #       registry: https://index.docker.io/v1/
+  #   extraImages:
   #     - image: registry.example.com/team/custom-workspace:1.0
   #       registry: https://registry.example.com
   #       imagePullSecrets:
   #         - name: example-registry
-  images: []
-  # imagePuller.resources -- Compute resources for the image-puller DaemonSet's containers, passed through
-  # verbatim. Omitted from the resource when empty.
+  extraImages: []
+  # imagePuller.resources -- Compute resources for the puller DaemonSet's idle containers (kept tiny — they only
+  # idle to hold the image resident). Omitted when empty.
   resources: {}
-  # imagePuller.nodeSelector -- Node labels the puller pods must match, passed through to the resource
-  # verbatim. Give it the session pool's selector (the same map as `agent.workspacesNodeSelector`) so
-  # images are staged where sessions can run and nowhere else; empty, the puller DaemonSet runs on
-  # every schedulable node.
-  nodeSelector: {}
-  # imagePuller.tolerations -- Tolerations for the puller pods, so a tainted pool node is staged too.
-  # Passed through verbatim.
-  tolerations: []
-  # imagePuller.affinity -- Node affinity for the puller pods, passed through verbatim. The resource
-  # takes a node affinity directly (`requiredDuringSchedulingIgnoredDuringExecution` right under
-  # `affinity`, no `nodeAffinity` wrapper); the operator merges its per-node back-off exclusions into it.
-  affinity: {}
 
 # httpRoute -- Optionally expose the operator-created session-proxy Service through a Gateway API Gateway.
 #

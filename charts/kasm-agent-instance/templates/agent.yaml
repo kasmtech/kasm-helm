@@ -145,6 +145,17 @@ spec:
     {{- end }}
   {{- end }}
   {{- end }}
+  imagePuller:
+    enabled: {{ .Values.imagePuller.enabled }}
+    refreshIntervalSeconds: {{ .Values.imagePuller.refreshIntervalSeconds }}
+    {{- with .Values.imagePuller.extraImages }}
+    extraImages:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.imagePuller.resources }}
+    resources:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
   {{- with .Values.imagePullSecrets }}
   imagePullSecrets:
     {{- toYaml . | nindent 4 }}

@@ -114,12 +114,10 @@ flowchart LR
    directly (`requiredDuringSchedulingIgnoredDuringExecution` right under `affinity`); the pod-style
    `nodeAffinity` wrapper is rejected with `unknown field "spec.affinity.nodeAffinity"`.
 
-6. **Image puller.** `imagePuller.nodeSelector` and `imagePuller.tolerations` take the same values as
-   the three DaemonSets. Without them the operator's puller DaemonSet runs on every schedulable node
-   and stages workspace images where no session can ever run. The agent also owns a puller of its own
-   (`<release>-image-puller`, fed from the control plane's workspace list); it inherits
-   `workspacesNodeSelector` and `workspacesTolerations`, so it follows the sessions without a value of
-   its own.
+6. **Image puller.** Nothing to place by hand. The agent maintains one puller (`kasm-image-puller`,
+   from the manager's advertised catalog plus any `imagePuller.extraImages`), and it inherits
+   `workspacesNodeSelector` and `workspacesTolerations` — so it stages images on exactly the nodes
+   sessions land on, and follows the pool automatically.
 
 7. **Tainted pool nodes.** Sessions carry no tolerations by default, so a `NoSchedule` taint on a pool
    node keeps them off it even though the DaemonSets (with their `tolerations`) prepare it. To run
@@ -183,6 +181,12 @@ kasm-agent:
   agent:
     workspacesNodeSelector:
       kasm.com/workspaces: "true"
+    # tolerations if the pool is tainted; the image puller inherits these, so it
+    # stages on the same nodes without a selector or toleration of its own
+    workspacesTolerations:
+      - key: kasm.com/workspaces
+        operator: Exists
+        effect: NoSchedule
   nodePrep:
     nodeSelector:
       kasm.com/workspaces: "true"
@@ -204,20 +208,6 @@ kasm-agent:
       - key: kasm.com/workspaces
         operator: Exists
         effect: NoSchedule
-  agent:
-    imagePuller:
-      nodeSelector:
-        kasm.com/workspaces: "true"
-      tolerations:
-        - key: kasm.com/workspaces
-          operator: Exists
-          effect: NoSchedule
-    # optional: tolerations if the pool is tainted (server labels for per-workspace targeting
-    # are set on the server in the admin UI or via the update_server API, not in this chart)
-    workspacesTolerations:
-      - key: kasm.com/workspaces
-        operator: Exists
-        effect: NoSchedule
 ```
 
 Installing `kasm-agent` directly? Drop the `kasm-agent:` key and start at `agent:`.
@@ -236,7 +226,7 @@ Installing `kasm-agent` directly? Drop the `kasm-agent:` key and start at `agent
 | A session pod is replaced after `kubectl drain` with no back-off on the `KasmWorkspace` status | Eviction API deletes are not node-exhaustion failures; only OOM kills and kubelet pressure evictions are tracked | Expected; the replacement schedules normally |
 | After a back-off window closes the `KasmWorkspace` stays `Pending` although its pod is `Running` | The operator's role has only `get` on nodes (a chart before this fix), so the cached node read never returns | Upgrade the operator chart (nodes: get, list, watch) and restart the operator |
 | `WarmPool` rejected with `unknown field "spec.affinity.nodeAffinity"` | The pools CRD takes a node affinity directly under `spec.affinity` | Drop the `nodeAffinity` wrapper |
-| Image puller pods on nodes outside the pool | `imagePuller.nodeSelector` unset | Set it, and `imagePuller.tolerations`, like the three DaemonSets |
+| Image puller pods on nodes outside the pool | `agent.workspacesNodeSelector`/`workspacesTolerations` unset (the puller follows them) | Set them; the puller stages only where sessions can run |
 
 ## Decisions
 
@@ -244,5 +234,5 @@ Installing `kasm-agent` directly? Drop the `kasm-agent:` key and start at `agent
 - [ ] `agent.workspacesNodeSelector` and the three DaemonSet `nodeSelector`s identical
 - [ ] Taint decision made: `agent.workspacesTolerations` set if sessions are meant to run on tainted pool nodes
 - [ ] Sub-pool labels (GPU, region) agreed with whoever sets workspace include labels in the admin UI, and set on the servers there too
-- [ ] `imagePuller.nodeSelector` set with the DaemonSets, or the wider staging accepted
+- [ ] The image puller follows `agent.workspacesNodeSelector`/`workspacesTolerations` automatically — no separate puller placement to set
 - [ ] A session launched and its pod's node checked after the upgrade
