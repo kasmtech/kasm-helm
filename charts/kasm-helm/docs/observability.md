@@ -62,8 +62,9 @@ There are two ways to get Kasm's logs, in order of recommendation:
    `examples/otel-collector-debug.yaml`. Supported for customers who want today's
    scrape-the-pod-logs behavior, at the cost of a second, more expensive Collector path.
 
-**Important:** `logFormat` was removed from the chart. Every service's stdout is now
-human-readable text; structured logs go out over OTLP instead (see §4 for how nginx and DB logs
+**Important:** `logFormat` was removed from the chart. Every service's stdout is
+human-readable text except the Kasm Proxy's, which is JSON (`json_combined`) whenever
+`observability.enabled` is true (the default); structured logs go out over OTLP instead (see §4 for how nginx and DB logs
 are collected). If you were scraping JSON from `api` pod stdout, switch to OTLP
 collection. The root values schema does not reject unknown top-level keys, so a leftover
 `logFormat` in your values file is a silent no-op, not a render error — remove it rather than

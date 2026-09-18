@@ -35,7 +35,7 @@ See [Migrating to connection-proxy](./README.md#migrating-to-connection-proxy) f
 
 ### Changed
 
-- **The `logFormat` value was removed from the chart.** Every service's console output is human-readable text; structured logs are exported over OpenTelemetry instead. If you were scraping JSON from pod stdout, switch to OTLP collection. (The root values schema does not reject unknown keys, so a leftover `logFormat` in a values file is a silent no-op, not a render error.)
+- **The `logFormat` value was removed from the chart.** Console output is human-readable text for every service except the Kasm Proxy, whose stdout access log is JSON (`json_combined`) whenever `observability.enabled` is true (the default); structured logs are exported over OpenTelemetry regardless. If you were scraping JSON from pod stdout, switch to OTLP collection. (The root values schema does not reject unknown keys, so a leftover `logFormat` in a values file is a silent no-op, not a render error.)
 - **New PVC and new workloads on every deployment**: a ClickHouse StatefulSet + PVC, a gateway Collector Deployment, and one extra sidecar container in every Proxy, Connection Proxy, and DB pod. Budget resources and storage accordingly before upgrading; see `charts/kasm-helm/docs/observability.md` §2 and §6.
 - The Kasm Proxy's stdout access log is JSON whenever `observability.enabled` is true (the default), because the sidecar collector parses it as JSON.
 - **nginx's access and error logs no longer write to an `emptyDir`.** They go to the sidecar over loopback syslog UDP instead, fixing unbounded growth on the shared log volume under sustained traffic. See `charts/kasm-helm/docs/observability.md` §4 for the fire-and-forget tradeoff this introduces at sidecar startup/restart.

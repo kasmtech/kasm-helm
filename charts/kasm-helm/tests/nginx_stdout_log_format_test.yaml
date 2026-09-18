@@ -1,0 +1,68 @@
+suite: nginx stdout access_log gated on observability.enabled
+
+# CHANGELOG.md (Unreleased/Changed) and docs/observability.md §3: the Proxy's stdout
+# access_log is json_combined whenever observability.enabled is true (the default), and main
+# otherwise. Covers both nginx blocks in the shared configmap — nginx.conf's http block and
+# logging.conf — since each defines its own access_log line. Syslog access_log/error_log
+# lines are unaffected either way.
+
+templates:
+  - templates/nginx-shared-configmap.yaml
+
+tests:
+  - it: nginx.conf stdout access_log is json_combined when observability.enabled=true (default)
+    asserts:
+      - matchRegex:
+          path: data["nginx.conf"]
+          pattern: "access_log\\s+/dev/stdout\\s+json_combined;"
+      - notMatchRegex:
+          path: data["nginx.conf"]
+          pattern: "access_log\\s+/dev/stdout\\s+main;"
+
+  - it: nginx.conf stdout access_log is main when observability.enabled=false
+    set:
+      observability.enabled: false
+    asserts:
+      - matchRegex:
+          path: data["nginx.conf"]
+          pattern: "access_log\\s+/dev/stdout\\s+main;"
+      - notMatchRegex:
+          path: data["nginx.conf"]
+          pattern: "access_log\\s+/dev/stdout\\s+json_combined;"
+
+  - it: logging.conf stdout access_log is json_combined when observability.enabled=true (default)
+    asserts:
+      - matchRegex:
+          path: data["logging.conf"]
+          pattern: "access_log /dev/stdout json_combined;"
+      - notMatchRegex:
+          path: data["logging.conf"]
+          pattern: "access_log /dev/stdout main;"
+
+  - it: logging.conf stdout access_log is main when observability.enabled=false
+    set:
+      observability.enabled: false
+    asserts:
+      - matchRegex:
+          path: data["logging.conf"]
+          pattern: "access_log /dev/stdout main;"
+      - notMatchRegex:
+          path: data["logging.conf"]
+          pattern: "access_log /dev/stdout json_combined;"
+
+  - it: logging.conf syslog access_log/error_log are unaffected by observability.enabled=true
+    asserts:
+      - matchRegex:
+          path: data["logging.conf"]
+          pattern: "access_log syslog:server=127\\.0\\.0\\.1:\\d+,tag=nginx json_combined;"
+      - matchRegex:
+          path: data["logging.conf"]
+          pattern: "error_log\\s+syslog:server=127\\.0\\.0\\.1:\\d+ warn;"
+
+  - it: logging.conf syslog lines are absent when observability.enabled=false
+    set:
+      observability.enabled: false
+    asserts:
+      - notMatchRegex:
+          path: data["logging.conf"]
+          pattern: "syslog:server"

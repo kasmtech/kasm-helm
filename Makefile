@@ -787,7 +787,7 @@ e2e-pss: kind-prep build-pytest ## Pod Security Standards restricted namespace t
 e2e-preseed: kind-prep build-pytest ## Preseed verification: group, settings, and user seeded via custom_properties.yaml
 	$(MAKE) pytest-docker E2E_SCENARIO=e2e-preseed PYTEST_ARGS="-m e2e -q test_11_preseed.py"
 
-e2e-json-logging: kind-prep build-pytest ## Verify all non-Guac pods emit JSON logs when logFormat=json
+e2e-json-logging: kind-prep build-pytest ## Verify proxy stdout is JSON when observability is enabled (default)
 	$(MAKE) pytest-docker E2E_SCENARIO=e2e-json-logging PYTEST_ARGS="-m e2e -q test_10_json_logging.py"
 
 # The four e2e-observability-* targets depend on the DEV-31 backend (OTel instrumentation,

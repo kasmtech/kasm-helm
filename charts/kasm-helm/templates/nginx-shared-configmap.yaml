@@ -43,8 +43,6 @@ data:
                         '$status $body_bytes_sent "$http_referer" '
                         '"$http_user_agent" "$http_x_forwarded_for"';
 
-      access_log  /dev/stdout  main;
-
       sendfile        on;
 
       keepalive_timeout  65;
@@ -52,6 +50,12 @@ data:
       include /etc/nginx/compress.conf;
       include /etc/nginx/logging.conf;
       include /etc/nginx/orchestrator.conf;
+
+      {{- if .Values.observability.enabled }}
+      access_log  /dev/stdout  json_combined;
+      {{- else }}
+      access_log  /dev/stdout  main;
+      {{- end }}
 
       include /etc/nginx/conf.d/*.conf;
       include /etc/nginx/services.d/*.conf;
@@ -101,10 +105,15 @@ data:
         '"cookie_username": "$cookie_username",'
         '"upstream_header_time": "$upstream_header_time"'
       '}';
-      # The console always gets the human-readable format. Structured logs are the sidecar's job:
-      # a sidecar cannot read another container's stdout, so nginx additionally sends JSON access
-      # logs and its error log over loopback syslog UDP to the in-pod otel sidecar collector.
+      # Console format follows observability.enabled: json_combined when on (the default), main
+      # when off. Independently of the console, nginx sends JSON access logs and its error log
+      # over loopback syslog UDP to the in-pod otel sidecar collector (a sidecar cannot read
+      # another container's stdout).
+      {{- if .Values.observability.enabled }}
+      access_log /dev/stdout json_combined;
+      {{- else }}
       access_log /dev/stdout main;
+      {{- end }}
       error_log  /dev/stderr warn;
       {{- if .Values.observability.enabled }}
       access_log syslog:server=127.0.0.1:{{ $constants.otel.syslogAccess }},tag=nginx json_combined;

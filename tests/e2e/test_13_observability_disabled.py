@@ -96,3 +96,11 @@ def test_observability_disabled_stays_deployable(installer, temp_workdir: Path) 
     # gated out of the chart's rendered nginx.conf) did not break startup.
     logs = kubectl(["logs", proxy_pod, "--tail=200"], namespace=namespace).stdout
     assert "emerg" not in logs.lower(), f"nginx emitted an emerg-level line at startup:\n{logs}"
+
+    # With observability.enabled=false, the stdout access_log must stay `main` (plain text),
+    # not switch to json_combined (see nginx-shared-configmap.yaml). The GET above already
+    # produced an access_log line, so this reuses the log tail already fetched.
+    access_log_lines = [line for line in logs.splitlines() if line.strip().startswith("{")]
+    assert not access_log_lines, (
+        f"observability.enabled=false but stdout access_log looks like JSON:\n{access_log_lines[:5]}"
+    )

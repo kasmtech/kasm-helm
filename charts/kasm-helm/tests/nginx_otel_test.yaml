@@ -118,17 +118,18 @@ tests:
           pattern: 'otel_span_attr          kasm\.kasm_user_name     "\$cookie_username";'
 
   # ---------- stdout access_log format ----------
-  # The console is always human-readable now. Structured logs are the sidecar's job, and a sidecar
-  # cannot read another container's stdout, so nginx sends them out over loopback syslog UDP.
-  - it: stdout access_log is always the human-readable format
+  # The stdout access_log is json_combined whenever observability.enabled is true (the
+  # default) — the sidecar collector parses it as JSON — and main otherwise. See
+  # nginx_stdout_log_format_test.yaml for the dedicated suite covering both nginx blocks.
+  - it: stdout access_log is json_combined when telemetry is on
     template: templates/nginx-shared-configmap.yaml
     asserts:
       - matchRegex:
           path: data["logging.conf"]
-          pattern: "access_log /dev/stdout main;"
+          pattern: "access_log /dev/stdout json_combined;"
       - notMatchRegex:
           path: data["logging.conf"]
-          pattern: "access_log /dev/stdout json_combined;"
+          pattern: "access_log /dev/stdout main;"
 
   - it: stdout access_log stays human-readable when telemetry is off
     template: templates/nginx-shared-configmap.yaml
