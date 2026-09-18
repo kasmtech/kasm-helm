@@ -107,6 +107,15 @@ runs in place.
    both); they separate only where a second agent runs with `operator.enabled=false`, and then the
    operator's release goes first.
 
+   > **Note**
+   > Get this order wrong and it does not self-correct. If `helm upgrade` runs before the new schema
+   > is in place, the API server silently **prunes** any field the new chart added — a new
+   > `imagePuller` control, say — from the resources Helm writes. Because that field is still in the
+   > rendered manifest, a later `helm upgrade` (after you apply the CRDs) sees no manifest change and
+   > does **not** put it back. Recover by applying the CRDs and then forcing the resource to be
+   > rewritten: change any affected value so the next `helm upgrade` re-renders it, or set the field
+   > directly, e.g. `kubectl -n <ns> patch agents.agent.kasm.com <name> --type merge -p '{"spec":{"imagePuller":{"enabled":true}}}'`.
+
 2. **Keep the versions in step.** `kasm-platform` pins both dependency versions in its `Chart.yaml`;
    the control plane's `manager/agent_version` setting gates which agent builds it accepts, so an
    agent image tag out of step with the control plane shows up as a **registration failure**, not a
