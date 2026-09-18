@@ -60,9 +60,10 @@ spec:
           spec:
             description: |-
               KasmImagePullerSpec pre-stages OCI images onto nodes to remove cold-start pull
-              latency. The controller runs a DaemonSet whose pod holds one idle ("sleep")
-              container per image, forcing the kubelet to pull and retain each image on
-              every targeted node. A change to the image set replaces that pod on every
+              latency. The controller runs a DaemonSet whose pod holds one idle container
+              per image, forcing the kubelet to pull and retain each image on every
+              targeted node. The idle process is a static binary the operator supplies
+              through a shared volume, so an image needs no "sleep" or shell of its own. A change to the image set replaces that pod on every
               node, so the controller applies one only once no puller pod is still
               pulling; until then the change waits (Progressing=True, reason
               RolloutDeferred) and later changes join it in the same rollout.
@@ -274,7 +275,10 @@ spec:
                 type: object
               imagePullPolicy:
                 default: IfNotPresent
-                description: ImagePullPolicy for the staged images.
+                description: |-
+                  ImagePullPolicy for the staged images. The agent sets this to Always when
+                  RefreshIntervalSeconds is non-zero, so a scheduled roll actually re-fetches
+                  a mutable tag rather than reusing the node's cached copy.
                 enum:
                 - Always
                 - IfNotPresent
@@ -362,10 +366,21 @@ spec:
                   PruneMode is advisory metadata from the agent describing how unreferenced
                   images should be handled; the controller stages exactly spec.images.
                 type: string
+              refreshIntervalSeconds:
+                default: 0
+                description: |-
+                  RefreshIntervalSeconds re-pulls the staged images on this cadence so a
+                  mutable tag stays current on the nodes. 0 (the default) never re-pulls; the
+                  puller then only fetches an image when it first enters spec.images. When
+                  set, the controller rolls the DaemonSet once per interval (and the agent
+                  sets ImagePullPolicy to Always so the roll re-fetches).
+                format: int32
+                minimum: 0
+                type: integer
               resources:
                 description: |-
                   Resources are the per-image idle container's requests/limits (kept tiny —
-                  the container only sleeps).
+                  the container only idles).
                 properties:
                   claims:
                     description: |-

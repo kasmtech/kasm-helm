@@ -339,6 +339,142 @@ spec:
                   type: object
                   x-kubernetes-map-type: atomic
                 type: array
+              imagePuller:
+                description: |-
+                  ImagePuller configures pre-pulling of workspace images onto the session
+                  nodes. Enabled by default; when omitted, pre-pulling is on with no
+                  scheduled refresh. See ImagePullerSpec.
+                properties:
+                  enabled:
+                    default: true
+                    description: |-
+                      Enabled turns image pre-pulling on. Keep it on (the default) for the
+                      normal fast, pull-free session start. Turning it off makes sessions pull
+                      their image on demand at launch, which only makes sense together with
+                      imageAvailabilityPolicy "all": with "pulled" the manager never learns an
+                      image is available on any node, so sessions stop scheduling. Disable it
+                      only to relieve node disk pressure from a large catalog, or when images
+                      are already resident on the nodes (a baked node image or a local registry
+                      mirror).
+                    type: boolean
+                  extraImages:
+                    description: |-
+                      ExtraImages are images to stage in addition to the manager's advertised
+                      catalog, e.g. to pre-seed a custom workspace image the manager has not
+                      listed yet. They are merged with the catalog into the one puller.
+                    items:
+                      description: PulledImage is one image to stage on every targeted
+                        node.
+                      properties:
+                        image:
+                          description: Image is the full image reference (registry/repo:tag).
+                          minLength: 1
+                          type: string
+                        imagePullSecrets:
+                          description: |-
+                            ImagePullSecrets are pull secrets for this specific image. They are merged
+                            into the DaemonSet pod's imagePullSecrets (the kubelet selects the matching
+                            secret per image), so per-image credentials work within one pod.
+                          items:
+                            description: |-
+                              LocalObjectReference contains enough information to let you locate the
+                              referenced object inside the same namespace.
+                            properties:
+                              name:
+                                default: ""
+                                description: |-
+                                  Name of the referent.
+                                  This field is effectively required, but due to backwards compatibility is
+                                  allowed to be empty. Instances of this type with an empty value here are
+                                  almost certainly wrong.
+                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                type: string
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          type: array
+                        registry:
+                          description: |-
+                            Registry is an optional registry hostname override (informational; the
+                            reference in Image is authoritative for the pull).
+                          type: string
+                      required:
+                      - image
+                      type: object
+                    type: array
+                  refreshIntervalSeconds:
+                    default: 0
+                    description: |-
+                      RefreshIntervalSeconds re-pulls the staged images on this cadence so a
+                      mutable tag (e.g. :develop, or a rebuilt :1.2.3 whose digest changed but
+                      whose tag did not) stays current on the nodes. 0 (the default) never
+                      re-pulls: the puller only fetches an image when it first appears in the
+                      catalog. A refresh rolls the puller DaemonSet, so set it comfortably
+                      longer than a pull takes (e.g. 3600 for hourly).
+                    format: int32
+                    minimum: 0
+                    type: integer
+                  resources:
+                    description: |-
+                      Resources are the per-image idle container's requests/limits on the puller
+                      DaemonSet (kept tiny — the containers only idle to hold the image resident).
+                    properties:
+                      claims:
+                        description: |-
+                          Claims lists the names of resources, defined in spec.resourceClaims,
+                          that are used by this container.
+
+                          This field depends on the
+                          DynamicResourceAllocation feature gate.
+
+                          This field is immutable. It can only be set for containers.
+                        items:
+                          description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                          properties:
+                            name:
+                              description: |-
+                                Name must match the name of one entry in pod.spec.resourceClaims of
+                                the Pod where this field is used. It makes that resource available
+                                inside a container.
+                              type: string
+                            request:
+                              description: |-
+                                Request is the name chosen for a request in the referenced claim.
+                                If empty, everything from the claim is made available, otherwise
+                                only the result of this request.
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        type: array
+                        x-kubernetes-list-map-keys:
+                        - name
+                        x-kubernetes-list-type: map
+                      limits:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: |-
+                          Limits describes the maximum amount of compute resources allowed.
+                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                        type: object
+                      requests:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: |-
+                          Requests describes the minimum amount of compute resources required.
+                          If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                          otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                        type: object
+                    type: object
+                type: object
               logLevel:
                 default: INFO
                 description: LogLevel is the agent log level (LOG_LEVEL).
