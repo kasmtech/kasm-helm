@@ -96,14 +96,27 @@ def get_api_image() -> str:
     try:
         with open(values_path) as f:
             v = yaml.safe_load(f)
-        api = v["components"]["api"]
+        api_image = dict(v["components"]["api"]["image"])
+        # Mirror what helm_install layers onto every scenario install: the
+        # E2E_IMAGE_VALUES overlay (tests/values/pubsub-images.yaml by default,
+        # D021) replaces components.api.image wholesale. Without this, the
+        # dns-check helper pod below resolves to the released :develop tag,
+        # which was never preloaded into kind once every scenario switched to
+        # the branch-build overlay -- ErrImageNeverPull.
+        image_values = os.environ.get("E2E_IMAGE_VALUES", "").strip()
+        if image_values and os.path.isfile(image_values):
+            with open(image_values) as f:
+                overlay = yaml.safe_load(f) or {}
+            overlay_api_image = overlay.get("components", {}).get("api", {}).get("image")
+            if overlay_api_image:
+                api_image.update(overlay_api_image)
         # Mirror the chart's helper precedence: per-component image.tag wins
         # if set; otherwise fall back to the chart-wide useImageTags. If both
         # are empty fall through to the env-var/default fallback below.
-        tag = api["image"].get("tag") or v.get("useImageTags") or ""
+        tag = api_image.get("tag") or v.get("useImageTags") or ""
         if not tag:
             raise ValueError("api.image.tag and useImageTags are both empty")
-        return f"{api['image']['repository']}:{tag}"
+        return f"{api_image['repository']}:{tag}"
     except Exception:
         tag = os.environ.get("KASM_TAG", "develop")
         return f"kasmweb/api:{tag}"

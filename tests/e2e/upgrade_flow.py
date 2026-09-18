@@ -539,7 +539,7 @@ def run_upgrade_flow(
     # Strict ``helm upgrade`` (no ``--install``).  The release was created by
     # Phase 1; if it isn't there, we want this command to fail loudly rather
     # than silently fall through to a fresh install.
-    helm([
+    phase2_args = [
         "upgrade",
         release_name,
         e2e_config.chart_dir,
@@ -547,7 +547,19 @@ def run_upgrade_flow(
         "--timeout", "15m",
         "--set", "imagePullPolicy=Never",
         "-f", str(upgrade_values_path),
-    ])
+    ]
+    # Layered last so it wins: branch-build image overrides (see helm_install's
+    # matching comment). Phase 1 (the old 1.18.1 chart) deliberately never
+    # receives this — only the current chart understands these component tags.
+    image_values = os.environ.get("E2E_IMAGE_VALUES", "").strip()
+    if image_values:
+        if not Path(image_values).is_file():
+            raise AssertionError(
+                f"E2E_IMAGE_VALUES={image_values} does not exist inside the test container; "
+                "tests/values is mounted at /e2e-values by the pytest-docker target"
+            )
+        phase2_args.extend(["-f", image_values])
+    helm(phase2_args)
 
     # -----------------------------------------------------------------------
     # Phase 3: Verify pre-upgrade backup job wrote a non-empty file to PVC

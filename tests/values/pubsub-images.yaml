@@ -1,17 +1,16 @@
-# Branch-build image overrides for the pub/sub e2e scenarios (test_16_api_worker_split.py and
-# any other scenario exercising the manager-removal / components.api.workerPool rework). This
-# chart change depends on backend code that only exists on integ/otel-openapi-pubsub (API
-# absorbing the manager role, BullMQ-on-PostgreSQL pub/sub, a non-empty workerPool), so those
-# scenarios must run against branch builds rather than the released tags the other e2e
-# scenarios use.
+# Branch-build image overrides applied to every e2e scenario via the E2E_IMAGE_VALUES default
+# (Makefile). All app images (api, proxy, connectionProxy's nginx/guac/rdpGateway/
+# rdpHttpsGateway) come from this branch's build (integ/otel-openapi-pubsub) — the backend/OTel
+# rework (API absorbing the manager role, BullMQ-on-PostgreSQL pub/sub, OTel instrumentation)
+# only exists there, so released tags won't do.
 #
 # There is no `postgres-private:integ-otel-openapi-pubsub` build, so `database.image` is
 # deliberately left untouched here — it stays on the chart's default released `kasmweb/postgres`
 # tag (D021).
 #
-# Supersedes tests/values/dev31-images.yaml (DEV-31 backend merged into this integ branch, see
-# D021) for pub/sub scenarios. dev31-images.yaml stays as-is for the OTel-only scenarios
-# (test_12/13/14) that don't need the pub/sub rework.
+# Formerly split against tests/values/dev31-images.yaml (OTel-only scenarios vs. pub/sub
+# scenarios); DEV-31 merged into this integ branch, so a single overlay now covers every
+# scenario (D021) and dev31-images.yaml was deleted.
 #
 # Tags verified present on this host (2026-09-17):
 #   kasmweb/{api,proxy,kasm-guac,rdp-gateway,rdp-https-gateway}-private:integ-otel-openapi-pubsub
