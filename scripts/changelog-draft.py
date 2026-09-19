@@ -402,7 +402,16 @@ def _merge_into_existing(existing: str, new_buckets: dict) -> str:
     existing text. New entries for existing categories are appended within that
     category block; new categories are appended at the end of the section.
     """
-    result = existing.rstrip("\n")
+    # Keep `result` free of trailing newlines throughout so every insertion
+    # point below can rely on that invariant; the exact trailing newline run
+    # (e.g. the blank line before the next "## [x.y.z]" heading) is captured
+    # once here and restored verbatim at the end. Blindly rstripping and
+    # re-adding a single "\n" (the old behaviour) ate that blank line and, for
+    # the section's last category, ate the newline terminating its last entry
+    # too — gluing new entries onto the previous one.
+    stripped = existing.rstrip("\n")
+    trailing = existing[len(stripped):] or "\n"
+    result = stripped
 
     for cat in _CATEGORY_ORDER:
         if cat not in new_buckets:
@@ -418,13 +427,15 @@ def _merge_into_existing(existing: str, new_buckets: dict) -> str:
             next_header = re.search(r"\n### ", result[cat_start:])
             if next_header:
                 insert_at = cat_start + next_header.start()
+                result = result[:insert_at] + entries_text + result[insert_at:]
             else:
-                insert_at = len(result)
-            result = result[:insert_at] + entries_text + result[insert_at:]
+                # Last category in the section: `result` has no trailing
+                # newline, so a newline must be added before the new entries.
+                result = result + "\n" + entries_text.rstrip("\n")
         else:
-            result += f"\n\n{header}\n\n{entries_text}"
+            result += f"\n\n{header}\n\n{entries_text.rstrip(chr(10))}"
 
-    return result + "\n"
+    return result + trailing
 
 
 # ---------------------------------------------------------------------------

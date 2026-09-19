@@ -467,11 +467,23 @@ changelog-check: ## Verify CHANGELOG.md has been updated relative to BASE_BRANCH
 	fi; \
 	base="$${BASE_BRANCH:-develop}"; \
 	git fetch origin "$$base" 2>/dev/null || true; \
-	if git diff --name-only "origin/$$base...HEAD" | grep -q "^charts/kasm-helm/CHANGELOG.md$$"; then \
-	  echo "CHANGELOG.md updated — check passed."; \
+	changed_files="$$(git diff --name-only "origin/$$base...HEAD")"; \
+	touched_charts="$$(echo "$$changed_files" | grep -oE '^charts/[^/]+/' | sort -u || true)"; \
+	missing=""; \
+	for chart_path in $$touched_charts; do \
+	  chart_changelog="$${chart_path}CHANGELOG.md"; \
+	  if ! echo "$$changed_files" | grep -qxF "$$chart_changelog"; then \
+	    missing="$$missing $$chart_changelog"; \
+	  fi; \
+	done; \
+	if [[ -z "$$touched_charts" ]]; then \
+	  echo "No charts/ paths touched — check passed."; \
+	elif [[ -z "$$missing" ]]; then \
+	  echo "CHANGELOG.md updated for every touched chart — check passed."; \
 	else \
 	  echo ""; \
-	  echo "ERROR: charts/kasm-helm/CHANGELOG.md has not been updated."; \
+	  echo "ERROR: the following chart CHANGELOG.md files have not been updated:"; \
+	  for f in $$missing; do echo "  $$f"; done; \
 	  echo "Run 'make changelog' to generate a draft, edit it, then commit."; \
 	  echo ""; \
 	  exit 1; \
