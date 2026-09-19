@@ -466,8 +466,14 @@ changelog-check: ## Verify CHANGELOG.md has been updated relative to BASE_BRANCH
 	  exit 0; \
 	fi; \
 	base="$${BASE_BRANCH:-develop}"; \
-	git fetch origin "$$base" 2>/dev/null || true; \
-	changed_files="$$(git diff --name-only "origin/$$base...HEAD")"; \
+	git fetch origin "+refs/heads/$$base:refs/remotes/origin/$$base" 2>/dev/null || true; \
+	if [ -f "$$(git rev-parse --git-dir)/shallow" ]; then \
+	  git fetch --unshallow origin "+refs/heads/$$base:refs/remotes/origin/$$base" 2>/dev/null || true; \
+	fi; \
+	if ! changed_files="$$(git diff --name-only "origin/$$base...HEAD")"; then \
+	  echo "ERROR: cannot diff against origin/$$base (missing ref or no merge base — shallow clone?)."; \
+	  exit 1; \
+	fi; \
 	touched_charts="$$(echo "$$changed_files" | grep -oE '^charts/[^/]+/' | sort -u || true)"; \
 	missing=""; \
 	for chart_path in $$touched_charts; do \
