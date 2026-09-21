@@ -220,7 +220,7 @@ full.
 > config, schedule, or status for this in the Kasm admin panel the way there is for Kasm's own cloud-VM
 > autoscaler; treat it as infrastructure you manage with Helm and `kubectl`, not from Kasm.
 
-### Scaling standby headroom with KEDA
+### Scaling standby headroom (KEDA or HPA)
 
 `standby.replicas` holds a **fixed** amount of headroom. To size it to load instead, set
 `standby.externallyScaled: true`: the operator then applies `replicas` only once, at creation, and
@@ -249,10 +249,39 @@ spec:
 ```
 
 Scale on the **running sessions**, as here (`component=workspace`), not on the agent's `launchable`
-figures — those *fall* as more room is needed, the opposite of what a horizontal autoscaler expects. A
-plain HPA against the same Deployment works too; KEDA's `kubernetes-workload` trigger is just the
-simplest way to count session pods. Leave `externallyScaled: false` (the default) to keep the fixed
-`replicas` and no external autoscaler.
+figures — those *fall* as more room is needed, the opposite of what a horizontal autoscaler expects.
+
+A native `HorizontalPodAutoscaler` can drive the same Deployment, but note the catch: the placeholders
+are idle pause pods, so a **resource** (CPU/memory) HPA is useless — utilisation is always ~0. You need a
+metric for the *session* count, which a custom/external-metrics adapter (for example
+[prometheus-adapter](https://github.com/kubernetes-sigs/prometheus-adapter)) must expose; KEDA above just
+packages that plumbing for you. With such an adapter serving an external metric, the HPA is:
+
+```yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: k8s-agent-workspace-standby
+  namespace: kasm
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: k8s-agent-workspace-standby            # the standby Deployment
+  minReplicas: 1
+  maxReplicas: 10
+  metrics:
+    - type: External
+      external:
+        metric:
+          name: kasm_running_sessions            # your adapter's metric for component=workspace pods
+        target:
+          type: AverageValue
+          averageValue: "5"                       # one placeholder per five sessions
+```
+
+Either way, leave `externallyScaled: false` (the default) to keep the fixed `replicas` with no external
+autoscaler.
 
 **Decisions**
 
