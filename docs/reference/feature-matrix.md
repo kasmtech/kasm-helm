@@ -31,6 +31,7 @@ OpenShift decide some of the rows for you.
 | ------- | ------ | ------------- | ---------- |
 | **Desktop, browser and app sessions** | ✅ | Any conformant cluster with containerd or CRI-O · [how-to](../how-to/install/one-cluster.md) | `operator.enabled=true`<br>`agent.enabled=true`<br>`agent.manager.hostname`<br>`agent.publicHostname`<br>(both derived under `kasm-platform`; the no-values install sets neither) |
 | **CPU and memory limits** | ⚠️ | Nothing | Set per workspace in the Kasm UI |
+| **Session CPU-request density** | ✅ | Nothing · [capacity](../explanation/capacity.md#shrinking-the-cpu-request-without-changing-the-image) | `agent.workspaceCPURequestPercent` (1-100, default 100) |
 | **Docker run and exec config overrides** | ⚠️ | Nothing | Set per workspace in the Kasm UI |
 | **Session recording** | ⚠️ | A Kasm license that includes recording, and session pods able to reach the Kasm API service · [how-to](../how-to/storage/README.md) | Turn recording on in the Kasm UI |
 | **Printing** | ✅ | A workspace image with CUPS - the stock Kasm images have it | Nothing |
@@ -42,7 +43,10 @@ OpenShift decide some of the rows for you.
 **CPU and memory.** Kasm's **Shares** allocation (and *Inherit* under the default) gives a session
 a CPU request with no ceiling; **Quotas** gives it a request and an equal limit. Memory always sets
 both. Kubernetes has no share weighting, so there is no third mode. Size memory honestly - each
-session's `/dev/shm` is memory-backed and counts against the pod's limit.
+session's `/dev/shm` is memory-backed and counts against the pod's limit. Because a request is a hard
+reservation, an image's `cores` fills a node's CPU while sessions sit idle; `agent.workspaceCPURequestPercent`
+shrinks the request (not the limit) to bin-pack more sessions per node - see
+[Capacity](../explanation/capacity.md#shrinking-the-cpu-request-without-changing-the-image).
 
 **Docker run and exec config.** The pod-shaped parts survive: shared-memory size, devices,
 capabilities, command and arguments, environment, labels and annotations, stop timeout, health

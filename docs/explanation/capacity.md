@@ -78,12 +78,29 @@ setting that must land first, are in [Node tuning and swap](../how-to/nodes/tuni
 
 **CPU requests bind, at 3 sessions per node** - three times tighter than RAM, on a node that is
 nowhere near CPU-saturated, because under *Shares* that 2-core request is a scheduling reservation
-with no ceiling behind it. The levers, in order of preference: lower `cores` on the workspace image
-(the request is what the scheduler counts), pick a CPU-denser node shape, or move the image to
-*Quotas* only if you actually want a throughput ceiling.
+with no ceiling behind it. The levers, in order of preference: shrink the request with
+`agent.workspaceCPURequestPercent` (below), lower `cores` on the workspace image (the request is
+what the scheduler counts), pick a CPU-denser node shape, or move the image to *Quotas* only if you
+actually want a throughput ceiling.
 
 Same node, a 1-core / 1536Mi image: 6500m ÷ 1000m = **6** sessions on CPU, 18 on RAM. CPU still
 binds - and the default 2Gi `/dev/shm` no longer fits inside a 1536Mi limit at all.
+
+### Shrinking the CPU request without changing the image
+
+`agent.workspaceCPURequestPercent` (1-100, default 100) is the share of an image's `cores` a session
+pod reserves as its CPU **request**. The manager's `cores` are a soft hint the Docker agent only ever
+applied as a scheduling weight; as a Kubernetes request they are a hard reservation, which is why the
+worked example fills a node's CPU while it sits idle. Lowering the percent shrinks only the request,
+so more sessions bin-pack per node; any CPU **limit** (on a *Quotas* image) is untouched, so a session
+can still burst to its full `cores`.
+
+In the worked example, `workspaceCPURequestPercent: 50` halves the 2-core request to 1000m, so CPU
+requests fit **6** sessions per node instead of 3, still under the 9 that RAM allows. The agent scales
+the capacity it reports to the manager by the same factor, so the manager's session accounting keeps
+matching what the scheduler can actually place - set it too low and you oversubscribe CPU, so treat it
+as trading idle-time burst headroom for density, and measure a real session's usage (below) before
+going far below 50.
 
 ## Measure, do not guess
 

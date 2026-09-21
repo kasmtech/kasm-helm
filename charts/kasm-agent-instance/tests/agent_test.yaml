@@ -396,6 +396,9 @@ tests:
           path: spec.imageAvailabilityPolicy
           value: pulled
       - equal:
+          path: spec.workspaceCPURequestPercent
+          value: 100
+      - equal:
           path: spec.imagePullPolicy
           value: IfNotPresent
       - equal:
@@ -407,6 +410,14 @@ tests:
       - equal:
           path: spec.zone
           value: default
+
+  - it: shrinks the workspace CPU request so sessions bin-pack more per node
+    set:
+      workspaceCPURequestPercent: 25
+    asserts:
+      - equal:
+          path: spec.workspaceCPURequestPercent
+          value: 25
 
   - it: pre-pulls by default with no scheduled refresh
     asserts:

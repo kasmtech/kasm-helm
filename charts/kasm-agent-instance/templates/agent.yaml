@@ -32,6 +32,7 @@ metadata:
 spec:
   image: {{ include "kasmAgentInstance.joinImage" (dict "image" .Values.image "defaultTag" .Chart.AppVersion "path" "agent.image") | quote }}
   imageAvailabilityPolicy: {{ .Values.imageAvailabilityPolicy | quote }}
+  workspaceCPURequestPercent: {{ .Values.workspaceCPURequestPercent }}
   imagePullPolicy: {{ .Values.imagePullPolicy }}
   logLevel: {{ .Values.logLevel | quote }}
   heartbeatIntervalSeconds: {{ .Values.heartbeatIntervalSeconds }}

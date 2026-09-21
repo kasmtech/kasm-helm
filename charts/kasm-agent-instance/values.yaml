@@ -262,6 +262,16 @@ heartbeatIntervalSeconds: 5
 #
 imageAvailabilityPolicy: "pulled"
 
+# workspaceCPURequestPercent -- Share (1-100) of a workspace image's cores that each session pod reserves as
+# its Kubernetes CPU *request*. The manager sizes cores as a soft hint the Docker agent only ever applied as a
+# scheduling weight; as a Kubernetes request they are a hard reservation, so at the default `100` a mostly idle
+# desktop still holds a whole core and nodes fill long before they are busy. Lower it to bin-pack more sessions
+# per node: `25` lets four 1-core sessions share one core's worth of requests. A CPU *limit* (on "Quotas"
+# images) is unaffected, so sessions can still burst to their full size. The agent scales the capacity it
+# reports to the manager by the same factor, so session accounting keeps matching what the scheduler can place.
+#
+workspaceCPURequestPercent: 100
+
 # imagePullPolicy -- Pull policy applied to the agent and session-proxy containers.
 #
 imagePullPolicy: IfNotPresent
