@@ -6,6 +6,16 @@
 #
 deploymentSize: "small"
 
+# global -- Values Helm shares with every chart in a release. Rancher fills in `global.cattle.*` on every install
+# from its catalog; nothing here needs to be set by hand.
+global:
+  cattle:
+    # global.cattle.systemDefaultRegistry -- The registry Rancher configured as the cluster's system default registry
+    # (air-gapped and mirrored clusters). When set, it replaces the registry part of every image this chart renders and
+    # the per-image `image.registry` values are ignored, following Rancher's convention. Rancher sets it on install
+    # from its catalog; leave it empty everywhere else.
+    systemDefaultRegistry: ""
+
 # publicAddr -- Set the access URL to be used for the Kasm deployment. This is the URL you will use to access
 # your Kasm deployment. This URL can be a private address, it just needs to be resolvable by systems you use
 # to interface with Kasm.

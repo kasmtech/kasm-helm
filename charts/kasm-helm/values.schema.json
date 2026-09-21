@@ -1690,6 +1690,27 @@
         "large"
       ]
     },
+    "global": {
+      "additionalProperties": true,
+      "description": "Values Helm shares with every chart in a release. Rancher fills in `global.cattle.*` on every install from its catalog; nothing here needs to be set by hand.",
+      "title": "global",
+      "type": "object",
+      "properties": {
+        "cattle": {
+          "additionalProperties": true,
+          "title": "cattle",
+          "type": "object",
+          "properties": {
+            "systemDefaultRegistry": {
+              "default": "",
+              "description": "The registry Rancher configured as the cluster's system default registry (air-gapped and mirrored clusters). When set, it replaces the registry part of every image this chart renders and the per-image `image.registry` values are ignored, following Rancher's convention. Rancher sets it on install from its catalog; leave it empty everywhere else.",
+              "title": "systemDefaultRegistry",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
     "directRdpService": {
       "additionalProperties": false,
       "type": "object",

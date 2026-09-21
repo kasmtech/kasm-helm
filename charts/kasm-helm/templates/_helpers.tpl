@@ -55,6 +55,17 @@
 {{- end }}
 
 {{/*
+  The registry an image is pulled from: Rancher's global.cattle.systemDefaultRegistry when set,
+  otherwise the per-image registry the caller passes. Usage: include "kasm.imageRegistry" (list $ctx .Values.components.api.image.registry)
+*/}}
+{{- define "kasm.imageRegistry" -}}
+{{- $ctx := index . 0 -}}
+{{- $registry := index . 1 -}}
+{{- $global := dig "cattle" "systemDefaultRegistry" "" ($ctx.Values.global | default dict) -}}
+{{- if $global -}}{{ trimSuffix "/" $global }}{{- else -}}{{ $registry }}{{- end -}}
+{{- end }}
+
+{{/*
   Constants to use across chart template files
 */}}
 {{- define "kasm.constants" }}
@@ -65,7 +76,7 @@ api:
   component: api
   svc: {{ printf "%s-api" .Release.Name }}
   portName: api-pt
-  image: {{ printf "%s/%s:%s" .Values.components.api.image.registry .Values.components.api.image.repository (include "kasm.imageTag" (list . .Values.components.api.image.tag "api")) }}
+  image: {{ printf "%s/%s:%s" (include "kasm.imageRegistry" (list . .Values.components.api.image.registry)) .Values.components.api.image.repository (include "kasm.imageTag" (list . .Values.components.api.image.tag "api")) }}
   port: 8080
   livenessPortName: api-liveness-pt
   livenessPort: 8081
@@ -73,13 +84,13 @@ manager:
   component: manager
   svc: {{ printf "%s-manager" .Release.Name }}
   portName: manager-pt
-  image: {{ printf "%s/%s:%s" .Values.components.manager.image.registry .Values.components.manager.image.repository (include "kasm.imageTag" (list . .Values.components.manager.image.tag "manager")) }}
+  image: {{ printf "%s/%s:%s" (include "kasm.imageRegistry" (list . .Values.components.manager.image.registry)) .Values.components.manager.image.repository (include "kasm.imageTag" (list . .Values.components.manager.image.tag "manager")) }}
   port: 8181
 proxy:
   component: proxy
   svc: {{ printf "%s-proxy" .Release.Name }}
   portName: proxy-pt
-  image: {{ printf "%s/%s:%s" .Values.components.proxy.image.registry .Values.components.proxy.image.repository (include "kasm.imageTag" (list . .Values.components.proxy.image.tag "proxy")) }}
+  image: {{ printf "%s/%s:%s" (include "kasm.imageRegistry" (list . .Values.components.proxy.image.registry)) .Values.components.proxy.image.repository (include "kasm.imageTag" (list . .Values.components.proxy.image.tag "proxy")) }}
   http: 8080
   https: 8443
   extHttps: 443
@@ -87,7 +98,7 @@ db:
   component: db
   svc: {{ if .Values.database.standalone }}{{- .Values.database.hostname }}{{ else }}{{- printf "%s-db" .Release.Name }}{{ end }}
   portName: db-pt
-  image: {{ printf "%s/%s:%s" .Values.database.image.registry .Values.database.image.repository (include "kasm.imageTag" (list . .Values.database.image.tag "database")) }}
+  image: {{ printf "%s/%s:%s" (include "kasm.imageRegistry" (list . .Values.database.image.registry)) .Values.database.image.repository (include "kasm.imageTag" (list . .Values.database.image.tag "database")) }}
   port: {{ .Values.database.port }}
 connectionProxy:
   component: connection-proxy
@@ -95,11 +106,11 @@ connectionProxy:
   portName: cp-nginx-pt
   nginxPort: 8443
   {{- $cp := .Values.components.connectionProxy }}
-  image: {{ if and $cp.nginx.image.registry $cp.nginx.image.repository }}{{ printf "%s/%s:%s" $cp.nginx.image.registry $cp.nginx.image.repository (include "kasm.imageTag" (list . $cp.nginx.image.tag "connectionProxy.nginx")) }}{{ end }}
+  image: {{ if and $cp.nginx.image.registry $cp.nginx.image.repository }}{{ printf "%s/%s:%s" (include "kasm.imageRegistry" (list . $cp.nginx.image.registry)) $cp.nginx.image.repository (include "kasm.imageTag" (list . $cp.nginx.image.tag "connectionProxy.nginx")) }}{{ end }}
   guac:
     port: 3000
     portName: cp-guac-pt
-    image: {{ if and $cp.guac.image.registry $cp.guac.image.repository }}{{ printf "%s/%s:%s" $cp.guac.image.registry $cp.guac.image.repository (include "kasm.imageTag" (list . $cp.guac.image.tag "connectionProxy.guac")) }}{{ end }}
+    image: {{ if and $cp.guac.image.registry $cp.guac.image.repository }}{{ printf "%s/%s:%s" (include "kasm.imageRegistry" (list . $cp.guac.image.registry)) $cp.guac.image.repository (include "kasm.imageTag" (list . $cp.guac.image.tag "connectionProxy.guac")) }}{{ end }}
     ports:
       {{- $cpClusterSize := ternary $cp.guac.guacClusterSize (include "resources.preset" (dict "node" "guac-processes" "size" .Values.deploymentSize "context" .Values)) (gt (int $cp.guac.guacClusterSize) 0) }}
       {{- range $idx := until (int $cpClusterSize) }}
@@ -110,11 +121,11 @@ connectionProxy:
     portName: cp-rdp-gw-pt
     directPort: 3389
     directPortName: cp-rdp-drct-pt
-    image: {{ if and $cp.rdpGateway.image.registry $cp.rdpGateway.image.repository }}{{ printf "%s/%s:%s" $cp.rdpGateway.image.registry $cp.rdpGateway.image.repository (include "kasm.imageTag" (list . $cp.rdpGateway.image.tag "connectionProxy.rdpGateway")) }}{{ end }}
+    image: {{ if and $cp.rdpGateway.image.registry $cp.rdpGateway.image.repository }}{{ printf "%s/%s:%s" (include "kasm.imageRegistry" (list . $cp.rdpGateway.image.registry)) $cp.rdpGateway.image.repository (include "kasm.imageTag" (list . $cp.rdpGateway.image.tag "connectionProxy.rdpGateway")) }}{{ end }}
   rdpHttpsGateway:
     port: 9443
     portName: cp-rdp-tls-pt
-    image: {{ if and $cp.rdpHttpsGateway.image.registry $cp.rdpHttpsGateway.image.repository }}{{ printf "%s/%s:%s" $cp.rdpHttpsGateway.image.registry $cp.rdpHttpsGateway.image.repository (include "kasm.imageTag" (list . $cp.rdpHttpsGateway.image.tag "connectionProxy.rdpHttpsGateway")) }}{{ end }}
+    image: {{ if and $cp.rdpHttpsGateway.image.registry $cp.rdpHttpsGateway.image.repository }}{{ printf "%s/%s:%s" (include "kasm.imageRegistry" (list . $cp.rdpHttpsGateway.image.registry)) $cp.rdpHttpsGateway.image.repository (include "kasm.imageTag" (list . $cp.rdpHttpsGateway.image.tag "connectionProxy.rdpHttpsGateway")) }}{{ end }}
 {{- end }}
 
 {{/*

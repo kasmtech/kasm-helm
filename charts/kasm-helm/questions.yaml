@@ -1,0 +1,117 @@
+# Rancher install form for the kasm-helm chart. Every `variable` is a path in values.yaml; anything
+# not covered here is set through the YAML editor on the same install page.
+questions:
+  # ---------- Control plane ----------
+  - variable: publicAddr
+    label: Public hostname
+    description: The DNS name users open to reach Kasm and the name the certificate is issued for. It can be a private name; it only has to resolve for the systems that use Kasm.
+    type: hostname
+    required: true
+    group: Control plane
+  - variable: deploymentSize
+    label: Deployment size
+    description: The expected session load. small = up to 10-15 sessions, medium = up to 25-30 sessions, large = up to 50+ sessions. Sizes the replica counts and resource requests of every component.
+    type: enum
+    options:
+      - small
+      - medium
+      - large
+    default: small
+    group: Control plane
+  - variable: ingress.enabled
+    label: Publish through an Ingress
+    description: Publish the Kasm proxy through an Ingress. Off, the chart publishes it through a LoadBalancer Service. The Gateway API and OpenShift Route publishers are set through the YAML editor; see the chart README.
+    type: boolean
+    default: false
+    group: Control plane
+    show_subquestion_if: true
+    subquestions:
+      - variable: ingress.ingressClassName
+        label: Ingress class
+        description: The IngressClass to use. Leave empty for the cluster default.
+        type: string
+        default: ""
+      - variable: ingress.tls
+        label: Terminate TLS at the Ingress
+        description: Attach the certificate Secret to the Ingress so the ingress controller terminates TLS. Off, the Ingress passes traffic to the proxy unencrypted.
+        type: boolean
+        default: true
+
+  # ---------- Certificate ----------
+  - variable: certificate.certManager.enabled
+    label: Issue the certificate with cert-manager
+    description: Have cert-manager issue the certificate for the public hostname. Requires cert-manager to be installed in the cluster.
+    type: boolean
+    default: false
+    group: Certificate
+    show_subquestion_if: true
+    subquestions:
+      - variable: certificate.certManager.issuerName
+        label: Issuer name
+        description: The name of the cert-manager Issuer or ClusterIssuer to request the certificate from.
+        type: string
+        default: ""
+      - variable: certificate.certManager.issuerKind
+        label: Issuer kind
+        type: enum
+        options:
+          - Issuer
+          - ClusterIssuer
+        default: ClusterIssuer
+  - variable: certificate.secretName
+    label: Existing TLS Secret
+    description: The name of a TLS Secret in the release namespace holding the certificate for the public hostname. Leave empty to use a generated self-signed certificate, or cert-manager above.
+    type: string
+    default: ""
+    group: Certificate
+
+  # ---------- Credentials ----------
+  - variable: kasmSecrets.passwords.admin-password
+    label: Admin password
+    description: The password of the admin user (admin@kasm.local). Leave empty to generate one. Either way it is stored in the Secret <release>-secrets under the key admin-password.
+    type: password
+    default: ""
+    group: Credentials
+  - variable: kasmSecrets.passwords.manager-token
+    label: Manager token
+    description: The token agents present when registering with the control plane. Leave empty to generate one. Read it from the Secret <release>-secrets under the key manager-token.
+    type: password
+    default: ""
+    group: Credentials
+
+  # ---------- Database ----------
+  - variable: database.standalone
+    label: Use an external PostgreSQL
+    description: Connect to a PostgreSQL server you run instead of the bundled one. The password Secret settings (database.kasmDbSecret and database.postgresMasterUser) are set through the YAML editor; see the chart README.
+    type: boolean
+    default: false
+    group: Database
+    show_subquestion_if: true
+    subquestions:
+      - variable: database.hostname
+        label: PostgreSQL hostname
+        type: hostname
+        default: ""
+      - variable: database.port
+        label: PostgreSQL port
+        type: int
+        default: 5432
+      - variable: database.ssl
+        label: Connect with SSL
+        type: boolean
+        default: true
+      - variable: database.kasmDbName
+        label: Database name
+        type: string
+        default: kasm
+      - variable: database.kasmDbUser
+        label: Database user
+        type: string
+        default: kasmapp
+  - variable: database.storage.storageClassName
+    label: Database storage class
+    description: The StorageClass for the bundled PostgreSQL volume. Leave empty to use the cluster default.
+    type: storageclass
+    default: ""
+    group: Database
+    show_if: database.standalone=false
