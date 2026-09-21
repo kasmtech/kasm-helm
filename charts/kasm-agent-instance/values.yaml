@@ -355,11 +355,25 @@ workspacesAutoscaling:
 standby:
   # standby.enabled -- Create the placeholder Deployment.
   enabled: false
-  # standby.priorityClassName -- REQUIRED when enabled. Names a PriorityClass with a *negative* value that your
-  # cluster admin has created; a real session (default priority) outranks it, so the scheduler evicts a
-  # placeholder to make room, and the agent uses the class to know the placeholders' room is free to give away.
-  # Rendering fails if this is empty while `enabled` is true.
+  # standby.priorityClassName -- REQUIRED when enabled. Names the PriorityClass the placeholders run under: one
+  # with a *negative* value, so a real session (default priority) outranks it and the scheduler evicts a
+  # placeholder to make room, and the agent knows the placeholders' room is free to give away. By default this
+  # is a PriorityClass a cluster admin manages out-of-band and this chart only references by name; set
+  # `priorityClass.create` to have the chart create it instead. Rendering fails if this is empty while
+  # `enabled` is true.
   priorityClassName: ""
+  # standby.priorityClass -- Optionally have this chart create the PriorityClass named above, rather than
+  # referencing one a cluster admin already manages (the default, and the common case). A PriorityClass is a
+  # *cluster-scoped* object, so enabling this on more than one agent release must use distinct
+  # `priorityClassName`s to avoid an ownership clash.
+  priorityClass:
+    # standby.priorityClass.create -- Create the PriorityClass named by `priorityClassName` with `value` below.
+    # Default false: reference an existing one. When true, `priorityClassName` must be set and `value` negative.
+    create: false
+    # standby.priorityClass.value -- The (negative) value for the created PriorityClass. Only used when
+    # `create` is true; rendering fails if it is not below zero, since a session must be able to preempt a
+    # placeholder.
+    value: -10
   # standby.replicas -- How many placeholders to keep. Applied when the Deployment is created and kept in step
   # afterwards, unless `externallyScaled`. Minimum 0.
   replicas: 1

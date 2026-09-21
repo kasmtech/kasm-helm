@@ -183,8 +183,11 @@ placeholders on the workspace nodes (same `workspacesNodeSelector`/`workspacesTo
 requesting what a session does. A real session outranks them, so the scheduler evicts a placeholder
 and the session starts at once; the evicted placeholder then goes unschedulable, which is what makes
 the autoscaler add a node - so the headroom comes back with nobody waiting on it. It requires a
-`priorityClassName` naming a PriorityClass with a **negative** value that a cluster admin creates
-(the chart references it, never creates it); rendering fails if `standby.enabled` is set without one.
+`priorityClassName` naming a PriorityClass with a **negative** value; rendering fails if
+`standby.enabled` is set without one. By default the chart only *references* that PriorityClass, so a
+cluster admin creates it out-of-band (the common case, since a PriorityClass is cluster-scoped and
+often shared); set `standby.priorityClass.create: true` to have the chart create it instead, with
+`standby.priorityClass.value` (which must be negative).
 `replicas` is how much headroom to hold - fixed, or `externallyScaled` to let a KEDA `ScaledObject` or
 an HPA drive it from real demand. Each placeholder defaults to the largest request in the agent's
 catalog (`status.workspaces.largestRequest`), so one placeholder's room fits any image; set
@@ -205,7 +208,7 @@ placeholders are counted as free room, not used, so they do not themselves make 
 - [ ] Swap decision made - understanding sessions get **no** swap (memory request = limit); the swapfile helps only other Burstable pods.
 - [ ] Node pool labelled; `agent.workspacesNodeSelector` and the DaemonSet `nodeSelector`s agree.
 - [ ] If the pool is meant to grow: an autoscaler confirmed to watch the workspace nodes, `agent.workspacesAutoscaling` enabled, and `maxNodes` set to the pool's real limit.
-- [ ] If using `agent.standby`: a negative-value PriorityClass created by an admin, its name in `standby.priorityClassName`, and the headroom (`replicas`, or the KEDA/HPA path) decided.
+- [ ] If using `agent.standby`: a negative-value PriorityClass in `standby.priorityClassName` (admin-managed, or `standby.priorityClass.create: true` to let the chart make it), and the headroom (`replicas`, or the KEDA/HPA path) decided.
 - [ ] If the pool is tainted: session scheduling onto it verified.
 - [ ] A load test scheduled to validate all of the above before go-live.
 

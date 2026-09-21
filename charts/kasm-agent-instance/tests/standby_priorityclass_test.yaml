@@ -1,0 +1,67 @@
+suite: standby placeholder PriorityClass
+templates:
+  - templates/standby-priorityclass.yaml
+set:
+  manager:
+    hostname: zonea.example.com
+    existingTokenSecret: kasm-manager-token
+  publicHostname: agent.example.com
+tests:
+  - it: renders nothing while standby is disabled
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders nothing when standby references an admin-managed PriorityClass (create false, the default)
+    set:
+      standby:
+        enabled: true
+        priorityClassName: kasm-standby
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: creates the PriorityClass when opted in, with the negative value
+    set:
+      standby:
+        enabled: true
+        priorityClassName: kasm-standby
+        priorityClass:
+          create: true
+          value: -25
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: PriorityClass
+      - equal:
+          path: metadata.name
+          value: kasm-standby
+      - equal:
+          path: value
+          value: -25
+      - equal:
+          path: globalDefault
+          value: false
+
+  - it: fails when asked to create a PriorityClass with a non-negative value
+    set:
+      standby:
+        enabled: true
+        priorityClassName: kasm-standby
+        priorityClass:
+          create: true
+          value: 0
+    asserts:
+      - failedTemplate:
+          errorMessage: "standby.priorityClass.value must be negative so a session can preempt a standby placeholder; set it below zero"
+
+  - it: fails when asked to create a PriorityClass without a name
+    set:
+      standby:
+        enabled: true
+        priorityClass:
+          create: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "standby.priorityClassName is required when standby.enabled is true: name the PriorityClass to create (standby.priorityClass.create)"

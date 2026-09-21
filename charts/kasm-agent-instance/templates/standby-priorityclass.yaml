@@ -1,0 +1,28 @@
+{{- /*
+  Optional PriorityClass for the standby placeholder pods.
+
+  Rendered only when standby is enabled AND standby.priorityClass.create is true. By default the chart
+  references a PriorityClass a cluster admin manages out-of-band (priorityClass.create: false), which is the
+  common case; this template is the opt-in that lets the chart own it instead.
+
+  A PriorityClass is cluster-scoped, so two agent releases that both create one must use distinct
+  priorityClassNames. The value must be negative, so a real session (default priority 0) preempts a placeholder.
+*/}}
+{{- if and .Values.standby.enabled .Values.standby.priorityClass.create }}
+{{- if not .Values.standby.priorityClassName }}
+{{- fail "standby.priorityClassName is required when standby.enabled is true: name the PriorityClass to create (standby.priorityClass.create)" }}
+{{- end }}
+{{- $v := int .Values.standby.priorityClass.value }}
+{{- if ge $v 0 }}
+{{- fail "standby.priorityClass.value must be negative so a session can preempt a standby placeholder; set it below zero" }}
+{{- end }}
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: {{ .Values.standby.priorityClassName | quote }}
+  labels:
+    {{- include "kasmAgentInstance.labels" . | nindent 4 }}
+value: {{ $v }}
+globalDefault: false
+description: "Kasm standby placeholder priority for agent {{ .Values.name }}: negative, so a real session preempts a placeholder to take its reserved room."
+{{- end }}
