@@ -55,6 +55,18 @@ rules:
   - apiGroups: ["agent.kasm.com"]
     resources: ["kasmimagepullers", "kasmimagepullers/status"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Agent CRs — the agent reports the ImagesWithheld condition on its own Agent
+  # (status only; it never touches the spec) and records an Event there when
+  # the set of images it is withholding from the manager changes.
+  - apiGroups: ["agent.kasm.com"]
+    resources: ["agents"]
+    verbs: ["get"]
+  - apiGroups: ["agent.kasm.com"]
+    resources: ["agents/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
   # Metrics — agent scrapes node/pod metrics for heartbeat utilization data.
   - apiGroups: ["metrics.k8s.io"]
     resources: ["nodes", "pods"]

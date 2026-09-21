@@ -925,6 +925,23 @@ spec:
                 required:
                 - enabled
                 type: object
+              workspaceCPURequestPercent:
+                default: 100
+                description: |-
+                  WorkspaceCPURequestPercent is the share of a workspace image's cores that
+                  its pod reserves as a CPU request (KASM_WORKSPACE_CPU_REQUEST_PERCENT).
+                  The manager's cores are a sizing hint the Docker agent only ever applied
+                  as a soft weight; as a Kubernetes request they are a hard reservation, so
+                  at 100 a mostly idle desktop still holds a whole core and nodes fill up
+                  long before they are busy. 25 lets four 1-core sessions share a core's
+                  worth of requests. A CPU limit ("Quotas" images) stays at the full cores,
+                  so sessions can still burst to their size. The heartbeat scales the
+                  capacity it reports by the same factor, so the manager's session
+                  accounting keeps matching what the scheduler can place.
+                format: int32
+                maximum: 100
+                minimum: 1
+                type: integer
               workspaceLabels:
                 additionalProperties:
                   type: string
@@ -1004,7 +1021,8 @@ spec:
               conditions:
                 description: |-
                   Conditions represent the latest available observations of the agent's
-                  state (Available / Progressing / Degraded).
+                  state (Available / Progressing / Degraded), plus ImagesWithheld, which
+                  the agent reports about itself.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.

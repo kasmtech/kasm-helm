@@ -242,6 +242,40 @@ tests:
               - get
               - list
 
+  - it: lets the agent write its own ImagesWithheld status and Events
+    template: templates/rbac/kasm-agent-clusterrole.yaml
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups:
+              - agent.kasm.com
+            resources:
+              - agents
+            verbs:
+              - get
+      - contains:
+          path: rules
+          content:
+            apiGroups:
+              - agent.kasm.com
+            resources:
+              - agents/status
+            verbs:
+              - get
+              - update
+              - patch
+      - contains:
+          path: rules
+          content:
+            apiGroups:
+              - ""
+            resources:
+              - events
+            verbs:
+              - create
+              - patch
+
   - it: names the sidecar cluster role kasm-nginx-sidecar verbatim
     template: templates/rbac/kasm-nginx-sidecar-clusterrole.yaml
     asserts:
