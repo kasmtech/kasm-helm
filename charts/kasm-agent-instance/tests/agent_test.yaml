@@ -790,23 +790,27 @@ tests:
       - isNull:
           path: spec.standby.resources
 
-  - it: passes standby resources and the externallyScaled flag through
+  - it: passes standby resources (a bare resource map) and the externallyScaled flag through
     set:
       standby:
         enabled: true
         priorityClassName: kasm-standby
         externallyScaled: true
         resources:
-          requests:
-            cpu: "1"
-            memory: 1Gi
+          cpu: "2"
+          memory: 2Gi
     asserts:
       - equal:
           path: spec.standby.externallyScaled
           value: true
       - equal:
-          path: spec.standby.resources.requests.cpu
-          value: "1"
+          path: spec.standby.resources.cpu
+          value: "2"
+      - equal:
+          path: spec.standby.resources.memory
+          value: 2Gi
+      - isNull:
+          path: spec.standby.resources.requests
 
   - it: derives the standby priorityClassName from the agent name when none is set
     set:

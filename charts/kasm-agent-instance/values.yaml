@@ -392,9 +392,11 @@ standby:
   externallyScaled: false
   # standby.image -- The placeholder container image. The default is a bare pause container.
   image: registry.k8s.io/pause:3.10
-  # standby.resources -- What each placeholder requests. Leave empty to size it to the largest workspace in the
-  # agent's catalog (the agent reports this as status.workspaces.largestRequest), so one placeholder's room
-  # fits any image; until that is known, no placeholders are created. Set it to pin a size instead.
+  # standby.resources -- What each placeholder reserves, as a bare resource map (e.g. `{cpu: "2", memory: 2Gi}`)
+  # applied as both the request and the limit — NOT a pod-style `{requests, limits}` block. Leave empty to size
+  # it to the largest workspace in the agent's catalog (the agent reports this as
+  # status.workspaces.largestRequest), so one placeholder's room fits any image; until that is known, no
+  # placeholders are created. Set the map to pin a size instead.
   resources: {}
 
 # storageMappings -- rclone CSI storage mappings for workspace volumes. The whole block is omitted from the

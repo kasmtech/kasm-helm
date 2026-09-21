@@ -192,7 +192,8 @@ clashing; give them distinct names (or a shared admin-managed one) if you overri
 `replicas` is how much headroom to hold - fixed, or `externallyScaled` to let a KEDA `ScaledObject` or
 an HPA drive it from real demand. Each placeholder defaults to the largest request in the agent's
 catalog (`status.workspaces.largestRequest`), so one placeholder's room fits any image; set
-`standby.resources` to pin a size instead.
+`standby.resources` to pin a size instead — a bare resource map like `{cpu: "2", memory: 2Gi}` (applied as
+both request and limit), not a pod-style `{requests, limits}` block.
 
 **You do not need both — they are independent, and each is turned on by its own `enabled`.** Enable
 whichever fits:
