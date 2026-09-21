@@ -1,9 +1,3 @@
-# CustomResourceDefinition rendered as an ordinary Helm template, so this release owns its full
-# lifecycle: `helm upgrade` applies schema changes, and the `helm.sh/resource-policy: keep`
-# annotation makes `helm uninstall` leave the CRD, and every custom resource stored in it, in place.
-# Schema synced from charts/kasm-agent-operator/crds/agent.kasm.com_agents.yaml, which is
-# itself copied VERBATIM from config/crd/bases/ in the kasm-agent-operator repo. Do not hand-edit
-# either copy independently; `make crds-sync-check` fails when the two diverge.
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -945,6 +939,56 @@ spec:
                 - image
                 - sidecarImage
                 type: object
+              standby:
+                description: Standby keeps room for sessions ready ahead of demand.
+                properties:
+                  enabled:
+                    description: Enabled creates the placeholder Deployment; false
+                      removes it.
+                    type: boolean
+                  externallyScaled:
+                    description: |-
+                      ExternallyScaled leaves the Deployment's replica count to something
+                      else (KEDA, an HPA) once it exists.
+                    type: boolean
+                  image:
+                    default: registry.k8s.io/pause:3.10
+                    description: Image is the placeholder container's image.
+                    type: string
+                  priorityClassName:
+                    description: |-
+                      PriorityClassName names a PriorityClass with a negative value, which
+                      the cluster admin provides (it is cluster-scoped; the operator does not
+                      create one). Negative matters twice over: it is what lets any session
+                      evict a placeholder, and it is how the agent knows not to count the room
+                      placeholders hold as used.
+                    minLength: 1
+                    type: string
+                  replicas:
+                    default: 1
+                    description: |-
+                      Replicas is how many placeholders to keep. Applied when the Deployment
+                      is created, and kept in step afterwards unless externallyScaled.
+                    format: int32
+                    minimum: 0
+                    type: integer
+                  resources:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    description: |-
+                      Resources each placeholder requests. Defaults to the largest workspace
+                      the agent's catalog can launch (status.workspaces.largestRequest), so
+                      that one placeholder's room is enough for any image. Until the agent has
+                      reported that, no placeholders are created.
+                    type: object
+                required:
+                - enabled
+                - priorityClassName
+                type: object
               storageMappings:
                 description: StorageMappings enables rclone CSI storage mappings.
                 properties:
@@ -984,6 +1028,38 @@ spec:
                   workspace (session) pod and its resources this agent launches. A session's
                   own labels are layered on top, taking precedence on conflicting keys.
                   Distinct from AgentLabels, which target the agent's own workloads.
+                type: object
+              workspacesAutoscaling:
+                description: |-
+                  WorkspacesAutoscaling tells the agent that a node autoscaler (Cluster
+                  Autoscaler, Karpenter) manages the nodes workspaces run on. Unset or
+                  disabled, the agent treats the cluster as fixed in size: it reports only
+                  the room there is, and refuses what doesn't fit.
+                properties:
+                  enabled:
+                    description: Enabled turns the behaviour on.
+                    type: boolean
+                  maxNodes:
+                    description: |-
+                      MaxNodes is the most workspace nodes the autoscaler will run. At that
+                      size the agent stops counting on growth, and a session that doesn't fit
+                      is refused up front. Unset, the agent always counts on one more node
+                      than there is; at the autoscaler's own limit a session then waits out
+                      schedulingTimeoutSeconds and fails with the scheduler's message.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  schedulingTimeoutSeconds:
+                    default: 600
+                    description: |-
+                      SchedulingTimeoutSeconds is how long a session may wait for a node
+                      before it is failed. It should comfortably exceed the time a node takes
+                      to join and pull the session's image.
+                    format: int32
+                    minimum: 60
+                    type: integer
+                required:
+                - enabled
                 type: object
               workspacesNodeSelector:
                 additionalProperties:
@@ -1146,6 +1222,51 @@ spec:
                       across nodes, so it is not the nodes' CPU count.
                     format: int64
                     type: integer
+                  largestRequest:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    description: |-
+                      LargestRequest is what the largest workspace in the agent's catalog
+                      requests (CPU already scaled by workspaceCPURequestPercent): the size a
+                      standby placeholder needs to be to make room for any image.
+                    type: object
+                  launchable:
+                    description: |-
+                      Launchable is, for each catalog image this agent has, how many more
+                      sessions of it could be started. The images share the same room, so
+                      these are alternatives, not a total: starting one session lowers the
+                      figure for every image.
+                    items:
+                      description: AgentLaunchableImage is how many more sessions
+                        of one image fit.
+                      properties:
+                        atMax:
+                          description: |-
+                            AtMax also counts the nodes a node autoscaler could still add
+                            (spec.workspacesAutoscaling); equal to Now on a cluster of fixed size.
+                          format: int32
+                          type: integer
+                        image:
+                          description: Image is the image name as the manager's catalog
+                            has it.
+                          type: string
+                        now:
+                          description: Now is how many fit on the nodes there are.
+                          format: int32
+                          type: integer
+                      required:
+                      - atMax
+                      - image
+                      - now
+                      type: object
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - image
+                    x-kubernetes-list-type: map
                   nodes:
                     description: |-
                       Nodes is the number of schedulable nodes workspaces can land on: those
