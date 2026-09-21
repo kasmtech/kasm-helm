@@ -1,0 +1,250 @@
+# The install form Rancher's Apps catalog renders for this chart. Every other Helm client ignores
+# this file. It covers the values an install cannot guess; everything else stays at the chart
+# default and is reachable through the form's YAML editor. Variable paths are the kasm-platform
+# values paths (`kasm-helm.*` for the control plane, `kasm-agent.*` for the agent), so this file
+# mirrors charts/kasm-helm/questions.yaml and charts/kasm-agent/questions.yaml with those prefixes.
+# `make rancher-check` verifies every path against the charts' values.
+questions:
+  # ---------------------------------------------------------------- control plane
+  - variable: kasm-helm.enabled
+    label: Install the control plane
+    description: "The Kasm web UI, API, manager, session proxy and database. Turn off to install only the agent, registering it with a control plane that already exists."
+    type: boolean
+    default: true
+    group: Control plane
+  - variable: kasm-helm.publicAddr
+    label: Public hostname
+    description: "The DNS name users open in a browser. The certificate is issued for it, and agents in other clusters register through it."
+    type: hostname
+    required: true
+    group: Control plane
+    show_if: kasm-helm.enabled=true
+  - variable: kasm-helm.deploymentSize
+    label: Deployment size
+    description: "Sizes replica counts and resources for the expected session load: small up to 10-15 sessions, medium up to 25-30, large 50 or more."
+    type: enum
+    options:
+      - small
+      - medium
+      - large
+    default: small
+    group: Control plane
+    show_if: kasm-helm.enabled=true
+  - variable: kasm-helm.ingress.enabled
+    label: Publish through an Ingress
+    description: "Off, the control plane is published by a LoadBalancer Service. On, an Ingress for the public hostname is created instead; the chart README covers the Gateway API and OpenShift Route alternatives."
+    type: boolean
+    default: false
+    group: Control plane
+    show_if: kasm-helm.enabled=true
+    show_subquestion_if: true
+    subquestions:
+      - variable: kasm-helm.ingress.ingressClassName
+        label: Ingress class
+        description: "Leave empty for the cluster's default IngressClass."
+        type: string
+      - variable: kasm-helm.ingress.tls
+        label: Terminate TLS at the Ingress
+        description: "Uses the certificate below. Turn off to let the Ingress controller pass TLS through to the proxy."
+        type: boolean
+        default: true
+
+  # ---------------------------------------------------------------- certificate
+  - variable: kasm-helm.certificate.certManager.enabled
+    label: Issue the certificate with cert-manager
+    description: "Creates a cert-manager Certificate for the public hostname. cert-manager and an issuer must already exist."
+    type: boolean
+    default: false
+    group: Certificate
+    show_if: kasm-helm.enabled=true
+    show_subquestion_if: true
+    subquestions:
+      - variable: kasm-helm.certificate.certManager.issuerName
+        label: Issuer name
+        type: string
+      - variable: kasm-helm.certificate.certManager.issuerKind
+        label: Issuer kind
+        type: enum
+        options:
+          - ClusterIssuer
+          - Issuer
+        default: ClusterIssuer
+  - variable: kasm-helm.certificate.secretName
+    label: Existing TLS Secret
+    description: "A kubernetes.io/tls Secret in the target namespace to serve instead of a generated one. Leave empty to use a self-signed certificate, or cert-manager above."
+    type: string
+    group: Certificate
+    show_if: kasm-helm.enabled=true&&kasm-helm.certificate.certManager.enabled=false
+
+  # ---------------------------------------------------------------- credentials
+  - variable: kasm-helm.kasmSecrets.passwords.admin-password
+    label: Admin password
+    description: "Password for admin@kasm.local. Leave empty to generate one; either way it is stored in Secret <release>-secrets, key admin-password."
+    type: password
+    group: Credentials
+    show_if: kasm-helm.enabled=true
+  - variable: kasm-helm.kasmSecrets.passwords.manager-token
+    label: Manager token
+    description: "The token agents present when they register. Leave empty to generate one; it is stored in Secret <release>-secrets, key manager-token. The agent in this release reads it from there."
+    type: password
+    group: Credentials
+    show_if: kasm-helm.enabled=true
+
+  # ---------------------------------------------------------------- database
+  - variable: kasm-helm.database.standalone
+    label: Use an external PostgreSQL
+    description: "Off, the chart runs PostgreSQL in the release. On, nothing is deployed and the control plane connects to the server below; the chart README covers the password Secret settings."
+    type: boolean
+    default: false
+    group: Database
+    show_if: kasm-helm.enabled=true
+    show_subquestion_if: true
+    subquestions:
+      - variable: kasm-helm.database.hostname
+        label: PostgreSQL host
+        type: hostname
+      - variable: kasm-helm.database.port
+        label: PostgreSQL port
+        type: int
+        default: 5432
+      - variable: kasm-helm.database.ssl
+        label: Connect over TLS
+        type: boolean
+        default: true
+      - variable: kasm-helm.database.kasmDbName
+        label: Database name
+        type: string
+        default: kasm
+      - variable: kasm-helm.database.kasmDbUser
+        label: Database user
+        type: string
+        default: kasmapp
+  - variable: kasm-helm.database.storage.storageClassName
+    label: Database StorageClass
+    description: "For the bundled PostgreSQL's volume. Leave empty for the cluster default."
+    type: storageclass
+    group: Database
+    show_if: kasm-helm.enabled=true&&kasm-helm.database.standalone=false
+
+  # ---------------------------------------------------------------- agent
+  - variable: kasm-agent.enabled
+    label: Install the Kubernetes agent
+    description: "The operator that runs sessions as pods in this cluster, its telemetry collector and the agent registration. Turn off to install only the control plane and add agents separately."
+    type: boolean
+    default: true
+    group: Agent
+  - variable: kasm-agent.agent.inClusterControlPlane
+    label: Register with the control plane in this release
+    description: "On, the manager hostname, the manager token and the session hostname are derived from the control plane installed alongside. Off, give them explicitly below."
+    type: boolean
+    default: true
+    group: Agent
+    show_if: kasm-agent.enabled=true
+  - variable: kasm-agent.agent.manager.hostname
+    label: Manager hostname
+    description: "The control plane's public hostname (or the proxy in front of its manager)."
+    type: hostname
+    required: true
+    group: Agent
+    show_if: kasm-agent.enabled=true&&kasm-agent.agent.inClusterControlPlane=false
+  - variable: kasm-agent.agent.manager.token
+    label: Manager token
+    description: "From the control plane: Secret <release>-secrets, key manager-token. Stored in a Secret this release creates; the chart README covers pointing at an existing Secret instead."
+    type: password
+    required: true
+    group: Agent
+    show_if: kasm-agent.enabled=true&&kasm-agent.agent.inClusterControlPlane=false
+  - variable: kasm-agent.agent.publicHostname
+    label: Session hostname
+    description: "The DNS name browsers reach sessions on, through the agent's session proxy. Leave empty in the relayed default, where the control plane relays sessions through the in-cluster proxy; set it for direct connections, and always when the control plane is elsewhere."
+    type: hostname
+    group: Agent
+    show_if: kasm-agent.enabled=true
+  - variable: kasm-agent.agent.sessionProxy.service.type
+    label: Session proxy Service type
+    description: "How the session proxy is exposed when no Ingress is used."
+    type: enum
+    options:
+      - ClusterIP
+      - LoadBalancer
+      - NodePort
+    default: ClusterIP
+    group: Agent
+    show_if: kasm-agent.enabled=true
+  - variable: kasm-agent.agent.ingress.enabled
+    label: Publish the session proxy through an Ingress
+    description: "Creates an Ingress for the session hostname. Set the session hostname above."
+    type: boolean
+    default: false
+    group: Agent
+    show_if: kasm-agent.enabled=true
+    show_subquestion_if: true
+    subquestions:
+      - variable: kasm-agent.agent.ingress.className
+        label: Ingress class
+        type: string
+
+  # ---------------------------------------------------------------- cluster features
+  - variable: kasm-agent.networkPolicies.enabled
+    label: Baseline NetworkPolicies
+    description: "Namespace policies that restrict the agent stack's traffic to what it needs. The cluster's CNI must enforce NetworkPolicy."
+    type: boolean
+    default: false
+    group: Cluster features
+    show_if: kasm-agent.enabled=true
+  - variable: kasm-agent.nodePrep.enabled
+    label: Kernel modules (webcam passthrough, WireGuard)
+    description: "Privileged DaemonSet that builds and loads v4l2loopback and WireGuard on every workspace node. The target namespace must permit privileged pods."
+    type: boolean
+    default: false
+    group: Cluster features
+    show_if: kasm-agent.enabled=true
+  - variable: kasm-agent.videoDevicePlugin.enabled
+    label: Video device plugin
+    description: "Advertises the /dev/video* devices node prep creates as a schedulable resource for webcam sessions. Privileged; needs the kernel modules above."
+    type: boolean
+    default: false
+    group: Cluster features
+    show_if: kasm-agent.enabled=true
+  - variable: kasm-agent.egressInstaller.enabled
+    label: Per-session VPN egress
+    description: "Privileged DaemonSet (hostPID, hostNetwork) that chains a CNI shim into every node for OpenVPN, WireGuard or Ziti egress per session. Read the kasm-egress-installer README before turning it on."
+    type: boolean
+    default: false
+    group: Cluster features
+    show_if: kasm-agent.enabled=true
+    show_subquestion_if: true
+    subquestions:
+      - variable: kasm-agent.egressInstaller.distro
+        label: CNI plugin directory preset
+        description: "vanilla installs the shim into /opt/cni/bin, k3s into k3s's data directory. For RKE2 and anything else, set the directory explicitly below."
+        type: enum
+        options:
+          - vanilla
+          - k3s
+        default: vanilla
+      - variable: kasm-agent.egressInstaller.cniBinDir
+        label: CNI plugin directory
+        description: "Overrides the preset. Required on RKE2."
+        type: string
+  - variable: kasm-agent.gpuOperator.enabled
+    label: NVIDIA GPU Operator
+    description: "Installs the NVIDIA drivers, container toolkit and device plugin so sessions can request nvidia.com/gpu. Do not enable it on a cluster that already runs the GPU Operator."
+    type: boolean
+    default: false
+    group: Cluster features
+    show_if: kasm-agent.enabled=true
+  - variable: kasm-agent.nfs-server-provisioner.enabled
+    label: In-cluster NFS provisioner
+    description: "A ReadWriteMany StorageClass for persistent profiles, for clusters without an RWX-capable CSI driver."
+    type: boolean
+    default: false
+    group: Cluster features
+    show_if: kasm-agent.enabled=true
+  - variable: kasm-agent.csiRclone.enabled
+    label: rclone CSI driver
+    description: "Backs Kasm cloud storage mappings (S3, Google Drive, and the other rclone remotes)."
+    type: boolean
+    default: false
+    group: Cluster features
+    show_if: kasm-agent.enabled=true

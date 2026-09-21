@@ -1,0 +1,23 @@
+# The install form Rancher's Apps catalog renders for this chart. Every other Helm client ignores
+# this file. `make rancher-check` verifies every path against the chart's values.
+questions:
+  - variable: distro
+    label: CNI plugin directory preset
+    description: "Where the CNI shim is installed: vanilla is /opt/cni/bin, k3s is k3s's data directory. For RKE2 and anything else, set the directory explicitly below."
+    type: enum
+    options:
+      - vanilla
+      - k3s
+    default: vanilla
+    group: Node layout
+  - variable: cniBinDir
+    label: CNI plugin directory
+    description: "Overrides the preset. Required on RKE2, where the directory varies by version."
+    type: string
+    group: Node layout
+  - variable: socketDir
+    label: Daemon socket directory
+    description: "Host directory the shim and the daemon meet in. The Kasm agent must be given the same path."
+    type: string
+    default: /var/run/kasm-egress
+    group: Node layout

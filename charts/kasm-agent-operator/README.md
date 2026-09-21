@@ -114,7 +114,7 @@ alongside this subchart; set `otel.endpoint` to point at a collector of your own
 	</thead>
 	<tbody>
 		<tr>
-			<td id="affinity"><a href="./values.yaml#L154">affinity</a></td>
+			<td id="affinity"><a href="./values.yaml#L164">affinity</a></td>
 			<td>
 object
 </td>
@@ -128,7 +128,7 @@ object
 			<td>Affinity and anti-affinity rules for the operator Pod. </td>
 		</tr>
 		<tr>
-			<td id="extraEnv"><a href="./values.yaml#L102">extraEnv</a></td>
+			<td id="extraEnv"><a href="./values.yaml#L112">extraEnv</a></td>
 			<td>
 list
 </td>
@@ -156,7 +156,36 @@ string
 			<td>Override the fully qualified name of the operator Deployment. Leave empty to build it from the release name and the chart name (`<release>-kasm-agent-operator`). </td>
 		</tr>
 		<tr>
-			<td id="image"><a href="./values.yaml#L28">image</a></td>
+			<td id="global"><a href="./values.yaml#L17">global</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+cattle:
+    systemDefaultRegistry: ""
+</pre>
+</div>
+			</td>
+			<td>Values Helm shares with every chart in a release. Rancher fills in `global.cattle.*` on every install from its catalog; nothing here needs to be set by hand.</td>
+		</tr>
+		<tr>
+			<td id="global--cattle--systemDefaultRegistry"><a href="./values.yaml#L23">global.cattle.systemDefaultRegistry</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+""
+</pre>
+</div>
+			</td>
+			<td>The registry Rancher configured as the cluster's system default registry (air-gapped and mirrored clusters). When set, it replaces the registry part of every image this chart renders and `image.registry` is ignored, following Rancher's convention. Rancher sets it on install from its catalog; leave it empty everywhere else.</td>
+		</tr>
+		<tr>
+			<td id="image"><a href="./values.yaml#L38">image</a></td>
 			<td>
 object
 </td>
@@ -173,7 +202,7 @@ tag: ""
 			<td>The controller-manager container image. </td>
 		</tr>
 		<tr>
-			<td id="image--pullPolicy"><a href="./values.yaml#L40">image.pullPolicy</a></td>
+			<td id="image--pullPolicy"><a href="./values.yaml#L50">image.pullPolicy</a></td>
 			<td>
 string
 </td>
@@ -187,7 +216,7 @@ IfNotPresent
 			<td>The image pull policy for the operator container. </td>
 		</tr>
 		<tr>
-			<td id="image--registry"><a href="./values.yaml#L31">image.registry</a></td>
+			<td id="image--registry"><a href="./values.yaml#L41">image.registry</a></td>
 			<td>
 string
 </td>
@@ -201,7 +230,7 @@ docker.io
 			<td>The registry the operator image is pulled from. </td>
 		</tr>
 		<tr>
-			<td id="image--repository"><a href="./values.yaml#L34">image.repository</a></td>
+			<td id="image--repository"><a href="./values.yaml#L44">image.repository</a></td>
 			<td>
 string
 </td>
@@ -215,7 +244,7 @@ kasmweb/kasm-agent-operator
 			<td>The repository of the operator image, without the registry or the tag. </td>
 		</tr>
 		<tr>
-			<td id="image--tag"><a href="./values.yaml#L37">image.tag</a></td>
+			<td id="image--tag"><a href="./values.yaml#L47">image.tag</a></td>
 			<td>
 string
 </td>
@@ -229,7 +258,7 @@ string
 			<td>The tag of the operator image. Leave empty to use the chart's `appVersion`. </td>
 		</tr>
 		<tr>
-			<td id="imagePullSecrets"><a href="./values.yaml#L50">imagePullSecrets</a></td>
+			<td id="imagePullSecrets"><a href="./values.yaml#L60">imagePullSecrets</a></td>
 			<td>
 list
 </td>
@@ -243,7 +272,7 @@ list
 			<td>A list of Secret references used to pull the operator image, each entry an object with a `name` key. The referenced Secrets must already exist in the release namespace; this chart does not create them.  Example:   imagePullSecrets:     - name: kasm-ai </td>
 		</tr>
 		<tr>
-			<td id="leaderElect"><a href="./values.yaml#L24">leaderElect</a></td>
+			<td id="leaderElect"><a href="./values.yaml#L34">leaderElect</a></td>
 			<td>
 bool
 </td>
@@ -271,7 +300,7 @@ string
 			<td>Override the chart name used to build resource names and the `app.kubernetes.io/name` label. Leave empty to use the chart name, `kasm-agent-operator`.  This only affects chart-generated names (the operator Deployment). The RBAC objects this chart ships keep the fixed names the operator and the kustomize deployment use (`manager-role`, `kasm-agent`, and so on) and are not affected by this value. </td>
 		</tr>
 		<tr>
-			<td id="nodeSelector"><a href="./values.yaml#L146">nodeSelector</a></td>
+			<td id="nodeSelector"><a href="./values.yaml#L156">nodeSelector</a></td>
 			<td>
 object
 </td>
@@ -285,7 +314,7 @@ object
 			<td>Node labels the operator Pod must match to be scheduled. </td>
 		</tr>
 		<tr>
-			<td id="otel"><a href="./values.yaml#L81">otel</a></td>
+			<td id="otel"><a href="./values.yaml#L91">otel</a></td>
 			<td>
 object
 </td>
@@ -300,7 +329,7 @@ endpoint: ""
 			<td>OpenTelemetry export configuration for the operator's traces and metrics. </td>
 		</tr>
 		<tr>
-			<td id="otel--enabled"><a href="./values.yaml#L86">otel.enabled</a></td>
+			<td id="otel--enabled"><a href="./values.yaml#L96">otel.enabled</a></td>
 			<td>
 bool
 </td>
@@ -314,7 +343,7 @@ true
 			<td>Set the OTLP exporter environment variables on the controller-manager container. Disable it to leave the OTLP endpoint unset, which makes the operator's SDK fall back to its own default endpoint (localhost) and drop the exported telemetry. </td>
 		</tr>
 		<tr>
-			<td id="otel--endpoint"><a href="./values.yaml#L91">otel.endpoint</a></td>
+			<td id="otel--endpoint"><a href="./values.yaml#L101">otel.endpoint</a></td>
 			<td>
 string
 </td>
@@ -328,7 +357,7 @@ string
 			<td>The OTLP HTTP endpoint the operator exports to. Leave empty to point at the collector deployed alongside this chart by the `kasm-agent` umbrella chart, `http://<release>-kasm-otel-collector:4318`. </td>
 		</tr>
 		<tr>
-			<td id="podAnnotations"><a href="./values.yaml#L137">podAnnotations</a></td>
+			<td id="podAnnotations"><a href="./values.yaml#L147">podAnnotations</a></td>
 			<td>
 object
 </td>
@@ -342,7 +371,7 @@ object
 			<td>Additional annotations to add to the operator Pod. The chart's own `kubectl.kubernetes.io/default-container` annotation always wins and cannot be overridden here. </td>
 		</tr>
 		<tr>
-			<td id="podLabels"><a href="./values.yaml#L142">podLabels</a></td>
+			<td id="podLabels"><a href="./values.yaml#L152">podLabels</a></td>
 			<td>
 object
 </td>
@@ -356,7 +385,7 @@ object
 			<td>Additional labels to add to the operator Pod, merged with the chart's own labels. The chart's labels, including the immutable selector labels, always win and cannot be overridden here. </td>
 		</tr>
 		<tr>
-			<td id="rbac"><a href="./values.yaml#L71">rbac</a></td>
+			<td id="rbac"><a href="./values.yaml#L81">rbac</a></td>
 			<td>
 object
 </td>
@@ -370,7 +399,7 @@ aggregateRoles: true
 			<td>The cluster RBAC the operator, and the workloads it reconciles, require. </td>
 		</tr>
 		<tr>
-			<td id="rbac--aggregateRoles"><a href="./values.yaml#L77">rbac.aggregateRoles</a></td>
+			<td id="rbac--aggregateRoles"><a href="./values.yaml#L87">rbac.aggregateRoles</a></td>
 			<td>
 bool
 </td>
@@ -384,7 +413,7 @@ true
 			<td>Install the convenience admin/editor/viewer ClusterRoles scaffolded for each custom resource kind. They are not used by the operator itself; they exist so a cluster administrator can delegate access to the Kasm custom resources. Disabling them does not affect the operator, the `kasm-agent` ClusterRole, or the `kasm-nginx-sidecar` ClusterRole. </td>
 		</tr>
 		<tr>
-			<td id="replicas"><a href="./values.yaml#L18">replicas</a></td>
+			<td id="replicas"><a href="./values.yaml#L28">replicas</a></td>
 			<td>
 int
 </td>
@@ -398,7 +427,7 @@ int
 			<td>The number of controller-manager replicas to run. The operator uses leader election (see `leaderElect`), so only one replica reconciles at a time; additional replicas are warm standbys. </td>
 		</tr>
 		<tr>
-			<td id="resources"><a href="./values.yaml#L108">resources</a></td>
+			<td id="resources"><a href="./values.yaml#L118">resources</a></td>
 			<td>
 object
 </td>
@@ -417,7 +446,7 @@ requests:
 			<td>CPU and memory requests and limits for the controller-manager container. Both requests and limits must set `cpu` and `memory`; the repository's Kyverno policies reject a container that leaves any of the four unset. </td>
 		</tr>
 		<tr>
-			<td id="resources--limits--cpu"><a href="./values.yaml#L115">resources.limits.cpu</a></td>
+			<td id="resources--limits--cpu"><a href="./values.yaml#L125">resources.limits.cpu</a></td>
 			<td>
 string
 </td>
@@ -431,7 +460,7 @@ string
 			<td>The CPU limit for the controller-manager container. The default is carried over from the operator's own kustomize manifests, where 100m has been enough for a controller that spends most of its time watching. Raise it if reconcile latency climbs on a cluster with many `Agent` or `KasmWorkspace` objects; a throttled controller does not fail, it just falls behind. </td>
 		</tr>
 		<tr>
-			<td id="resources--limits--memory"><a href="./values.yaml#L121">resources.limits.memory</a></td>
+			<td id="resources--limits--memory"><a href="./values.yaml#L131">resources.limits.memory</a></td>
 			<td>
 string
 </td>
@@ -445,7 +474,7 @@ string
 			<td>The memory limit for the controller-manager container, also carried over from the operator's kustomize manifests. The controller's informer caches hold every object it watches, so this is the value to raise on a large cluster rather than letting the manager be OOMKilled part way through a reconcile. </td>
 		</tr>
 		<tr>
-			<td id="resources--requests--cpu"><a href="./values.yaml#L127">resources.requests.cpu</a></td>
+			<td id="resources--requests--cpu"><a href="./values.yaml#L137">resources.requests.cpu</a></td>
 			<td>
 string
 </td>
@@ -459,7 +488,7 @@ string
 			<td>The CPU request for the controller-manager container. It deliberately matches `resources.limits.cpu`, which puts the operator Pod in the Guaranteed QoS class so the scheduler reserves the capacity and the kubelet does not pick it first under node pressure. </td>
 		</tr>
 		<tr>
-			<td id="resources--requests--memory"><a href="./values.yaml#L132">resources.requests.memory</a></td>
+			<td id="resources--requests--memory"><a href="./values.yaml#L142">resources.requests.memory</a></td>
 			<td>
 string
 </td>
@@ -473,7 +502,7 @@ string
 			<td>The memory request for the controller-manager container. It matches `resources.limits.memory` for the same Guaranteed QoS reason, so keep the two in step if you raise either. </td>
 		</tr>
 		<tr>
-			<td id="serviceAccount"><a href="./values.yaml#L55">serviceAccount</a></td>
+			<td id="serviceAccount"><a href="./values.yaml#L65">serviceAccount</a></td>
 			<td>
 object
 </td>
@@ -489,7 +518,7 @@ name: controller-manager
 			<td>The ServiceAccount the controller-manager runs as, and which the RBAC this chart ships is bound to. </td>
 		</tr>
 		<tr>
-			<td id="serviceAccount--annotations"><a href="./values.yaml#L67">serviceAccount.annotations</a></td>
+			<td id="serviceAccount--annotations"><a href="./values.yaml#L77">serviceAccount.annotations</a></td>
 			<td>
 object
 </td>
@@ -503,7 +532,7 @@ object
 			<td>Annotations to add to the ServiceAccount, for example an IAM role binding annotation on a cloud-managed cluster. </td>
 		</tr>
 		<tr>
-			<td id="serviceAccount--create"><a href="./values.yaml#L59">serviceAccount.create</a></td>
+			<td id="serviceAccount--create"><a href="./values.yaml#L69">serviceAccount.create</a></td>
 			<td>
 bool
 </td>
@@ -517,7 +546,7 @@ true
 			<td>Create the ServiceAccount. Disable it if the ServiceAccount named below is managed outside this chart; the ClusterRoleBinding and RoleBinding still reference it. </td>
 		</tr>
 		<tr>
-			<td id="serviceAccount--name"><a href="./values.yaml#L63">serviceAccount.name</a></td>
+			<td id="serviceAccount--name"><a href="./values.yaml#L73">serviceAccount.name</a></td>
 			<td>
 string
 </td>
@@ -531,7 +560,7 @@ controller-manager
 			<td>The name of the ServiceAccount. The default matches the name used by the operator's kustomize deployment, so an existing cluster keeps the same identity. </td>
 		</tr>
 		<tr>
-			<td id="tolerations"><a href="./values.yaml#L150">tolerations</a></td>
+			<td id="tolerations"><a href="./values.yaml#L160">tolerations</a></td>
 			<td>
 list
 </td>

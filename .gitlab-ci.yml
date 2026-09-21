@@ -296,7 +296,7 @@ docs-check:
     - apt-get install -y --no-install-recommends bash curl make git ca-certificates
   parallel:
     matrix:
-      - CHECK: [readme, changelog, readme-all, changelog-all, linkcheck, images]
+      - CHECK: [readme, changelog, readme-all, changelog-all, linkcheck, images, rancher]
   script:
     - |
       if [ "$CHECK" = "readme" ]; then
@@ -311,6 +311,8 @@ docs-check:
         make linkcheck
       elif [ "$CHECK" = "images" ]; then
         make images-check
+      elif [ "$CHECK" = "rancher" ]; then
+        make rancher-check
       fi
   rules:
     - if: $CI_COMMIT_BRANCH

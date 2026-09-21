@@ -26,6 +26,7 @@ See [kasm-node-prep, Security posture](../../../charts/kasm-node-prep/README.md#
   - **kubeadm / vanilla** - PSA is compiled in and commonly configured to enforce `baseline` cluster-wide via an `AdmissionConfiguration` file. Those clusters reject the DaemonSet pods outright.
   - **Managed (EKS / AKS / GKE)** - PSA is available and often pre-configured (GKE Autopilot forbids privileged pods altogether and cannot run these charts). Cloud policy add-ons (GKE Policy Controller, AKS Azure Policy) apply on top.
   - **OpenShift** - SecurityContextConstraints gate privileged pods in addition to PSA, so the namespace label alone is not sufficient there. Binding the SCC is yours to set up.
+  - **RKE2 / Rancher** - without a CIS profile RKE2 behaves like kubeadm. With `profile: cis`, RKE2 configures PSA to enforce `restricted` on every namespace but its own system ones, from a `PodSecurity` admission configuration that a namespace label cannot loosen. Add the namespace to that configuration's `exemptions.namespaces` (the `pod-security-admission-config-file` in the RKE2 config, or, for a Rancher-provisioned cluster, the cluster's Pod Security Admission Configuration Template) and let the server nodes restart. Do this before the install; the DaemonSets otherwise sit at zero ready pods with `violates PodSecurity` events.
 - `kubectl` with permission to label namespaces, and to read your policy engine's `ClusterPolicy` / `ConstraintTemplate` objects.
 
 ## Steps

@@ -1,3 +1,13 @@
+# The catalog.cattle.io/* annotations are read by Rancher's Apps catalog (display name, the
+# release name its form proposes, the version gates, and for the umbrella charts the CRD chart to
+# install first). Every other Helm client ignores them. See docs/how-to/install/rancher.md.
+annotations:
+  catalog.cattle.io/display-name: Kasm Workspaces
+  catalog.cattle.io/release-name: kasm
+  catalog.cattle.io/kube-version: '>= 1.26.0-0'
+  catalog.cattle.io/rancher-version: '>= 2.9.0-0'
+  catalog.cattle.io/permits-os: linux
+  catalog.cattle.io/auto-install: kasm-agent-crds=match
 apiVersion: v2
 name: kasm-platform
 description: "The complete Kasm Workspaces stack for Kubernetes: the control plane and the Kubernetes agent in one release, each independently switchable"
@@ -15,6 +25,7 @@ maintainers:
   - name: Kasm Technologies, Inc.
     url: https://github.com/kasmtech/kasm-helm
 version: 1.1200.0-develop
+kubeVersion: '>= 1.26.0-0'
 appVersion: "develop"
 dependencies:
   # The Kasm Workspaces control plane: the web UI, the manager/API services, the session proxy,

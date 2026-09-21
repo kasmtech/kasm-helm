@@ -30,7 +30,7 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
-  image: {{ include "kasmAgentInstance.joinImage" (dict "image" .Values.image "defaultTag" .Chart.AppVersion "path" "agent.image") | quote }}
+  image: {{ include "kasmAgentInstance.joinImage" (dict "image" .Values.image "defaultTag" .Chart.AppVersion "path" "agent.image" "globalRegistry" (include "kasmAgentInstance.systemDefaultRegistry" $)) | quote }}
   imageAvailabilityPolicy: {{ .Values.imageAvailabilityPolicy | quote }}
   workspaceCPURequestPercent: {{ .Values.workspaceCPURequestPercent }}
   imagePullPolicy: {{ .Values.imagePullPolicy }}
@@ -49,8 +49,8 @@ spec:
   publicPort: {{ include "kasmAgentInstance.publicPort" . }}
   zone: {{ .Values.zone | quote }}
   sessionProxy:
-    image: {{ include "kasmAgentInstance.joinImage" (dict "image" .Values.sessionProxy.image "defaultTag" "" "path" "agent.sessionProxy.image") | quote }}
-    sidecarImage: {{ include "kasmAgentInstance.joinImage" (dict "image" .Values.sessionProxy.sidecarImage "defaultTag" .Chart.AppVersion "path" "agent.sessionProxy.sidecarImage") | quote }}
+    image: {{ include "kasmAgentInstance.joinImage" (dict "image" .Values.sessionProxy.image "defaultTag" "" "path" "agent.sessionProxy.image" "globalRegistry" (include "kasmAgentInstance.systemDefaultRegistry" $)) | quote }}
+    sidecarImage: {{ include "kasmAgentInstance.joinImage" (dict "image" .Values.sessionProxy.sidecarImage "defaultTag" .Chart.AppVersion "path" "agent.sessionProxy.sidecarImage" "globalRegistry" (include "kasmAgentInstance.systemDefaultRegistry" $)) | quote }}
     replicas: {{ .Values.sessionProxy.replicas }}
     probeTimeoutSeconds: {{ .Values.sessionProxy.probeTimeoutSeconds }}
     reconcileIntervalSeconds: {{ .Values.sessionProxy.reconcileIntervalSeconds }}
@@ -166,7 +166,7 @@ spec:
     backend: {{ .Values.seccomp.backend }}
     {{- if eq .Values.seccomp.backend "installer" }}
     installer:
-      image: {{ include "kasmAgentInstance.joinImage" (dict "image" .Values.seccomp.installer.image "defaultTag" .Chart.AppVersion "path" "seccomp.installer.image") | quote }}
+      image: {{ include "kasmAgentInstance.joinImage" (dict "image" .Values.seccomp.installer.image "defaultTag" .Chart.AppVersion "path" "seccomp.installer.image" "globalRegistry" (include "kasmAgentInstance.systemDefaultRegistry" $)) | quote }}
       imagePullPolicy: {{ .Values.seccomp.installer.imagePullPolicy }}
       kubeletSeccompDir: {{ .Values.seccomp.installer.kubeletSeccompDir | quote }}
       {{- with .Values.seccomp.installer.resources }}

@@ -30,6 +30,7 @@ All notable changes to the kasm-agent-instance chart are documented here.
 
 ### Added
 
+- `global.cattle.systemDefaultRegistry`: when set, it replaces the registry part of every image on the `Agent` resource (agent, session proxy and sidecar, seccomp installer); `standby.image` is a full reference and is passed through as written and the per-image `registry` values are ignored, following Rancher's convention for the system default registry it injects on air-gapped clusters. Empty by default, so nothing changes outside Rancher.
 - Adds `inClusterControlPlane` (default `false`), which derives `manager.hostname`, the manager token Secret and `publicHostname` from a `kasm-helm` release installed under the same release name and namespace. Those three values otherwise have no default and fail the render, which is what made a Kubernetes agent impossible to install without a values file. Anything set explicitly still wins.
 - Adds `sessionProxy.selfSigned.enabled` (default `true`), generating the Secret named by `sessionProxy.certSecretName` when cert-manager is not issuing one — the session proxy will not start without it. An existing Secret of that name is reused. On the default relayed topology this certificate is never shown to a browser; on direct-connect paths it must be replaced with a publicly trusted one.
 

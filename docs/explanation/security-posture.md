@@ -23,7 +23,9 @@ in the namespace, which is the main reason for the two-namespace layout
 blanket `disallow-host-namespaces` Kyverno or Gatekeeper rule rejects the egress installer even in a
 `privileged` namespace, so it needs a scoped exception or a recorded accepted risk. On OpenShift,
 SecurityContextConstraints gate privileged pods in addition to Pod Security admission, and the
-label alone is not enough. Procedure:
+label alone is not enough. On RKE2 with the CIS profile, Pod Security admission enforces
+`restricted` on every namespace from the API server's admission configuration, and a namespace
+label cannot loosen it: the exemption is an entry in that configuration. Procedure:
 [Privileged workloads and cluster policy](../how-to/nodes/privileged-workloads.md).
 
 The control plane runs as ordinary workloads on any node and creates no cluster-scoped objects at

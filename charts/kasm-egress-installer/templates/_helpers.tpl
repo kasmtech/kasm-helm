@@ -66,7 +66,7 @@ app.kubernetes.io/part-of: kasm-ai
   "@sha256:" suffix is passed through untouched so both "latest" and "latest@sha256:<digest>" work.
 */}}
 {{- define "kasmEgressInstaller.image" -}}
-{{- $registry := trimSuffix "/" (.Values.image.registry | default "") -}}
+{{- $registry := include "kasmEgressInstaller.imageRegistry" . -}}
 {{- $repository := required "kasm-egress-installer: image.repository must be set" .Values.image.repository -}}
 {{- $tag := .Values.image.tag | default .Chart.AppVersion | toString -}}
 {{- $name := $repository -}}
@@ -78,6 +78,17 @@ app.kubernetes.io/part-of: kasm-ai
 {{- else -}}
 {{- printf "%s:%s" $name $tag -}}
 {{- end -}}
+{{- end -}}
+
+{{/*
+  The registry the image is pulled from: Rancher's global.cattle.systemDefaultRegistry when set,
+  otherwise image.registry. Rancher injects the global on every install from its catalog on a
+  cluster with a system default registry, and its convention is that it replaces the registry of
+  every image a chart renders. A trailing slash is tolerated; the result never carries one.
+*/}}
+{{- define "kasmEgressInstaller.imageRegistry" -}}
+{{- $global := dig "cattle" "systemDefaultRegistry" "" (.Values.global | default dict) -}}
+{{- if $global -}}{{ trimSuffix "/" $global }}{{- else -}}{{ trimSuffix "/" (.Values.image.registry | default "") }}{{- end -}}
 {{- end -}}
 
 {{/*

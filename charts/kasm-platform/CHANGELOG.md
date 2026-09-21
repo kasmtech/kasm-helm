@@ -15,6 +15,8 @@ All notable changes to the kasm-platform chart are documented here.
 
 ### Added
 
+- Rancher catalog packaging: `catalog.cattle.io/*` annotations in `Chart.yaml` (display name, release name, version gates, the `kasm-agent-crds` chart Rancher installs first), a top-level `kubeVersion`, `app-readme.md` for the chart tile and `questions.yaml` for the install form. `make rancher-check` verifies them. Every other Helm client ignores all three.
+- `global.cattle.systemDefaultRegistry`: when set, it replaces the registry part of every image `kasm-helm` and the six Kasm subcharts of `kasm-agent` render and the per-image `registry` values are ignored, following Rancher's convention for the system default registry it injects on air-gapped clusters. Empty by default, so nothing changes outside Rancher.
 - A default install of this chart now needs **no values at all**: it wires the agent to the control plane in the same release (`kasm-agent.agent.inClusterControlPlane`, plus the in-cluster manager port and scheme and the session proxy's own port), and both halves fall back to generated self-signed certificates. Previously the render failed on three agent values with no defaults, and even once past that the pods waited on TLS Secrets nothing created. Every derived value is an ordinary default that an explicit setting overrides, and NOTES.txt warns whenever a generated certificate is in play.
 
 - Initial release: whole-stack umbrella chart composing `kasm-helm` (the control plane) and `kasm-agent` (the Kubernetes agent) into a single release, each half independently toggleable.

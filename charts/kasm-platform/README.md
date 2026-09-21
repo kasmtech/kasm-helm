@@ -154,6 +154,18 @@ kubectl label namespace kasm pod-security.kubernetes.io/enforce=privileged --ove
 For the **two-namespace** layout (control plane and agent as separate releases, with the umbrella's
 NetworkPolicies enforced) see [Install in two namespaces](../../docs/how-to/install/two-namespaces.md).
 
+## Installing from Rancher
+
+The chart carries what Rancher's Apps catalog reads: `catalog.cattle.io/*` annotations,
+`app-readme.md` and a `questions.yaml` form for the values an install cannot guess (the public
+hostname, exposure, certificate, credentials, database, the agent's registration and session
+hostname, the cluster features). From a repository that lists both charts Rancher installs
+`kasm-agent-crds` first on its own (`catalog.cattle.io/auto-install`); from a one-chart OCI entry
+such as `oci://registry-1.docker.io/kasmweb/kasm-platform`, install the CRD chart first from its own
+entry. A system default registry configured on the cluster is honoured for every Kasm image
+(`global.cattle.systemDefaultRegistry`). Procedure:
+[Install from the Rancher catalog](../../docs/how-to/install/rancher.md).
+
 ## Going deeper
 
 This chart is a composition, so almost every question about it is really a question about one of
@@ -204,6 +216,8 @@ See [Publish the charts](../../docs/how-to/publish-charts.md).
 
 ## Requirements
 
+Kubernetes: `>= 1.26.0-0`
+
 | Repository | Name | Version |
 |------------|------|---------|
 | file://../kasm-agent | kasm-agent | 1.1200.0-develop |
@@ -214,6 +228,8 @@ See [Publish the charts](../../docs/how-to/publish-charts.md).
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | extraObjects | list | `[]` | Deploy additional Kubernetes manifests alongside this release. This field is expected to be either a list of strings or a list of objects. Each entry is rendered through `tpl`, so Helm templating may be used inside it.  |
+| global | object | `{"cattle":{"systemDefaultRegistry":""}}` | Values Helm shares with every chart in a release, both halves and their subcharts included. Rancher fills in `global.cattle.*` on every install from its catalog; nothing here needs to be set by hand. |
+| global.cattle.systemDefaultRegistry | string | `""` | The registry Rancher configured as the cluster's system default registry (air-gapped and mirrored clusters). When set, it replaces the registry part of every image `kasm-helm` and the six Kasm subcharts of `kasm-agent` render, and their per-image `registry` values are ignored, following Rancher's convention. The three third-party dependencies of `kasm-agent` do not read it. Rancher sets it on install from its catalog; leave it empty everywhere else. |
 | kasm-agent | object | `{"agent":{"inClusterControlPlane":true},"enabled":true}` | The Kasm Kubernetes agent (the `kasm-agent` umbrella chart). The agent operator, the OpenTelemetry collector, the `Agent` custom resource and its session proxy, and the optional per-feature cluster infrastructure.  ALL of that chart's values nest under this key, its own aliased subcharts included, so its subchart conditions stay reachable from here (`kasm-agent.operator.enabled`, `kasm-agent.nodePrep.enabled`, `kasm-agent.gpuOperator.enabled`, ...). This chart adds only `enabled` and restates nothing else. For example, the three values the agent cannot be installed without are set from here as:    kasm-agent:     agent:       manager:         hostname: kasm.example.com         token: "<the control plane's manager-token>"       publicHostname: sessions.example.com  See `charts/kasm-agent/README.md` for the full value reference, and its "Running alongside the kasm-helm control plane" section for what has to line up between the two halves.  |
 | kasm-agent.enabled | bool | `true` | Install the Kasm Kubernetes agent with this release. Set to false to install only the control plane, and add agents (Kubernetes or otherwise) separately.  |
 | kasm-helm | object | `{"enabled":true}` | The Kasm Workspaces control plane (the `kasm-helm` chart). The web UI, the manager/API services, the session proxy, Guacamole, the RDP gateways, and the PostgreSQL database.  ALL of that chart's values nest under this key — this chart adds only `enabled` and restates nothing else, so every default in `charts/kasm-helm/values.yaml` still applies. For example, the chart's own `publicAddr` and `ingress.enabled` are set from here as:    kasm-helm:     publicAddr: kasm.example.com     ingress:       enabled: true       ingressClassName: traefik  See `charts/kasm-helm/README.md` for the full value reference.  |

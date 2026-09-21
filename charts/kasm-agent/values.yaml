@@ -21,6 +21,18 @@
 # instead of live defaults, so that upgrading the upstream chart never silently changes behaviour
 # because this file pinned a value.
 
+# global -- Values Helm shares with every chart in a release, this chart's six Kasm subcharts included.
+# Rancher fills in `global.cattle.*` on every install from its catalog; nothing here needs to be set by hand.
+global:
+  cattle:
+    # global.cattle.systemDefaultRegistry -- The registry Rancher configured as the cluster's system default
+    # registry (air-gapped and mirrored clusters). When set, it replaces the registry part of every image the six
+    # Kasm subcharts render and their per-image `registry` values are ignored, following Rancher's convention.
+    # The three third-party dependencies (`csiRclone`, `gpuOperator`, `nfs-server-provisioner`) do not read it;
+    # point their own image values at the mirror. Rancher sets it on install from its catalog; leave it empty
+    # everywhere else.
+    systemDefaultRegistry: ""
+
 # operator -- The Kasm agent operator (`kasm-agent-operator` subchart, alias `operator`). Installs
 # the Kasm CustomResourceDefinitions, the cluster RBAC, and the controller-manager that reconciles
 # Agent, KasmWorkspace, and KasmImagePuller resources.

@@ -58,6 +58,7 @@ For anything workspace-related, use an amd64 cluster.
 | -------- | ------ | ------------ |
 | k3s | Supported | Traefik is bundled; its Gateway API provider is **off** by default and needs a `HelmChartConfig` |
 | kubeadm / vanilla | Supported | Bring your own ingress controller or Gateway API implementation |
+| RKE2, and clusters managed by Rancher | Supported | Installable from Rancher's Apps catalog: [Install from the Rancher catalog](../how-to/install/rancher.md). The CIS profile enforces the `restricted` Pod Security Standard cluster-wide from the API server's admission configuration, so the privileged charts need a namespace exemption there, not a namespace label |
 | EKS / AKS / GKE | Supported, see caveats | Node images, GPU drivers, kernel modules and client-IP handling all differ - [Managed providers](managed-providers.md) |
 | OpenShift / ROSA / ARO | Control plane supported, see caveats; agent charts not yet supported | Set `kasm-helm.isOpenshift=true` so the restricted SCC can assign UIDs; Routes are the native path; SCCs govern the privileged components. The agent charts pin no UIDs and need no flag, but the pods the operator creates (agent, session proxy, every session) carry whatever the operator and the workspace images set, with no field on the `Agent` resource to change it |
 

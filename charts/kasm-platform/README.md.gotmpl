@@ -156,6 +156,18 @@ kubectl label namespace kasm pod-security.kubernetes.io/enforce=privileged --ove
 For the **two-namespace** layout (control plane and agent as separate releases, with the umbrella's
 NetworkPolicies enforced) see [Install in two namespaces](../../docs/how-to/install/two-namespaces.md).
 
+## Installing from Rancher
+
+The chart carries what Rancher's Apps catalog reads: `catalog.cattle.io/*` annotations,
+`app-readme.md` and a `questions.yaml` form for the values an install cannot guess (the public
+hostname, exposure, certificate, credentials, database, the agent's registration and session
+hostname, the cluster features). From a repository that lists both charts Rancher installs
+`kasm-agent-crds` first on its own (`catalog.cattle.io/auto-install`); from a one-chart OCI entry
+such as `oci://registry-1.docker.io/kasmweb/kasm-platform`, install the CRD chart first from its own
+entry. A system default registry configured on the cluster is honoured for every Kasm image
+(`global.cattle.systemDefaultRegistry`). Procedure:
+[Install from the Rancher catalog](../../docs/how-to/install/rancher.md).
+
 ## Going deeper
 
 This chart is a composition, so almost every question about it is really a question about one of

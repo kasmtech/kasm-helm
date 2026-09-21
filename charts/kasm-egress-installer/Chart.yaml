@@ -1,5 +1,13 @@
 annotations:
   category: Virtual Desktop
+  # The catalog.cattle.io/* annotations are read by Rancher's Apps catalog (display name, the
+  # release name its form proposes, the version gates, and for the umbrella charts the CRD chart to
+  # install first). Every other Helm client ignores them. See docs/how-to/install/rancher.md.
+  catalog.cattle.io/display-name: Kasm Egress Installer
+  catalog.cattle.io/release-name: kasm-egress-installer
+  catalog.cattle.io/kube-version: '>= 1.26.0-0'
+  catalog.cattle.io/rancher-version: '>= 2.9.0-0'
+  catalog.cattle.io/permits-os: linux
 apiVersion: v2
 appVersion: "develop"
 name: kasm-egress-installer
@@ -17,3 +25,4 @@ maintainers:
   - name: Kasm Technologies, Inc.
     url: https://github.com/kasmtech/kasm-helm
 version: 1.1200.0-develop
+kubeVersion: '>= 1.26.0-0'

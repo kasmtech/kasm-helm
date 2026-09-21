@@ -24,4 +24,5 @@ All notable changes to the kasm-agent-operator chart are documented here.
 
 ### Added
 
+- `global.cattle.systemDefaultRegistry`: when set, it replaces the registry part of every image the chart renders and the per-image `registry` values are ignored, following Rancher's convention for the system default registry it injects on air-gapped clusters. Empty by default, so nothing changes outside Rancher.
 - Initial release: installs the `agent.kasm.com` CustomResourceDefinitions, the static cluster RBAC the operator and the workloads it reconciles require, and the controller-manager Deployment.

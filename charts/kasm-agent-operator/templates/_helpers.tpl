@@ -74,11 +74,23 @@ app.kubernetes.io/component: operator
 */}}
 {{- define "kasmAgentOperator.image" -}}
 {{- $tag := .Values.image.tag | default .Chart.AppVersion -}}
-{{- if .Values.image.registry -}}
-{{- printf "%s/%s:%s" .Values.image.registry .Values.image.repository $tag -}}
+{{- $registry := include "kasmAgentOperator.imageRegistry" . -}}
+{{- if $registry -}}
+{{- printf "%s/%s:%s" $registry .Values.image.repository $tag -}}
 {{- else -}}
 {{- printf "%s:%s" .Values.image.repository $tag -}}
 {{- end -}}
+{{- end -}}
+
+{{/*
+  The registry the image is pulled from: Rancher's global.cattle.systemDefaultRegistry when set,
+  otherwise image.registry. Rancher injects the global on every install from its catalog on a
+  cluster with a system default registry, and its convention is that it replaces the registry of
+  every image a chart renders. A trailing slash is tolerated; the result never carries one.
+*/}}
+{{- define "kasmAgentOperator.imageRegistry" -}}
+{{- $global := dig "cattle" "systemDefaultRegistry" "" (.Values.global | default dict) -}}
+{{- if $global -}}{{ trimSuffix "/" $global }}{{- else -}}{{ trimSuffix "/" (.Values.image.registry | default "") }}{{- end -}}
 {{- end -}}
 
 {{/*

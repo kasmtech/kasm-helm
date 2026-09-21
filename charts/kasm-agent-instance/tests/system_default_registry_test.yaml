@@ -1,0 +1,69 @@
+suite: global.cattle.systemDefaultRegistry (Rancher's system default registry)
+
+templates:
+  - templates/agent.yaml
+
+set:
+  manager.hostname: kasm.example.com
+  manager.token: t0k3n
+  publicHostname: sessions.example.com
+  image.tag: t
+  seccomp.enabled: true
+
+tests:
+  - it: replaces the registry of every image on the Agent, trailing slash tolerated
+    set:
+      global.cattle.systemDefaultRegistry: mirror.example.com/
+    documentSelector:
+      path: kind
+      value: Agent
+    asserts:
+      - equal:
+          path: spec.image
+          value: mirror.example.com/kasmweb/kasm-agent-api:t
+      - matchRegex:
+          path: spec.sessionProxy.image
+          pattern: '^mirror\.example\.com/kasmweb/nginx:'
+      - matchRegex:
+          path: spec.sessionProxy.sidecarImage
+          pattern: '^mirror\.example\.com/kasmweb/'
+      - matchRegex:
+          path: spec.seccomp.installer.image
+          pattern: '^mirror\.example\.com/kasmweb/kasm-seccomp-installer:'
+
+  - it: wins over an explicit image.registry
+    set:
+      image.registry: own.example.com
+      global.cattle.systemDefaultRegistry: mirror.example.com
+    documentSelector:
+      path: kind
+      value: Agent
+    asserts:
+      - equal:
+          path: spec.image
+          value: mirror.example.com/kasmweb/kasm-agent-api:t
+
+  - it: leaves image.registry in charge when the global is empty
+    set:
+      image.registry: own.example.com
+    documentSelector:
+      path: kind
+      value: Agent
+    asserts:
+      - equal:
+          path: spec.image
+          value: own.example.com/kasmweb/kasm-agent-api:t
+      - matchRegex:
+          path: spec.sessionProxy.image
+          pattern: '^docker\.io/kasmweb/nginx:'
+
+  - it: renders the default registry when no global block exists at all
+    set:
+      global: null
+    documentSelector:
+      path: kind
+      value: Agent
+    asserts:
+      - equal:
+          path: spec.image
+          value: docker.io/kasmweb/kasm-agent-api:t

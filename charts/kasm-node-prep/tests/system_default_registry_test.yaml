@@ -1,0 +1,47 @@
+suite: global.cattle.systemDefaultRegistry (Rancher's system default registry)
+
+templates:
+  - templates/daemonset.yaml
+  - templates/configmap.yaml
+
+tests:
+  - it: replaces the image registry when Rancher sets the global, trailing slash tolerated
+    template: templates/daemonset.yaml
+    set:
+      image.tag: t
+      global.cattle.systemDefaultRegistry: mirror.example.com/
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: mirror.example.com/library/ubuntu:t
+
+  - it: wins over an explicit image.registry
+    template: templates/daemonset.yaml
+    set:
+      image.tag: t
+      image.registry: own.example.com
+      global.cattle.systemDefaultRegistry: mirror.example.com
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: mirror.example.com/library/ubuntu:t
+
+  - it: leaves image.registry in charge when the global is empty
+    template: templates/daemonset.yaml
+    set:
+      image.tag: t
+      image.registry: own.example.com
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: own.example.com/library/ubuntu:t
+
+  - it: renders the default registry when no global block exists at all
+    template: templates/daemonset.yaml
+    set:
+      image.tag: t
+      global: null
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: docker.io/library/ubuntu:t

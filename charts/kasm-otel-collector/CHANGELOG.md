@@ -13,4 +13,5 @@ All notable changes to the kasm-otel-collector chart are documented here.
 
 ### Added
 
+- `global.cattle.systemDefaultRegistry`: when set, it replaces the registry part of every image the chart renders and the per-image `registry` values are ignored, following Rancher's convention for the system default registry it injects on air-gapped clusters. Empty by default, so nothing changes outside Rancher.
 - Initial release: an OpenTelemetry Collector that receives OTLP traces, metrics, and logs from the Kasm agent components, with toggleable exporters (OTLP/gRPC, ClickHouse, debug) and an optional `k8s_events` receiver that ingests Kubernetes Events as log records.

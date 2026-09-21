@@ -84,6 +84,7 @@ app.kubernetes.io/part-of: kasm-ai
     defaultTag - tag to use when image.tag is empty (pass "" for images that
                  have no sensible fallback, such as upstream nginx)
     path       - the values path, used in the failure message
+    globalRegistry - optional; when non-empty it replaces image.registry (Rancher's system default registry)
 */}}
 {{- define "kasmAgentInstance.joinImage" -}}
 {{- $image := .image -}}
@@ -94,11 +95,22 @@ app.kubernetes.io/part-of: kasm-ai
 {{- if not $tag -}}
 {{- fail (printf "%s.tag is required: this image has no chart appVersion fallback." .path) -}}
 {{- end -}}
-{{- if $image.registry -}}
-{{- printf "%s/%s:%s" $image.registry $image.repository $tag -}}
+{{- $registry := trimSuffix "/" (default ($image.registry | default "") .globalRegistry) -}}
+{{- if $registry -}}
+{{- printf "%s/%s:%s" $registry $image.repository $tag -}}
 {{- else -}}
 {{- printf "%s:%s" $image.repository $tag -}}
 {{- end -}}
+{{- end }}
+
+{{/*
+  Rancher's global.cattle.systemDefaultRegistry, or "" when unset. Rancher injects it on every
+  install from its catalog on a cluster with a system default registry, and its convention is
+  that it replaces the registry of every image a chart renders; joinImage takes it as
+  globalRegistry and prefers it over the per-image registry. A trailing slash is tolerated.
+*/}}
+{{- define "kasmAgentInstance.systemDefaultRegistry" -}}
+{{- trimSuffix "/" (dig "cattle" "systemDefaultRegistry" "" (.Values.global | default dict)) -}}
 {{- end }}
 
 {{/*

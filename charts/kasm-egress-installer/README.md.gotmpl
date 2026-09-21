@@ -142,6 +142,15 @@ that already covers the k3s, RKE2, and vanilla layouts, and entries that do not 
 node are skipped rather than treated as an error — so there is no matching `distro` choice to make
 for those.
 
+## Installing from Rancher
+
+The chart carries what Rancher's Apps catalog reads: `catalog.cattle.io/*` annotations,
+`app-readme.md` and a `questions.yaml` form for the CNI plugin directory and the socket directory.
+On RKE2 set `cniBinDir` explicitly, and with the CIS profile exempt the namespace from Pod Security
+admission before installing. A system default registry configured on the cluster is honoured
+(`global.cattle.systemDefaultRegistry`). Procedure:
+[Install from the Rancher catalog](../../docs/how-to/install/rancher.md).
+
 ## Chart value settings in `values.yaml`
 
 {{ template "chart.valuesSectionHtml" . }}

@@ -21,4 +21,6 @@ their own. Each README is that chart's value reference, generated from its `valu
 
 Which combination to install is [Deployment topologies](../explanation/topologies.md); how they
 depend on one another is [Architecture](../explanation/architecture.md); how they are packaged
-and pushed is [Publish the charts](../how-to/publish-charts.md).
+and pushed is [Publish the charts](../how-to/publish-charts.md). Each published chart also carries
+the three files Rancher's Apps catalog reads (`catalog.cattle.io/*` annotations, `app-readme.md`,
+`questions.yaml`); installing from there is [Install from the Rancher catalog](../how-to/install/rancher.md).

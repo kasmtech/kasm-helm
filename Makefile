@@ -247,7 +247,7 @@ CRANE_ARCH := $(subst amd64,x86_64,$(ARCH))
 CLOUD_PROVIDER_KIND_PID_FILE ?= $(CURDIR)/.kind/cloud-provider-kind.pid
 CLOUD_PROVIDER_KIND_LOG ?= $(CURDIR)/.kind/cloud-provider-kind.log
 
-.PHONY: tools lint render kubeconform kyverno unittest readme readme-check readme-all readme-check-all set-version changelog changelog-llm changelog-console changelog-console-llm changelog-check changelog-check-all docs linkcheck images-check test build-pytest kind-up kind-down kind-recreate kind-ensure kind-load-images kind-load-old-images kind-clean-namespace kind-prep pytest-docker e2e e2e-basic e2e-trustedca e2e-multizone e2e-externaldb e2e-backup e2e-backup-pss e2e-pss e2e-json-logging e2e-upgrade e2e-upgrade-included e2e-upgrade-standalone e2e-settle e2e-preseed validate-preseed extract-old-chart clean deps-agent lint-agent unittest-agent crds-sync-check version-check-agent render-agent package-agent package-agent-all images-agent kmm-install kmm-install-mirrored kmm-uninstall
+.PHONY: tools lint render kubeconform kyverno unittest readme readme-check readme-all readme-check-all set-version changelog changelog-llm changelog-console changelog-console-llm changelog-check changelog-check-all docs linkcheck images-check test build-pytest kind-up kind-down kind-recreate kind-ensure kind-load-images kind-load-old-images kind-clean-namespace kind-prep pytest-docker e2e e2e-basic e2e-trustedca e2e-multizone e2e-externaldb e2e-backup e2e-backup-pss e2e-pss e2e-json-logging e2e-upgrade e2e-upgrade-included e2e-upgrade-standalone e2e-settle e2e-preseed validate-preseed extract-old-chart clean deps-agent lint-agent unittest-agent crds-sync-check version-check-agent rancher-check render-agent package-agent package-agent-all images-agent kmm-install kmm-install-mirrored kmm-uninstall
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*## "; printf "\nUsage: make \033[36m<target>\033[0m\n"} \
@@ -431,7 +431,7 @@ kyverno: tools render ## Apply Kyverno policies against rendered manifests
 unittest: tools unittest-agent ## Run helm-unittest test suites (+ the kasm-agent charts, via unittest-agent)
 	HELM_PLUGINS="$(HELM_PLUGINS_DIR)" $(HELM) unittest $(CHART_DIR)
 
-test: lint kubeconform kyverno unittest crds-sync-check version-check-agent ## Run full static suite: lint + kubeconform + kyverno + unittest + crds-sync-check + version-check-agent
+test: lint kubeconform kyverno unittest crds-sync-check version-check-agent rancher-check ## Run full static suite: lint + kubeconform + kyverno + unittest + crds-sync-check + version-check-agent + rancher-check
 
 validate-preseed: tools render ## Validate preseed output against the 1.19.0 schema
 	python3 tests/validate_preseed.py \
@@ -537,6 +537,16 @@ crds-sync-check: $(YQ) ## Verify charts/kasm-agent-crds templates carry the same
 # naming it together, dry-run until --write.
 version-check-agent: ## Verify every file:// dependency pin matches the version the referenced chart declares
 	python3 scripts/agent_versions.py --check
+
+# Rancher's Apps catalog reads three files no other Helm client does: the catalog.cattle.io/*
+# annotations in Chart.yaml, app-readme.md and questions.yaml. helm lint, helm template and
+# helm-unittest never look at them, and a mistyped `variable` in a question is a form field that
+# silently writes a value nothing reads. scripts/rancher_check.py checks the five published charts
+# (kasm-platform, kasm-agent, kasm-agent-crds, kasm-egress-installer, kasm-helm): annotation set,
+# kubeVersion agreement, the CRD auto-install pairing, and every question path against the chart's
+# effective values (its own values.yaml, then the file:// dependency an aliased prefix names).
+rancher-check: $(YQ) ## Verify the Rancher catalog packaging of the published charts (annotations, app-readme.md, questions.yaml paths)
+	python3 scripts/rancher_check.py
 
 # Scenarios are derived from tests/values-agent/*.yaml (basename), same idiom as SCENARIOS above.
 # infra.yaml and kmm.yaml are excluded here and rendered separately below: they are the deliberately-

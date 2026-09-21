@@ -29,6 +29,7 @@ One task per page. Each ends in a Decisions block that is the checklist.
 | [Install in two namespaces](how-to/install/two-namespaces.md) | `kasm-helm` and `kasm-agent` as separate releases: token copy, PSS scope, NetworkPolicies |
 | [Add an agent cluster](how-to/install/agent-only.md) | `kasm-agent` in another cluster, against a control plane that already exists: the multi-cluster building block |
 | [Install the CRDs as their own release](how-to/install/crds.md) | `kasm-agent-crds`, and the upgrade order it imposes |
+| [Install from the Rancher catalog](how-to/install/rancher.md) | The repository entry, the install form, the CRD chart Rancher installs first, the system default registry on air-gapped clusters |
 | [Networking](how-to/networking/README.md) | Pick one exposure mechanism per half: [certificates](how-to/networking/certificates.md), [Ingress](how-to/networking/ingress.md), [HTTPRoute](how-to/networking/gateway-api-httproute.md), [TLS passthrough](how-to/networking/gateway-api-passthrough.md), [TCPRoute](how-to/networking/gateway-api-tcproute.md), [LoadBalancer and NodePort](how-to/networking/loadbalancer-nodeport.md), [OpenShift Route](how-to/networking/openshift-route.md), [NetworkPolicies](how-to/networking/network-policies.md), [egress](how-to/networking/egress.md) |
 | [Switch sessions to direct-connect](how-to/networking/direct-connect.md) | Hostname pair, authorization domain, zone routing |
 | [Publish the RDP gateway](how-to/networking/rdp-gateway.md) | `directRdpService` or a `TCPRoute` |
@@ -40,7 +41,7 @@ One task per page. Each ends in a Decisions block that is the checklist.
 | [Enable agents automatically](how-to/enable-agents-automatically.md) | `auto_agent` by preseed or on an existing database |
 | [Label the agent's workloads](how-to/label-workloads.md) | `commonLabels`, `agentLabels`, `workspaceLabels`: what each one labels |
 | [Day 2](how-to/day-2.md) | Upgrade, uninstall in two steps, backup, restore |
-| [Publish the charts](how-to/publish-charts.md) | Package and push the OCI artifacts |
+| [Publish the charts](how-to/publish-charts.md) | Package and push the OCI artifacts; what the Rancher partner catalog needs |
 
 ## Explanation
 

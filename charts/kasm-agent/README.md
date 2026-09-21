@@ -137,6 +137,17 @@ See [Get started](../../docs/tutorials/get-started.md),
 [Install in two namespaces](../../docs/how-to/install/two-namespaces.md) and
 [Add an agent cluster to an existing control plane](../../docs/how-to/install/agent-only.md).
 
+### From Rancher
+
+The chart carries what Rancher's Apps catalog reads: `catalog.cattle.io/*` annotations,
+`app-readme.md` and a `questions.yaml` form for the registration values and the cluster features.
+From a repository that lists both charts Rancher installs `kasm-agent-crds` first on its own
+(`catalog.cattle.io/auto-install`); from a one-chart OCI entry such as
+`oci://registry-1.docker.io/kasmweb/kasm-agent`, install the CRD chart first from its own entry.
+A system default registry configured on the cluster is honoured for the six Kasm subcharts'
+images (`global.cattle.systemDefaultRegistry`; the three third-party dependencies keep their own
+image values). Procedure: [Install from the Rancher catalog](../../docs/how-to/install/rancher.md).
+
 ## Running alongside the kasm-helm control plane
 
 See [Install in two namespaces](../../docs/how-to/install/two-namespaces.md) for the procedure,
@@ -257,6 +268,8 @@ See [Publish the charts](../../docs/how-to/publish-charts.md).
 
 ## Requirements
 
+Kubernetes: `>= 1.26.0-0`
+
 | Repository | Name | Version |
 |------------|------|---------|
 | file://../kasm-agent-instance | agent(kasm-agent-instance) | 1.1200.0-develop |
@@ -283,6 +296,8 @@ See [Publish the charts](../../docs/how-to/publish-charts.md).
 | egressInstaller.enabled | bool | `false` | Install the egress installer DaemonSet with this release.  |
 | egressInstaller.nameOverride | string | `"kasm-egress-installer"` | Pins the subchart's resource names to its own chart name. Helm sets `.Chart.Name` inside an aliased dependency to the *alias*, and `egressInstaller` is not a valid RFC 1123 name, so without this the chart would render resource names Kubernetes rejects.  |
 | extraObjects | list | `[]` | Deploy additional Kubernetes manifests alongside this release. This field is expected to be either a list of strings or a list of objects. Each entry is rendered through `tpl`, so Helm templating may be used inside it.  |
+| global | object | `{"cattle":{"systemDefaultRegistry":""}}` | Values Helm shares with every chart in a release, this chart's six Kasm subcharts included. Rancher fills in `global.cattle.*` on every install from its catalog; nothing here needs to be set by hand. |
+| global.cattle.systemDefaultRegistry | string | `""` | The registry Rancher configured as the cluster's system default registry (air-gapped and mirrored clusters). When set, it replaces the registry part of every image the six Kasm subcharts render and their per-image `registry` values are ignored, following Rancher's convention. The three third-party dependencies (`csiRclone`, `gpuOperator`, `nfs-server-provisioner`) do not read it; point their own image values at the mirror. Rancher sets it on install from its catalog; leave it empty everywhere else. |
 | gpuOperator | object | `{"enabled":false}` | The NVIDIA GPU Operator (`gpu-operator`, alias `gpuOperator`). Third-party chart, not maintained by Kasm.  Installs the NVIDIA drivers, the container toolkit, and the device plugin so that GPU nodes advertise `nvidia.com/gpu` and CUDA workloads run inside workspace pods.  Installing the operator alone does not make Kasm request GPUs. Also set `agent.gpu.enabled=true`, which adds `KASM_GPU_OPERATOR_ENABLED` to the agent so it schedules GPU workspaces against the advertised resource.  Everything nested under `gpuOperator` other than `enabled` is passed straight through to the upstream chart; run `helm show values nvidia/gpu-operator --version v26.7.0` for the full reference. Note that the operator is cluster-scoped, so install it once per cluster.  |
 | gpuOperator.enabled | bool | `false` | Install the NVIDIA GPU Operator with this release. Leave disabled when the operator is already installed in the cluster, or when the nodes' GPU drivers are managed outside Kubernetes.  |
 | networkPolicies | object | `{"apiServer":{"cidr":"0.0.0.0/0","ports":[6443,443]},"cilium":{"enabled":false},"enabled":false,"extraPolicies":[],"manager":{"cidr":"0.0.0.0/0","inCluster":{"namespace":"","podSelector":{"app.kubernetes.io/component":"proxy"}},"ports":[443,80,8080]},"otelBackend":{"cidr":"0.0.0.0/0","ports":[4317,4318,9000]},"sessionProxy":{"from":[],"ports":[4444,4445]}}` | Baseline namespace-scoped NetworkPolicies for the release namespace.  These are a starting point for isolating the Kasm namespace: a default deny, then narrow allowances for DNS, intra-namespace traffic, the Kubernetes API server, the Kasm manager, inbound session proxy traffic, and the OpenTelemetry backend. The operator additionally stamps its own per-workspace NetworkPolicies at runtime for workspace network isolation; those are unaffected by anything here.  NetworkPolicy objects are inert unless the cluster CNI enforces them (Calico, Cilium, Antrea, Weave, and the managed equivalents do; the default kubenet and some managed CNIs do not).  |

@@ -18,6 +18,8 @@ All notable changes to the kasm-agent chart are documented here.
 
 ### Added
 
+- Rancher catalog packaging: `catalog.cattle.io/*` annotations in `Chart.yaml` (display name, release name, version gates, the `kasm-agent-crds` chart Rancher installs first), a top-level `kubeVersion`, `app-readme.md` for the chart tile and `questions.yaml` for the install form. `make rancher-check` verifies them. Every other Helm client ignores all three.
+- `global.cattle.systemDefaultRegistry`: when set, it replaces the registry part of every image the six Kasm subcharts render and the per-image `registry` values are ignored, following Rancher's convention for the system default registry it injects on air-gapped clusters. Empty by default, so nothing changes outside Rancher. The three third-party dependencies do not read it.
 - Initial release: umbrella chart for the Kasm Workspaces Kubernetes agent stack, composing the operator, telemetry collector, agent instance, node prep, and video device plugin subcharts, plus optional third-party cluster infrastructure (`csi-driver-rclone`, `gpu-operator`, `nfs-server-provisioner`).
 - Adds baseline namespace `NetworkPolicies` (`networkPolicies.enabled`) for the agent stack and a cluster preparation checklist (GPU support, persistent-profile storage, workspace network isolation) documented in the README.
 - Adds the `kasm-egress-installer` subchart as an optional dependency (`egressInstaller.enabled`, off by default) for per-session OpenVPN/WireGuard/Ziti egress routing.

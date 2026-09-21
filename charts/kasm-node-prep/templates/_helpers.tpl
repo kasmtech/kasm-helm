@@ -67,7 +67,7 @@ app.kubernetes.io/part-of: kasm-ai
   "@sha256:" suffix is passed through untouched so both "1.0" and "1.0@sha256:<digest>" work.
 */}}
 {{- define "kasmNodePrep.image" -}}
-{{- $registry := trimSuffix "/" (.Values.image.registry | default "") -}}
+{{- $registry := include "kasmNodePrep.imageRegistry" . -}}
 {{- $repository := required "kasm-node-prep: image.repository must be set" .Values.image.repository -}}
 {{- $tag := .Values.image.tag | default .Chart.AppVersion | toString -}}
 {{- $name := $repository -}}
@@ -79,6 +79,17 @@ app.kubernetes.io/part-of: kasm-ai
 {{- else -}}
 {{- printf "%s:%s" $name $tag -}}
 {{- end -}}
+{{- end -}}
+
+{{/*
+  The registry the image is pulled from: Rancher's global.cattle.systemDefaultRegistry when set,
+  otherwise image.registry. Rancher injects the global on every install from its catalog on a
+  cluster with a system default registry, and its convention is that it replaces the registry of
+  every image a chart renders. A trailing slash is tolerated; the result never carries one.
+*/}}
+{{- define "kasmNodePrep.imageRegistry" -}}
+{{- $global := dig "cattle" "systemDefaultRegistry" "" (.Values.global | default dict) -}}
+{{- if $global -}}{{ trimSuffix "/" $global }}{{- else -}}{{ trimSuffix "/" (.Values.image.registry | default "") }}{{- end -}}
 {{- end -}}
 
 {{/*

@@ -84,6 +84,14 @@ The second command still carries the operator chart's `crds/` directory, which i
 skips a CRD that already exists rather than replacing it. If you would rather the app release never
 reason about CRDs at all, add `--skip-crds` to it.
 
+From Rancher's Apps catalog this step is automatic: `kasm-agent` and `kasm-platform` carry
+`catalog.cattle.io/auto-install: kasm-agent-crds=match`, so Rancher installs this chart at the same
+version, into the same namespace, before the app release, and upgrades it with the app. The chart
+is marked `catalog.cattle.io/hidden`, so it does not appear in the catalog on its own. Rancher
+resolves the auto-install within the repository the app chart came from; from a one-chart OCI
+entry (Docker Hub offers nothing else), install this chart first from its own entry instead. See
+[Install from the Rancher catalog](../../docs/how-to/install/rancher.md).
+
 ## Upgrade discipline
 
 **Upgrade this release first, then the app releases.** A new operator expects its new schema; the

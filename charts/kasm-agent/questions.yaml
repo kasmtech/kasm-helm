@@ -1,0 +1,110 @@
+# The install form Rancher's Apps catalog renders for this chart. Every other Helm client ignores
+# this file. It covers the values an install cannot guess; everything else stays at the chart
+# default and is reachable through the form's YAML editor. charts/kasm-platform/questions.yaml
+# carries the same questions under the `kasm-agent.` prefix. `make rancher-check` verifies every
+# path against the chart's values.
+questions:
+  # ---------------------------------------------------------------- registration
+  - variable: agent.manager.hostname
+    label: Manager hostname
+    description: "The control plane's public hostname (or the proxy in front of its manager)."
+    type: hostname
+    required: true
+    group: Registration
+  - variable: agent.manager.token
+    label: Manager token
+    description: "From the control plane: Secret <release>-secrets, key manager-token. Stored in a Secret this release creates; the chart README covers pointing at an existing Secret instead."
+    type: password
+    required: true
+    group: Registration
+  - variable: agent.publicHostname
+    label: Session hostname
+    description: "The DNS name browsers reach sessions on, through this agent's session proxy."
+    type: hostname
+    required: true
+    group: Registration
+  - variable: agent.zone
+    label: Zone
+    description: "The Kasm zone this agent joins. Must exist on the control plane; the default zone always does."
+    type: string
+    default: default
+    group: Registration
+  - variable: agent.sessionProxy.service.type
+    label: Session proxy Service type
+    description: "How the session proxy is exposed when no Ingress is used."
+    type: enum
+    options:
+      - ClusterIP
+      - LoadBalancer
+      - NodePort
+    default: ClusterIP
+    group: Registration
+  - variable: agent.ingress.enabled
+    label: Publish the session proxy through an Ingress
+    description: "Creates an Ingress for the session hostname."
+    type: boolean
+    default: false
+    group: Registration
+    show_subquestion_if: true
+    subquestions:
+      - variable: agent.ingress.className
+        label: Ingress class
+        type: string
+
+  # ---------------------------------------------------------------- cluster features
+  - variable: networkPolicies.enabled
+    label: Baseline NetworkPolicies
+    description: "Namespace policies that restrict the agent stack's traffic to what it needs. The cluster's CNI must enforce NetworkPolicy."
+    type: boolean
+    default: false
+    group: Cluster features
+  - variable: nodePrep.enabled
+    label: Kernel modules (webcam passthrough, WireGuard)
+    description: "Privileged DaemonSet that builds and loads v4l2loopback and WireGuard on every workspace node. The target namespace must permit privileged pods."
+    type: boolean
+    default: false
+    group: Cluster features
+  - variable: videoDevicePlugin.enabled
+    label: Video device plugin
+    description: "Advertises the /dev/video* devices node prep creates as a schedulable resource for webcam sessions. Privileged; needs the kernel modules above."
+    type: boolean
+    default: false
+    group: Cluster features
+  - variable: egressInstaller.enabled
+    label: Per-session VPN egress
+    description: "Privileged DaemonSet (hostPID, hostNetwork) that chains a CNI shim into every node for OpenVPN, WireGuard or Ziti egress per session. Read the kasm-egress-installer README before turning it on."
+    type: boolean
+    default: false
+    group: Cluster features
+    show_subquestion_if: true
+    subquestions:
+      - variable: egressInstaller.distro
+        label: CNI plugin directory preset
+        description: "vanilla installs the shim into /opt/cni/bin, k3s into k3s's data directory. For RKE2 and anything else, set the directory explicitly below."
+        type: enum
+        options:
+          - vanilla
+          - k3s
+        default: vanilla
+      - variable: egressInstaller.cniBinDir
+        label: CNI plugin directory
+        description: "Overrides the preset. Required on RKE2."
+        type: string
+  - variable: gpuOperator.enabled
+    label: NVIDIA GPU Operator
+    description: "Installs the NVIDIA drivers, container toolkit and device plugin so sessions can request nvidia.com/gpu. Do not enable it on a cluster that already runs the GPU Operator."
+    type: boolean
+    default: false
+    group: Cluster features
+  - variable: nfs-server-provisioner.enabled
+    label: In-cluster NFS provisioner
+    description: "A ReadWriteMany StorageClass for persistent profiles, for clusters without an RWX-capable CSI driver."
+    type: boolean
+    default: false
+    group: Cluster features
+  - variable: csiRclone.enabled
+    label: rclone CSI driver
+    description: "Backs Kasm cloud storage mappings (S3, Google Drive, and the other rclone remotes)."
+    type: boolean
+    default: false
+    group: Cluster features

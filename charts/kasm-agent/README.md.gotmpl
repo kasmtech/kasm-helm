@@ -139,6 +139,17 @@ See [Get started](../../docs/tutorials/get-started.md),
 [Install in two namespaces](../../docs/how-to/install/two-namespaces.md) and
 [Add an agent cluster to an existing control plane](../../docs/how-to/install/agent-only.md).
 
+### From Rancher
+
+The chart carries what Rancher's Apps catalog reads: `catalog.cattle.io/*` annotations,
+`app-readme.md` and a `questions.yaml` form for the registration values and the cluster features.
+From a repository that lists both charts Rancher installs `kasm-agent-crds` first on its own
+(`catalog.cattle.io/auto-install`); from a one-chart OCI entry such as
+`oci://registry-1.docker.io/kasmweb/kasm-agent`, install the CRD chart first from its own entry.
+A system default registry configured on the cluster is honoured for the six Kasm subcharts'
+images (`global.cattle.systemDefaultRegistry`; the three third-party dependencies keep their own
+image values). Procedure: [Install from the Rancher catalog](../../docs/how-to/install/rancher.md).
+
 ## Running alongside the kasm-helm control plane
 
 See [Install in two namespaces](../../docs/how-to/install/two-namespaces.md) for the procedure,

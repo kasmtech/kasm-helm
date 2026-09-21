@@ -77,6 +77,24 @@ cadence. A published archive embeds every dependency, so an install from it cont
    refused, unless the pipeline sets `FORCE_REPUBLISH=true` (Run pipeline → Variables, or the manual
    job's own variables), which makes replacing a published preview a deliberate act.
 
+6. **Rancher's own catalog, optional.** Any Rancher installation can add `https://helm.kasm.com`
+   or the OCI URLs as a repository and install the published charts as they are
+   ([Install from the Rancher catalog](install/rancher.md)); nothing here is needed for that.
+   Appearing in the **Partners** catalog that every Rancher ships with is a submission to SUSE's
+   `rancher/partner-charts` repository on GitHub: a `packages/kasm/<chart>/package.yaml` per chart
+   that names the upstream chart's HTTP repository URL and a fixed version, regenerated with their
+   `make prepare` / `make patch` / `make charts` workflow and reviewed by SUSE. Two things follow:
+
+   - the chart must be in a public **HTTP-indexed** repository, so the agent-family charts need the
+     `helm-deploy-gitlab` treatment `kasm-helm` already gets (the index at `https://helm.kasm.com`),
+     not only the OCI push;
+   - the version must be a release, not a prerelease: Rancher hides prereleases by default, and
+     the partner repository pins versions that never change.
+
+   The `catalog.cattle.io/*` annotations, `app-readme.md` and `questions.yaml` the submission needs
+   are already in each published chart; `make rancher-check` verifies them and fails on a question
+   whose `variable` names no value.
+
 ## Verify
 
 The job log shows one line per archive:
@@ -129,11 +147,13 @@ None. Publishing sets no chart values. The versions live in each chart's `Chart.
 | `ERROR: no dist/*.tgz artifacts to publish` | `helm-build-agent` did not run in this pipeline, or its artifacts expired. | Re-run the build job in the same pipeline, then the deploy job. |
 | The published `kasm-platform` installs an agent with no subcharts | `charts/kasm-platform` was packaged before `charts/kasm-agent` was staged. | `make deps-agent package-agent-all`; never `helm package` by hand. |
 | `make images-check` reports `MISSING` | A template references an image under a key shape the `images-agent` extractor does not see. | Fix the extractor in the Makefile, not the list; the list is generated. |
+| `make rancher-check` reports `does not resolve to a key` | A `questions.yaml` variable path has a typo, or names a value the chart (or the dependency its prefix names) does not declare. | Fix the path; the form otherwise writes a value nothing reads. |
 
 ## Decisions
 
 - [ ] Every chart that changed has a new version, and `make version-check-agent` passes.
 - [ ] `make deps-agent` ran on this checkout before packaging.
 - [ ] `make images-check` passes, so the airgap list matches the archives.
+- [ ] `make rancher-check` passes, so the Rancher catalog files match the values.
 - [ ] The pipeline is on `develop` or `release/*`, and the log shows `PUBLISH` for every archive.
 - [ ] `FORCE_REPUBLISH=true` was used only to replace a preview on purpose.

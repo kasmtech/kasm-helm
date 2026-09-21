@@ -9,6 +9,16 @@ nameOverride: ""
 #
 fullnameOverride: ""
 
+# global -- Values Helm shares with every chart in a release. Rancher fills in `global.cattle.*` on every
+# install from its catalog; nothing here needs to be set by hand.
+global:
+  cattle:
+    # global.cattle.systemDefaultRegistry -- The registry Rancher configured as the cluster's system default
+    # registry (air-gapped and mirrored clusters). When set, it replaces the registry part of every image this
+    # chart renders and `image.registry` is ignored, following Rancher's convention. Rancher sets it on install
+    # from its catalog; leave it empty everywhere else.
+    systemDefaultRegistry: ""
+
 # commonLabels -- Custom labels to apply to every resource created by **this chart** (the Agent
 # custom resource, its RBAC, the session-proxy TLS Secret). These do NOT reach the workloads the
 # operator creates from the Agent CR -- use agentLabels and workspaceLabels for those.

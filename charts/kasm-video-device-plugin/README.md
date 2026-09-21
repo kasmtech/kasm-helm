@@ -105,7 +105,7 @@ log on that node.
 	</thead>
 	<tbody>
 		<tr>
-			<td id="allocateEnvVar"><a href="./values.yaml#L56">allocateEnvVar</a></td>
+			<td id="allocateEnvVar"><a href="./values.yaml#L66">allocateEnvVar</a></td>
 			<td>
 string
 </td>
@@ -119,7 +119,7 @@ KASM_VIDEO_DEVICE
 			<td>Env var injected into a container that is allocated exactly one device, set to that device's host path (e.g. `KASM_VIDEO_DEVICE=/dev/video3`). The exec job reads this to discover which device kubelet assigned. Not set when a container is allocated more than one device. </td>
 		</tr>
 		<tr>
-			<td id="devicePrefix"><a href="./values.yaml#L39">devicePrefix</a></td>
+			<td id="devicePrefix"><a href="./values.yaml#L49">devicePrefix</a></td>
 			<td>
 string
 </td>
@@ -147,7 +147,36 @@ string
 			<td>Override the fully qualified name of every resource this chart creates. Leave empty to use the standard `<release name>-<chart name>` naming. </td>
 		</tr>
 		<tr>
-			<td id="image--pullPolicy"><a href="./values.yaml#L28">image.pullPolicy</a></td>
+			<td id="global"><a href="./values.yaml#L13">global</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+cattle:
+    systemDefaultRegistry: ""
+</pre>
+</div>
+			</td>
+			<td>Values Helm shares with every chart in a release. Rancher fills in `global.cattle.*` on every install from its catalog; nothing here needs to be set by hand.</td>
+		</tr>
+		<tr>
+			<td id="global--cattle--systemDefaultRegistry"><a href="./values.yaml#L19">global.cattle.systemDefaultRegistry</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+""
+</pre>
+</div>
+			</td>
+			<td>The registry Rancher configured as the cluster's system default registry (air-gapped and mirrored clusters). When set, it replaces the registry part of every image this chart renders and `image.registry` is ignored, following Rancher's convention. Rancher sets it on install from its catalog; leave it empty everywhere else.</td>
+		</tr>
+		<tr>
+			<td id="image--pullPolicy"><a href="./values.yaml#L38">image.pullPolicy</a></td>
 			<td>
 string
 </td>
@@ -161,7 +190,7 @@ IfNotPresent
 			<td>Image pull policy for the device plugin container. </td>
 		</tr>
 		<tr>
-			<td id="image--registry"><a href="./values.yaml#L19">image.registry</a></td>
+			<td id="image--registry"><a href="./values.yaml#L29">image.registry</a></td>
 			<td>
 string
 </td>
@@ -175,7 +204,7 @@ docker.io
 			<td>Container registry that hosts the device plugin image. Point this at a private registry or a pull-through mirror for air-gapped clusters. </td>
 		</tr>
 		<tr>
-			<td id="image--repository"><a href="./values.yaml#L22">image.repository</a></td>
+			<td id="image--repository"><a href="./values.yaml#L32">image.repository</a></td>
 			<td>
 string
 </td>
@@ -189,7 +218,7 @@ kasmweb/kasm-video-device-plugin
 			<td>Repository of the device plugin image within `image.registry`. </td>
 		</tr>
 		<tr>
-			<td id="image--tag"><a href="./values.yaml#L25">image.tag</a></td>
+			<td id="image--tag"><a href="./values.yaml#L35">image.tag</a></td>
 			<td>
 string
 </td>
@@ -203,7 +232,7 @@ string
 			<td>Tag of the device plugin image. Leave empty to use the chart's `appVersion`. </td>
 		</tr>
 		<tr>
-			<td id="imagePullSecrets"><a href="./values.yaml#L33">imagePullSecrets</a></td>
+			<td id="imagePullSecrets"><a href="./values.yaml#L43">imagePullSecrets</a></td>
 			<td>
 list
 </td>
@@ -217,7 +246,7 @@ list
 			<td>Names of existing `kubernetes.io/dockerconfigjson` Secrets in the release namespace, used to pull the device plugin image from a private registry. </td>
 		</tr>
 		<tr>
-			<td id="maxDevices"><a href="./values.yaml#L44">maxDevices</a></td>
+			<td id="maxDevices"><a href="./values.yaml#L54">maxDevices</a></td>
 			<td>
 int
 </td>
@@ -245,7 +274,7 @@ string
 			<td>Override the chart name used when building resource names and the `app.kubernetes.io/name` label. Leave empty to use the chart name (`kasm-video-device-plugin`). </td>
 		</tr>
 		<tr>
-			<td id="nodeSelector"><a href="./values.yaml#L62">nodeSelector</a></td>
+			<td id="nodeSelector"><a href="./values.yaml#L72">nodeSelector</a></td>
 			<td>
 object
 </td>
@@ -259,7 +288,7 @@ object
 			<td>Node labels that select which nodes run the device plugin. Set this to the same selector used by the `kasm-node-prep` chart so `kasm.com/video` is only advertised on nodes where the v4l2loopback module is actually loaded; otherwise the scheduler can place a webcam session on a node with no devices. </td>
 		</tr>
 		<tr>
-			<td id="podAnnotations"><a href="./values.yaml#L109">podAnnotations</a></td>
+			<td id="podAnnotations"><a href="./values.yaml#L119">podAnnotations</a></td>
 			<td>
 object
 </td>
@@ -273,7 +302,7 @@ object
 			<td>Extra annotations to add to the DaemonSet pods. </td>
 		</tr>
 		<tr>
-			<td id="podLabels"><a href="./values.yaml#L113">podLabels</a></td>
+			<td id="podLabels"><a href="./values.yaml#L123">podLabels</a></td>
 			<td>
 object
 </td>
@@ -287,7 +316,7 @@ object
 			<td>Extra labels to add to the DaemonSet pods, merged with the chart's standard selector labels. </td>
 		</tr>
 		<tr>
-			<td id="priorityClassName"><a href="./values.yaml#L105">priorityClassName</a></td>
+			<td id="priorityClassName"><a href="./values.yaml#L115">priorityClassName</a></td>
 			<td>
 string
 </td>
@@ -301,7 +330,7 @@ system-node-critical
 			<td>Priority class for the DaemonSet pods. Device plugins should outlive node pressure: if this pod is evicted, kubelet stops advertising `kasm.com/video` and webcam sessions become unschedulable on that node. Set to an empty string to use the namespace default instead. </td>
 		</tr>
 		<tr>
-			<td id="resourceName"><a href="./values.yaml#L50">resourceName</a></td>
+			<td id="resourceName"><a href="./values.yaml#L60">resourceName</a></td>
 			<td>
 string
 </td>
@@ -315,7 +344,7 @@ kasm.com/video
 			<td>Kubernetes extended resource name the plugin registers under with kubelet. Must match the resource key in workspace pod limits — this is the resource the Kasm agent requests when `KASM_SVC_WEBCAM=1`. </td>
 		</tr>
 		<tr>
-			<td id="resources"><a href="./values.yaml#L77">resources</a></td>
+			<td id="resources"><a href="./values.yaml#L87">resources</a></td>
 			<td>
 object
 </td>
@@ -334,7 +363,7 @@ requests:
 			<td>CPU and memory requests and limits for the device plugin container. The plugin only watches device paths and answers kubelet, so it stays small. Both requests and limits are always set. </td>
 		</tr>
 		<tr>
-			<td id="resources--limits--cpu"><a href="./values.yaml#L94">resources.limits.cpu</a></td>
+			<td id="resources--limits--cpu"><a href="./values.yaml#L104">resources.limits.cpu</a></td>
 			<td>
 string
 </td>
@@ -348,7 +377,7 @@ string
 			<td>CPU limit for the device plugin container. Headroom over the request for the periodic `/dev` re-scan and for the burst of Allocate calls when several webcam sessions start at once; the plugin is near-idle the rest of the time, so there is little reason to raise this. </td>
 		</tr>
 		<tr>
-			<td id="resources--limits--memory"><a href="./values.yaml#L99">resources.limits.memory</a></td>
+			<td id="resources--limits--memory"><a href="./values.yaml#L109">resources.limits.memory</a></td>
 			<td>
 string
 </td>
@@ -362,7 +391,7 @@ string
 			<td>Memory limit for the device plugin container. Comfortably above what the plugin actually uses — it is here to bound a runaway and to satisfy the repository's Kyverno policies, which reject a container with no memory limit, not because the plugin is expected to approach it. </td>
 		</tr>
 		<tr>
-			<td id="resources--requests--cpu"><a href="./values.yaml#L83">resources.requests.cpu</a></td>
+			<td id="resources--requests--cpu"><a href="./values.yaml#L93">resources.requests.cpu</a></td>
 			<td>
 string
 </td>
@@ -376,7 +405,7 @@ string
 			<td>CPU request for the device plugin container. All the plugin does is re-scan `/dev` every 10 seconds and answer kubelet's gRPC calls, so there is no per-session work and the request is effectively an idle reservation. </td>
 		</tr>
 		<tr>
-			<td id="resources--requests--memory"><a href="./values.yaml#L88">resources.requests.memory</a></td>
+			<td id="resources--requests--memory"><a href="./values.yaml#L98">resources.requests.memory</a></td>
 			<td>
 string
 </td>
@@ -390,7 +419,7 @@ string
 			<td>Memory request for the device plugin container. It holds only the list of matching device files (at most `maxDevices` entries) and its gRPC server, so this stays flat no matter how many webcam sessions are running on the node. </td>
 		</tr>
 		<tr>
-			<td id="tolerations"><a href="./values.yaml#L67">tolerations</a></td>
+			<td id="tolerations"><a href="./values.yaml#L77">tolerations</a></td>
 			<td>
 list
 </td>
@@ -404,7 +433,7 @@ list
 			<td>Tolerations for the DaemonSet pods, so nodes carrying taints (for example dedicated workspace nodes) still advertise their video devices. </td>
 		</tr>
 		<tr>
-			<td id="updateStrategy"><a href="./values.yaml#L72">updateStrategy</a></td>
+			<td id="updateStrategy"><a href="./values.yaml#L82">updateStrategy</a></td>
 			<td>
 string
 </td>

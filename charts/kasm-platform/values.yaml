@@ -16,6 +16,17 @@
 # Templates in this chart reach the two blocks with `index .Values "kasm-helm"` /
 # `index .Values "kasm-agent"`, because `.Values.kasm-helm` is not valid Go template syntax.
 
+# global -- Values Helm shares with every chart in a release, both halves and their subcharts included.
+# Rancher fills in `global.cattle.*` on every install from its catalog; nothing here needs to be set by hand.
+global:
+  cattle:
+    # global.cattle.systemDefaultRegistry -- The registry Rancher configured as the cluster's system default
+    # registry (air-gapped and mirrored clusters). When set, it replaces the registry part of every image
+    # `kasm-helm` and the six Kasm subcharts of `kasm-agent` render, and their per-image `registry` values are
+    # ignored, following Rancher's convention. The three third-party dependencies of `kasm-agent` do not read
+    # it. Rancher sets it on install from its catalog; leave it empty everywhere else.
+    systemDefaultRegistry: ""
+
 # kasm-helm -- The Kasm Workspaces control plane (the `kasm-helm` chart). The web UI, the
 # manager/API services, the session proxy, Guacamole, the RDP gateways, and the PostgreSQL database.
 #
