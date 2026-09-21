@@ -28,6 +28,9 @@ tests:
           path: value
           value: -10
       - equal:
+          path: preemptionPolicy
+          value: Never
+      - equal:
           path: globalDefault
           value: false
 

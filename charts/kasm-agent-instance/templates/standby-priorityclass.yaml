@@ -20,6 +20,8 @@ metadata:
   labels:
     {{- include "kasmAgentInstance.labels" . | nindent 4 }}
 value: {{ $v }}
+# A placeholder only holds room; it must never preempt other pods (sessions preempt it, not the reverse).
+preemptionPolicy: Never
 globalDefault: false
 description: "Kasm standby placeholder priority for agent {{ .Values.name }}: negative, so a real session preempts a placeholder to take its reserved room."
 {{- end }}

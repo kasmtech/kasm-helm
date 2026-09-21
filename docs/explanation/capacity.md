@@ -220,6 +220,40 @@ full.
 > config, schedule, or status for this in the Kasm admin panel the way there is for Kasm's own cloud-VM
 > autoscaler; treat it as infrastructure you manage with Helm and `kubectl`, not from Kasm.
 
+### Scaling standby headroom with KEDA
+
+`standby.replicas` holds a **fixed** amount of headroom. To size it to load instead, set
+`standby.externallyScaled: true`: the operator then applies `replicas` only once, at creation, and
+leaves the count to a horizontal autoscaler you run. This chart installs neither KEDA nor the autoscaler
+object — you apply that yourself, against the placeholder Deployment, which is named
+`<agent name>-workspace-standby` (for the default agent name, `k8s-agent-workspace-standby`).
+
+A KEDA `ScaledObject` that keeps one placeholder per five running sessions:
+
+```yaml
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: k8s-agent-workspace-standby
+  namespace: kasm
+spec:
+  scaleTargetRef:
+    name: k8s-agent-workspace-standby                     # the standby Deployment
+  minReplicaCount: 1
+  maxReplicaCount: 10
+  triggers:
+    - type: kubernetes-workload
+      metadata:
+        podSelector: app.kubernetes.io/component=workspace # count running session pods
+        value: "5"                                         # one placeholder per five sessions
+```
+
+Scale on the **running sessions**, as here (`component=workspace`), not on the agent's `launchable`
+figures — those *fall* as more room is needed, the opposite of what a horizontal autoscaler expects. A
+plain HPA against the same Deployment works too; KEDA's `kubernetes-workload` trigger is just the
+simplest way to count session pods. Leave `externallyScaled: false` (the default) to keep the fixed
+`replicas` and no external autoscaler.
+
 **Decisions**
 
 - [ ] Per-session cost written down from **your** images' `cores` / `memory_bytes`, not from the defaults above.

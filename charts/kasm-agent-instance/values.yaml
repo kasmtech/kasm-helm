@@ -379,7 +379,9 @@ standby:
   # afterwards, unless `externallyScaled`. Minimum 0.
   replicas: 1
   # standby.externallyScaled -- Leave the replica count to a KEDA ScaledObject or an HPA after creation; the
-  # operator then sets `replicas` only once, at creation. Use this to scale placeholders with real demand.
+  # operator then sets `replicas` only once, at creation. Use this to scale placeholders with real demand. You
+  # supply the autoscaler yourself, targeting the placeholder Deployment `<name>-workspace-standby` (scale on
+  # running session pods, `app.kubernetes.io/component=workspace`). See the Capacity docs for a KEDA example.
   externallyScaled: false
   # standby.image -- The placeholder container image. The default is a bare pause container.
   image: registry.k8s.io/pause:3.10
