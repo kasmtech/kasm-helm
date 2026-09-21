@@ -203,12 +203,9 @@ spec:
     schedulingTimeoutSeconds: {{ .Values.workspacesAutoscaling.schedulingTimeoutSeconds }}
   {{- end }}
   {{- if .Values.standby.enabled }}
-  {{- if not .Values.standby.priorityClassName }}
-  {{- fail "standby.priorityClassName is required when standby.enabled is true: name a PriorityClass with a negative value that your cluster admin has created, so an evicted placeholder is what triggers the node autoscaler" }}
-  {{- end }}
   standby:
     enabled: true
-    priorityClassName: {{ .Values.standby.priorityClassName | quote }}
+    priorityClassName: {{ include "kasmAgentInstance.standbyPriorityClassName" . | quote }}
     replicas: {{ .Values.standby.replicas }}
     externallyScaled: {{ .Values.standby.externallyScaled }}
     image: {{ .Values.standby.image | quote }}

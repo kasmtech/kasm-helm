@@ -32,6 +32,19 @@
 {{- end }}
 
 {{/*
+  Effective standby placeholder PriorityClass name: the explicit standby.priorityClassName when set,
+  otherwise derived from the Agent name (<name>-standby). Deriving keeps standby turnkey (enabling it needs
+  no name) while staying unique per agent, since a PriorityClass is cluster-scoped.
+*/}}
+{{- define "kasmAgentInstance.standbyPriorityClassName" -}}
+{{- if .Values.standby.priorityClassName -}}
+{{- .Values.standby.priorityClassName -}}
+{{- else -}}
+{{- printf "%s-standby" .Values.name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- end }}
+
+{{/*
   Chart name and version, as the `helm.sh/chart` label value.
 */}}
 {{- define "kasmAgentInstance.chart" -}}

@@ -182,12 +182,13 @@ session just waits out the timeout.
 placeholders on the workspace nodes (same `workspacesNodeSelector`/`workspacesTolerations`), each
 requesting what a session does. A real session outranks them, so the scheduler evicts a placeholder
 and the session starts at once; the evicted placeholder then goes unschedulable, which is what makes
-the autoscaler add a node - so the headroom comes back with nobody waiting on it. It requires a
-`priorityClassName` naming a PriorityClass with a **negative** value; rendering fails if
-`standby.enabled` is set without one. By default the chart only *references* that PriorityClass, so a
-cluster admin creates it out-of-band (the common case, since a PriorityClass is cluster-scoped and
-often shared); set `standby.priorityClass.create: true` to have the chart create it instead, with
-`standby.priorityClass.value` (which must be negative).
+the autoscaler add a node - so the headroom comes back with nobody waiting on it. It runs the placeholders under a PriorityClass with a **negative** value, and works out of the box:
+`standby.enabled: true` is enough. By default the chart derives the class name from the agent
+(`<name>-standby`) and **creates** it (at `standby.priorityClass.value`, which must be negative). Point
+`standby.priorityClassName` at a specific name to override the derived one, and set
+`standby.priorityClass.create: false` to reference a class a cluster admin manages instead of creating
+it. Since a PriorityClass is cluster-scoped, the derived per-agent name keeps two agent releases from
+clashing; give them distinct names (or a shared admin-managed one) if you override it.
 `replicas` is how much headroom to hold - fixed, or `externallyScaled` to let a KEDA `ScaledObject` or
 an HPA drive it from real demand. Each placeholder defaults to the largest request in the agent's
 catalog (`status.workspaces.largestRequest`), so one placeholder's room fits any image; set
@@ -208,7 +209,7 @@ placeholders are counted as free room, not used, so they do not themselves make 
 - [ ] Swap decision made - understanding sessions get **no** swap (memory request = limit); the swapfile helps only other Burstable pods.
 - [ ] Node pool labelled; `agent.workspacesNodeSelector` and the DaemonSet `nodeSelector`s agree.
 - [ ] If the pool is meant to grow: an autoscaler confirmed to watch the workspace nodes, `agent.workspacesAutoscaling` enabled, and `maxNodes` set to the pool's real limit.
-- [ ] If using `agent.standby`: a negative-value PriorityClass in `standby.priorityClassName` (admin-managed, or `standby.priorityClass.create: true` to let the chart make it), and the headroom (`replicas`, or the KEDA/HPA path) decided.
+- [ ] If using `agent.standby`: the PriorityClass decided (the chart derives and creates `<name>-standby` by default; set `standby.priorityClassName` and/or `standby.priorityClass.create: false` to use an admin-managed one), and the headroom (`replicas`, or the KEDA/HPA path) decided.
 - [ ] If the pool is tainted: session scheduling onto it verified.
 - [ ] A load test scheduled to validate all of the above before go-live.
 

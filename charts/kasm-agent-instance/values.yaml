@@ -355,21 +355,22 @@ workspacesAutoscaling:
 standby:
   # standby.enabled -- Create the placeholder Deployment.
   enabled: false
-  # standby.priorityClassName -- REQUIRED when enabled. Names the PriorityClass the placeholders run under: one
-  # with a *negative* value, so a real session (default priority) outranks it and the scheduler evicts a
-  # placeholder to make room, and the agent knows the placeholders' room is free to give away. By default this
-  # is a PriorityClass a cluster admin manages out-of-band and this chart only references by name; set
-  # `priorityClass.create` to have the chart create it instead. Rendering fails if this is empty while
-  # `enabled` is true.
+  # standby.priorityClassName -- Names the PriorityClass the placeholders run under: one with a *negative* value,
+  # so a real session (default priority) outranks it and the scheduler evicts a placeholder to make room, and
+  # the agent knows the placeholders' room is free to give away. Leave empty (the default) to derive it from the
+  # agent name as `<name>-standby`, so standby works with nothing else set. By default the chart also creates it
+  # (see `priorityClass.create`); set `priorityClass.create: false` to reference one a cluster admin manages
+  # out-of-band instead — set an explicit name here to match theirs.
   priorityClassName: ""
-  # standby.priorityClass -- Optionally have this chart create the PriorityClass named above, rather than
-  # referencing one a cluster admin already manages (the default, and the common case). A PriorityClass is a
-  # *cluster-scoped* object, so enabling this on more than one agent release must use distinct
-  # `priorityClassName`s to avoid an ownership clash.
+  # standby.priorityClass -- Whether this chart creates the PriorityClass named above. A PriorityClass is a
+  # *cluster-scoped* object, so more than one agent release with `create` on must use distinct
+  # `priorityClassName`s to avoid an ownership clash; set `create: false` on the extras (or all of them) to
+  # reference a shared, admin-managed class.
   priorityClass:
     # standby.priorityClass.create -- Create the PriorityClass named by `priorityClassName` with `value` below.
-    # Default false: reference an existing one. When true, `priorityClassName` must be set and `value` negative.
-    create: false
+    # Default true: standby works out of the box. Set false to reference an existing PriorityClass instead.
+    # When true, `priorityClassName` must be set and `value` negative.
+    create: true
     # standby.priorityClass.value -- The (negative) value for the created PriorityClass. Only used when
     # `create` is true; rendering fails if it is not below zero, since a session must be able to preempt a
     # placeholder.

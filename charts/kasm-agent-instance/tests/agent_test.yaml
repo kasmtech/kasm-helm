@@ -796,10 +796,21 @@ tests:
           path: spec.standby.resources.requests.cpu
           value: "1"
 
-  - it: fails when standby is enabled without a priorityClassName
+  - it: derives the standby priorityClassName from the agent name when none is set
     set:
       standby:
         enabled: true
     asserts:
-      - failedTemplate:
-          errorMessage: "standby.priorityClassName is required when standby.enabled is true: name a PriorityClass with a negative value that your cluster admin has created, so an evicted placeholder is what triggers the node autoscaler"
+      - equal:
+          path: spec.standby.priorityClassName
+          value: k8s-agent-standby
+
+  - it: derives the standby priorityClassName from a custom agent name
+    set:
+      name: zone-b-agent
+      standby:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.standby.priorityClassName
+          value: zone-b-agent-standby

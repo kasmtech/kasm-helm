@@ -9,9 +9,6 @@
   priorityClassNames. The value must be negative, so a real session (default priority 0) preempts a placeholder.
 */}}
 {{- if and .Values.standby.enabled .Values.standby.priorityClass.create }}
-{{- if not .Values.standby.priorityClassName }}
-{{- fail "standby.priorityClassName is required when standby.enabled is true: name the PriorityClass to create (standby.priorityClass.create)" }}
-{{- end }}
 {{- $v := int .Values.standby.priorityClass.value }}
 {{- if ge $v 0 }}
 {{- fail "standby.priorityClass.value must be negative so a session can preempt a standby placeholder; set it below zero" }}
@@ -19,7 +16,7 @@
 apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:
-  name: {{ .Values.standby.priorityClassName | quote }}
+  name: {{ include "kasmAgentInstance.standbyPriorityClassName" . | quote }}
   labels:
     {{- include "kasmAgentInstance.labels" . | nindent 4 }}
 value: {{ $v }}
