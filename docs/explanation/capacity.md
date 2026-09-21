@@ -194,8 +194,22 @@ an HPA drive it from real demand. Each placeholder defaults to the largest reque
 catalog (`status.workspaces.largestRequest`), so one placeholder's room fits any image; set
 `standby.resources` to pin a size instead.
 
-Used together, standby serves the room instantly and autoscaling refills it in the background. Standby
-placeholders are counted as free room, not used, so they do not themselves make the pool look full.
+**You do not need both — they are independent, and each is turned on by its own `enabled`.** Enable
+whichever fits:
+
+- **`workspacesAutoscaling` on its own** lets a session *wait* for a node instead of the launch failing
+  on a full pool. It is only useful with a real node autoscaler watching the workspace nodes — without
+  one, the session just waits out `schedulingTimeoutSeconds` and then fails.
+- **`standby` on its own** starts sessions *instantly* from reserved room, and because an evicted
+  placeholder goes unschedulable it is itself what prompts a node autoscaler to grow the pool. It still
+  helps without an autoscaler (the instant start), it just won't refill the headroom on its own.
+- **Both together** is the fullest setup: standby absorbs a burst instantly, while
+  `workspacesAutoscaling` catches the case where even the placeholder-freed room isn't enough and holds
+  that session `WaitingForCapacity` rather than failing it. Both ultimately depend on a node autoscaler
+  to add real capacity.
+
+Standby placeholders are counted as free room, not used, so they do not themselves make the pool look
+full.
 
 > **Caveat — this is chart-managed, not manager-managed.** Kubernetes cluster autoscaling here
 > (`workspacesAutoscaling` and `standby`) is configured and driven **entirely through this chart** — the
