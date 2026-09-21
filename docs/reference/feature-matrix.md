@@ -244,7 +244,7 @@ releases per tenant, and the two-namespace layout in
 | **Image pre-pulling** | ✅ | Registry access or a mirror reachable from every session node · [how-to](../how-to/registries-and-airgap.md) | On by default (`agent.imagePuller.enabled`).<br>`agent.imagePuller.extraImages` to pre-seed<br>`agent.imagePuller.refreshIntervalSeconds` to refresh mutable tags<br>`agent.imageAvailabilityPolicy` |
 | **Node targeting and pools** | ✅ | A consistent node-labelling strategy · [how-to](../how-to/nodes/scope-workspaces-to-nodes.md) | Nothing per workspace.<br>`agent.workspacesNodeSelector` sets a fleet-wide default |
 | **Node tuning and swap** | 🔧 | The node's kubelet configured for swap **first** · [how-to](../how-to/nodes/tuning-and-swap.md) | `nodePrep.tuning.swap.enabled=true`<br>`nodePrep.tuning.sysctls.enabled=true` |
-| **Autoscaling** | ⚠️ | Cluster Autoscaler or Karpenter, against node groups that match workspace pod requests | `operator.enabled=true` |
+| **Autoscaling** | 🔧 | Cluster Autoscaler or Karpenter, against node groups that match workspace pod requests · [capacity](../explanation/capacity.md#growing-capacity-autoscaling-and-standby) | `agent.workspacesAutoscaling.enabled=true` (wait for a node)<br>`agent.standby.enabled=true` (pre-warmed headroom) |
 | **Airgapped installation** | ✅ | A registry you mirror the images into · [how-to](../how-to/registries-and-airgap.md) | Nothing |
 
 **Telemetry.** `otelCollector.exporters.debug.enabled=true` is the quickest way to confirm data is
@@ -261,10 +261,17 @@ kubelet does the pull) — no container-runtime socket or privileges. The defaul
 **Node targeting** needs no value per workspace: the agent turns the manager's own workspace labels
 into a node selector for you. `agent.nodeSelector` targets the agent's own pods, not sessions.
 
-**Autoscaling.** Node-level autoscaling works normally. What is missing is the Kasm-specific half  - 
-nothing scales on session density. Pre-warmed pools are available as a custom resource and cut
-cold-start latency, but that is pre-warming, not demand-driven scaling, and no chart value creates
-one.
+**Autoscaling.** Node-level autoscaling works normally, and the agent now cooperates with it.
+`agent.workspacesAutoscaling` lets a session wait for the autoscaler to add a node instead of the
+launch failing on a full pool (the agent advertises the growable capacity and holds the workspace
+`WaitingForCapacity`), and `agent.standby` keeps a pool of low-priority placeholder pods so a session
+takes reserved room instantly while the evicted placeholder triggers the scale-up - demand-driven when
+`standby.externallyScaled` hands the replica count to a KEDA `ScaledObject` or HPA. Both are covered in
+[Capacity](../explanation/capacity.md#growing-capacity-autoscaling-and-standby). Note that this is
+chart-managed: you configure and observe it through Helm and `kubectl`, not the Kasm admin UI, which has
+no controls over it and sees only the capacity the agent reports. Warm session *instances* (the
+`warmpools.pools.kasm.ai` CRD, which pre-starts whole sessions) remain a bare custom resource with no
+chart value.
 
 **Airgap.** Every chart installs with no internet access. `make images-agent` lists every image to
 mirror and `make package-agent` builds the self-contained archive. The one thing that needs
@@ -309,9 +316,11 @@ On a fresh install most of these can be seeded from Helm values at database init
 - **Docker-only run options.** `network_mode`, `ulimits`, `hostname`, `dns`, restart policy and
   `pid_mode` describe a Docker host. The pod sandbox owns those concerns, so the settings are
   ignored rather than translated.
-- **Session-density autoscaling.** Kasm's own autoscaler provisions VMs from a cloud provider;
-  nothing here scales session capacity on demand. Node autoscaling and pre-warmed pools are the
-  Kubernetes-side substitutes.
+- **Cloud-VM session autoscaling.** Kasm's own autoscaler provisions VMs from a cloud provider; there
+  is no equivalent here. The Kubernetes-side substitutes are node autoscaling with
+  `agent.workspacesAutoscaling`, standby placeholder headroom with `agent.standby` (see
+  [Capacity](../explanation/capacity.md#growing-capacity-autoscaling-and-standby)), and the
+  `warmpools.pools.kasm.ai` CRD for pre-started sessions.
 
 What the operator adds to a session's environment, compared with a Docker agent, is in
 [Sessions: Docker agent vs Kubernetes](../explanation/sessions-docker-vs-kubernetes.md).

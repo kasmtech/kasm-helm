@@ -197,6 +197,15 @@ catalog (`status.workspaces.largestRequest`), so one placeholder's room fits any
 Used together, standby serves the room instantly and autoscaling refills it in the background. Standby
 placeholders are counted as free room, not used, so they do not themselves make the pool look full.
 
+> **Caveat — this is chart-managed, not manager-managed.** Kubernetes cluster autoscaling here
+> (`workspacesAutoscaling` and `standby`) is configured and driven **entirely through this chart** — the
+> `Agent`'s Helm values — and observed through Kubernetes (`kubectl get agent`, the placeholder
+> Deployment, and your node autoscaler's own logs). The Kasm **manager, API and admin UI have no
+> controls over it and no visibility into it**, with one exception: the capacity the agent reports each
+> heartbeat (its cores, sessions and image availability) still shows up there. There is no autoscale
+> config, schedule, or status for this in the Kasm admin panel the way there is for Kasm's own cloud-VM
+> autoscaler; treat it as infrastructure you manage with Helm and `kubectl`, not from Kasm.
+
 **Decisions**
 
 - [ ] Per-session cost written down from **your** images' `cores` / `memory_bytes`, not from the defaults above.
