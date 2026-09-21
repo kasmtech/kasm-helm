@@ -23,8 +23,40 @@ spec:
     - jsonPath: .status.phase
       name: Phase
       type: string
+    - jsonPath: .status.conditions[?(@.type=="Registered")].status
+      name: Registered
+      type: string
+    - jsonPath: .status.workspaces.sessions
+      name: Sessions
+      type: integer
+    - jsonPath: .status.workspaces.cores
+      name: Cores
+      type: integer
+    - jsonPath: .status.conditions[?(@.type=="ImagesWithheld")].reason
+      name: Withheld
+      type: string
     - jsonPath: .spec.manager.hostname
       name: Manager
+      type: string
+    - jsonPath: .status.workspaces.nodes
+      name: Nodes
+      priority: 1
+      type: integer
+    - jsonPath: .spec.workspaceCPURequestPercent
+      name: CPU%
+      priority: 1
+      type: integer
+    - jsonPath: .status.conditions[?(@.type=="Degraded")].reason
+      name: Degraded
+      priority: 1
+      type: string
+    - jsonPath: .spec.zone
+      name: Zone
+      priority: 1
+      type: string
+    - jsonPath: .spec.workspacesNodeSelector
+      name: Node Selector
+      priority: 1
       type: string
     - jsonPath: .spec.publicHostname
       name: Public
@@ -1021,8 +1053,8 @@ spec:
               conditions:
                 description: |-
                   Conditions represent the latest available observations of the agent's
-                  state (Available / Progressing / Degraded), plus ImagesWithheld, which
-                  the agent reports about itself.
+                  state (Available / Progressing / Degraded), plus Registered and
+                  ImagesWithheld, which the agent reports about itself.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -1098,6 +1130,36 @@ spec:
                   ServerID is the effective UUID the agent registered under (either the
                   spec value or an operator-generated one).
                 type: string
+              workspaces:
+                description: Workspaces is the agent's own report of its sessions
+                  and capacity.
+                properties:
+                  cores:
+                    description: |-
+                      Cores is the capacity reported to the manager, in image cores: what the
+                      manager subtracts each session's cores from to decide whether another
+                      fits. It already accounts for workspaceCPURequestPercent, for what
+                      other pods on the nodes request, and for a session not being splittable
+                      across nodes, so it is not the nodes' CPU count.
+                    format: int64
+                    type: integer
+                  nodes:
+                    description: |-
+                      Nodes is the number of schedulable nodes workspaces can land on: those
+                      matched by workspacesNodeSelector whose taints workspacesTolerations
+                      cover. Zero means the selector matches nothing.
+                    format: int32
+                    type: integer
+                  sessions:
+                    description: Sessions is the number of workspaces this agent is
+                      running.
+                    format: int32
+                    type: integer
+                required:
+                - cores
+                - nodes
+                - sessions
+                type: object
             type: object
         type: object
     served: true
