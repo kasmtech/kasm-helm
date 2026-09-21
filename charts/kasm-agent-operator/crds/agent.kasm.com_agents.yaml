@@ -865,6 +865,20 @@ spec:
                     format: int32
                     minimum: 1
                     type: integer
+                  routing:
+                    default: static
+                    description: |-
+                      Routing is how the proxy finds a session's workspace. "static" has the
+                      sidecar write an nginx location per session and reload nginx whenever
+                      one comes or goes. "dynamic" has nginx look the workspace up per
+                      request in a table the sidecar keeps current, with no reload: under
+                      session churn, reloads leave old nginx workers behind for as long as
+                      the connections they hold. Needs a session-proxy image with nginx's
+                      njs module (kasmweb/nginx has it). Changing it restarts the proxy.
+                    enum:
+                    - static
+                    - dynamic
+                    type: string
                   service:
                     description: |-
                       Service overrides the session-proxy Service's networking (type,
