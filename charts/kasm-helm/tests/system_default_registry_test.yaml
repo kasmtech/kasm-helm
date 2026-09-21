@@ -1,0 +1,115 @@
+suite: global.cattle.systemDefaultRegistry (Rancher system default registry)
+
+tests:
+  # ---------- the global registry replaces every image's registry ----------
+  - it: global.cattle.systemDefaultRegistry replaces the registry part of every rendered image
+    set:
+      global.cattle.systemDefaultRegistry: registry.internal.example.com
+      useImageTags: "1.19.0-rolling"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: registry.internal.example.com/kasmweb/api:1.19.0-rolling
+        template: templates/api-deployment.yaml
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: registry.internal.example.com/kasmweb/manager:1.19.0-rolling
+        template: templates/manager-deployment.yaml
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: registry.internal.example.com/kasmweb/proxy:1.19.0-rolling
+        template: templates/proxy-deployment.yaml
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: registry.internal.example.com/kasmweb/postgres:1.19.0-rolling
+        template: templates/db-statefulset.yaml
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: registry.internal.example.com/kasmweb/proxy:1.19.0-rolling
+        template: templates/connection-proxy-statefulset.yaml
+      - equal:
+          path: spec.template.spec.containers[1].image
+          value: registry.internal.example.com/kasmweb/kasm-guac:1.19.0-rolling
+        template: templates/connection-proxy-statefulset.yaml
+      - equal:
+          path: spec.template.spec.containers[2].image
+          value: registry.internal.example.com/kasmweb/rdp-gateway:1.19.0-rolling
+        template: templates/connection-proxy-statefulset.yaml
+      - equal:
+          path: spec.template.spec.containers[3].image
+          value: registry.internal.example.com/kasmweb/rdp-https-gateway:1.19.0-rolling
+        template: templates/connection-proxy-statefulset.yaml
+
+  # ---------- a trailing slash is tolerated ----------
+  - it: a trailing slash on the global registry does not produce a double slash
+    set:
+      global.cattle.systemDefaultRegistry: registry.internal.example.com/
+      useImageTags: "1.19.0-rolling"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: registry.internal.example.com/kasmweb/api:1.19.0-rolling
+        template: templates/api-deployment.yaml
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: registry.internal.example.com/kasmweb/postgres:1.19.0-rolling
+        template: templates/db-statefulset.yaml
+      - notMatchRegex:
+          path: spec.template.spec.containers[1].image
+          pattern: "//"
+        template: templates/connection-proxy-statefulset.yaml
+
+  # ---------- empty (the default) leaves the per-image registries alone ----------
+  - it: an empty global registry (the default) keeps the per-image registry
+    set:
+      useImageTags: "1.19.0-rolling"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: docker.io/kasmweb/api:1.19.0-rolling
+        template: templates/api-deployment.yaml
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: docker.io/kasmweb/manager:1.19.0-rolling
+        template: templates/manager-deployment.yaml
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: docker.io/kasmweb/postgres:1.19.0-rolling
+        template: templates/db-statefulset.yaml
+      - equal:
+          path: spec.template.spec.containers[3].image
+          value: docker.io/kasmweb/rdp-https-gateway:1.19.0-rolling
+        template: templates/connection-proxy-statefulset.yaml
+
+  # ---------- a missing global map is fine (charts installed without Rancher) ----------
+  - it: renders when global is absent altogether
+    template: templates/api-deployment.yaml
+    set:
+      global: null
+      useImageTags: "1.19.0-rolling"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: docker.io/kasmweb/api:1.19.0-rolling
+
+  # ---------- the global wins over an explicit per-image registry ----------
+  - it: the global registry wins over an explicit components.api.image.registry
+    set:
+      global.cattle.systemDefaultRegistry: registry.internal.example.com
+      components.api.image.registry: mirror.example.org
+      useImageTags: "1.19.0-rolling"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: registry.internal.example.com/kasmweb/api:1.19.0-rolling
+        template: templates/api-deployment.yaml
+      # and the explicit per-image registry is still honoured when the global is empty
+  - it: an explicit components.api.image.registry is used when the global is empty
+    template: templates/api-deployment.yaml
+    set:
+      components.api.image.registry: mirror.example.org
+      useImageTags: "1.19.0-rolling"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: mirror.example.org/kasmweb/api:1.19.0-rolling
