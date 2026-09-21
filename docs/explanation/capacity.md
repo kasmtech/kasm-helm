@@ -154,12 +154,44 @@ tolerations:
     effect: NoSchedule
 ```
 
-There is **no equivalent chart value for the session pods** - `kasm-agent-instance` has no
-tolerations key, and `agent.workspacesNodeSelector` is label-based placement only, so a `NoSchedule`
-taint on the pool keeps sessions off it. The operator does add placement of its own: after an eviction
-or OOM it excludes that node from the replacement pod's affinity until a back-off passes and the
-node's pressure conditions clear. The full procedure is [Scope workspaces to specific
-nodes](../how-to/nodes/scope-workspaces-to-nodes.md).
+Session pods have their own tolerations value, `agent.workspacesTolerations`, so a `NoSchedule` taint
+on the pool no longer keeps sessions off it - set it to the pool's taint alongside the DaemonSets'.
+`agent.workspacesNodeSelector` is label-based placement on top of that. The operator adds placement of
+its own: after an eviction or OOM it excludes that node from the replacement pod's affinity until a
+back-off passes and the node's pressure conditions clear. The full procedure is [Scope workspaces to
+specific nodes](../how-to/nodes/scope-workspaces-to-nodes.md).
+
+## Growing capacity: autoscaling and standby
+
+Everything above sizes a **fixed** pool: when its binding ceiling is reached the manager stops routing
+launches here, and a launch that races in fails. Two opt-in `Agent` features change that, and they
+compose.
+
+**`agent.workspacesAutoscaling`** makes a full pool one the autoscaler can grow. A cluster autoscaler
+(Cluster Autoscaler, Karpenter, a cloud node pool) only adds a node for a pod it already sees
+unschedulable - but by default the agent never lets one get that far: it reports only the room that
+exists, so the manager refuses the launch before a pod is ever created. With autoscaling on, the agent
+counts nodes the autoscaler could still add (up to `maxNodes`, or one past what is running when no cap
+is set) as capacity, stops withholding an image that would fit a fresh node, and holds an
+unschedulable session `Pending`/`WaitingForCapacity` for `schedulingTimeoutSeconds` (default 600, the
+clock restarting once the pod is scheduled, since a fresh node has no pre-pulled images) rather than
+failing it in seconds. It needs an autoscaler actually watching the workspace nodes; without one, a
+session just waits out the timeout.
+
+**`agent.standby`** removes the wait. It runs a Deployment of low-priority pause-container
+placeholders on the workspace nodes (same `workspacesNodeSelector`/`workspacesTolerations`), each
+requesting what a session does. A real session outranks them, so the scheduler evicts a placeholder
+and the session starts at once; the evicted placeholder then goes unschedulable, which is what makes
+the autoscaler add a node - so the headroom comes back with nobody waiting on it. It requires a
+`priorityClassName` naming a PriorityClass with a **negative** value that a cluster admin creates
+(the chart references it, never creates it); rendering fails if `standby.enabled` is set without one.
+`replicas` is how much headroom to hold - fixed, or `externallyScaled` to let a KEDA `ScaledObject` or
+an HPA drive it from real demand. Each placeholder defaults to the largest request in the agent's
+catalog (`status.workspaces.largestRequest`), so one placeholder's room fits any image; set
+`standby.resources` to pin a size instead.
+
+Used together, standby serves the room instantly and autoscaling refills it in the background. Standby
+placeholders are counted as free room, not used, so they do not themselves make the pool look full.
 
 **Decisions**
 
@@ -172,6 +204,8 @@ nodes](../how-to/nodes/scope-workspaces-to-nodes.md).
 - [ ] Node disk sized with `80GB + (users × space_per_user)` on the **image-store** volume.
 - [ ] Swap decision made - understanding sessions get **no** swap (memory request = limit); the swapfile helps only other Burstable pods.
 - [ ] Node pool labelled; `agent.workspacesNodeSelector` and the DaemonSet `nodeSelector`s agree.
+- [ ] If the pool is meant to grow: an autoscaler confirmed to watch the workspace nodes, `agent.workspacesAutoscaling` enabled, and `maxNodes` set to the pool's real limit.
+- [ ] If using `agent.standby`: a negative-value PriorityClass created by an admin, its name in `standby.priorityClassName`, and the headroom (`replicas`, or the KEDA/HPA path) decided.
 - [ ] If the pool is tainted: session scheduling onto it verified.
 - [ ] A load test scheduled to validate all of the above before go-live.
 

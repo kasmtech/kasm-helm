@@ -32,6 +32,8 @@ OpenShift decide some of the rows for you.
 | **Desktop, browser and app sessions** | ✅ | Any conformant cluster with containerd or CRI-O · [how-to](../how-to/install/one-cluster.md) | `operator.enabled=true`<br>`agent.enabled=true`<br>`agent.manager.hostname`<br>`agent.publicHostname`<br>(both derived under `kasm-platform`; the no-values install sets neither) |
 | **CPU and memory limits** | ⚠️ | Nothing | Set per workspace in the Kasm UI |
 | **Session CPU-request density** | ✅ | Nothing · [capacity](../explanation/capacity.md#shrinking-the-cpu-request-without-changing-the-image) | `agent.workspaceCPURequestPercent` (1-100, default 100) |
+| **Wait for autoscaled capacity** | 🔧 | A cluster autoscaler watching the workspace nodes · [capacity](../explanation/capacity.md#growing-capacity-autoscaling-and-standby) | `agent.workspacesAutoscaling.enabled=true`<br>`agent.workspacesAutoscaling.maxNodes`<br>`agent.workspacesAutoscaling.schedulingTimeoutSeconds` |
+| **Standby session headroom** | 🔧 | A negative-value `PriorityClass` created by a cluster admin · [capacity](../explanation/capacity.md#growing-capacity-autoscaling-and-standby) | `agent.standby.enabled=true`<br>`agent.standby.priorityClassName` (required)<br>`agent.standby.replicas` / `externallyScaled`<br>`agent.standby.resources` |
 | **Docker run and exec config overrides** | ⚠️ | Nothing | Set per workspace in the Kasm UI |
 | **Session recording** | ⚠️ | A Kasm license that includes recording, and session pods able to reach the Kasm API service · [how-to](../how-to/storage/README.md) | Turn recording on in the Kasm UI |
 | **Printing** | ✅ | A workspace image with CUPS - the stock Kasm images have it | Nothing |

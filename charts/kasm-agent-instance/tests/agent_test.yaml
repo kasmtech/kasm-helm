@@ -715,3 +715,91 @@ tests:
           value:
             - name: KASM_EXTRA
               value: extra-value
+
+  # ---------- workspacesAutoscaling ----------
+  - it: omits workspacesAutoscaling and standby by default
+    asserts:
+      - isNull:
+          path: spec.workspacesAutoscaling
+      - isNull:
+          path: spec.standby
+
+  - it: renders workspacesAutoscaling when enabled, omitting an unset maxNodes
+    set:
+      workspacesAutoscaling:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.workspacesAutoscaling.enabled
+          value: true
+      - equal:
+          path: spec.workspacesAutoscaling.schedulingTimeoutSeconds
+          value: 600
+      - isNull:
+          path: spec.workspacesAutoscaling.maxNodes
+
+  - it: carries a maxNodes cap and a custom scheduling timeout
+    set:
+      workspacesAutoscaling:
+        enabled: true
+        maxNodes: 5
+        schedulingTimeoutSeconds: 120
+    asserts:
+      - equal:
+          path: spec.workspacesAutoscaling.maxNodes
+          value: 5
+      - equal:
+          path: spec.workspacesAutoscaling.schedulingTimeoutSeconds
+          value: 120
+
+  # ---------- standby ----------
+  - it: renders the standby placeholder block when enabled with a priority class
+    set:
+      standby:
+        enabled: true
+        priorityClassName: kasm-standby
+        replicas: 3
+    asserts:
+      - equal:
+          path: spec.standby.enabled
+          value: true
+      - equal:
+          path: spec.standby.priorityClassName
+          value: kasm-standby
+      - equal:
+          path: spec.standby.replicas
+          value: 3
+      - equal:
+          path: spec.standby.externallyScaled
+          value: false
+      - equal:
+          path: spec.standby.image
+          value: registry.k8s.io/pause:3.10
+      - isNull:
+          path: spec.standby.resources
+
+  - it: passes standby resources and the externallyScaled flag through
+    set:
+      standby:
+        enabled: true
+        priorityClassName: kasm-standby
+        externallyScaled: true
+        resources:
+          requests:
+            cpu: "1"
+            memory: 1Gi
+    asserts:
+      - equal:
+          path: spec.standby.externallyScaled
+          value: true
+      - equal:
+          path: spec.standby.resources.requests.cpu
+          value: "1"
+
+  - it: fails when standby is enabled without a priorityClassName
+    set:
+      standby:
+        enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "standby.priorityClassName is required when standby.enabled is true: name a PriorityClass with a negative value that your cluster admin has created, so an evicted placeholder is what triggers the node autoscaler"

@@ -190,6 +190,33 @@ spec:
   workspacesTolerations:
     {{- toYaml . | nindent 4 }}
   {{- end }}
+  {{- /* spec.workspacesAutoscaling and spec.standby render only when enabled, since the CRD
+         requires enabled on each block (and standby requires a priorityClassName). maxNodes is
+         omitted when unset (0): the CRD floor is 1, and an absent maxNodes lets the pool grow one
+         node past what is running. */}}
+  {{- if .Values.workspacesAutoscaling.enabled }}
+  workspacesAutoscaling:
+    enabled: true
+    {{- if gt (int .Values.workspacesAutoscaling.maxNodes) 0 }}
+    maxNodes: {{ .Values.workspacesAutoscaling.maxNodes }}
+    {{- end }}
+    schedulingTimeoutSeconds: {{ .Values.workspacesAutoscaling.schedulingTimeoutSeconds }}
+  {{- end }}
+  {{- if .Values.standby.enabled }}
+  {{- if not .Values.standby.priorityClassName }}
+  {{- fail "standby.priorityClassName is required when standby.enabled is true: name a PriorityClass with a negative value that your cluster admin has created, so an evicted placeholder is what triggers the node autoscaler" }}
+  {{- end }}
+  standby:
+    enabled: true
+    priorityClassName: {{ .Values.standby.priorityClassName | quote }}
+    replicas: {{ .Values.standby.replicas }}
+    externallyScaled: {{ .Values.standby.externallyScaled }}
+    image: {{ .Values.standby.image | quote }}
+    {{- with .Values.standby.resources }}
+    resources:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+  {{- end }}
   {{- with .Values.agentLabels }}
   agentLabels:
     {{- toYaml . | nindent 4 }}
