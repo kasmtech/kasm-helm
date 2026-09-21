@@ -797,7 +797,8 @@ spec:
               serverID:
                 description: |-
                   ServerID is the stable UUID identity this agent registers under. When
-                  empty the operator generates one and records it in status.serverID.
+                  empty the agent generates one on first start, keeps it in the
+                  kasm-agent-state ConfigMap, and reports it in status.serverID.
                 pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
                 type: string
               sessionProxy:
@@ -1128,8 +1129,9 @@ spec:
                 type: string
               serverID:
                 description: |-
-                  ServerID is the effective UUID the agent registered under (either the
-                  spec value or an operator-generated one).
+                  ServerID is the effective UUID the agent registered under: the spec
+                  value, or the one the agent generated for itself, in which case it is
+                  the agent that reports it here.
                 type: string
               workspaces:
                 description: Workspaces is the agent's own report of its sessions
