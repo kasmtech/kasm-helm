@@ -147,8 +147,20 @@ tests:
           path: spec.sessionProxy.reconcileIntervalSeconds
           value: 30
       - equal:
+          path: spec.sessionProxy.routing
+          value: static
+      - equal:
           path: spec.sessionProxy.certSecretName
           value: kasm-session-proxy-tls
+
+  - it: switches the session proxy to dynamic routing
+    set:
+      sessionProxy:
+        routing: dynamic
+    asserts:
+      - equal:
+          path: spec.sessionProxy.routing
+          value: dynamic
 
   - it: omits the session proxy service and proxy protocol blocks while they hold only defaults
     asserts:

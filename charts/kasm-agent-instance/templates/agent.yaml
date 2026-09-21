@@ -54,6 +54,7 @@ spec:
     replicas: {{ .Values.sessionProxy.replicas }}
     probeTimeoutSeconds: {{ .Values.sessionProxy.probeTimeoutSeconds }}
     reconcileIntervalSeconds: {{ .Values.sessionProxy.reconcileIntervalSeconds }}
+    routing: {{ .Values.sessionProxy.routing | quote }}
     certSecretName: {{ .Values.sessionProxy.certSecretName }}
     {{- if $serviceSet }}
     service:

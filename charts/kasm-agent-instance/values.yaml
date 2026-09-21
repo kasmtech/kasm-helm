@@ -140,6 +140,13 @@ sessionProxy:
   probeTimeoutSeconds: 120
   # sessionProxy.reconcileIntervalSeconds -- The sidecar's session reconcile interval.
   reconcileIntervalSeconds: 30
+  # sessionProxy.routing -- How the proxy finds a session's workspace, `static` or `dynamic`. `static` (the
+  # default) has the sidecar write an nginx location per session and reload nginx whenever one comes or goes;
+  # a reload replaces every worker, and the old ones live on for as long as the connections they hold, so under
+  # heavy session churn worker generations pile up. `dynamic` has nginx look the workspace up per request in a
+  # table the sidecar keeps current, with no reload - it needs a session-proxy image carrying nginx's njs module
+  # (`kasmweb/nginx` has it). Changing this restarts the proxy.
+  routing: static
   # sessionProxy.selfSigned -- Last-resort certificate for the session proxy, so that an install
   # with no certificate configured still starts instead of the proxy never coming up.
   #
