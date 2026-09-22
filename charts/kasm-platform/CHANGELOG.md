@@ -6,6 +6,7 @@ All notable changes to the kasm-platform chart are documented here.
 
 ### Changed
 
+- NOTES resolve the proxy Service type the way `kasm-helm` now does: an explicit `kasm-helm.proxyService.type` wins, and an empty one means LoadBalancer, or NodePort when Rancher installed the release. The form and tile text say so.
 - README rewritten around the relayed default: a no-values quickstart, `publicAddr` plus an optional real TLS Secret, the namespace rules, and a short pointer to the direct-connect how-to; the auth-domain explanation and the direct-connect quickstart moved to docs, and Publishing links the publishing how-to. Fixed the `helm dependency update` command, which named an OCI URL instead of `charts/kasm-platform`. NOTES: one line next to the Enable step pointing at the "Automatically Enable Agents" setting.
 
 ### Fixed

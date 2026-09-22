@@ -37,7 +37,7 @@ questions:
     show_if: kasm-helm.enabled=true
   - variable: kasm-helm.ingress.enabled
     label: Publish through an Ingress
-    description: "Off, the control plane is published by a LoadBalancer Service. On, an Ingress for the public hostname is created instead; the chart README covers the Gateway API and OpenShift Route alternatives."
+    description: "Off, the control plane is published by a NodePort Service when installed from Rancher (RKE2 ships no LoadBalancer implementation; kasm-helm.proxyService.type in the YAML editor changes that). On, an Ingress for the public hostname is created instead; the chart README covers the Gateway API and OpenShift Route alternatives."
     type: boolean
     default: false
     group: Control plane
