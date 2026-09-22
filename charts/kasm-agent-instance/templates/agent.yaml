@@ -260,28 +260,32 @@ spec:
   workspacesTolerations:
     {{- toYaml . | nindent 4 }}
   {{- end }}
-  {{- /* spec.workspacesAutoscaling and spec.standby render only when enabled, since the CRD
-         requires enabled on each block (and standby requires a priorityClassName). maxNodes is
-         omitted when unset (0): the CRD floor is 1, and an absent maxNodes lets the pool grow one
-         node past what is running. */}}
-  {{- if .Values.workspacesAutoscaling.enabled }}
+  {{- /* spec.workspacesAutoscaling groups the two ways to grow workspace capacity, and each works
+         on its own: `workspacesAutoscaling.enabled` lets a session wait for a node autoscaler, and
+         `standby` keeps placeholder headroom ready. The block renders when either is on. `enabled`
+         is omitted unless set (the CRD treats an absent value as false), and maxNodes is omitted
+         when unset (0): the CRD floor is 1, and an absent maxNodes lets the pool grow one node past
+         what is running. standby still requires a priorityClassName. */}}
+  {{- if or .Values.workspacesAutoscaling.enabled .Values.standby.enabled }}
   workspacesAutoscaling:
+    {{- if .Values.workspacesAutoscaling.enabled }}
     enabled: true
     {{- if gt (int .Values.workspacesAutoscaling.maxNodes) 0 }}
     maxNodes: {{ .Values.workspacesAutoscaling.maxNodes }}
     {{- end }}
     schedulingTimeoutSeconds: {{ .Values.workspacesAutoscaling.schedulingTimeoutSeconds }}
-  {{- end }}
-  {{- if .Values.standby.enabled }}
-  standby:
-    enabled: true
-    priorityClassName: {{ include "kasmAgentInstance.standbyPriorityClassName" . | quote }}
-    replicas: {{ .Values.standby.replicas }}
-    externallyScaled: {{ .Values.standby.externallyScaled }}
-    image: {{ .Values.standby.image | quote }}
-    {{- with .Values.standby.resources }}
-    resources:
-      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- if .Values.standby.enabled }}
+    standby:
+      enabled: true
+      priorityClassName: {{ include "kasmAgentInstance.standbyPriorityClassName" . | quote }}
+      replicas: {{ .Values.standby.replicas }}
+      externallyScaled: {{ .Values.standby.externallyScaled }}
+      image: {{ .Values.standby.image | quote }}
+      {{- with .Values.standby.resources }}
+      resources:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
     {{- end }}
   {{- end }}
   {{- with .Values.agentLabels }}

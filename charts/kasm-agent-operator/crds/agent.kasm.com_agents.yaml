@@ -2334,56 +2334,6 @@ spec:
                     one
                   rule: '!(has(self.autoscaling) && has(self.externallyScaled) &&
                     self.externallyScaled)'
-              standby:
-                description: Standby keeps room for sessions ready ahead of demand.
-                properties:
-                  enabled:
-                    description: Enabled creates the placeholder Deployment; false
-                      removes it.
-                    type: boolean
-                  externallyScaled:
-                    description: |-
-                      ExternallyScaled leaves the Deployment's replica count to something
-                      else (KEDA, an HPA) once it exists.
-                    type: boolean
-                  image:
-                    default: registry.k8s.io/pause:3.10
-                    description: Image is the placeholder container's image.
-                    type: string
-                  priorityClassName:
-                    description: |-
-                      PriorityClassName names a PriorityClass with a negative value, which
-                      the cluster admin provides (it is cluster-scoped; the operator does not
-                      create one). Negative matters twice over: it is what lets any session
-                      evict a placeholder, and it is how the agent knows not to count the room
-                      placeholders hold as used.
-                    minLength: 1
-                    type: string
-                  replicas:
-                    default: 1
-                    description: |-
-                      Replicas is how many placeholders to keep. Applied when the Deployment
-                      is created, and kept in step afterwards unless externallyScaled.
-                    format: int32
-                    minimum: 0
-                    type: integer
-                  resources:
-                    additionalProperties:
-                      anyOf:
-                      - type: integer
-                      - type: string
-                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                      x-kubernetes-int-or-string: true
-                    description: |-
-                      Resources each placeholder requests. Defaults to the largest workspace
-                      the agent's catalog can launch (status.workspaces.largestRequest), so
-                      that one placeholder's room is enough for any image. Until the agent has
-                      reported that, no placeholders are created.
-                    type: object
-                required:
-                - enabled
-                - priorityClassName
-                type: object
               storageMappings:
                 description: StorageMappings enables rclone CSI storage mappings.
                 properties:
@@ -2432,7 +2382,9 @@ spec:
                   the room there is, and refuses what doesn't fit.
                 properties:
                   enabled:
-                    description: Enabled turns the behaviour on.
+                    description: |-
+                      Enabled lets a session that does not fit yet wait for a node instead of
+                      being refused.
                     type: boolean
                   maxNodes:
                     description: |-
@@ -2453,8 +2405,56 @@ spec:
                     format: int32
                     minimum: 60
                     type: integer
-                required:
-                - enabled
+                  standby:
+                    description: Standby keeps room for sessions ready ahead of demand.
+                    properties:
+                      enabled:
+                        description: Enabled creates the placeholder Deployment; false
+                          removes it.
+                        type: boolean
+                      externallyScaled:
+                        description: |-
+                          ExternallyScaled leaves the Deployment's replica count to something
+                          else (KEDA, an HPA) once it exists.
+                        type: boolean
+                      image:
+                        default: registry.k8s.io/pause:3.10
+                        description: Image is the placeholder container's image.
+                        type: string
+                      priorityClassName:
+                        description: |-
+                          PriorityClassName names a PriorityClass with a negative value, which
+                          the cluster admin provides (it is cluster-scoped; the operator does not
+                          create one). Negative matters twice over: it is what lets any session
+                          evict a placeholder, and it is how the agent knows not to count the room
+                          placeholders hold as used.
+                        minLength: 1
+                        type: string
+                      replicas:
+                        default: 1
+                        description: |-
+                          Replicas is how many placeholders to keep. Applied when the Deployment
+                          is created, and kept in step afterwards unless externallyScaled.
+                        format: int32
+                        minimum: 0
+                        type: integer
+                      resources:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: |-
+                          Resources each placeholder requests. Defaults to the largest workspace
+                          the agent's catalog can launch (status.workspaces.largestRequest), so
+                          that one placeholder's room is enough for any image. Until the agent has
+                          reported that, no placeholders are created.
+                        type: object
+                    required:
+                    - enabled
+                    - priorityClassName
+                    type: object
                 type: object
               workspacesNodeSelector:
                 additionalProperties:

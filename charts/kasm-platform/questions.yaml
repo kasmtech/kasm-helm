@@ -4,6 +4,12 @@
 # values paths (`kasm-helm.*` for the control plane, `kasm-agent.*` for the agent), so this file
 # mirrors charts/kasm-helm/questions.yaml and charts/kasm-agent/questions.yaml with those prefixes.
 # `make rancher-check` verifies every path against the charts' values.
+#
+# No question may sit on a value this chart overrides to a truthy default (`kasm-agent.agent.
+# inClusterControlPlane: true`): Rancher's form can submit an untouched boolean as `null`, and a null
+# in user values deletes the umbrella's override, so the subchart's own default takes over and the
+# zero-config install breaks. The `enabled` toggles survive that (Helm treats a non-bool condition
+# as enabled); anything else with a truthy umbrella default stays out of the form.
 questions:
   # ---------------------------------------------------------------- control plane
   - variable: kasm-helm.enabled
@@ -132,25 +138,18 @@ questions:
     type: boolean
     default: true
     group: Agent
-  - variable: kasm-agent.agent.inClusterControlPlane
-    label: Register with the control plane in this release
-    description: "On, the manager hostname, the manager token and the session hostname are derived from the control plane installed alongside. Off, give them explicitly below."
-    type: boolean
-    default: true
-    group: Agent
-    show_if: kasm-agent.enabled=true
   - variable: kasm-agent.agent.manager.hostname
     label: Manager hostname
-    description: "The control plane's public hostname (or the proxy in front of its manager). Required when the agent does not register with the control plane in this release."
+    description: "Leave empty to register with the control plane installed by this release. Set it to a control plane elsewhere: its public hostname, or the proxy in front of its manager."
     type: hostname
     group: Agent
-    show_if: kasm-agent.enabled=true&&kasm-agent.agent.inClusterControlPlane=false
+    show_if: kasm-agent.enabled=true
   - variable: kasm-agent.agent.manager.token
     label: Manager token
-    description: "From the control plane: Secret <release>-secrets, key manager-token. Required when the agent does not register with the control plane in this release. Stored in a Secret this release creates; the chart README covers pointing at an existing Secret instead."
+    description: "Leave empty to read the token of the control plane installed by this release. For a control plane elsewhere: the manager-token key of its <release>-secrets Secret. Stored in a Secret this release creates; the chart README covers pointing at an existing Secret instead."
     type: password
     group: Agent
-    show_if: kasm-agent.enabled=true&&kasm-agent.agent.inClusterControlPlane=false
+    show_if: kasm-agent.enabled=true
   - variable: kasm-agent.agent.publicHostname
     label: Session hostname
     description: "The DNS name browsers reach sessions on, through the agent's session proxy. Leave empty in the relayed default, where the control plane relays sessions through the in-cluster proxy; set it for direct connections, and always when the control plane is elsewhere."
