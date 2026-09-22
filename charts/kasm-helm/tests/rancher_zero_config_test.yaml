@@ -1,0 +1,123 @@
+suite: zero-config install through Rancher's catalog
+
+# Rancher sets global.cattle.clusterId on every install from its catalog. With proxyService.type
+# left empty the chart resolves NodePort (RKE2 ships no LoadBalancer implementation), pins the port
+# to 30443, and generates a preseed so the default zone advertises that port in session URLs and
+# auto_agent enables agents as they register. The explicit opt-outs (kasmConfig.generatePreseed:
+# false, kasmConfig.autoEnableAgents: false) cannot be expressed here: helm-unittest's value merge
+# drops a `false` set over the chart's `null` default. They are checked with
+#   helm template kasm charts/kasm-helm --set global.cattle.clusterId=x --set kasmConfig.generatePreseed=false
+#   helm template kasm charts/kasm-helm --set global.cattle.clusterId=x --set kasmConfig.autoEnableAgents=false
+# (no preseed Secret; a preseed with proxy_port 30443 and no auto_agent, respectively).
+
+templates:
+  - templates/db-preseed-secret.yaml
+  - templates/kasm-password-secret.yaml
+  - templates/db-init-job.yaml
+
+tests:
+  - it: generates a preseed under Rancher with the default zone on the pinned node port and auto_agent on
+    template: templates/db-preseed-secret.yaml
+    set:
+      global:
+        cattle:
+          clusterId: c-m-abcdef12
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-db-preseed
+    asserts:
+      - matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'proxy_port: 30443'
+      - matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'zone_name: default'
+      - matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'name: "auto_agent"'
+      - matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'value: "True"'
+
+  - it: mounts the generated preseed into the db-init Job under Rancher
+    template: templates/db-init-job.yaml
+    set:
+      global:
+        cattle:
+          clusterId: c-m-abcdef12
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: custom-db-preseed
+          any: true
+
+  - it: seeds nothing outside Rancher when generatePreseed is left unset
+    template: templates/db-preseed-secret.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders the password Secret from the plain template outside Rancher
+    template: templates/kasm-password-secret.yaml
+    asserts:
+      - isKind:
+          of: Secret
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-secrets
+
+  - it: leaves the password Secret to the preseed path under Rancher
+    template: templates/kasm-password-secret.yaml
+    set:
+      global:
+        cattle:
+          clusterId: c-m-abcdef12
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: seeds auto_agent outside Rancher when asked, with the zone on 443
+    template: templates/db-preseed-secret.yaml
+    set:
+      kasmConfig:
+        generatePreseed: true
+        autoEnableAgents: true
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-db-preseed
+    asserts:
+      - matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'name: "auto_agent"'
+      - matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'proxy_port: 443'
+
+  - it: lets an auto_agent entry in kasmConfig.config.settings win as written
+    template: templates/db-preseed-secret.yaml
+    set:
+      global:
+        cattle:
+          clusterId: c-m-abcdef12
+      kasmConfig:
+        config:
+          settings:
+            - category: scale
+              name: auto_agent
+              title: Automatically Enable Agents
+              value_type: bool
+              value: "False"
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-db-preseed
+    asserts:
+      - matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'name: "auto_agent"'
+      - matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'value: "False"'
+      - notMatchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'value: "True"'

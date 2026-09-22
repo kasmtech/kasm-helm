@@ -9,7 +9,7 @@ Initialize the DB
 {{- $existingDefaultPropertiesKey := dig "existingDefaultPropertiesSecret" "key" "default_properties.yaml" .Values.kasmConfig }}
 {{- $adminUsername := dig "adminUsername" "admin@kasm.local" .Values.kasmConfig }}
 {{- $authDomain := dig "authDomain" "" .Values.kasmConfig }}
-{{- $generatePreseed := and .Values.kasmConfig .Values.kasmConfig.generatePreseed }}
+{{- $generatePreseed := include "kasm.generatePreseed" . }}
 {{/* The prepare-db-preseed initContainer rewrites the seed file the db-init container reads. Any
      one of the three inputs is reason enough to render it: a chart-generated custom_properties to
      merge, a customer-supplied default_properties to swap in, or an auth domain to stamp. */}}
@@ -17,7 +17,7 @@ Initialize the DB
 {{/* admin@kasm.local only stops being the seeded admin account when preseed's defaultUsers
      replaces it with a renamed, non-built-in admin account. Otherwise (preseed disabled, or
      defaultUsers disabled) the app's baked-in default seed still creates admin@kasm.local. */}}
-{{- $builtInAdminExists := or (not .Values.kasmConfig.generatePreseed) (not (dig "defaultUsers" false .Values.kasmConfig)) (eq $adminUsername "admin@kasm.local") }}
+{{- $builtInAdminExists := or (not $generatePreseed) (not (dig "defaultUsers" false .Values.kasmConfig)) (eq $adminUsername "admin@kasm.local") }}
 apiVersion: batch/v1
 kind: Job
 metadata:

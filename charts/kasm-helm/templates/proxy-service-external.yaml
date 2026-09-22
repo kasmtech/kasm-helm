@@ -28,7 +28,7 @@ spec:
       protocol: TCP
       port: {{ $constants.proxy.extHttps }}
       targetPort: {{ $constants.proxy.portName }}-https
-      {{- if and (eq (include "kasm.proxyServiceType" .) "NodePort") .Values.proxyService.nodePort }}
-      nodePort: {{ .Values.proxyService.nodePort }}
+      {{- if and (eq (include "kasm.proxyServiceType" .) "NodePort") (include "kasm.proxyNodePort" .) }}
+      nodePort: {{ include "kasm.proxyNodePort" . }}
       {{- end }}
 {{- end }}

@@ -1656,6 +1656,54 @@ true
 {{- end }}
 
 {{/*
+  "true" when the chart itself chose NodePort for the proxy: proxyService.type is empty and
+  Rancher installed the release. The zero-config Rancher install hangs a few more defaults
+  off this: a pinned node port, a seeded default zone that advertises it, and auto_agent.
+*/}}
+{{- define "kasm.rancherNodePort" -}}
+{{- if and (not (.Values.proxyService.type | default "")) (dig "cattle" "clusterId" "" (.Values.global | default dict)) -}}true{{- end -}}
+{{- end }}
+
+{{/*
+  The pinned node port of the external proxy Service, or "" when Kubernetes assigns one.
+  proxyService.nodePort wins; when the chart chose NodePort on its own (Rancher) it pins 30443,
+  so that the port is known at render time and the seeded default zone can advertise it.
+*/}}
+{{- define "kasm.proxyNodePort" -}}
+{{- if .Values.proxyService.nodePort -}}{{ .Values.proxyService.nodePort }}{{- else if include "kasm.rancherNodePort" . -}}30443{{- end -}}
+{{- end }}
+
+{{/*
+  The port a seeded zone advertises in session URLs when it sets no proxy_port of its own:
+  the pinned node port when the proxy is a NodePort with a known port, else 443. Kasm builds
+  session URLs from the zone's proxy_port, not from the Service, so a NodePort reached on
+  30443 with a zone still saying 443 sends every browser to a port nothing listens on.
+*/}}
+{{- define "kasm.defaultZoneProxyPort" -}}
+{{- if and (eq (include "kasm.proxyServiceType" .) "NodePort") (include "kasm.proxyNodePort" .) -}}{{ include "kasm.proxyNodePort" . }}{{- else -}}443{{- end -}}
+{{- end }}
+
+{{/*
+  "true" when the chart seeds auto_agent ("Automatically Enable Agents"), so agents come up
+  enabled as they register. kasmConfig.autoEnableAgents wins when set; unset (null) it is on
+  for a release Rancher installed and off everywhere else.
+*/}}
+{{- define "kasm.autoEnableAgents" -}}
+{{- $v := .Values.kasmConfig.autoEnableAgents -}}
+{{- if kindIs "invalid" $v -}}{{- if dig "cattle" "clusterId" "" (.Values.global | default dict) -}}true{{- end -}}{{- else if $v -}}true{{- end -}}
+{{- end }}
+
+{{/*
+  "true" when a database preseed is generated. kasmConfig.generatePreseed wins when set;
+  unset (null) it is on for a release Rancher installed, which has two things to seed (the
+  default zone's proxy_port for the NodePort, and auto_agent), and off everywhere else.
+*/}}
+{{- define "kasm.generatePreseed" -}}
+{{- $v := .Values.kasmConfig.generatePreseed -}}
+{{- if kindIs "invalid" $v -}}{{- if dig "cattle" "clusterId" "" (.Values.global | default dict) -}}true{{- end -}}{{- else if $v -}}true{{- end -}}
+{{- end }}
+
+{{/*
   The address the Kasm proxy can be reached at from outside the cluster, as far as a render
   can tell. In order of preference:
 
@@ -1684,7 +1732,7 @@ true
 {{- .hostname | default .ip -}}
 {{- end -}}
 {{- else -}}
-{{- $port := $v.proxyService.nodePort -}}
+{{- $port := include "kasm.proxyNodePort" . -}}
 {{- if not $port -}}
 {{- with (first (dig "spec" "ports" (list) $svc)) -}}{{- $port = .nodePort -}}{{- end -}}
 {{- end -}}
