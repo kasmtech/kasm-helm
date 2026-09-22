@@ -524,7 +524,7 @@ tests:
               - update
               - watch
 
-  - it: keeps persistentvolumes and clusterrolebindings to get, create, update and delete by name, and nodes read-only
+  - it: keeps persistentvolumes and clusterrolebindings to get, create, update and delete by name, and endpoints/nodes read-only
     template: templates/rbac/manager-role.yaml
     documentIndex: 0
     asserts:
@@ -546,6 +546,7 @@ tests:
             apiGroups:
               - ""
             resources:
+              - endpoints
               - nodes
             verbs:
               - get

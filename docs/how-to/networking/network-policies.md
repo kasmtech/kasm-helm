@@ -9,13 +9,19 @@ a cluster whose CNI ignores policy succeeds silently and isolates nothing - the 
 failure mode, because it looks like it worked. Enforcement is a cluster property you have to
 establish before the chart's baseline means anything.
 
-Two separate mechanisms exist here, and they are often confused:
+Three separate mechanisms exist here, and they are often confused:
 
 * **The operator's per-workspace policies.** Stamped automatically for every session pod, no
   configuration. Nothing in this page turns them on or off.
 * **`networkPolicies.*` - the agent's own namespace baseline.** Seven policies: default-deny plus
   narrow allows for DNS, intra-namespace traffic, the API server, the Kasm manager, session-proxy
   ingress, and the telemetry backend. Off by default.
+* **`sessionProxy.networkPolicy` - the operator's session-proxy egress policy.** An egress
+  NetworkPolicy the operator creates for the session-proxy pods (opt-in, off by default), because a
+  session's route sends the user's forwarded credential to whatever address the route names: it bounds
+  the proxy's egress to its own and the control plane's namespaces, DNS and the API server, plus
+  `sessionProxy.networkPolicy.extraEgress` (for a control plane reachable only outside the cluster, say).
+  Distinct from the `networkPolicies.sessionProxy` *ingress* allow in the baseline above.
 
 ## Before you start
 

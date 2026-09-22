@@ -194,6 +194,43 @@ tests:
           path: spec.sessionProxy.autoscaling
       - isNull:
           path: spec.sessionProxy.externallyScaled
+      - isNull:
+          path: spec.sessionProxy.networkPolicy
+
+  - it: renders the session proxy egress network policy when enabled, with extra egress
+    set:
+      sessionProxy:
+        networkPolicy:
+          enabled: true
+          extraEgress:
+            - to:
+                - ipBlock:
+                    cidr: 203.0.113.0/24
+              ports:
+                - protocol: TCP
+                  port: 443
+    asserts:
+      - equal:
+          path: spec.sessionProxy.networkPolicy.enabled
+          value: true
+      - equal:
+          path: spec.sessionProxy.networkPolicy.extraEgress[0].to[0].ipBlock.cidr
+          value: 203.0.113.0/24
+      - equal:
+          path: spec.sessionProxy.networkPolicy.extraEgress[0].ports[0].port
+          value: 443
+
+  - it: omits extraEgress from the network policy when none is set
+    set:
+      sessionProxy:
+        networkPolicy:
+          enabled: true
+    asserts:
+      - equal:
+          path: spec.sessionProxy.networkPolicy.enabled
+          value: true
+      - isNull:
+          path: spec.sessionProxy.networkPolicy.extraEgress
 
   - it: renders the session proxy scaling and placement knobs once they are set
     set:

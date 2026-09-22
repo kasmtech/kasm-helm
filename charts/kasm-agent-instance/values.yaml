@@ -239,6 +239,29 @@ sessionProxy:
   # `app.kubernetes.io/component=workspace`) keeps one proxy per so many sessions; its scale-in removes pods
   # at its own pace, each still draining for `drainTimeoutSeconds`. Alternative to `autoscaling`.
   externallyScaled: false
+  # sessionProxy.networkPolicy -- Bound where the proxy pods may connect, with an egress NetworkPolicy the
+  # operator creates. A session's route sends the user's authenticated request — cookies and the workspace
+  # credential the control plane returned — to whatever address the route names, so anything that could write a
+  # route could send those anywhere the proxy pod can reach. The policy limits egress to where the proxy has
+  # business: its own namespace (workspaces, the agent), the control plane's namespace, DNS, the API server (the
+  # sidecar's watches), plus `extraEgress`. Ingress is left open (browsers connect from anywhere). Needs a CNI
+  # that enforces NetworkPolicy. Omitted from the Agent unless `enabled`.
+  networkPolicy:
+    # sessionProxy.networkPolicy.enabled -- Create the egress NetworkPolicy.
+    enabled: false
+    # sessionProxy.networkPolicy.extraEgress -- Extra egress rules allowed on top of the built-in set, in
+    # NetworkPolicy's own `egress:` terms (a list of `{to, ports}` rules). Use it for a control plane reachable
+    # only outside the cluster (an `ipBlock`) or an OTLP collector in another namespace. Applies only when
+    # `enabled`.
+    # Example:
+    #   extraEgress:
+    #     - to:
+    #         - ipBlock:
+    #             cidr: 203.0.113.0/24
+    #       ports:
+    #         - protocol: TCP
+    #           port: 443
+    extraEgress: []
   # sessionProxy.selfSigned -- Last-resort certificate for the session proxy, so that an install
   # with no certificate configured still starts instead of the proxy never coming up.
   #
