@@ -105,3 +105,37 @@ tests:
       - failedTemplate:
           errorPattern: proxyService.type must not be NodePort
 
+  # ---------- the node port that comes with the automatic NodePort ----------
+  - it: pins node port 30443 when the chart chose NodePort under Rancher
+    template: templates/proxy-service-external.yaml
+    set:
+      global:
+        cattle:
+          clusterId: c-m-abcdef12
+    asserts:
+      - equal:
+          path: spec.ports[0].nodePort
+          value: 30443
+
+  - it: lets an explicit proxyService.nodePort win under Rancher
+    template: templates/proxy-service-external.yaml
+    set:
+      proxyService:
+        nodePort: 31000
+      global:
+        cattle:
+          clusterId: c-m-abcdef12
+    asserts:
+      - equal:
+          path: spec.ports[0].nodePort
+          value: 31000
+
+  - it: keeps a Kubernetes-assigned port for an explicit NodePort type outside Rancher
+    template: templates/proxy-service-external.yaml
+    set:
+      proxyService:
+        type: NodePort
+    asserts:
+      - notExists:
+          path: spec.ports[0].nodePort
+

@@ -34,6 +34,10 @@ kubectl get svc --namespace {{ .Release.Namespace }} {{ .Release.Name }}-proxy-e
 
 Helm renders these notes before it creates anything, so the first install cannot show the
 address. From the next `helm upgrade` on (same values) it is read back and printed above.
+{{- else if and (eq $proxyType "NodePort") (include "kasm.proxyNodePort" .) }}
+The proxy is published on node port {{ include "kasm.proxyNodePort" . }}{{ if include "kasm.rancherNodePort" . }} (the chart's default for a release
+Rancher installed, because RKE2 ships no LoadBalancer implementation){{ end }}; browse to
+https://<any node address>:{{ include "kasm.proxyNodePort" . }}. The seeded default zone advertises that port in session URLs.
 {{- else if eq $proxyType "NodePort" }}
 The proxy is published on a NodePort; browse to https://<any node address>:<port>, where port is:
 

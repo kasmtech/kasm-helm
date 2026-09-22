@@ -107,13 +107,16 @@ proxyService:
   # stay pending forever. An explicit value always wins.
   # @default -- `""`: LoadBalancer, or NodePort under Rancher
   type: ""
-  # proxyService.nodePort -- Pin the node port when `proxyService.type` is NodePort. Leave empty to
-  # let Kubernetes assign one from the cluster's service-node-port-range (30000-32767 by default).
+  # proxyService.nodePort -- Pin the node port when the proxy Service is a NodePort. Leave empty to
+  # let Kubernetes assign one from the cluster's service-node-port-range (30000-32767 by default),
+  # except when the chart chose NodePort on its own (`proxyService.type` empty, installed through
+  # Rancher): then it pins 30443, so the port is known at render time.
   #
-  # Kasm builds session URLs from the zone's `proxy_port`, not from this Service, so when users reach
-  # the deployment on a non-standard port set `kasmZones[].proxy_port` to match - otherwise the
-  # browser is sent to a port nothing is listening on. Ignored for any other service type.
-  #
+  # Kasm builds session URLs from the zone's `proxy_port`, not from this Service. A generated preseed
+  # advertises the pinned port in the default zone by itself; with no preseed, or with a Kubernetes-
+  # assigned port, set `kasmZones[].proxy_port` to match - otherwise the browser is sent to a port
+  # nothing is listening on. Ignored for any other service type.
+  # @default -- `""`, or `30443` when the chart chose NodePort under Rancher
   nodePort: ""
   annotations: {}
   labels: {}
@@ -1378,10 +1381,21 @@ extraObjects: []
 # configuration settings. 
 #
 kasmConfig:
-  # kasmConfig.generatePreseed -- Enable generation of a custom DB initialization configuration to
-  # pre-configure Kasm during installation.
-  #
-  generatePreseed: false
+  # kasmConfig.generatePreseed -- Generate a custom DB initialization configuration (`kasmConfig.config`,
+  # plus what the chart seeds on its own: the default zone's `proxy_port` for a NodePort proxy, and
+  # `auto_agent` from `kasmConfig.autoEnableAgents`) and merge it into Kasm's default seed data at
+  # database initialization. Unset (null), it is on for a release installed through Rancher's
+  # catalog, which has both of those to seed, and off everywhere else; `true`/`false` decides
+  # explicitly.
+  # @default -- `null`: on under Rancher, else off
+  generatePreseed: null
+  # kasmConfig.autoEnableAgents -- Seed the manager setting "Automatically Enable Agents" (`auto_agent`),
+  # so agents come up enabled as they register instead of waiting for a click under Infrastructure ->
+  # Agents. Takes effect at database initialization only, through the generated preseed. Unset (null),
+  # it is on for a release installed through Rancher's catalog and off everywhere else; an
+  # `auto_agent` entry in `kasmConfig.config.settings` wins over it as written.
+  # @default -- `null`: on under Rancher, else off
+  autoEnableAgents: null
   # kasmConfig.defaultUsers -- Creates a series of 4 users and 5 groups with a standard set of
   # permissions accommodating most standard deployment scenarios. Refer to the [Default Users](../../docs/reference/default-users.md)
   # for additional information about what this flag creates.

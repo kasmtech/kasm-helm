@@ -33,8 +33,12 @@ In Rancher, add `https://helm.kasm.com` (or `oci://registry-1.docker.io/kasmweb/
 Repository under Apps, then install the chart from the catalog. The install form covers the
 essentials (public hostname, deployment size, Ingress, certificate, credentials, database) and the
 YAML editor takes everything else in this reference. Installed this way the proxy is published by a
-`NodePort` Service rather than a LoadBalancer, because RKE2 ships no LoadBalancer implementation;
-set `proxyService.type` explicitly to change that. A cluster-wide system default registry is
+`NodePort` Service on port 30443 rather than a LoadBalancer, because RKE2 ships no LoadBalancer
+implementation; the chart generates a database preseed that makes the default zone advertise that
+port in session URLs and turns on "Automatically Enable Agents" (`kasmConfig.autoEnableAgents`), so
+the install is usable without a visit to the admin UI. `proxyService.type`, `proxyService.nodePort`,
+`kasmConfig.generatePreseed` and `kasmConfig.autoEnableAgents` each override their part. A
+cluster-wide system default registry is
 honoured: Rancher passes it as `global.cattle.systemDefaultRegistry` and it replaces the registry of
 every image the chart renders. The step-by-step guide is
 [Install from Rancher](../../docs/how-to/install/rancher.md).
