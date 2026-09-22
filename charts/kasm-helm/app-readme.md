@@ -10,7 +10,7 @@ It is the control plane only. Sessions run on agents, which this chart does not 
 Three settings matter on first install:
 
 - **Public hostname** (`publicAddr`): the DNS name users open and the certificate is issued for.
-- **Exposure**: a `NodePort` Service by default when installed from Rancher (RKE2 has no LoadBalancer implementation; set `proxyService.type` to change it), or an Ingress; the chart also supports the
+- **Exposure**: a `LoadBalancer` Service by default, or an Ingress. Installed from Rancher the default is a `NodePort` Service instead, because RKE2 ships no LoadBalancer implementation; `proxyService.type` sets it explicitly. The chart also supports the
   Gateway API and OpenShift Routes through the YAML editor.
 - **Certificate**: a generated self-signed certificate by default, an existing TLS Secret, or
   cert-manager.
