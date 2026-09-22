@@ -8,10 +8,10 @@
   A PriorityClass is cluster-scoped, so two agent releases that both create one must use distinct
   priorityClassNames. The value must be negative, so a real session (default priority 0) preempts a placeholder.
 */}}
-{{- if and .Values.standby.enabled .Values.standby.priorityClass.create }}
-{{- $v := int .Values.standby.priorityClass.value }}
+{{- if and .Values.workspacesAutoscaling.standby.enabled .Values.workspacesAutoscaling.standby.priorityClass.create }}
+{{- $v := int .Values.workspacesAutoscaling.standby.priorityClass.value }}
 {{- if ge $v 0 }}
-{{- fail "standby.priorityClass.value must be negative so a session can preempt a standby placeholder; set it below zero" }}
+{{- fail "workspacesAutoscaling.standby.priorityClass.value must be negative so a session can preempt a standby placeholder; set it below zero" }}
 {{- end }}
 apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass

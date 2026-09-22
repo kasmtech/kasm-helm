@@ -266,7 +266,7 @@ spec:
          is omitted unless set (the CRD treats an absent value as false), and maxNodes is omitted
          when unset (0): the CRD floor is 1, and an absent maxNodes lets the pool grow one node past
          what is running. standby still requires a priorityClassName. */}}
-  {{- if or .Values.workspacesAutoscaling.enabled .Values.standby.enabled }}
+  {{- if or .Values.workspacesAutoscaling.enabled .Values.workspacesAutoscaling.standby.enabled }}
   workspacesAutoscaling:
     {{- if .Values.workspacesAutoscaling.enabled }}
     enabled: true
@@ -275,14 +275,14 @@ spec:
     {{- end }}
     schedulingTimeoutSeconds: {{ .Values.workspacesAutoscaling.schedulingTimeoutSeconds }}
     {{- end }}
-    {{- if .Values.standby.enabled }}
+    {{- if .Values.workspacesAutoscaling.standby.enabled }}
     standby:
       enabled: true
       priorityClassName: {{ include "kasmAgentInstance.standbyPriorityClassName" . | quote }}
-      replicas: {{ .Values.standby.replicas }}
-      externallyScaled: {{ .Values.standby.externallyScaled }}
-      image: {{ .Values.standby.image | quote }}
-      {{- with .Values.standby.resources }}
+      replicas: {{ .Values.workspacesAutoscaling.standby.replicas }}
+      externallyScaled: {{ .Values.workspacesAutoscaling.standby.externallyScaled }}
+      image: {{ .Values.workspacesAutoscaling.standby.image | quote }}
+      {{- with .Values.workspacesAutoscaling.standby.resources }}
       resources:
         {{- toYaml . | nindent 8 }}
       {{- end }}

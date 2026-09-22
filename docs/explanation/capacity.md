@@ -178,21 +178,21 @@ clock restarting once the pod is scheduled, since a fresh node has no pre-pulled
 failing it in seconds. It needs an autoscaler actually watching the workspace nodes; without one, a
 session just waits out the timeout.
 
-**`agent.standby`** removes the wait. It runs a Deployment of low-priority pause-container
+**`agent.workspacesAutoscaling.standby`** removes the wait. It runs a Deployment of low-priority pause-container
 placeholders on the workspace nodes (same `workspacesNodeSelector`/`workspacesTolerations`), each
 requesting what a session does. A real session outranks them, so the scheduler evicts a placeholder
 and the session starts at once; the evicted placeholder then goes unschedulable, which is what makes
 the autoscaler add a node - so the headroom comes back with nobody waiting on it. It runs the placeholders under a PriorityClass with a **negative** value, and works out of the box:
-`standby.enabled: true` is enough. By default the chart derives the class name from the agent
-(`<name>-standby`) and **creates** it (at `standby.priorityClass.value`, which must be negative). Point
-`standby.priorityClassName` at a specific name to override the derived one, and set
-`standby.priorityClass.create: false` to reference a class a cluster admin manages instead of creating
+`workspacesAutoscaling.standby.enabled: true` is enough. By default the chart derives the class name from the agent
+(`<name>-standby`) and **creates** it (at `workspacesAutoscaling.standby.priorityClass.value`, which must be negative). Point
+`workspacesAutoscaling.standby.priorityClassName` at a specific name to override the derived one, and set
+`workspacesAutoscaling.standby.priorityClass.create: false` to reference a class a cluster admin manages instead of creating
 it. Since a PriorityClass is cluster-scoped, the derived per-agent name keeps two agent releases from
 clashing; give them distinct names (or a shared admin-managed one) if you override it.
 `replicas` is how much headroom to hold - fixed, or `externallyScaled` to let a KEDA `ScaledObject` or
 an HPA drive it from real demand. Each placeholder defaults to the largest request in the agent's
 catalog (`status.workspaces.largestRequest`), so one placeholder's room fits any image; set
-`standby.resources` to pin a size instead — a bare resource map like `{cpu: "2", memory: 2Gi}` (applied as
+`workspacesAutoscaling.standby.resources` to pin a size instead — a bare resource map like `{cpu: "2", memory: 2Gi}` (applied as
 both request and limit), not a pod-style `{requests, limits}` block.
 
 **You do not need both — they are independent, and each is turned on by its own `enabled`.** Enable
@@ -201,7 +201,7 @@ whichever fits:
 - **`workspacesAutoscaling` on its own** lets a session *wait* for a node instead of the launch failing
   on a full pool. It is only useful with a real node autoscaler watching the workspace nodes — without
   one, the session just waits out `schedulingTimeoutSeconds` and then fails.
-- **`standby` on its own** starts sessions *instantly* from reserved room, and because an evicted
+- **`workspacesAutoscaling.standby` on its own** starts sessions *instantly* from reserved room, and because an evicted
   placeholder goes unschedulable it is itself what prompts a node autoscaler to grow the pool. It still
   helps without an autoscaler (the instant start), it just won't refill the headroom on its own.
 - **Both together** is the fullest setup: standby absorbs a burst instantly, while
@@ -213,7 +213,7 @@ Standby placeholders are counted as free room, not used, so they do not themselv
 full.
 
 > **Caveat — this is chart-managed, not manager-managed.** Kubernetes cluster autoscaling here
-> (`workspacesAutoscaling` and `standby`) is configured and driven **entirely through this chart** — the
+> (`workspacesAutoscaling` and `workspacesAutoscaling.standby`) is configured and driven **entirely through this chart** — the
 > `Agent`'s Helm values — and observed through Kubernetes (`kubectl get agent`, the placeholder
 > Deployment, and your node autoscaler's own logs). The Kasm **manager, API and admin UI have no
 > controls over it and no visibility into it**, with one exception: the capacity the agent reports each
@@ -223,8 +223,8 @@ full.
 
 ### Scaling standby headroom (KEDA or HPA)
 
-`standby.replicas` holds a **fixed** amount of headroom. To size it to load instead, set
-`standby.externallyScaled: true`: the operator then applies `replicas` only once, at creation, and
+`workspacesAutoscaling.standby.replicas` holds a **fixed** amount of headroom. To size it to load instead, set
+`workspacesAutoscaling.standby.externallyScaled: true`: the operator then applies `replicas` only once, at creation, and
 leaves the count to a horizontal autoscaler you run. This chart installs neither KEDA nor the autoscaler
 object — you apply that yourself, against the placeholder Deployment, which is named
 `<agent name>-workspace-standby` (for the default agent name, `k8s-agent-workspace-standby`).
@@ -296,7 +296,7 @@ autoscaler.
 - [ ] Swap decision made - understanding sessions get **no** swap (memory request = limit); the swapfile helps only other Burstable pods.
 - [ ] Node pool labelled; `agent.workspacesNodeSelector` and the DaemonSet `nodeSelector`s agree.
 - [ ] If the pool is meant to grow: an autoscaler confirmed to watch the workspace nodes, `agent.workspacesAutoscaling` enabled, and `maxNodes` set to the pool's real limit.
-- [ ] If using `agent.standby`: the PriorityClass decided (the chart derives and creates `<name>-standby` by default; set `standby.priorityClassName` and/or `standby.priorityClass.create: false` to use an admin-managed one), and the headroom (`replicas`, or the KEDA/HPA path) decided.
+- [ ] If using `agent.workspacesAutoscaling.standby`: the PriorityClass decided (the chart derives and creates `<name>-standby` by default; set `workspacesAutoscaling.standby.priorityClassName` and/or `workspacesAutoscaling.standby.priorityClass.create: false` to use an admin-managed one), and the headroom (`replicas`, or the KEDA/HPA path) decided.
 - [ ] If the pool is tainted: session scheduling onto it verified.
 - [ ] A load test scheduled to validate all of the above before go-live.
 
@@ -347,7 +347,7 @@ sessionProxy:
 ```
 
 **External autoscaling (KEDA or HPA).** `sessionProxy.externallyScaled: true` leaves the replica count to
-a horizontal autoscaler you run, exactly as `standby.externallyScaled` does (`sessionProxy.replicas`
+a horizontal autoscaler you run, exactly as `workspacesAutoscaling.standby.externallyScaled` does (`sessionProxy.replicas`
 applies only when the Deployment is first created). The two proxy paths are mutually exclusive — set
 `autoscaling` *or* `externallyScaled`, not both. Scale on the **running sessions**
 (`component=workspace`), the same trigger the standby example above uses; the proxy Deployment is named

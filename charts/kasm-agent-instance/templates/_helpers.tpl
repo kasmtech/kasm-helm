@@ -37,8 +37,8 @@
   no name) while staying unique per agent, since a PriorityClass is cluster-scoped.
 */}}
 {{- define "kasmAgentInstance.standbyPriorityClassName" -}}
-{{- if .Values.standby.priorityClassName -}}
-{{- .Values.standby.priorityClassName -}}
+{{- if .Values.workspacesAutoscaling.standby.priorityClassName -}}
+{{- .Values.workspacesAutoscaling.standby.priorityClassName -}}
 {{- else -}}
 {{- printf "%s-standby" .Values.name | trunc 63 | trimSuffix "-" -}}
 {{- end -}}

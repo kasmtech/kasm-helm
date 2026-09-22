@@ -14,8 +14,9 @@ tests:
 
   - it: creates the PriorityClass by default with a name derived from the agent
     set:
-      standby:
-        enabled: true
+      workspacesAutoscaling:
+        standby:
+          enabled: true
     asserts:
       - hasDocuments:
           count: 1
@@ -36,9 +37,10 @@ tests:
 
   - it: uses an explicit priorityClassName when set
     set:
-      standby:
-        enabled: true
-        priorityClassName: kasm-standby
+      workspacesAutoscaling:
+        standby:
+          enabled: true
+          priorityClassName: kasm-standby
     asserts:
       - equal:
           path: metadata.name
@@ -46,22 +48,24 @@ tests:
 
   - it: renders nothing when opted out to reference an admin-managed PriorityClass
     set:
-      standby:
-        enabled: true
-        priorityClassName: kasm-standby
-        priorityClass:
-          create: false
+      workspacesAutoscaling:
+        standby:
+          enabled: true
+          priorityClassName: kasm-standby
+          priorityClass:
+            create: false
     asserts:
       - hasDocuments:
           count: 0
 
   - it: honours a custom negative value
     set:
-      standby:
-        enabled: true
-        priorityClassName: kasm-standby
-        priorityClass:
-          value: -25
+      workspacesAutoscaling:
+        standby:
+          enabled: true
+          priorityClassName: kasm-standby
+          priorityClass:
+            value: -25
     asserts:
       - hasDocuments:
           count: 1
@@ -71,20 +75,22 @@ tests:
 
   - it: fails when asked to create a PriorityClass with a non-negative value
     set:
-      standby:
-        enabled: true
-        priorityClassName: kasm-standby
-        priorityClass:
-          value: 0
+      workspacesAutoscaling:
+        standby:
+          enabled: true
+          priorityClassName: kasm-standby
+          priorityClass:
+            value: 0
     asserts:
       - failedTemplate:
-          errorMessage: "standby.priorityClass.value must be negative so a session can preempt a standby placeholder; set it below zero"
+          errorMessage: "workspacesAutoscaling.standby.priorityClass.value must be negative so a session can preempt a standby placeholder; set it below zero"
 
   - it: renders nothing when standby itself is disabled even if create is on
     set:
-      standby:
-        priorityClass:
-          create: true
+      workspacesAutoscaling:
+        standby:
+          priorityClass:
+            create: true
     asserts:
       - hasDocuments:
           count: 0

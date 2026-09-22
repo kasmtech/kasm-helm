@@ -33,7 +33,7 @@ OpenShift decide some of the rows for you.
 | **CPU and memory limits** | ⚠️ | Nothing | Set per workspace in the Kasm UI |
 | **Session CPU-request density** | ✅ | Nothing · [capacity](../explanation/capacity.md#shrinking-the-cpu-request-without-changing-the-image) | `agent.workspaceCPURequestPercent` (1-100, default 100) |
 | **Wait for autoscaled capacity** | 🔧 | A cluster autoscaler watching the workspace nodes · [capacity](../explanation/capacity.md#growing-capacity-autoscaling-and-standby) | `agent.workspacesAutoscaling.enabled=true`<br>`agent.workspacesAutoscaling.maxNodes`<br>`agent.workspacesAutoscaling.schedulingTimeoutSeconds` |
-| **Standby session headroom** | 🔧 | Nothing — the chart creates a negative-value `PriorityClass` (or reference an admin-managed one) · [capacity](../explanation/capacity.md#growing-capacity-autoscaling-and-standby) | `agent.standby.enabled=true`<br>`agent.standby.priorityClassName` (optional; derived `<name>-standby`)<br>`agent.standby.priorityClass.create` (default true) / `value`<br>`agent.standby.replicas` / `externallyScaled`<br>`agent.standby.resources` |
+| **Standby session headroom** | 🔧 | Nothing — the chart creates a negative-value `PriorityClass` (or reference an admin-managed one) · [capacity](../explanation/capacity.md#growing-capacity-autoscaling-and-standby) | `agent.workspacesAutoscaling.standby.enabled=true`<br>`agent.workspacesAutoscaling.standby.priorityClassName` (optional; derived `<name>-standby`)<br>`agent.workspacesAutoscaling.standby.priorityClass.create` (default true) / `value`<br>`agent.workspacesAutoscaling.standby.replicas` / `externallyScaled`<br>`agent.workspacesAutoscaling.standby.resources` |
 | **Session proxy scaling** | 🔧 | For external scaling, KEDA or an HPA against the proxy Deployment · [capacity](../explanation/capacity.md#scaling-the-session-proxy) | `agent.sessionProxy.autoscaling.enabled=true` (`sessionsPerReplica`, `min`/`maxReplicas`)<br>or `agent.sessionProxy.externallyScaled=true`<br>`agent.sessionProxy.nginx` (per-pod capacity)<br>`agent.sessionProxy.drainTimeoutSeconds` |
 | **Docker run and exec config overrides** | ⚠️ | Nothing | Set per workspace in the Kasm UI |
 | **Session recording** | ⚠️ | A Kasm license that includes recording, and session pods able to reach the Kasm API service · [how-to](../how-to/storage/README.md) | Turn recording on in the Kasm UI |
@@ -245,7 +245,7 @@ releases per tenant, and the two-namespace layout in
 | **Image pre-pulling** | ✅ | Registry access or a mirror reachable from every session node · [how-to](../how-to/registries-and-airgap.md) | On by default (`agent.imagePuller.enabled`).<br>`agent.imagePuller.extraImages` to pre-seed<br>`agent.imagePuller.refreshIntervalSeconds` to refresh mutable tags<br>`agent.imageAvailabilityPolicy` |
 | **Node targeting and pools** | ✅ | A consistent node-labelling strategy · [how-to](../how-to/nodes/scope-workspaces-to-nodes.md) | Nothing per workspace.<br>`agent.workspacesNodeSelector` sets a fleet-wide default |
 | **Node tuning and swap** | 🔧 | The node's kubelet configured for swap **first** · [how-to](../how-to/nodes/tuning-and-swap.md) | `nodePrep.tuning.swap.enabled=true`<br>`nodePrep.tuning.sysctls.enabled=true` |
-| **Autoscaling** | 🔧 | Cluster Autoscaler or Karpenter, against node groups that match workspace pod requests · [capacity](../explanation/capacity.md#growing-capacity-autoscaling-and-standby) | `agent.workspacesAutoscaling.enabled=true` (wait for a node)<br>`agent.standby.enabled=true` (pre-warmed headroom) |
+| **Autoscaling** | 🔧 | Cluster Autoscaler or Karpenter, against node groups that match workspace pod requests · [capacity](../explanation/capacity.md#growing-capacity-autoscaling-and-standby) | `agent.workspacesAutoscaling.enabled=true` (wait for a node)<br>`agent.workspacesAutoscaling.standby.enabled=true` (pre-warmed headroom) |
 | **Airgapped installation** | ✅ | A registry you mirror the images into · [how-to](../how-to/registries-and-airgap.md) | Nothing |
 
 **Telemetry.** `otelCollector.exporters.debug.enabled=true` is the quickest way to confirm data is
@@ -265,9 +265,9 @@ into a node selector for you. `agent.nodeSelector` targets the agent's own pods,
 **Autoscaling.** Node-level autoscaling works normally, and the agent now cooperates with it.
 `agent.workspacesAutoscaling` lets a session wait for the autoscaler to add a node instead of the
 launch failing on a full pool (the agent advertises the growable capacity and holds the workspace
-`WaitingForCapacity`), and `agent.standby` keeps a pool of low-priority placeholder pods so a session
+`WaitingForCapacity`), and `agent.workspacesAutoscaling.standby` keeps a pool of low-priority placeholder pods so a session
 takes reserved room instantly while the evicted placeholder triggers the scale-up - demand-driven when
-`standby.externallyScaled` hands the replica count to a KEDA `ScaledObject` or HPA. Both are covered in
+`workspacesAutoscaling.standby.externallyScaled` hands the replica count to a KEDA `ScaledObject` or HPA. Both are covered in
 [Capacity](../explanation/capacity.md#growing-capacity-autoscaling-and-standby). Note that this is
 chart-managed: you configure and observe it through Helm and `kubectl`, not the Kasm admin UI, which has
 no controls over it and sees only the capacity the agent reports. Warm session *instances* (the
@@ -319,7 +319,7 @@ On a fresh install most of these can be seeded from Helm values at database init
   ignored rather than translated.
 - **Cloud-VM session autoscaling.** Kasm's own autoscaler provisions VMs from a cloud provider; there
   is no equivalent here. The Kubernetes-side substitutes are node autoscaling with
-  `agent.workspacesAutoscaling`, standby placeholder headroom with `agent.standby` (see
+  `agent.workspacesAutoscaling`, standby placeholder headroom with `agent.workspacesAutoscaling.standby` (see
   [Capacity](../explanation/capacity.md#growing-capacity-autoscaling-and-standby)), and the
   `warmpools.pools.kasm.ai` CRD for pre-started sessions.
 

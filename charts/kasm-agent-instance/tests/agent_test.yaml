@@ -895,10 +895,11 @@ tests:
   # ---------- standby (nests under workspacesAutoscaling) ----------
   - it: renders standby under workspacesAutoscaling, without enabling the wait-for-node path
     set:
-      standby:
-        enabled: true
-        priorityClassName: kasm-standby
-        replicas: 3
+      workspacesAutoscaling:
+        standby:
+          enabled: true
+          priorityClassName: kasm-standby
+          replicas: 3
     asserts:
       - equal:
           path: spec.workspacesAutoscaling.standby.enabled
@@ -922,13 +923,14 @@ tests:
 
   - it: passes standby resources (a bare resource map) and the externallyScaled flag through
     set:
-      standby:
-        enabled: true
-        priorityClassName: kasm-standby
-        externallyScaled: true
-        resources:
-          cpu: "2"
-          memory: 2Gi
+      workspacesAutoscaling:
+        standby:
+          enabled: true
+          priorityClassName: kasm-standby
+          externallyScaled: true
+          resources:
+            cpu: "2"
+            memory: 2Gi
     asserts:
       - equal:
           path: spec.workspacesAutoscaling.standby.externallyScaled
@@ -944,8 +946,9 @@ tests:
 
   - it: derives the standby priorityClassName from the agent name when none is set
     set:
-      standby:
-        enabled: true
+      workspacesAutoscaling:
+        standby:
+          enabled: true
     asserts:
       - equal:
           path: spec.workspacesAutoscaling.standby.priorityClassName
@@ -954,8 +957,9 @@ tests:
   - it: derives the standby priorityClassName from a custom agent name
     set:
       name: zone-b-agent
-      standby:
-        enabled: true
+      workspacesAutoscaling:
+        standby:
+          enabled: true
     asserts:
       - equal:
           path: spec.workspacesAutoscaling.standby.priorityClassName
@@ -966,9 +970,9 @@ tests:
       workspacesAutoscaling:
         enabled: true
         maxNodes: 4
-      standby:
-        enabled: true
-        replicas: 2
+        standby:
+          enabled: true
+          replicas: 2
     asserts:
       - equal:
           path: spec.workspacesAutoscaling.enabled

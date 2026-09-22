@@ -426,15 +426,14 @@ workspacesNodeSelector: {}
 #
 workspacesTolerations: []
 
-# workspacesAutoscaling -- Let a session wait for a node a cluster autoscaler (Cluster Autoscaler, Karpenter,
-# a cloud node pool) can add, instead of the launch failing when the pool is full. When enabled, the agent
-# counts nodes the autoscaler could still add as capacity (so the manager still routes the launch), stops
-# withholding an image that would fit a fresh node, and marks the pending workspace `WaitingForCapacity`
-# until a node joins or the timeout passes. Off by default (nothing here changes behaviour while disabled).
-# Needs an autoscaler watching for unschedulable pods on the workspace nodes. Its companion is `standby`
-# below, which keeps room ready ahead of demand so nobody waits; the two work independently, and the
-# operator carries both under one Agent block (`standby` renders inside `workspacesAutoscaling`), so
-# enabling either one renders the block.
+# workspacesAutoscaling -- Grow workspace capacity on demand, in two independent ways. Off by default (nothing
+# here changes behaviour while both halves are disabled), and the whole block is omitted from the Agent unless
+# one is enabled. `enabled` lets a session wait for a node a cluster autoscaler (Cluster Autoscaler, Karpenter,
+# a cloud node pool) can add, instead of the launch failing when the pool is full: the agent counts nodes the
+# autoscaler could still add as capacity (so the manager still routes the launch), stops withholding an image
+# that would fit a fresh node, and marks the pending workspace `WaitingForCapacity` until a node joins or the
+# timeout passes (needs an autoscaler watching for unschedulable pods on the workspace nodes). `standby` below
+# keeps room ready ahead of demand so nobody waits. The two work independently.
 workspacesAutoscaling:
   # workspacesAutoscaling.enabled -- Turn autoscaling-aware waiting on.
   enabled: false
@@ -446,54 +445,56 @@ workspacesAutoscaling:
   # it fails with the scheduler's message. The clock restarts once the pod is scheduled (a fresh node has no
   # pre-pulled images). Minimum 60.
   schedulingTimeoutSeconds: 600
-
-# standby -- Keep spare room for sessions ready ahead of demand: a Deployment of low-priority pause-container
-# placeholders, each requesting what a session does, on the same nodes workspaces use (they follow
-# `workspacesNodeSelector`/`workspacesTolerations`). A session that needs the room evicts a placeholder and
-# starts at once; the evicted placeholder then goes unschedulable, which is what makes a node autoscaler add a
-# node, so the headroom returns with nobody waiting. Works with or without `workspacesAutoscaling.enabled`
-# above: standby alone gives instant starts until a burst exhausts the headroom (then launches are refused as
-# on a fixed cluster unless `workspacesAutoscaling.enabled` is also on to make them wait for a node). Off by
-# default; rendered as `workspacesAutoscaling.standby` on the Agent, and omitted unless `enabled` is true.
-standby:
-  # standby.enabled -- Create the placeholder Deployment.
-  enabled: false
-  # standby.priorityClassName -- Names the PriorityClass the placeholders run under: one with a *negative* value,
-  # so a real session (default priority) outranks it and the scheduler evicts a placeholder to make room, and
-  # the agent knows the placeholders' room is free to give away. Leave empty (the default) to derive it from the
-  # agent name as `<name>-standby`, so standby works with nothing else set. By default the chart also creates it
-  # (see `priorityClass.create`); set `priorityClass.create: false` to reference one a cluster admin manages
-  # out-of-band instead — set an explicit name here to match theirs.
-  priorityClassName: ""
-  # standby.priorityClass -- Whether this chart creates the PriorityClass named above. A PriorityClass is a
-  # *cluster-scoped* object, so more than one agent release with `create` on must use distinct
-  # `priorityClassName`s to avoid an ownership clash; set `create: false` on the extras (or all of them) to
-  # reference a shared, admin-managed class.
-  priorityClass:
-    # standby.priorityClass.create -- Create the PriorityClass named by `priorityClassName` with `value` below.
-    # Default true: standby works out of the box. Set false to reference an existing PriorityClass instead.
-    # When true, `priorityClassName` must be set and `value` negative.
-    create: true
-    # standby.priorityClass.value -- The (negative) value for the created PriorityClass. Only used when
-    # `create` is true; rendering fails if it is not below zero, since a session must be able to preempt a
-    # placeholder.
-    value: -10
-  # standby.replicas -- How many placeholders to keep. Applied when the Deployment is created and kept in step
-  # afterwards, unless `externallyScaled`. Minimum 0.
-  replicas: 1
-  # standby.externallyScaled -- Leave the replica count to a KEDA ScaledObject or an HPA after creation; the
-  # operator then sets `replicas` only once, at creation. Use this to scale placeholders with real demand. You
-  # supply the autoscaler yourself, targeting the placeholder Deployment `<name>-workspace-standby` (scale on
-  # running session pods, `app.kubernetes.io/component=workspace`). See the Capacity docs for a KEDA example.
-  externallyScaled: false
-  # standby.image -- The placeholder container image. The default is a bare pause container.
-  image: registry.k8s.io/pause:3.10
-  # standby.resources -- What each placeholder reserves, as a bare resource map (e.g. `{cpu: "2", memory: 2Gi}`)
-  # applied as both the request and the limit — NOT a pod-style `{requests, limits}` block. Leave empty to size
-  # it to the largest workspace in the agent's catalog (the agent reports this as
-  # status.workspaces.largestRequest), so one placeholder's room fits any image; until that is known, no
-  # placeholders are created. Set the map to pin a size instead.
-  resources: {}
+  # workspacesAutoscaling.standby -- Keep spare room for sessions ready ahead of demand: a Deployment of
+  # low-priority pause-container placeholders, each requesting what a session does, on the same nodes workspaces
+  # use (they follow `workspacesNodeSelector`/`workspacesTolerations`). A session that needs the room evicts a
+  # placeholder and starts at once; the evicted placeholder then goes unschedulable, which is what makes a node
+  # autoscaler add a node, so the headroom returns with nobody waiting. Works with or without
+  # `workspacesAutoscaling.enabled` above: standby alone gives instant starts until a burst exhausts the
+  # headroom (then launches are refused as on a fixed cluster unless `enabled` is also on to make them wait for
+  # a node). Off by default; omitted from the Agent unless `enabled` below is true.
+  standby:
+    # workspacesAutoscaling.standby.enabled -- Create the placeholder Deployment.
+    enabled: false
+    # workspacesAutoscaling.standby.priorityClassName -- Names the PriorityClass the placeholders run under: one
+    # with a *negative* value, so a real session (default priority) outranks it and the scheduler evicts a
+    # placeholder to make room, and the agent knows the placeholders' room is free to give away. Leave empty (the
+    # default) to derive it from the agent name as `<name>-standby`, so standby works with nothing else set. By
+    # default the chart also creates it (see `priorityClass.create`); set `priorityClass.create: false` to
+    # reference one a cluster admin manages out-of-band instead — set an explicit name here to match theirs.
+    priorityClassName: ""
+    # workspacesAutoscaling.standby.priorityClass -- Whether this chart creates the PriorityClass named above. A
+    # PriorityClass is a *cluster-scoped* object, so more than one agent release with `create` on must use
+    # distinct `priorityClassName`s to avoid an ownership clash; set `create: false` on the extras (or all of
+    # them) to reference a shared, admin-managed class.
+    priorityClass:
+      # workspacesAutoscaling.standby.priorityClass.create -- Create the PriorityClass named by
+      # `priorityClassName` with `value` below. Default true: standby works out of the box. Set false to
+      # reference an existing PriorityClass instead. When true, `priorityClassName` must be set and `value`
+      # negative.
+      create: true
+      # workspacesAutoscaling.standby.priorityClass.value -- The (negative) value for the created PriorityClass.
+      # Only used when `create` is true; rendering fails if it is not below zero, since a session must be able to
+      # preempt a placeholder.
+      value: -10
+    # workspacesAutoscaling.standby.replicas -- How many placeholders to keep. Applied when the Deployment is
+    # created and kept in step afterwards, unless `externallyScaled`. Minimum 0.
+    replicas: 1
+    # workspacesAutoscaling.standby.externallyScaled -- Leave the replica count to a KEDA ScaledObject or an HPA
+    # after creation; the operator then sets `replicas` only once, at creation. Use this to scale placeholders
+    # with real demand. You supply the autoscaler yourself, targeting the placeholder Deployment
+    # `<name>-workspace-standby` (scale on running session pods, `app.kubernetes.io/component=workspace`). See the
+    # Capacity docs for a KEDA example.
+    externallyScaled: false
+    # workspacesAutoscaling.standby.image -- The placeholder container image. The default is a bare pause
+    # container.
+    image: registry.k8s.io/pause:3.10
+    # workspacesAutoscaling.standby.resources -- What each placeholder reserves, as a bare resource map (e.g.
+    # `{cpu: "2", memory: 2Gi}`) applied as both the request and the limit — NOT a pod-style `{requests, limits}`
+    # block. Leave empty to size it to the largest workspace in the agent's catalog (the agent reports this as
+    # status.workspaces.largestRequest), so one placeholder's room fits any image; until that is known, no
+    # placeholders are created. Set the map to pin a size instead.
+    resources: {}
 
 # storageMappings -- rclone CSI storage mappings for workspace volumes. The whole block is omitted from the
 # Agent resource when it is disabled and no installation ID is set.
