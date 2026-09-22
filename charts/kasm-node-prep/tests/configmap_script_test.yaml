@@ -1073,3 +1073,63 @@ tests:
       - matchRegex:
           path: data["ensure-modules.sh"]
           pattern: 'pkg_install \$headers_args "\$headers_spec"'
+
+  - it: loads the v4l2loopback the kernel ships before building one
+    asserts:
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'ships its own v4l2loopback'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'find "/lib/modules/\$\{KERNEL_RELEASE\}/kernel" -name .v4l2loopback\.ko\*.'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'if load_shipped_v4l2loopback; then'
+
+  - it: always builds when preferShippedModule is off
+    set:
+      modules.v4l2loopback.preferShippedModule: false
+    asserts:
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'load_shipped_v4l2loopback'
+
+  - it: explains a rejected module signature as Secure Boot on every load site
+    asserts:
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'Key was rejected by service'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'Required key not available'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'secureBoot.existingMokSecret \(docs/how-to/nodes/secure-boot.md\)'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'explain_load_failure "modprobe v4l2loopback"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'explain_load_failure "insmod of \$\{src\}/v4l2loopback.ko"'
+
+  - it: installs the V4L2 core package from the builder image on Debian and Ubuntu when it is missing
+    asserts:
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'pkg_install "linux-modules-extra-\$\{KERNEL_RELEASE\}" && depmod -a && modinfo videodev'
+      # A kernel built without media support is still told apart from a missing package.
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'has its V4L2 core \(videodev\) as a separate module that is not installed on the node'
+
+  - it: only names the V4L2 core package when installVideodevPackage is off
+    set:
+      modules.v4l2loopback.installVideodevPackage: false
+    asserts:
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'pkg_install "linux-modules-extra-'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'linux-modules-extra-\$\{KERNEL_RELEASE\} on Ubuntu'
+

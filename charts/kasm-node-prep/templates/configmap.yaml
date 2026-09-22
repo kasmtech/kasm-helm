@@ -177,6 +177,23 @@ module_loaded() {
   grep -qE "^$1[[:space:]]" /proc/modules 2>/dev/null
 }
 
+# Report a failed insmod/modprobe with its real reason. "Key was rejected by service" and
+# "Required key not available" are the kernel refusing a module for lack of a signature it
+# trusts: UEFI Secure Boot is enabled on the node and the freshly built module is unsigned, or
+# signed with a key the node has not enrolled.
+explain_load_failure() {
+  local what="$1" out="$2"
+
+  case "$out" in
+    *"Key was rejected by service"*|*"Required key not available"*)
+      err "${what} failed: the kernel rejected the module's signature (${out}). Secure Boot is enabled on this node and the module is unsigned, or signed with a key the node does not trust. Enroll a MOK and set secureBoot.existingMokSecret (docs/how-to/nodes/secure-boot.md), hand the module to KMM with signing (modules.<module>.method=kmm and kmm.sign), or, for v4l2loopback, run a kernel that ships a distribution-signed one (Ubuntu 24.04 and later), which this script loads in preference to building. Skipping this pass."
+      ;;
+    *)
+      err "${what} failed${out:+: ${out}}. Skipping this pass."
+      ;;
+  esac
+}
+
 # Like module_loaded, but with a short grace period: immediately after a successful
 # modprobe/insmod the module list can lag by a moment, and a same-second check reports a
 # false failure for a module that is in fact loaded.
@@ -528,31 +545,33 @@ video_devices_present() {
 
 # Build, sign and load v4l2loopback with the configured device count.
 ensure_v4l2loopback() {
-  local src="${BUILD_ROOT}/v4l2loopback"
+  local src="${BUILD_ROOT}/v4l2loopback" out
 
   if module_loaded v4l2loopback; then
     log "v4l2loopback is already loaded"
     return 0
   fi
 
-  log "v4l2loopback is not loaded; building it for kernel ${KERNEL_RELEASE}"
-
-  if ! ensure_build_deps; then
-    return 1
-  fi
-
-  # v4l2loopback links against the kernel's V4L2 core (the videodev module). Minimal kernel
-  # flavors -- Ubuntu's -kvm and some cloud kernels -- are built with CONFIG_MEDIA_SUPPORT
-  # unset and ship no videodev at all, so the build can never succeed there; on other
-  # distributions the core is a module in a package the node may simply not have installed.
-  # Fail with the real reason instead of a wall of undefined-symbol modpost errors every pass.
-  if ! modinfo videodev >/dev/null 2>&1 && ! grep -qE '^CONFIG_VIDEO_DEV=(m|y)' "${KERNEL_BUILD}/.config" 2>/dev/null; then
-    err "Kernel ${KERNEL_RELEASE} has no V4L2 core (videodev): CONFIG_MEDIA_SUPPORT/CONFIG_VIDEO_DEV are not enabled in this kernel flavor, or the package carrying videodev.ko is not installed on the node. Webcam support needs a kernel that ships the V4L2 core. It lives in linux-modules-extra-${KERNEL_RELEASE} on Ubuntu (generic flavor only: the -kvm and cloud flavors are built without media support and can never work, so install the generic kernel there), in kernel-modules on RHEL, Rocky Linux and AlmaLinux (installed by the kernel metapackage), in kernel-modules-extra on Amazon Linux 2023, and in kernel-uek-modules (UEK R7) or kernel-uek-modules-desktop (UEK R8) on Oracle Linux. Install it on the node; skipping v4l2loopback until then."
+  resolve_kernel_build
+  if ! ensure_videodev; then
     return 1
   fi
   # The V4L2 core may exist as a module but not be loaded yet; v4l2loopback needs it present
   # at insertion time.
   modprobe videodev 2>/dev/null || true
+{{- if $v4l2.preferShippedModule }}
+
+  if load_shipped_v4l2loopback; then
+    v4l2loopback_loaded_check
+    return
+  fi
+{{- end }}
+
+  log "v4l2loopback is not loaded; building it for kernel ${KERNEL_RELEASE}"
+
+  if ! ensure_build_deps; then
+    return 1
+  fi
 
   if ! stage_source "$V4L2_SOURCE_REPO" "$V4L2_SOURCE_REF" "$src" "$V4L2_SOURCE_PATH" "${V4L2_GIT_USERNAME:-}" "${V4L2_GIT_PASSWORD:-}"; then
 {{- if $v4l2.sourcePath }}
@@ -576,19 +595,24 @@ ensure_v4l2loopback() {
 
   if ! make -C "$src" KERNEL_DIR="$KERNEL_BUILD" install-module && ! make -C "$KERNEL_BUILD" M="$src" modules_install; then
     log "Could not install v4l2loopback into /lib/modules; falling back to inserting the built module directly"
-    if ! insmod "${src}/v4l2loopback.ko" "devices=${V4L2_DEVICES}" "exclusive_caps=${V4L2_EXCLUSIVE_CAPS}"; then
-      err "insmod of ${src}/v4l2loopback.ko failed. Skipping this pass."
+    if ! out=$(insmod "${src}/v4l2loopback.ko" "devices=${V4L2_DEVICES}" "exclusive_caps=${V4L2_EXCLUSIVE_CAPS}" 2>&1); then
+      explain_load_failure "insmod of ${src}/v4l2loopback.ko" "$out"
       return 1
     fi
   else
     depmod -a || true
     log "Loading v4l2loopback with devices=${V4L2_DEVICES} exclusive_caps=${V4L2_EXCLUSIVE_CAPS}"
-    if ! modprobe v4l2loopback "devices=${V4L2_DEVICES}" "exclusive_caps=${V4L2_EXCLUSIVE_CAPS}"; then
-      err "modprobe v4l2loopback failed. Skipping this pass."
+    if ! out=$(modprobe v4l2loopback "devices=${V4L2_DEVICES}" "exclusive_caps=${V4L2_EXCLUSIVE_CAPS}" 2>&1); then
+      explain_load_failure "modprobe v4l2loopback" "$out"
       return 1
     fi
   fi
 
+  v4l2loopback_loaded_check
+}
+
+# The checks every load path ends with: the module is in lsmod and the device nodes exist.
+v4l2loopback_loaded_check() {
   if ! module_loaded_wait v4l2loopback; then
     err "v4l2loopback still does not appear in lsmod after insertion. Skipping this pass."
     return 1
@@ -601,12 +625,73 @@ ensure_v4l2loopback() {
     return 1
   fi
 }
+
+# v4l2loopback links against the kernel's V4L2 core (the videodev module). Three cases, told
+# apart so the log names the real reason instead of a wall of undefined-symbol errors:
+#   * videodev is present: nothing to do;
+#   * the kernel was built without media support (Ubuntu's -kvm and some cloud flavors,
+#     CONFIG_MEDIA_SUPPORT/CONFIG_VIDEO_DEV unset): no build can ever succeed on this kernel;
+#   * the kernel has videodev as a module but the package carrying it is not installed on the
+#     node: installed here from the builder image's repositories on Debian/Ubuntu (they land
+#     in the node's /lib/modules through the same bind mount the kernel headers use for
+#     /usr/src), named for the other families.
+ensure_videodev() {
+  local cfg="${KERNEL_BUILD}/.config"
+
+  if modinfo videodev >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if [ -r "$cfg" ] && ! grep -qE '^CONFIG_VIDEO_DEV=(m|y)' "$cfg"; then
+    err "Kernel ${KERNEL_RELEASE} has no V4L2 core (videodev): CONFIG_MEDIA_SUPPORT/CONFIG_VIDEO_DEV are not enabled in this kernel flavor, or the package carrying videodev.ko is not installed on the node. Webcam support needs a kernel that ships the V4L2 core. It lives in linux-modules-extra-${KERNEL_RELEASE} on Ubuntu (generic flavor only: the -kvm and cloud flavors are built without media support and can never work, so install the generic kernel there), in kernel-modules on RHEL, Rocky Linux and AlmaLinux (installed by the kernel metapackage), in kernel-modules-extra on Amazon Linux 2023, and in kernel-uek-modules (UEK R7) or kernel-uek-modules-desktop (UEK R8) on Oracle Linux. Install it on the node; skipping v4l2loopback until then."
+    return 1
+  fi
+{{- if $v4l2.installVideodevPackage }}
+
+  if detect_pkg_manager && [ "$PKG_MANAGER" = apt ]; then
+    log "videodev is not installed on the node; installing linux-modules-extra-${KERNEL_RELEASE} from the builder image's repositories into /lib/modules"
+    if pkg_install "linux-modules-extra-${KERNEL_RELEASE}" && depmod -a && modinfo videodev >/dev/null 2>&1; then
+      log "videodev is installed"
+      return 0
+    fi
+    err "Could not install linux-modules-extra-${KERNEL_RELEASE} from this builder image: its release must match the node's (an Ubuntu 24.04 node needs ubuntu:24.04), and the -kvm and cloud kernel flavors have no such package because they are built without media support. Install the V4L2 core on the node by hand, or run the generic kernel there; skipping v4l2loopback until then."
+    return 1
+  fi
+{{- end }}
+
+  err "Kernel ${KERNEL_RELEASE} has its V4L2 core (videodev) as a separate module that is not installed on the node. It lives in linux-modules-extra-${KERNEL_RELEASE} on Ubuntu, in kernel-modules on RHEL, Rocky Linux and AlmaLinux, in kernel-modules-extra on Amazon Linux 2023, and in kernel-uek-modules (UEK R7) or kernel-uek-modules-desktop (UEK R8) on Oracle Linux. Install it on the node; skipping v4l2loopback until then."
+  return 1
+}
+{{- if $v4l2.preferShippedModule }}
+
+# Load the v4l2loopback the running kernel ships, when there is one. Ubuntu carries it in-tree
+# from 24.04 (in linux-modules, signed with the distribution's kernel key), so it loads on a
+# Secure Boot node with no MOK enrolment and needs neither a toolchain nor kernel headers. The
+# file is inserted by path, so an earlier build of ours in updates/ does not shadow it, and
+# insmod loads no dependencies, so videodev is loaded before this is called. Returns 1 when the
+# kernel ships none or the shipped one refuses to load; the caller then builds from source.
+load_shipped_v4l2loopback() {
+  local ko out
+
+  ko=$(find "/lib/modules/${KERNEL_RELEASE}/kernel" -name 'v4l2loopback.ko*' 2>/dev/null | head -n 1)
+  if [ -z "$ko" ]; then
+    return 1
+  fi
+
+  log "Kernel ${KERNEL_RELEASE} ships its own v4l2loopback (${ko}); loading it instead of building one"
+  if out=$(insmod "$ko" "devices=${V4L2_DEVICES}" "exclusive_caps=${V4L2_EXCLUSIVE_CAPS}" 2>&1); then
+    return 0
+  fi
+  log "The shipped v4l2loopback did not load (${out:-no error output}); building from source instead"
+  return 1
+}
+{{- end }}
 {{- end }}
 {{- if $wireguardBuild }}
 
 # Build, sign and load the out-of-tree WireGuard module, unless the kernel already provides it.
 ensure_wireguard() {
-  local src="${BUILD_ROOT}/wireguard-linux-compat"
+  local src="${BUILD_ROOT}/wireguard-linux-compat" out
 
   if grep -q wg_ /proc/kallsyms 2>/dev/null; then
     log "WireGuard is built into kernel ${KERNEL_RELEASE} (wg_ symbols found in /proc/kallsyms); nothing to build"
@@ -646,15 +731,15 @@ ensure_wireguard() {
 
   if ! make -C "${src}/src" KERNELDIR="$KERNEL_BUILD" module-install && ! make -C "$KERNEL_BUILD" M="${src}/src" modules_install; then
     log "Could not install wireguard into /lib/modules; falling back to inserting the built module directly"
-    if ! insmod "${src}/src/wireguard.ko"; then
-      err "insmod of ${src}/src/wireguard.ko failed. Skipping this pass."
+    if ! out=$(insmod "${src}/src/wireguard.ko" 2>&1); then
+      explain_load_failure "insmod of ${src}/src/wireguard.ko" "$out"
       return 1
     fi
   else
     depmod -a || true
     log "Loading wireguard"
-    if ! modprobe wireguard; then
-      err "modprobe wireguard failed. Skipping this pass."
+    if ! out=$(modprobe wireguard 2>&1); then
+      explain_load_failure "modprobe wireguard" "$out"
       return 1
     fi
   fi

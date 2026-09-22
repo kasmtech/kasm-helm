@@ -17,6 +17,10 @@ Both need the **same** thing out of band: the public key enrolled in each node's
 
 ## Before you start
 
+- **Ubuntu 24.04 and later nodes may not need this page for webcam support.** Their kernel ships a
+  `v4l2loopback` signed with the distribution's key, and `kasm-node-prep` loads that one in preference to
+  building (`modules.v4l2loopback.preferShippedModule`, on by default), so it passes Secure Boot with no
+  MOK. Signing is then only needed for an out-of-tree WireGuard, or when you force a source build.
 - **Confirm Secure Boot is actually on.** If it is off, this entire page is a no-op - skip it.
 
   ```console
