@@ -148,19 +148,22 @@ tests:
           value: 30
       - equal:
           path: spec.sessionProxy.routing
-          value: static
+          value: dynamic
+      - equal:
+          path: spec.sessionProxy.drainTimeoutSeconds
+          value: 300
       - equal:
           path: spec.sessionProxy.certSecretName
           value: kasm-session-proxy-tls
 
-  - it: switches the session proxy to dynamic routing
+  - it: switches the session proxy to static routing
     set:
       sessionProxy:
-        routing: dynamic
+        routing: static
     asserts:
       - equal:
           path: spec.sessionProxy.routing
-          value: dynamic
+          value: static
 
   - it: omits the session proxy service and proxy protocol blocks while they hold only defaults
     asserts:
@@ -168,6 +171,131 @@ tests:
           path: spec.sessionProxy.service
       - isNull:
           path: spec.sessionProxy.proxyProtocol
+
+  - it: omits the optional session proxy scaling and placement blocks while they hold only defaults
+    asserts:
+      - isNull:
+          path: spec.sessionProxy.nginx
+      - isNull:
+          path: spec.sessionProxy.resources
+      - isNull:
+          path: spec.sessionProxy.sidecarResources
+      - isNull:
+          path: spec.sessionProxy.nodeSelector
+      - isNull:
+          path: spec.sessionProxy.tolerations
+      - isNull:
+          path: spec.sessionProxy.affinity
+      - isNull:
+          path: spec.sessionProxy.topologySpreadConstraints
+      - isNull:
+          path: spec.sessionProxy.podDisruptionBudget
+      - isNull:
+          path: spec.sessionProxy.autoscaling
+      - isNull:
+          path: spec.sessionProxy.externallyScaled
+
+  - it: renders the session proxy scaling and placement knobs once they are set
+    set:
+      sessionProxy:
+        drainTimeoutSeconds: 600
+        nginx:
+          workerProcesses: 4
+          workerConnections: 2048
+        resources:
+          requests:
+            cpu: 250m
+        sidecarResources:
+          requests:
+            cpu: 50m
+        nodeSelector:
+          role: proxy
+        podDisruptionBudget:
+          minAvailable: 1
+        autoscaling:
+          enabled: true
+          sessionsPerReplica: 25
+          minReplicas: 2
+          maxReplicas: 8
+          scaleDownStabilizationSeconds: 900
+    asserts:
+      - equal:
+          path: spec.sessionProxy.drainTimeoutSeconds
+          value: 600
+      - equal:
+          path: spec.sessionProxy.nginx.workerProcesses
+          value: 4
+      - equal:
+          path: spec.sessionProxy.nginx.workerConnections
+          value: 2048
+      - equal:
+          path: spec.sessionProxy.resources.requests.cpu
+          value: 250m
+      - equal:
+          path: spec.sessionProxy.sidecarResources.requests.cpu
+          value: 50m
+      - equal:
+          path: spec.sessionProxy.nodeSelector.role
+          value: proxy
+      - equal:
+          path: spec.sessionProxy.podDisruptionBudget.minAvailable
+          value: 1
+      - equal:
+          path: spec.sessionProxy.autoscaling.sessionsPerReplica
+          value: 25
+      - equal:
+          path: spec.sessionProxy.autoscaling.minReplicas
+          value: 2
+      - equal:
+          path: spec.sessionProxy.autoscaling.maxReplicas
+          value: 8
+      - equal:
+          path: spec.sessionProxy.autoscaling.scaleDownStabilizationSeconds
+          value: 900
+      - notExists:
+          path: spec.sessionProxy.externallyScaled
+
+  - it: hands the proxy replica count to an external scaler
+    set:
+      sessionProxy:
+        externallyScaled: true
+    asserts:
+      - equal:
+          path: spec.sessionProxy.externallyScaled
+          value: true
+      - isNull:
+          path: spec.sessionProxy.autoscaling
+
+  - it: fails when session proxy autoscaling is enabled without its required sizes
+    set:
+      sessionProxy:
+        autoscaling:
+          enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "sessionProxy.autoscaling: enabled requires sessionsPerReplica >= 1 and maxReplicas >= 1"
+
+  - it: fails when session proxy autoscaling and external scaling are both on
+    set:
+      sessionProxy:
+        externallyScaled: true
+        autoscaling:
+          enabled: true
+          sessionsPerReplica: 10
+          maxReplicas: 5
+    asserts:
+      - failedTemplate:
+          errorMessage: "sessionProxy: set only one of autoscaling.enabled and externallyScaled"
+
+  - it: fails when the session proxy PDB sets both bounds
+    set:
+      sessionProxy:
+        podDisruptionBudget:
+          minAvailable: 1
+          maxUnavailable: 1
+    asserts:
+      - failedTemplate:
+          errorMessage: "sessionProxy.podDisruptionBudget: set only one of minAvailable and maxUnavailable"
 
   - it: renders every session proxy service field once they are set
     set:

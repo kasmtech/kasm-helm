@@ -150,13 +150,90 @@ sessionProxy:
   probeTimeoutSeconds: 120
   # sessionProxy.reconcileIntervalSeconds -- The sidecar's session reconcile interval.
   reconcileIntervalSeconds: 30
-  # sessionProxy.routing -- How the proxy finds a session's workspace, `static` or `dynamic`. `static` (the
-  # default) has the sidecar write an nginx location per session and reload nginx whenever one comes or goes;
+  # sessionProxy.routing -- How the proxy finds a session's workspace, `static` or `dynamic`. `dynamic` (the
+  # default) has nginx look the workspace up per request in a table the sidecar keeps current, with no reload;
+  # it needs a session-proxy image carrying nginx's njs module (`kasmweb/nginx`, the default image, has it).
+  # `static` has the sidecar write an nginx location per session and reload nginx whenever one comes or goes;
   # a reload replaces every worker, and the old ones live on for as long as the connections they hold, so under
-  # heavy session churn worker generations pile up. `dynamic` has nginx look the workspace up per request in a
-  # table the sidecar keeps current, with no reload - it needs a session-proxy image carrying nginx's njs module
-  # (`kasmweb/nginx` has it). Changing this restarts the proxy.
-  routing: static
+  # heavy session churn worker generations pile up without bound. Changing this restarts the proxy.
+  routing: dynamic
+  # sessionProxy.drainTimeoutSeconds -- How long a proxy pod that is being stopped keeps serving the
+  # connections it already holds. A stopping pod leaves the Service at once, so new connections go to other
+  # pods, but the desktop streams already on it keep running and are cut only when this elapses. Session
+  # streams can last hours, so set this to how long a rollout or a scale-in may take. Empty leaves the
+  # operator's default of 300.
+  drainTimeoutSeconds: 300
+  # sessionProxy.nginx -- nginx worker sizing for one proxy pod, and so its connection capacity. A proxied
+  # connection uses two of a worker's connections (client and upstream), and a session holds one per service
+  # in its port map (vnc, audio, uploads, ...), so a pod carries roughly
+  # `workerProcesses * workerConnections / (2 * services-per-session)` sessions. Omitted from the Agent
+  # resource while both values are empty, leaving the operator's defaults in charge.
+  nginx:
+    # sessionProxy.nginx.workerProcesses -- nginx `worker_processes`. Empty follows the container's CPU limit
+    # when one is set (rounded up), otherwise 6.
+    workerProcesses: ""
+    # sessionProxy.nginx.workerConnections -- nginx `worker_connections`, per worker; the worker's
+    # file-descriptor limit is raised to match. Empty leaves the operator's default of 1024.
+    workerConnections: ""
+  # sessionProxy.resources -- Resource requests/limits for the nginx container, as a Kubernetes
+  # `ResourceRequirements` map (`requests:`/`limits:`). Set requests: without them the proxy counts for nothing
+  # in the scheduler's or a node autoscaler's arithmetic and can be packed onto a node that is then scaled
+  # away, taking its sessions with it. Omitted from the Agent resource when empty.
+  resources: {}
+  # sessionProxy.sidecarResources -- Resource requests/limits for the kasm-nginx-sidecar container, same shape
+  # as `sessionProxy.resources`. Omitted from the Agent resource when empty.
+  sidecarResources: {}
+  # sessionProxy.nodeSelector -- Node selector for the proxy pods. Empty has them follow the agent's own
+  # `nodeSelector`. Set it to keep the proxy off a node pool an autoscaler shrinks, since a proxy pod taken
+  # away takes every stream it carries. Omitted from the Agent resource when empty.
+  nodeSelector: {}
+  # sessionProxy.tolerations -- Tolerations for the proxy pods. Omitted from the Agent resource when empty.
+  tolerations: []
+  # sessionProxy.affinity -- Affinity for the proxy pods, a Kubernetes `Affinity` map. Omitted from the Agent
+  # resource when empty.
+  affinity: {}
+  # sessionProxy.topologySpreadConstraints -- Topology spread constraints for the proxy pods. With more than
+  # one replica and none set, the operator spreads replicas across nodes where it can. Omitted from the Agent
+  # resource when empty.
+  topologySpreadConstraints: []
+  # sessionProxy.podDisruptionBudget -- Bound how many proxy pods a voluntary disruption (a node drain, say)
+  # may take at once. Set exactly one of `minAvailable` or `maxUnavailable`; leaving both empty omits the
+  # block, and with more than one replica the operator then defaults to at most one pod disrupted. With a
+  # single replica no budget is created (it could only block the drain).
+  podDisruptionBudget:
+    # sessionProxy.podDisruptionBudget.minAvailable -- Fewest proxy pods that must stay available, as a count
+    # (`2`) or a quoted percentage (`"50%"`). Mutually exclusive with `maxUnavailable`.
+    minAvailable: ""
+    # sessionProxy.podDisruptionBudget.maxUnavailable -- Most proxy pods that may be unavailable, as a count
+    # or a quoted percentage. Mutually exclusive with `minAvailable`.
+    maxUnavailable: ""
+  # sessionProxy.autoscaling -- Have the operator size the proxy Deployment by how many sessions the agent is
+  # running - the load a proxy actually carries, since a websocket relay uses little CPU and a CPU-based
+  # autoscaler would never fire before its connections ran out. Alternative to `externallyScaled`; the two
+  # cannot both be on. While enabled, `sessionProxy.replicas` is ignored. Omitted from the Agent resource
+  # unless enabled.
+  autoscaling:
+    # sessionProxy.autoscaling.enabled -- Turn on session-count autoscaling for the proxy.
+    enabled: false
+    # sessionProxy.autoscaling.sessionsPerReplica -- REQUIRED when enabled. Sessions one proxy pod is sized
+    # for; the replica count is `ceil(sessions / sessionsPerReplica)`, clamped to the min/max below. Size it
+    # from the `sessionProxy.nginx` capacity.
+    sessionsPerReplica: 0
+    # sessionProxy.autoscaling.minReplicas -- Fewest proxy pods, whatever the session count.
+    minReplicas: 1
+    # sessionProxy.autoscaling.maxReplicas -- REQUIRED when enabled. Most proxy pods, whatever the session
+    # count; must be at least `minReplicas`.
+    maxReplicas: 0
+    # sessionProxy.autoscaling.scaleDownStabilizationSeconds -- How long a lower replica count must be called
+    # for, without interruption, before a pod is removed - each removed pod then drains for
+    # `drainTimeoutSeconds`. Empty leaves the operator's default of 1800.
+    scaleDownStabilizationSeconds: 1800
+  # sessionProxy.externallyScaled -- Leave the proxy Deployment's replica count to something else (KEDA, an
+  # HPA) once that exists; `sessionProxy.replicas` applies only when the Deployment is first created. As with
+  # `standby`, a KEDA `ScaledObject` with a kubernetes-workload trigger on the workspace pods (selector
+  # `app.kubernetes.io/component=workspace`) keeps one proxy per so many sessions; its scale-in removes pods
+  # at its own pace, each still draining for `drainTimeoutSeconds`. Alternative to `autoscaling`.
+  externallyScaled: false
   # sessionProxy.selfSigned -- Last-resort certificate for the session proxy, so that an install
   # with no certificate configured still starts instead of the proxy never coming up.
   #

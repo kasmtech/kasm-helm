@@ -302,6 +302,88 @@ autoscaler.
 
 ---
 
+## Scaling the session proxy
+
+The session proxy is not the workspace tier: it is the nginx pod every session's streams pass through on
+the way to its workspace. One pod carries many sessions, but a pod **removed** takes with it every stream
+it still holds, so the proxy is sized and scaled on its own terms, separate from the node capacity above.
+
+Two things make it unlike an ordinary Deployment:
+
+- **Its load is connections, not CPU.** A websocket relay spends almost no CPU, so a CPU-based autoscaler
+  never fires before a pod's connections run out. Size and scale it by *session count*.
+- **Scaling in is destructive.** A pod leaving the Service stops taking new connections at once, but the
+  desktop streams already on it keep running until `sessionProxy.drainTimeoutSeconds` (default 300)
+  elapses, then are cut. Session streams last hours, so set the drain to how long a rollout or a scale-in
+  may take, and scale **in** slowly.
+
+**One pod's capacity.** `sessionProxy.nginx` sets `workerProcesses` and `workerConnections`. A proxied
+connection uses two of a worker's connections (client and upstream), and a session holds one per service
+in its port map (vnc, audio, uploads, ...), so a pod carries about
+`workerProcesses × workerConnections / (2 × services-per-session)` sessions. Set `sessionProxy.resources`
+requests to match, so the scheduler and a node autoscaler account for the pod instead of packing it onto
+a node they later remove.
+
+**Operator-driven autoscaling.** `sessionProxy.autoscaling` has the operator set the replica count from
+the live session count — `ceil(sessions / sessionsPerReplica)`, clamped to `minReplicas`..`maxReplicas`.
+It grows at once and shrinks one pod at a time, and only once a lower count has been called for without
+interruption for `scaleDownStabilizationSeconds` (default 1800); each removed pod then drains. While it is
+on, `sessionProxy.replicas` is ignored, and `status.sessionProxy` reports `replicas`/`desiredReplicas`.
+
+```yaml
+sessionProxy:
+  autoscaling:
+    enabled: true
+    sessionsPerReplica: 25      # from the nginx capacity above
+    minReplicas: 2
+    maxReplicas: 20
+    scaleDownStabilizationSeconds: 1800
+  nginx:
+    workerConnections: 2048
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+```
+
+**External autoscaling (KEDA or HPA).** `sessionProxy.externallyScaled: true` leaves the replica count to
+a horizontal autoscaler you run, exactly as `standby.externallyScaled` does (`sessionProxy.replicas`
+applies only when the Deployment is first created). The two proxy paths are mutually exclusive — set
+`autoscaling` *or* `externallyScaled`, not both. Scale on the **running sessions**
+(`component=workspace`), the same trigger the standby example above uses; the proxy Deployment is named
+`<agent name>-session-proxy` (`k8s-agent-session-proxy` for the default agent name):
+
+```yaml
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: k8s-agent-session-proxy
+  namespace: kasm
+spec:
+  scaleTargetRef:
+    name: k8s-agent-session-proxy                        # the session-proxy Deployment
+  minReplicaCount: 2
+  maxReplicaCount: 20
+  triggers:
+    - type: kubernetes-workload
+      metadata:
+        podSelector: app.kubernetes.io/component=workspace # count running session pods
+        value: "25"                                        # one proxy pod per 25 sessions
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 1800                 # scale in slowly; pods still drain
+```
+
+**Placement.** A proxy pod on a node a cluster autoscaler later shrinks goes down with the node, dropping
+its streams. Keep the proxy on stable nodes with `sessionProxy.nodeSelector` (unset, the pods follow the
+agent's own `nodeSelector`), and give it `resources` requests so the autoscaler counts it.
+`sessionProxy.podDisruptionBudget` (one of `minAvailable`/`maxUnavailable`) bounds how many pods a single
+drain may take.
+
+---
+
 ## The control-plane half
 
 The control plane is not sized with this model. One value covers it:

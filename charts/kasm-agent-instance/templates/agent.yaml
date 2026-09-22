@@ -55,6 +55,75 @@ spec:
     probeTimeoutSeconds: {{ .Values.sessionProxy.probeTimeoutSeconds }}
     reconcileIntervalSeconds: {{ .Values.sessionProxy.reconcileIntervalSeconds }}
     routing: {{ .Values.sessionProxy.routing | quote }}
+    {{- with .Values.sessionProxy.drainTimeoutSeconds }}
+    drainTimeoutSeconds: {{ . }}
+    {{- end }}
+    {{- $nginx := .Values.sessionProxy.nginx }}
+    {{- if or $nginx.workerProcesses $nginx.workerConnections }}
+    nginx:
+      {{- with $nginx.workerProcesses }}
+      workerProcesses: {{ . }}
+      {{- end }}
+      {{- with $nginx.workerConnections }}
+      workerConnections: {{ . }}
+      {{- end }}
+    {{- end }}
+    {{- with .Values.sessionProxy.resources }}
+    resources:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.sessionProxy.sidecarResources }}
+    sidecarResources:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.sessionProxy.nodeSelector }}
+    nodeSelector:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.sessionProxy.tolerations }}
+    tolerations:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.sessionProxy.affinity }}
+    affinity:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.sessionProxy.topologySpreadConstraints }}
+    topologySpreadConstraints:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- $pdb := .Values.sessionProxy.podDisruptionBudget }}
+    {{- if and $pdb.minAvailable $pdb.maxUnavailable }}
+    {{- fail "sessionProxy.podDisruptionBudget: set only one of minAvailable and maxUnavailable" }}
+    {{- end }}
+    {{- if or $pdb.minAvailable $pdb.maxUnavailable }}
+    podDisruptionBudget:
+      {{- with $pdb.minAvailable }}
+      minAvailable: {{ . }}
+      {{- end }}
+      {{- with $pdb.maxUnavailable }}
+      maxUnavailable: {{ . }}
+      {{- end }}
+    {{- end }}
+    {{- $spa := .Values.sessionProxy.autoscaling }}
+    {{- if and $spa.enabled .Values.sessionProxy.externallyScaled }}
+    {{- fail "sessionProxy: set only one of autoscaling.enabled and externallyScaled" }}
+    {{- end }}
+    {{- if $spa.enabled }}
+    {{- if or (lt (int $spa.sessionsPerReplica) 1) (lt (int $spa.maxReplicas) 1) }}
+    {{- fail "sessionProxy.autoscaling: enabled requires sessionsPerReplica >= 1 and maxReplicas >= 1" }}
+    {{- end }}
+    autoscaling:
+      sessionsPerReplica: {{ $spa.sessionsPerReplica }}
+      minReplicas: {{ $spa.minReplicas }}
+      maxReplicas: {{ $spa.maxReplicas }}
+      {{- with $spa.scaleDownStabilizationSeconds }}
+      scaleDownStabilizationSeconds: {{ . }}
+      {{- end }}
+    {{- end }}
+    {{- if .Values.sessionProxy.externallyScaled }}
+    externallyScaled: true
+    {{- end }}
     certSecretName: {{ .Values.sessionProxy.certSecretName }}
     {{- if $serviceSet }}
     service:
