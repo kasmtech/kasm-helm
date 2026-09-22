@@ -14,9 +14,8 @@ questions:
     group: Control plane
   - variable: kasm-helm.publicAddr
     label: Public hostname
-    description: "The DNS name users open in a browser. The certificate is issued for it, and agents in other clusters register through it."
+    description: "The DNS name users open in a browser. The certificate is issued for it, and agents in other clusters register through it. Leave empty for the no-values install, reached by the LoadBalancer Service's address."
     type: hostname
-    required: true
     group: Control plane
     show_if: kasm-helm.enabled=true
   - variable: kasm-helm.deploymentSize
@@ -142,16 +141,14 @@ questions:
     show_if: kasm-agent.enabled=true
   - variable: kasm-agent.agent.manager.hostname
     label: Manager hostname
-    description: "The control plane's public hostname (or the proxy in front of its manager)."
+    description: "The control plane's public hostname (or the proxy in front of its manager). Required when the agent does not register with the control plane in this release."
     type: hostname
-    required: true
     group: Agent
     show_if: kasm-agent.enabled=true&&kasm-agent.agent.inClusterControlPlane=false
   - variable: kasm-agent.agent.manager.token
     label: Manager token
-    description: "From the control plane: Secret <release>-secrets, key manager-token. Stored in a Secret this release creates; the chart README covers pointing at an existing Secret instead."
+    description: "From the control plane: Secret <release>-secrets, key manager-token. Required when the agent does not register with the control plane in this release. Stored in a Secret this release creates; the chart README covers pointing at an existing Secret instead."
     type: password
-    required: true
     group: Agent
     show_if: kasm-agent.enabled=true&&kasm-agent.agent.inClusterControlPlane=false
   - variable: kasm-agent.agent.publicHostname
