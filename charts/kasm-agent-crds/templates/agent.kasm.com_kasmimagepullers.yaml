@@ -571,13 +571,15 @@ spec:
                   pre-pulling due to repeated node-exhaustion pod failures there.
                 items:
                   description: |-
-                    NodePullBackoff tracks a node the controller has temporarily excluded from
-                    pre-pulling because its DaemonSet pod there kept failing for a
-                    node-exhaustion reason (eviction, OOM). It is bookkeeping: what failed,
-                    how often, and when the controller next checks the node's conditions. It
-                    does not change the DaemonSet's pod template - excluding a node there
-                    would roll every puller pod and abort the pulls in flight on all nodes,
-                    while the kubelet already refuses new pods on a node under pressure.
+                    NodePullBackoff tracks a node the controller has excluded from pre-pulling
+                    because its DaemonSet pod there kept failing for a node-exhaustion reason
+                    (eviction, OOM). The node is excluded from the DaemonSet's pod template
+                    (a hostname NotIn node affinity) for as long as the entry exists without
+                    RecoveredAt: while its window runs, and after it lapses until the node's
+                    conditions confirm it healthy. A node that recovered from a disk-pressure
+                    eviction keeps its entry, with RecoveredAt set, as memory only: it is
+                    scheduled again, but its DiskEvictions carry over, so a node that fills up
+                    on every attempt is caught and Suspended rather than retried forever.
                   properties:
                     backoffUntil:
                       description: |-
@@ -586,6 +588,15 @@ spec:
                         conditions) before deciding whether to re-include or extend.
                       format: date-time
                       type: string
+                    diskEvictions:
+                      description: |-
+                        DiskEvictions counts the puller pods this node has rejected or evicted
+                        for disk pressure since the staged image set (ImageSetHash) last
+                        changed. Unlike FailureCount it survives the node's recovery: the
+                        node clears DiskPressure once the aborted pull's layers are gone, is
+                        scheduled again, and fills up again on the next attempt.
+                      format: int32
+                      type: integer
                     failureCount:
                       description: |-
                         FailureCount is the number of consecutive node-exhaustion failures
@@ -593,6 +604,12 @@ spec:
                         0 once the node is confirmed healthy again.
                       format: int32
                       type: integer
+                    imageSetHash:
+                      description: |-
+                        ImageSetHash identifies the staged image set DiskEvictions was counted
+                        against. A different set (an image added or removed) is worth a fresh
+                        attempt, so it resets the count and lifts a suspension.
+                      type: string
                     lastEvictedPodUID:
                       description: |-
                         LastEvictedPodUID is the UID of the evicted puller pod on this node
@@ -612,6 +629,22 @@ spec:
                       type: string
                     node:
                       type: string
+                    recoveredAt:
+                      description: |-
+                        RecoveredAt is when the node was last confirmed healthy after a
+                        disk-pressure eviction. Set, the entry no longer excludes the node; it
+                        only carries DiskEvictions forward, and is dropped once enough time
+                        has passed without another failure there.
+                      format: date-time
+                      type: string
+                    suspended:
+                      description: |-
+                        Suspended is set once DiskEvictions reaches the controller's limit:
+                        the staged images do not fit this node's disk, and no amount of
+                        retrying changes that. The node stays excluded until the image set
+                        changes or the node is gone; the KasmImagePuller's Degraded condition
+                        names it.
+                      type: boolean
                   required:
                   - backoffUntil
                   - node
