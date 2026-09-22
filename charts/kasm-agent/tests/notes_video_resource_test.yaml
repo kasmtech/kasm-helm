@@ -1,0 +1,38 @@
+suite: NOTES warn about kasm.com/video
+
+templates:
+  - templates/NOTES.txt
+
+set:
+  agent.manager.hostname: kasm.example.com
+  agent.manager.token: t0k3n
+  agent.publicHostname: sessions.example.com
+
+tests:
+  - it: warns when v4l2loopback is prepared but the device plugin is off
+    set:
+      nodePrep.enabled: true
+    asserts:
+      - matchRegexRaw:
+          pattern: 'v4l2loopback node preparation is on but videoDevicePlugin.enabled is false'
+      - matchRegexRaw:
+          pattern: 'Insufficient kasm.com/video'
+
+  - it: keeps the inverse warning when the plugin is on without node preparation
+    set:
+      videoDevicePlugin.enabled: true
+    asserts:
+      - matchRegexRaw:
+          pattern: 'videoDevicePlugin.enabled is true but v4l2loopback node preparation is not'
+      - notMatchRegexRaw:
+          pattern: 'node preparation is on but'
+
+  - it: says nothing when both are on
+    set:
+      nodePrep.enabled: true
+      videoDevicePlugin.enabled: true
+    asserts:
+      - notMatchRegexRaw:
+          pattern: 'node preparation is on but'
+      - notMatchRegexRaw:
+          pattern: 'node preparation is not'
