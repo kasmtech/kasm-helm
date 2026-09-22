@@ -331,6 +331,16 @@ DIRECT SESSION CONNECTIONS - three things to check
   NAMESPACE. Sessions need no namespace label: the operator's per-workspace NetworkPolicy admits
   the session proxy by podSelector. Label this namespace kasm.com/role=manager only if something
   here needs DIRECT ingress to workspace pods.
+{{- if and $nodePrepEnabled (dig "nodePrep" "modules" "v4l2loopback" "enabled" true $kasmAgent) (not $videoEnabled) }}
+
+  WARNING: v4l2loopback node preparation is on but kasm-agent.videoDevicePlugin.enabled is false.
+  
+    The module creates /dev/video* on the nodes, but nothing advertises them to Kubernetes. A
+    workspace with the webcam enabled (KASM_SVC_WEBCAM=1, on by default for most Kasm desktop
+    images) requests kasm.com/video and never schedules: the agent reports the launch as failed
+    with "0/N nodes are available: ... Insufficient kasm.com/video". Set kasm-agent.videoDevicePlugin.enabled=true,
+    or turn the webcam off on those images (Workspaces -> the image -> Settings).
+{{- end }}
 {{- if or $nodePrepEnabled $videoEnabled $egressEnabled }}
 
   {{ if $nodePrepEnabled }}nodePrep{{ else if $videoEnabled }}videoDevicePlugin{{ else }}egressInstaller{{ end }} is enabled, so this namespace must also permit the "privileged" Pod

@@ -135,6 +135,16 @@ WARNING: videoDevicePlugin.enabled is true but v4l2loopback node preparation is 
   nodePrep.modules.v4l2loopback.enabled=true, or confirm the nodes provide real video devices.
 
 {{ end }}
+{{- if and $nodePrepEnabled $v4l2 (not $videoEnabled) }}
+WARNING: v4l2loopback node preparation is on but videoDevicePlugin.enabled is false.
+
+  The module creates /dev/video* on the nodes, but nothing advertises them to Kubernetes. A
+  workspace with the webcam enabled (KASM_SVC_WEBCAM=1, on by default for most Kasm desktop
+  images) requests kasm.com/video and never schedules: the agent reports the launch as failed
+  with "0/N nodes are available: ... Insufficient kasm.com/video". Set videoDevicePlugin.enabled=true,
+  or turn the webcam off on those images (Workspaces -> the image -> Settings).
+
+{{ end }}
 {{- if and $gpuOperatorEnabled (not $agentGpu) }}
 WARNING: gpuOperator.enabled is true but agent.gpu.enabled is false.
 
