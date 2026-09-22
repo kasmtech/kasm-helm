@@ -84,6 +84,7 @@ KUBELET_CONFIG="/host/var/lib/kubelet/config.yaml"
 {{- if $v4l2Build }}
 V4L2_DEVICES={{ include "kasmNodePrep.shq" (int .Values.modules.v4l2loopback.videoDevices) }}
 V4L2_EXCLUSIVE_CAPS={{ include "kasmNodePrep.shq" (ternary 1 0 .Values.modules.v4l2loopback.exclusiveCaps) }}
+V4L2_DEVICE_MODE={{ include "kasmNodePrep.shq" (.Values.modules.v4l2loopback.deviceMode | default "" | toString) }}
 V4L2_SOURCE_REPO={{ include "kasmNodePrep.shq" (.Values.modules.v4l2loopback.sourceRepo) }}
 V4L2_SOURCE_REF={{ include "kasmNodePrep.shq" (.Values.modules.v4l2loopback.sourceRef) }}
 V4L2_SOURCE_PATH={{ include "kasmNodePrep.shq" (.Values.modules.v4l2loopback.sourcePath) }}
@@ -549,7 +550,8 @@ ensure_v4l2loopback() {
 
   if module_loaded v4l2loopback; then
     log "v4l2loopback is already loaded"
-    return 0
+    apply_video_device_mode
+    return
   fi
 
   resolve_kernel_build
@@ -627,6 +629,38 @@ v4l2loopback_loaded_check() {
     err "v4l2loopback is loaded but no /dev/video* device appeared. Check that devtmpfs is mounted on the node."
     return 1
   fi
+
+  apply_video_device_mode
+}
+
+# Apply the configured mode to the loopback video devices, on every pass. udev sets root:video 0660
+# on the node when the module creates them, a session pod receives the node's device node as it
+# is, and the workspace image's webcam server runs as kasm-user with the image's own video gid,
+# which is not the node's; without this the server fails with "Could not access /dev/videoN due
+# to missing permissions". Only virtual video4linux devices, the ones this module creates, are
+# touched, never a physical camera the node happens to have.
+apply_video_device_mode() {
+  local sys name dev
+
+  if [ -z "${V4L2_DEVICE_MODE:-}" ]; then
+    return 0
+  fi
+
+  for sys in /sys/class/video4linux/video*; do
+    [ -e "$sys" ] || continue
+    case "$(readlink -f "$sys")" in
+      /sys/devices/virtual/*) ;;
+      *) continue ;;
+    esac
+    name=$(basename "$sys")
+    dev="/dev/${name}"
+    [ -e "$dev" ] || continue
+    if ! chmod "$V4L2_DEVICE_MODE" "$dev"; then
+      err "chmod ${V4L2_DEVICE_MODE} ${dev} failed; sessions allocated that device cannot open it as kasm-user."
+      return 1
+    fi
+  done
+  log "loopback video devices are mode ${V4L2_DEVICE_MODE}"
 }
 
 # modinfo, modprobe, insmod and depmod all come from kmod, which the slim base images do not

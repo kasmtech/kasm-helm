@@ -25,7 +25,9 @@ chart fills that gap with a privileged DaemonSet that runs a reconcile loop on e
   with the distribution's kernel key) the script loads that one and builds nothing, which also passes Secure
   Boot without a MOK; the source build is the fallback (`modules.v4l2loopback.preferShippedModule`). A missing
   V4L2 core (`videodev`) is installed from the builder image on Debian/Ubuntu nodes
-  (`modules.v4l2loopback.installVideodevPackage`).
+  (`modules.v4l2loopback.installVideodevPackage`). The loopback devices are made `0666` on every pass
+  (`modules.v4l2loopback.deviceMode`): a session pod gets the node's device node as udev made it, and the
+  image's webcam server runs as `kasm-user`, whose `video` gid is the image's, not the node's.
 * **WireGuard** backs workspace VPN sidecars on nodes running a kernel older than 5.6. Kernels 5.6 and newer
   ship WireGuard in-tree, so the reconcile script detects the built-in module (`wg_` symbols in
   `/proc/kallsyms`) and skips the build even when the module is enabled. Most managed Kubernetes node images
@@ -622,6 +624,20 @@ list
 			<td>Names of image pull Secrets in the release namespace, for pulling the builder image from a private registry (the air-gapped path described under `image.*`). Applies to the DaemonSet; a KMM in-cluster build pulls the builder for its own build pod and pushes the module image with `modules.v4l2loopback.kmm.imageRepoSecret`. </td>
 		</tr>
 		<tr>
+			<td id="modules--v4l2loopback--deviceMode"><a href="./values.yaml#L97">modules.v4l2loopback.deviceMode</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+"0666"
+</pre>
+</div>
+			</td>
+			<td>Permission bits applied to the loopback device nodes (the `/dev/video*` this module creates, never a physical camera) after every pass. A session pod receives the node's device node as it is, `root:video 0660` by udev's default, while the workspace image runs its webcam server as `kasm-user`, whose `video` group is the image's own gid (39 on RHEL-family images), not the node's (44 on Ubuntu). The server then fails with "Could not access /dev/videoN due to missing permissions" and the browser reports "unable to connect to the webcam stream". `0666` lets any user in a pod that was allocated the device open it; the device plugin still hands each device to one pod at a time. Empty leaves udev's mode alone. **Applies to `method: build` only**; under KMM set the same mode with a udev rule on the node. </td>
+		</tr>
+		<tr>
 			<td id="modules--v4l2loopback--enabled"><a href="./values.yaml#L67">modules.v4l2loopback.enabled</a></td>
 			<td>
 bool
@@ -650,7 +666,7 @@ true
 			<td>Announce the video capture capability only once a producer has opened the device (`exclusive_caps=1`). Required by Chrome/Chromium based applications inside the workspace, which ignore loopback devices that advertise capture with no stream attached. </td>
 		</tr>
 		<tr>
-			<td id="modules--v4l2loopback--installVideodevPackage"><a href="./values.yaml#L102">modules.v4l2loopback.installVideodevPackage</a></td>
+			<td id="modules--v4l2loopback--installVideodevPackage"><a href="./values.yaml#L112">modules.v4l2loopback.installVideodevPackage</a></td>
 			<td>
 bool
 </td>
@@ -664,7 +680,7 @@ true
 			<td>When the kernel has its V4L2 core (`videodev`) as a separate module that is not installed on the node, install the package carrying it from the builder image's repositories into the node's `/lib/modules`, the same way the kernel headers are installed into `/usr/src`. Debian/Ubuntu families only (`linux-modules-extra-<release>`); on the RPM families the core is part of the kernel's own module package and the script names it instead. **Applies to `method: build` only.** </td>
 		</tr>
 		<tr>
-			<td id="modules--v4l2loopback--kmm--build--enabled"><a href="./values.yaml#L190">modules.v4l2loopback.kmm.build.enabled</a></td>
+			<td id="modules--v4l2loopback--kmm--build--enabled"><a href="./values.yaml#L200">modules.v4l2loopback.kmm.build.enabled</a></td>
 			<td>
 bool
 </td>
@@ -678,7 +694,7 @@ true
 			<td>Let KMM build the kmod image in the cluster. The build pod needs to reach the distribution's kernel headers package for that kernel (the builder image's family decides which one — `image.*` must match the node family and release, exactly as for the DaemonSet), the module source in `modules.v4l2loopback.sourceRepo`, and the registry above (to push). Set to `false` for the airgapped path: no Dockerfile ConfigMap is rendered and no `build` block appears on the `Module`, so KMM only ever *pulls* images you built in connected CI and mirrored, one `<registry>/<repository>:<kernel release>` tag per kernel in the fleet. </td>
 		</tr>
 		<tr>
-			<td id="modules--v4l2loopback--kmm--image--registry"><a href="./values.yaml#L158">modules.v4l2loopback.kmm.image.registry</a></td>
+			<td id="modules--v4l2loopback--kmm--image--registry"><a href="./values.yaml#L168">modules.v4l2loopback.kmm.image.registry</a></td>
 			<td>
 string
 </td>
@@ -692,7 +708,7 @@ string
 			<td>Registry hosting the kmod image. **Required when `modules.v4l2loopback.method` is `kmm`.** With in-cluster builds this is also the registry the kaniko build pod pushes to, so the credentials in `modules.v4l2loopback.kmm.imageRepoSecret` need write access to it. </td>
 		</tr>
 		<tr>
-			<td id="modules--v4l2loopback--kmm--image--repository"><a href="./values.yaml#L163">modules.v4l2loopback.kmm.image.repository</a></td>
+			<td id="modules--v4l2loopback--kmm--image--repository"><a href="./values.yaml#L173">modules.v4l2loopback.kmm.image.repository</a></td>
 			<td>
 string
 </td>
@@ -706,7 +722,7 @@ string
 			<td>Repository of the kmod image within `modules.v4l2loopback.kmm.image.registry` (for example `kasm/v4l2loopback`). **Required when `modules.v4l2loopback.method` is `kmm`.** </td>
 		</tr>
 		<tr>
-			<td id="modules--v4l2loopback--kmm--image--tag"><a href="./values.yaml#L171">modules.v4l2loopback.kmm.image.tag</a></td>
+			<td id="modules--v4l2loopback--kmm--image--tag"><a href="./values.yaml#L181">modules.v4l2loopback.kmm.image.tag</a></td>
 			<td>
 string
 </td>
@@ -720,7 +736,7 @@ string
 			<td>Tag of the kmod image. Leave empty (the default) to tag per kernel: the rendered `containerImage` then ends in the literal `${KERNEL_FULL_VERSION}`, which KMM substitutes with each node's kernel release, so one entry covers a fleet running several kernels. Set it to pin a single image for every matching kernel instead — sensible only when the fleet is on one kernel. May carry a digest suffix (`1.0@sha256:<digest>`) to pin immutably. </td>
 		</tr>
 		<tr>
-			<td id="modules--v4l2loopback--kmm--imageRepoSecret"><a href="./values.yaml#L177">modules.v4l2loopback.kmm.imageRepoSecret</a></td>
+			<td id="modules--v4l2loopback--kmm--imageRepoSecret"><a href="./values.yaml#L187">modules.v4l2loopback.kmm.imageRepoSecret</a></td>
 			<td>
 string
 </td>
@@ -734,7 +750,7 @@ string
 			<td>Name of an existing `kubernetes.io/dockerconfigjson` Secret in the release namespace, used both to pull the kmod image onto the nodes and to push the result of an in-cluster build (`spec.imageRepoSecret` on the `Module`). Leave empty for a registry that needs no credentials. </td>
 		</tr>
 		<tr>
-			<td id="modules--v4l2loopback--kmm--kernelRegexp"><a href="./values.yaml#L146">modules.v4l2loopback.kmm.kernelRegexp</a></td>
+			<td id="modules--v4l2loopback--kmm--kernelRegexp"><a href="./values.yaml#L156">modules.v4l2loopback.kmm.kernelRegexp</a></td>
 			<td>
 string
 </td>
@@ -748,7 +764,7 @@ string
 			<td>Regular expression matched against each node's kernel release, deciding which nodes this mapping applies to (`spec.moduleLoader.container.kernelMappings[].regexp` on the `Module`). The default matches every kernel, which is what a single-image fleet wants. Narrow it (for example `^6\.8\..*$`) when different kernel families need different images. </td>
 		</tr>
 		<tr>
-			<td id="modules--v4l2loopback--kmm--sign--certSecret"><a href="./values.yaml#L210">modules.v4l2loopback.kmm.sign.certSecret</a></td>
+			<td id="modules--v4l2loopback--kmm--sign--certSecret"><a href="./values.yaml#L220">modules.v4l2loopback.kmm.sign.certSecret</a></td>
 			<td>
 string
 </td>
@@ -762,7 +778,7 @@ string
 			<td>Name of the Secret holding the **public** certificate (DER). **Required when `modules.v4l2loopback.kmm.sign.enabled` is set.** KMM expects the certificate under the Secret key `cert`. </td>
 		</tr>
 		<tr>
-			<td id="modules--v4l2loopback--kmm--sign--enabled"><a href="./values.yaml#L200">modules.v4l2loopback.kmm.sign.enabled</a></td>
+			<td id="modules--v4l2loopback--kmm--sign--enabled"><a href="./values.yaml#L210">modules.v4l2loopback.kmm.sign.enabled</a></td>
 			<td>
 bool
 </td>
@@ -776,7 +792,7 @@ false
 			<td>Have KMM sign the built module for Secure Boot nodes (`spec.moduleLoader.container.kernelMappings[].sign` on the `Module`). This is the KMM-mode counterpart of `secureBoot.existingMokSecret`, which only signs modules the DaemonSet builds. </td>
 		</tr>
 		<tr>
-			<td id="modules--v4l2loopback--kmm--sign--keySecret"><a href="./values.yaml#L205">modules.v4l2loopback.kmm.sign.keySecret</a></td>
+			<td id="modules--v4l2loopback--kmm--sign--keySecret"><a href="./values.yaml#L215">modules.v4l2loopback.kmm.sign.keySecret</a></td>
 			<td>
 string
 </td>
@@ -804,7 +820,7 @@ build
 			<td>How the module reaches the node. `build` (the default) compiles it from source on every node inside this chart's privileged DaemonSet. `kmm` instead delegates the whole lifecycle to the [Kernel Module Management](https://kmm.sigs.k8s.io/) operator: this chart renders a KMM `Module` custom resource (and, unless `modules.v4l2loopback.kmm.build.enabled` is false, the Dockerfile ConfigMap it builds from) and drops v4l2loopback out of the DaemonSet's reconcile script entirely. **`kmm` requires the KMM operator to already be installed in the cluster** — it ships no official Helm chart, so install it with `make kmm-install` (or the pinned `kubectl apply -k` URL that target runs). See "KMM mode" in this chart's README. </td>
 		</tr>
 		<tr>
-			<td id="modules--v4l2loopback--preferShippedModule"><a href="./values.yaml#L94">modules.v4l2loopback.preferShippedModule</a></td>
+			<td id="modules--v4l2loopback--preferShippedModule"><a href="./values.yaml#L104">modules.v4l2loopback.preferShippedModule</a></td>
 			<td>
 bool
 </td>
@@ -818,7 +834,7 @@ true
 			<td>Load the v4l2loopback the running kernel ships, when there is one, instead of building from source. Ubuntu carries it in-tree from 24.04, signed with the distribution's kernel key, so it loads on a Secure Boot node with no MOK enrolment and needs neither a toolchain nor kernel headers. The source build is the fallback whenever the kernel ships none or the shipped one fails to load. Set to false to always build `sourceRef`. **Applies to `method: build` only.** </td>
 		</tr>
 		<tr>
-			<td id="modules--v4l2loopback--sourcePath"><a href="./values.yaml#L133">modules.v4l2loopback.sourcePath</a></td>
+			<td id="modules--v4l2loopback--sourcePath"><a href="./values.yaml#L143">modules.v4l2loopback.sourcePath</a></td>
 			<td>
 string
 </td>
@@ -832,7 +848,7 @@ string
 			<td>Absolute path *inside the builder image* holding an already-vendored v4l2loopback source tree (for example `/opt/kasm-modules/v4l2loopback`). When set, the reconcile script copies that tree into its work directory and builds from it instead of running `git clone`, so the node needs no network access at all. This is the airgapped/offline path: bake the sources into a custom builder image, push it to your internal registry, and point `image.*` at it. Leave empty to clone from `modules.v4l2loopback.sourceRepo`. **Applies to `method: build` only** — a KMM in-cluster build always clones from `modules.v4l2loopback.sourceRepo`, and the airgapped KMM path is prebuilt per-kernel images (`modules.v4l2loopback.kmm.build.enabled: false`) instead. Setting it together with `method: kmm` fails the render. </td>
 		</tr>
 		<tr>
-			<td id="modules--v4l2loopback--sourceRef"><a href="./values.yaml#L114">modules.v4l2loopback.sourceRef</a></td>
+			<td id="modules--v4l2loopback--sourceRef"><a href="./values.yaml#L124">modules.v4l2loopback.sourceRef</a></td>
 			<td>
 string
 </td>
@@ -846,7 +862,7 @@ v0.15.4
 			<td>Git tag, branch, or commit to build. Pinning a released tag keeps builds reproducible across nodes. Do not pin below v0.15: RHEL 9.8's 5.14.0-687 kernel dropped the `from_timer` helper that v0.13's timer-API probe relies on, so v0.13.2 fails there with `implicit declaration of function 'setup_timer'`; v0.15.4 compiles against every kernel this chart was tested on (Ubuntu 22.04 5.15 and 6.8, RHEL 9.8 5.14, Amazon Linux 2023 6.12, openSUSE Leap 15.6 6.4, Azure Linux 3 6.6). </td>
 		</tr>
 		<tr>
-			<td id="modules--v4l2loopback--sourceRepo"><a href="./values.yaml#L106">modules.v4l2loopback.sourceRepo</a></td>
+			<td id="modules--v4l2loopback--sourceRepo"><a href="./values.yaml#L116">modules.v4l2loopback.sourceRepo</a></td>
 			<td>
 string
 </td>
@@ -860,7 +876,7 @@ https://github.com/umlaeute/v4l2loopback.git
 			<td>Git repository the module sources are cloned from. Point this at an internal mirror when nodes cannot reach GitHub. </td>
 		</tr>
 		<tr>
-			<td id="modules--v4l2loopback--sourceRepoSecret"><a href="./values.yaml#L122">modules.v4l2loopback.sourceRepoSecret</a></td>
+			<td id="modules--v4l2loopback--sourceRepoSecret"><a href="./values.yaml#L132">modules.v4l2loopback.sourceRepoSecret</a></td>
 			<td>
 string
 </td>
@@ -888,7 +904,7 @@ int
 			<td>Number of virtual video devices to create per node (`devices=` module parameter). This is the upper bound on concurrent webcam-enabled sessions on that node, so size it against the node's workspace capacity. </td>
 		</tr>
 		<tr>
-			<td id="modules--wireguard--enabled"><a href="./values.yaml#L219">modules.wireguard.enabled</a></td>
+			<td id="modules--wireguard--enabled"><a href="./values.yaml#L229">modules.wireguard.enabled</a></td>
 			<td>
 bool
 </td>
@@ -902,7 +918,7 @@ false
 			<td>Build and load the out-of-tree WireGuard module on every matching node. Leave disabled unless nodes run a kernel older than 5.6; the reconcile script detects an in-tree WireGuard (`wg_` symbols in `/proc/kallsyms`) and skips the build even when this is enabled. </td>
 		</tr>
 		<tr>
-			<td id="modules--wireguard--method"><a href="./values.yaml#L225">modules.wireguard.method</a></td>
+			<td id="modules--wireguard--method"><a href="./values.yaml#L235">modules.wireguard.method</a></td>
 			<td>
 string
 </td>
@@ -916,7 +932,7 @@ build
 			<td>How the module reaches the node. Only `build` is supported here: this key exists so the two modules read the same way, not because there is a choice to make. `kmm` fails the render, because the only nodes that need an out-of-tree WireGuard are those on kernels older than 5.6 — precisely the fleet where delegating to an operator buys nothing. </td>
 		</tr>
 		<tr>
-			<td id="modules--wireguard--sourcePath"><a href="./values.yaml#L240">modules.wireguard.sourcePath</a></td>
+			<td id="modules--wireguard--sourcePath"><a href="./values.yaml#L250">modules.wireguard.sourcePath</a></td>
 			<td>
 string
 </td>
@@ -930,7 +946,7 @@ string
 			<td>Absolute path *inside the builder image* holding an already-vendored `wireguard-linux-compat` source tree (for example `/opt/kasm-modules/wireguard-linux-compat`). When set, the reconcile script copies that tree into its work directory and builds from it instead of running `git clone`, so the node needs no network access at all. This is the airgapped/offline path; see `modules.v4l2loopback.sourcePath`. Leave empty to clone from `modules.wireguard.sourceRepo`. </td>
 		</tr>
 		<tr>
-			<td id="modules--wireguard--sourceRepo"><a href="./values.yaml#L229">modules.wireguard.sourceRepo</a></td>
+			<td id="modules--wireguard--sourceRepo"><a href="./values.yaml#L239">modules.wireguard.sourceRepo</a></td>
 			<td>
 string
 </td>
@@ -944,7 +960,7 @@ https://git.zx2c4.com/wireguard-linux-compat
 			<td>Git repository the WireGuard compatibility module is cloned from. Point this at an internal mirror when nodes cannot reach the upstream host. </td>
 		</tr>
 		<tr>
-			<td id="modules--wireguard--sourceRepoSecret"><a href="./values.yaml#L233">modules.wireguard.sourceRepoSecret</a></td>
+			<td id="modules--wireguard--sourceRepoSecret"><a href="./values.yaml#L243">modules.wireguard.sourceRepoSecret</a></td>
 			<td>
 string
 </td>
@@ -972,7 +988,7 @@ string
 			<td>Override the chart name used when building resource names and the `app.kubernetes.io/name` label. Leave empty to use the chart name (`kasm-node-prep`). </td>
 		</tr>
 		<tr>
-			<td id="nodeSelector"><a href="./values.yaml#L337">nodeSelector</a></td>
+			<td id="nodeSelector"><a href="./values.yaml#L347">nodeSelector</a></td>
 			<td>
 object
 </td>
@@ -986,7 +1002,7 @@ object
 			<td>Node labels that select which nodes get prepared. Leave empty to run on every node, or restrict it to the nodes that host Kasm workspace sessions. Pair it with the matching `kasm-video-device-plugin` selector so the device plugin only advertises `kasm.com/video` where the module is actually loaded. </td>
 		</tr>
 		<tr>
-			<td id="podAnnotations"><a href="./values.yaml#L382">podAnnotations</a></td>
+			<td id="podAnnotations"><a href="./values.yaml#L392">podAnnotations</a></td>
 			<td>
 object
 </td>
@@ -1000,7 +1016,7 @@ object
 			<td>Extra annotations to add to the DaemonSet pods, merged with the reconcile script checksum annotation this chart always sets. </td>
 		</tr>
 		<tr>
-			<td id="podLabels"><a href="./values.yaml#L386">podLabels</a></td>
+			<td id="podLabels"><a href="./values.yaml#L396">podLabels</a></td>
 			<td>
 object
 </td>
@@ -1014,7 +1030,7 @@ object
 			<td>Extra labels to add to the DaemonSet pods, merged with the chart's standard selector labels. </td>
 		</tr>
 		<tr>
-			<td id="reconcileIntervalSeconds"><a href="./values.yaml#L318">reconcileIntervalSeconds</a></td>
+			<td id="reconcileIntervalSeconds"><a href="./values.yaml#L328">reconcileIntervalSeconds</a></td>
 			<td>
 int
 </td>
@@ -1028,7 +1044,7 @@ int
 			<td>Seconds to sleep between reconcile passes. Every pass re-checks whether each enabled module is loaded and rebuilds it if it is not, and re-asserts any enabled `tuning.*` state, which is what makes both survive node reboots: after a reboot the check fails and the state is applied again. </td>
 		</tr>
 		<tr>
-			<td id="resources"><a href="./values.yaml#L353">resources</a></td>
+			<td id="resources"><a href="./values.yaml#L363">resources</a></td>
 			<td>
 object
 </td>
@@ -1047,7 +1063,7 @@ requests:
 			<td>CPU and memory requests and limits for the node prep container. Module builds are bursty: compiling against the node's kernel headers is short but CPU hungry, while the idle reconcile loop uses almost nothing. Both requests and limits are always set. </td>
 		</tr>
 		<tr>
-			<td id="resources--limits--cpu"><a href="./values.yaml#L371">resources.limits.cpu</a></td>
+			<td id="resources--limits--cpu"><a href="./values.yaml#L381">resources.limits.cpu</a></td>
 			<td>
 string
 </td>
@@ -1061,7 +1077,7 @@ string
 			<td>CPU limit for the node prep container, and the knob that decides how long a module build takes: the compile is bounded by this limit, so 1000m is roughly one core's worth of `make`. Raise it to shorten the window in which a freshly booted node has no `/dev/video*` yet; lower it to keep builds from competing with the workspace sessions sharing the node. </td>
 		</tr>
 		<tr>
-			<td id="resources--limits--memory"><a href="./values.yaml#L377">resources.limits.memory</a></td>
+			<td id="resources--limits--memory"><a href="./values.yaml#L387">resources.limits.memory</a></td>
 			<td>
 string
 </td>
@@ -1075,7 +1091,7 @@ string
 			<td>Memory limit for the node prep container. It has to cover an out-of-tree kernel module compile — the unpacked kernel headers, the module source tree, and gcc — not just the idle loop. Set it too low and the build is OOMKilled part way through, which the reconcile loop then retries every `reconcileIntervalSeconds` without ever finishing. </td>
 		</tr>
 		<tr>
-			<td id="resources--requests--cpu"><a href="./values.yaml#L359">resources.requests.cpu</a></td>
+			<td id="resources--requests--cpu"><a href="./values.yaml#L369">resources.requests.cpu</a></td>
 			<td>
 string
 </td>
@@ -1089,7 +1105,7 @@ string
 			<td>CPU request for the node prep container. Between builds the reconcile loop only sleeps and re-checks, so the request is sized for that idle steady state rather than for a compile; what a build actually gets to use is `resources.limits.cpu`. </td>
 		</tr>
 		<tr>
-			<td id="resources--requests--memory"><a href="./values.yaml#L364">resources.requests.memory</a></td>
+			<td id="resources--requests--memory"><a href="./values.yaml#L374">resources.requests.memory</a></td>
 			<td>
 string
 </td>
@@ -1103,7 +1119,7 @@ string
 			<td>Memory request for the node prep container. This is the idle floor, the reconcile loop itself; the real consumer is a kernel-module compile, which is what `resources.limits.memory` has to cover. </td>
 		</tr>
 		<tr>
-			<td id="secureBoot--existingMokSecret"><a href="./values.yaml#L330">secureBoot.existingMokSecret</a></td>
+			<td id="secureBoot--existingMokSecret"><a href="./values.yaml#L340">secureBoot.existingMokSecret</a></td>
 			<td>
 string
 </td>
@@ -1117,7 +1133,7 @@ string
 			<td>Name of an existing Secret holding the MOK signing key pair, with keys `mokPrivateKey` (PEM private key) and `mokPublicKey` (DER certificate). When set, the Secret is mounted read-only at `/etc/kasm-mok` and every built module is signed with the kernel's `sign-file` helper before it is inserted. Leave empty on nodes that do not enforce Secure Boot. </td>
 		</tr>
 		<tr>
-			<td id="tolerations"><a href="./values.yaml#L342">tolerations</a></td>
+			<td id="tolerations"><a href="./values.yaml#L352">tolerations</a></td>
 			<td>
 list
 </td>
@@ -1131,7 +1147,7 @@ list
 			<td>Tolerations for the DaemonSet pods, so nodes carrying taints (for example dedicated workspace nodes) still get their kernel modules prepared. </td>
 		</tr>
 		<tr>
-			<td id="tuning--swap--enabled"><a href="./values.yaml#L289">tuning.swap.enabled</a></td>
+			<td id="tuning--swap--enabled"><a href="./values.yaml#L299">tuning.swap.enabled</a></td>
 			<td>
 bool
 </td>
@@ -1145,7 +1161,7 @@ false
 			<td>Create and activate a swapfile on every matching node. The reconcile loop refuses to do so until it can confirm the node's kubelet tolerates swap (see `tuning.swap.force`). </td>
 		</tr>
 		<tr>
-			<td id="tuning--swap--force"><a href="./values.yaml#L312">tuning.swap.force</a></td>
+			<td id="tuning--swap--force"><a href="./values.yaml#L322">tuning.swap.force</a></td>
 			<td>
 bool
 </td>
@@ -1159,7 +1175,7 @@ false
 			<td>Skip the kubelet swap-support check and activate swap unconditionally. Only set this when the kubelet is configured somewhere the reconcile script cannot read (a systemd drop-in, a cloud-init unit, a distribution-specific config path) **and** you have verified `failSwapOn: false` is in effect. Enabling swap under a kubelet that still defaults to `failSwapOn: true` takes the node out at its next kubelet restart or reboot. </td>
 		</tr>
 		<tr>
-			<td id="tuning--swap--hostPath"><a href="./values.yaml#L299">tuning.swap.hostPath</a></td>
+			<td id="tuning--swap--hostPath"><a href="./values.yaml#L309">tuning.swap.hostPath</a></td>
 			<td>
 string
 </td>
@@ -1173,7 +1189,7 @@ string
 			<td>Host directory the swapfile lives in; the file itself is `<hostPath>/kasm.swap`. Mounted into the DaemonSet at the same path so `/proc/swaps` reads identically inside and outside the container. Point this at a directory on a disk with room for `tuning.swap.sizeMib`. </td>
 		</tr>
 		<tr>
-			<td id="tuning--swap--sizeMib"><a href="./values.yaml#L294">tuning.swap.sizeMib</a></td>
+			<td id="tuning--swap--sizeMib"><a href="./values.yaml#L304">tuning.swap.sizeMib</a></td>
 			<td>
 int
 </td>
@@ -1187,7 +1203,7 @@ int
 			<td>Size of the swapfile in MiB. `0` means auto: half of the node's `MemTotal`, clamped to `[4096, 16384]` — the range of the menu Kasm's own agent installer offers, whose documented example (`--swap-size 8192`) is half of a 16 GiB node. </td>
 		</tr>
 		<tr>
-			<td id="tuning--swap--swappiness"><a href="./values.yaml#L305">tuning.swap.swappiness</a></td>
+			<td id="tuning--swap--swappiness"><a href="./values.yaml#L315">tuning.swap.swappiness</a></td>
 			<td>
 int
 </td>
@@ -1201,7 +1217,7 @@ int
 			<td>`vm.swappiness` to set alongside the swapfile, re-applied every pass. Kasm's rationale for swap is parking the memory of *stopped and idle* Workspaces rather than absorbing peak load, so this defaults high (the kernel default is 60): idle desktop pages should move to disk readily and leave RAM for sessions that are actually being used. </td>
 		</tr>
 		<tr>
-			<td id="tuning--sysctls--enabled"><a href="./values.yaml#L254">tuning.sysctls.enabled</a></td>
+			<td id="tuning--sysctls--enabled"><a href="./values.yaml#L264">tuning.sysctls.enabled</a></td>
 			<td>
 bool
 </td>
@@ -1215,7 +1231,7 @@ false
 			<td>Apply `tuning.sysctls.values` on every matching node. The DaemonSet is already privileged, so it can write the node's `/proc/sys`; no extra host mount is needed. </td>
 		</tr>
 		<tr>
-			<td id="tuning--sysctls--values"><a href="./values.yaml#L265">tuning.sysctls.values</a></td>
+			<td id="tuning--sysctls--values"><a href="./values.yaml#L275">tuning.sysctls.values</a></td>
 			<td>
 object
 </td>
@@ -1230,7 +1246,7 @@ fs.inotify.max_user_watches: 524288
 			<td>Kernel tunables to set, as `key: value` pairs, written straight to the node's `/proc/sys` once per reconcile pass (no `sysctl` binary is needed in the builder image). Setting an already-correct value is a no-op, and because nothing is persisted to `/etc/sysctl.d` the loop is also what re-applies them after a node reboot. The defaults raise the inotify limits for desktop-session density: every session runs a desktop environment, a file manager and a browser, each of which consumes inotify instances and watches. The kernel's limit of 128 instances is per *UID*, and workspace sessions on a node share one, so it is effectively a per-node budget that a handful of concurrent sessions exhausts. This is Kasm-independent engineering judgement — Kasm's own installer sets no sysctls at all. </td>
 		</tr>
 		<tr>
-			<td id="updateStrategy"><a href="./values.yaml#L347">updateStrategy</a></td>
+			<td id="updateStrategy"><a href="./values.yaml#L357">updateStrategy</a></td>
 			<td>
 string
 </td>

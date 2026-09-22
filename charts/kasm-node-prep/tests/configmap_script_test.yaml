@@ -1142,3 +1142,27 @@ tests:
           path: data["ensure-modules.sh"]
           pattern: 'command -v modprobe >/dev/null 2>&1 && command -v depmod >/dev/null 2>&1'
 
+  - it: applies the device mode to the loopback devices on every pass
+    asserts:
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: "V4L2_DEVICE_MODE='0666'"
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'chmod "\$V4L2_DEVICE_MODE" "\$dev"'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: '/sys/devices/virtual/\*\) ;;'
+      # both the already-loaded and the freshly-loaded paths end in it
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'log "v4l2loopback is already loaded"\n    apply_video_device_mode'
+
+  - it: leaves the device mode alone when deviceMode is empty
+    set:
+      modules.v4l2loopback.deviceMode: ""
+    asserts:
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: "V4L2_DEVICE_MODE=''"
+

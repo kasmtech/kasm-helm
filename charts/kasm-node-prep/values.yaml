@@ -85,6 +85,16 @@ modules:
     # workspace, which ignore loopback devices that advertise capture with no stream attached.
     #
     exclusiveCaps: true
+    # modules.v4l2loopback.deviceMode -- Permission bits applied to the loopback device nodes (the `/dev/video*`
+    # this module creates, never a physical camera) after every pass. A session pod receives the node's device
+    # node as it is, `root:video 0660` by udev's default, while the workspace image runs its webcam server as
+    # `kasm-user`, whose `video` group is the image's own gid (39 on RHEL-family images), not the node's (44 on
+    # Ubuntu). The server then fails with "Could not access /dev/videoN due to missing permissions" and the
+    # browser reports "unable to connect to the webcam stream". `0666` lets any user in a pod that was allocated
+    # the device open it; the device plugin still hands each device to one pod at a time. Empty leaves udev's
+    # mode alone. **Applies to `method: build` only**; under KMM set the same mode with a udev rule on the node.
+    #
+    deviceMode: "0666"
     # modules.v4l2loopback.preferShippedModule -- Load the v4l2loopback the running kernel ships, when there is
     # one, instead of building from source. Ubuntu carries it in-tree from 24.04, signed with the
     # distribution's kernel key, so it loads on a Secure Boot node with no MOK enrolment and needs neither a
