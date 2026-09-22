@@ -19,7 +19,7 @@ questions:
     group: Control plane
   - variable: ingress.enabled
     label: Publish through an Ingress
-    description: Publish the Kasm proxy through an Ingress. Off, the chart publishes it through a NodePort Service when installed from Rancher (RKE2 ships no LoadBalancer implementation); proxyService.type in the YAML editor changes that. The Gateway API and OpenShift Route publishers are set through the YAML editor; see the chart README.
+    description: Publish the Kasm proxy through an Ingress. Off, the chart publishes it through a Service: a LoadBalancer by default, a NodePort when installed from Rancher because RKE2 ships no LoadBalancer implementation; proxyService.type in the YAML editor sets it explicitly. The Gateway API and OpenShift Route publishers are set through the YAML editor; see the chart README.
     type: boolean
     default: false
     group: Control plane
