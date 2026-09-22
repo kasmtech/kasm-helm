@@ -25,7 +25,9 @@ chart fills that gap with a privileged DaemonSet that runs a reconcile loop on e
   with the distribution's kernel key) the script loads that one and builds nothing, which also passes Secure
   Boot without a MOK; the source build is the fallback (`modules.v4l2loopback.preferShippedModule`). A missing
   V4L2 core (`videodev`) is installed from the builder image on Debian/Ubuntu nodes
-  (`modules.v4l2loopback.installVideodevPackage`).
+  (`modules.v4l2loopback.installVideodevPackage`). The loopback devices are made `0666` on every pass
+  (`modules.v4l2loopback.deviceMode`): a session pod gets the node's device node as udev made it, and the
+  image's webcam server runs as `kasm-user`, whose `video` gid is the image's, not the node's.
 * **WireGuard** backs workspace VPN sidecars on nodes running a kernel older than 5.6. Kernels 5.6 and newer
   ship WireGuard in-tree, so the reconcile script detects the built-in module (`wg_` symbols in
   `/proc/kallsyms`) and skips the build even when the module is enabled. Most managed Kubernetes node images
