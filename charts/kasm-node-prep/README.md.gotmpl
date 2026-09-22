@@ -21,6 +21,11 @@ chart fills that gap with a privileged DaemonSet that runs a reconcile loop on e
   the user's webcam, streams it to `kasm_webcam_server` inside the workspace, and that binary writes frames
   into a loopback device. Pair this chart with `kasm-video-device-plugin`, which advertises those devices to
   kubelet as the extended resource `kasm.com/video` so workspace pods can request `kasm.com/video: 1`.
+  When the running kernel ships a `v4l2loopback` of its own (Ubuntu 24.04 and later carry one in-tree, signed
+  with the distribution's kernel key) the script loads that one and builds nothing, which also passes Secure
+  Boot without a MOK; the source build is the fallback (`modules.v4l2loopback.preferShippedModule`). A missing
+  V4L2 core (`videodev`) is installed from the builder image on Debian/Ubuntu nodes
+  (`modules.v4l2loopback.installVideodevPackage`).
 * **WireGuard** backs workspace VPN sidecars on nodes running a kernel older than 5.6. Kernels 5.6 and newer
   ship WireGuard in-tree, so the reconcile script detects the built-in module (`wg_` symbols in
   `/proc/kallsyms`) and skips the build even when the module is enabled. Most managed Kubernetes node images

@@ -85,6 +85,21 @@ modules:
     # workspace, which ignore loopback devices that advertise capture with no stream attached.
     #
     exclusiveCaps: true
+    # modules.v4l2loopback.preferShippedModule -- Load the v4l2loopback the running kernel ships, when there is
+    # one, instead of building from source. Ubuntu carries it in-tree from 24.04, signed with the
+    # distribution's kernel key, so it loads on a Secure Boot node with no MOK enrolment and needs neither a
+    # toolchain nor kernel headers. The source build is the fallback whenever the kernel ships none or the
+    # shipped one fails to load. Set to false to always build `sourceRef`. **Applies to `method: build` only.**
+    #
+    preferShippedModule: true
+    # modules.v4l2loopback.installVideodevPackage -- When the kernel has its V4L2 core (`videodev`) as a
+    # separate module that is not installed on the node, install the package carrying it from the builder
+    # image's repositories into the node's `/lib/modules`, the same way the kernel headers are installed into
+    # `/usr/src`. Debian/Ubuntu families only (`linux-modules-extra-<release>`); on the RPM families the core
+    # is part of the kernel's own module package and the script names it instead. **Applies to `method:
+    # build` only.**
+    #
+    installVideodevPackage: true
     # modules.v4l2loopback.sourceRepo -- Git repository the module sources are cloned from. Point this at an
     # internal mirror when nodes cannot reach GitHub.
     #
