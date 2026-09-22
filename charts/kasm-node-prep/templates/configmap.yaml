@@ -553,6 +553,9 @@ ensure_v4l2loopback() {
   fi
 
   resolve_kernel_build
+  if ! ensure_kmod; then
+    return 1
+  fi
   if ! ensure_videodev; then
     return 1
   fi
@@ -622,6 +625,20 @@ v4l2loopback_loaded_check() {
     log "v4l2loopback loaded; /dev/video* devices are present on the node"
   else
     err "v4l2loopback is loaded but no /dev/video* device appeared. Check that devtmpfs is mounted on the node."
+    return 1
+  fi
+}
+
+# modinfo, modprobe, insmod and depmod all come from kmod, which the slim base images do not
+# ship. The build path installs it with the rest of the toolchain; the paths that never build
+# (a shipped module, or only the V4L2 core package) need it on its own.
+ensure_kmod() {
+  if command -v modprobe >/dev/null 2>&1 && command -v depmod >/dev/null 2>&1; then
+    return 0
+  fi
+  log "kmod is not in this builder image; installing it"
+  if ! pkg_install kmod; then
+    err "Failed to install kmod, which loading any module needs. The builder image needs access to its package repositories (or a local mirror), or kmod pre-baked into it. Skipping this pass."
     return 1
   fi
 }

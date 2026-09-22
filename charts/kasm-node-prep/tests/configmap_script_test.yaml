@@ -1133,3 +1133,12 @@ tests:
           path: data["ensure-modules.sh"]
           pattern: 'linux-modules-extra-\$\{KERNEL_RELEASE\} on Ubuntu'
 
+  - it: installs kmod before the paths that never run the toolchain install
+    asserts:
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'if ! ensure_kmod; then'
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'command -v modprobe >/dev/null 2>&1 && command -v depmod >/dev/null 2>&1'
+
