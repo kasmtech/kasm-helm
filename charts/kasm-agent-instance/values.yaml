@@ -426,8 +426,10 @@ workspacesTolerations: []
 # counts nodes the autoscaler could still add as capacity (so the manager still routes the launch), stops
 # withholding an image that would fit a fresh node, and marks the pending workspace `WaitingForCapacity`
 # until a node joins or the timeout passes. Off by default (nothing here changes behaviour while disabled).
-# Needs an autoscaler watching for unschedulable pods on the workspace nodes. The whole block is omitted
-# from the Agent unless `enabled` is true.
+# Needs an autoscaler watching for unschedulable pods on the workspace nodes. Its companion is `standby`
+# below, which keeps room ready ahead of demand so nobody waits; the two work independently, and the
+# operator carries both under one Agent block (`standby` renders inside `workspacesAutoscaling`), so
+# enabling either one renders the block.
 workspacesAutoscaling:
   # workspacesAutoscaling.enabled -- Turn autoscaling-aware waiting on.
   enabled: false
@@ -444,8 +446,10 @@ workspacesAutoscaling:
 # placeholders, each requesting what a session does, on the same nodes workspaces use (they follow
 # `workspacesNodeSelector`/`workspacesTolerations`). A session that needs the room evicts a placeholder and
 # starts at once; the evicted placeholder then goes unschedulable, which is what makes a node autoscaler add a
-# node, so the headroom returns with nobody waiting. Off by default; the whole block is omitted from the Agent
-# unless `enabled` is true.
+# node, so the headroom returns with nobody waiting. Works with or without `workspacesAutoscaling.enabled`
+# above: standby alone gives instant starts until a burst exhausts the headroom (then launches are refused as
+# on a fixed cluster unless `workspacesAutoscaling.enabled` is also on to make them wait for a node). Off by
+# default; rendered as `workspacesAutoscaling.standby` on the Agent, and omitted unless `enabled` is true.
 standby:
   # standby.enabled -- Create the placeholder Deployment.
   enabled: false

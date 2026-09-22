@@ -862,7 +862,7 @@ tests:
       - isNull:
           path: spec.workspacesAutoscaling
       - isNull:
-          path: spec.standby
+          path: spec.workspacesAutoscaling.standby
 
   - it: renders workspacesAutoscaling when enabled, omitting an unset maxNodes
     set:
@@ -892,8 +892,8 @@ tests:
           path: spec.workspacesAutoscaling.schedulingTimeoutSeconds
           value: 120
 
-  # ---------- standby ----------
-  - it: renders the standby placeholder block when enabled with a priority class
+  # ---------- standby (nests under workspacesAutoscaling) ----------
+  - it: renders standby under workspacesAutoscaling, without enabling the wait-for-node path
     set:
       standby:
         enabled: true
@@ -901,22 +901,24 @@ tests:
         replicas: 3
     asserts:
       - equal:
-          path: spec.standby.enabled
+          path: spec.workspacesAutoscaling.standby.enabled
           value: true
+      - isNull:
+          path: spec.workspacesAutoscaling.enabled
       - equal:
-          path: spec.standby.priorityClassName
+          path: spec.workspacesAutoscaling.standby.priorityClassName
           value: kasm-standby
       - equal:
-          path: spec.standby.replicas
+          path: spec.workspacesAutoscaling.standby.replicas
           value: 3
       - equal:
-          path: spec.standby.externallyScaled
+          path: spec.workspacesAutoscaling.standby.externallyScaled
           value: false
       - equal:
-          path: spec.standby.image
+          path: spec.workspacesAutoscaling.standby.image
           value: registry.k8s.io/pause:3.10
       - isNull:
-          path: spec.standby.resources
+          path: spec.workspacesAutoscaling.standby.resources
 
   - it: passes standby resources (a bare resource map) and the externallyScaled flag through
     set:
@@ -929,16 +931,16 @@ tests:
           memory: 2Gi
     asserts:
       - equal:
-          path: spec.standby.externallyScaled
+          path: spec.workspacesAutoscaling.standby.externallyScaled
           value: true
       - equal:
-          path: spec.standby.resources.cpu
+          path: spec.workspacesAutoscaling.standby.resources.cpu
           value: "2"
       - equal:
-          path: spec.standby.resources.memory
+          path: spec.workspacesAutoscaling.standby.resources.memory
           value: 2Gi
       - isNull:
-          path: spec.standby.resources.requests
+          path: spec.workspacesAutoscaling.standby.resources.requests
 
   - it: derives the standby priorityClassName from the agent name when none is set
     set:
@@ -946,7 +948,7 @@ tests:
         enabled: true
     asserts:
       - equal:
-          path: spec.standby.priorityClassName
+          path: spec.workspacesAutoscaling.standby.priorityClassName
           value: k8s-agent-standby
 
   - it: derives the standby priorityClassName from a custom agent name
@@ -956,5 +958,27 @@ tests:
         enabled: true
     asserts:
       - equal:
-          path: spec.standby.priorityClassName
+          path: spec.workspacesAutoscaling.standby.priorityClassName
           value: zone-b-agent-standby
+
+  - it: carries the wait-for-node settings and standby together in one block
+    set:
+      workspacesAutoscaling:
+        enabled: true
+        maxNodes: 4
+      standby:
+        enabled: true
+        replicas: 2
+    asserts:
+      - equal:
+          path: spec.workspacesAutoscaling.enabled
+          value: true
+      - equal:
+          path: spec.workspacesAutoscaling.maxNodes
+          value: 4
+      - equal:
+          path: spec.workspacesAutoscaling.standby.enabled
+          value: true
+      - equal:
+          path: spec.workspacesAutoscaling.standby.replicas
+          value: 2
