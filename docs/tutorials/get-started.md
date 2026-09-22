@@ -136,7 +136,8 @@ agent listed as `k8s-agent-session-proxy.kasm.svc.cluster.local` → Enable**. A
 interval (about 15 seconds) before launching anything; a session requested before that fails with
 "No resources are available".
 
-> **Note.** The manager setting `auto_agent` makes new agents enable themselves;
+> **Note.** The manager setting `auto_agent` makes new agents enable themselves; a release installed
+> through Rancher's catalog seeds it by default (`kasm-helm.kasmConfig.autoEnableAgents`);
 > [Enable agents automatically](../how-to/enable-agents-automatically.md) seeds it.
 
 ## 8. Install a workspace and authorize it

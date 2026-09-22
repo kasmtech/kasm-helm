@@ -22,8 +22,18 @@ again by the same rule.
 
 ### Fresh install: seed it
 
-1. Add the setting to the preseed and install. `generatePreseed` must be on for `config.settings`
-   to be applied.
+1. Turn on the value that seeds the setting, and the preseed that carries it, and install:
+
+   ```yaml
+   kasm-helm:
+     kasmConfig:
+       generatePreseed: true
+       autoEnableAgents: true
+   ```
+
+   A release installed through Rancher's catalog has both on already (their unset default is "on
+   under Rancher, off elsewhere"), so there is nothing to add there. The long form still works and
+   wins over `autoEnableAgents` when both name `auto_agent`:
 
    ```yaml
    kasm-helm:
@@ -104,7 +114,7 @@ group assignment, which this setting does not cover. Otherwise
 
 ## Decisions
 
-- [ ] Fresh install: `auto_agent` seeded through `kasmConfig.config.settings` with `generatePreseed: true`.
+- [ ] Fresh install: `kasmConfig.autoEnableAgents: true` with `generatePreseed: true` (both on by default under Rancher), or the `auto_agent` entry in `kasmConfig.config.settings`.
 - [ ] Existing database: the setting flipped in the UI or with `update_setting`.
 - [ ] Agents that registered before the change enabled once by hand, or their server records deleted before re-registering.
 - [ ] Group assignment for workspace images still owned by someone.

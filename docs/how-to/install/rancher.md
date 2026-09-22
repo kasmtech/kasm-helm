@@ -83,9 +83,15 @@ values themselves are the same as on every other page, so the how-to for your la
    Workspace images are still pulled from wherever the manager's image list points, exactly as on
    any other cluster.
 
-5. **Finish as on any install.** Sign in as `admin@kasm.local` with the password from Secret
-   `<release>-secrets`, enable the agent and authorize workspaces:
-   [Get started](../../tutorials/get-started.md) from step 4, "Get the password".
+5. **Sign in and authorize a workspace.** The UI is at `https://<any node address>:30443`: with
+   no Ingress and no `proxyService.type`, the chart publishes the proxy on a NodePort pinned to
+   30443 and seeds the default zone to advertise that port in session URLs. Sign in as
+   `admin@kasm.local` with the password from Secret `<release>-secrets`. The agent enables itself
+   as it registers, because the same seed turns on "Automatically Enable Agents"
+   (`kasm-helm.kasmConfig.autoEnableAgents`); assigning a workspace image to a group is the one
+   remaining click: [Get started](../../tutorials/get-started.md) from step 8. Both seeds happen
+   at database initialization only, so they are settings to change in the admin UI on a database
+   that already exists.
 
 ## Verify
 
@@ -101,18 +107,30 @@ kasm             kasm       1         deployed  kasm-platform-<version>        <
 kasm-agent-crds  kasm       1         deployed  kasm-agent-crds-<version>      <version>
 ```
 
-Without a public hostname or an Ingress, the UI is at any node's address on the proxy's node port:
+Without a public hostname or an Ingress, the UI is at any node's address on the pinned node port:
 
 ```console
 kubectl -n kasm get svc kasm-proxy-ext-default -o jsonpath='{.spec.type} {.spec.ports[0].nodePort}{"\n"}'
 ```
 
 ```
-NodePort 31972
+NodePort 30443
 ```
 
-Open `https://<node address>:<that port>`; the release notes Rancher shows after the install print the
-same URL once the port is known.
+The agent shows as enabled without a visit to Infrastructure → Agents, and the seeded zone carries the
+port:
+
+```console
+kubectl -n kasm get agents.agent.kasm.com
+kubectl -n kasm get secret kasm-db-preseed -o jsonpath='{.data.custom_properties\.yaml}' | base64 -d | grep -E 'auto_agent|proxy_port'
+```
+
+```
+NAME        PHASE   REGISTERED   ...
+k8s-agent   Ready   True         ...
+  name: "auto_agent"
+  proxy_port: 30443
+```
 
 On an air-gapped cluster, every image carries the system default registry:
 
@@ -139,7 +157,15 @@ global:
 kasm-helm:
   proxyService:
     type: ""                                               # empty: LoadBalancer, or NodePort under Rancher. Set LoadBalancer only with MetalLB or a cloud LB present
+    nodePort: ""                                           # empty: 30443 when the chart chose NodePort under Rancher, else Kubernetes-assigned
+  kasmConfig:
+    generatePreseed: null                                  # null: on under Rancher (the zone port and auto_agent need seeding), off elsewhere
+    autoEnableAgents: null                                 # null: on under Rancher, off elsewhere; agents come up enabled as they register
 ```
+
+Every one of the four is a plain value to set explicitly when the default is not wanted; they apply
+at database initialization, so on a database that already exists the zone port and auto_agent are
+changed in the admin UI instead.
 
 ## Troubleshooting
 

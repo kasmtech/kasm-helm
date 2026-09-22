@@ -51,6 +51,16 @@
 {{- $relayed := $publicDerived -}}
 {{- /* The agent-instance chart derives 4444 alongside the derived hostname; an explicit hostname keeps publicPort. */ -}}
 {{- $effectivePublicPort := ternary 4444 $publicPort $publicDerived -}}
+{{- /* The zero-config Rancher install (kasm.rancherNodePort in kasm-helm): type left empty on a release Rancher
+       installed pins node port 30443 and seeds the database. Mirrored here for the notes only. */ -}}
+{{- $rancher := ne (dig "cattle" "clusterId" "" (.Values.global | default dict)) "" -}}
+{{- $rancherNodePort := and $rancher (eq (dig "proxyService" "type" "" $kasmHelm) "") -}}
+{{- $pinnedNodePort := dig "proxyService" "nodePort" "" $kasmHelm | default (ternary "30443" "" $rancherNodePort) -}}
+{{- $autoEnableExplicit := index (dig "kasmConfig" dict $kasmHelm) "autoEnableAgents" -}}
+{{- $autoEnable := ternary $rancher $autoEnableExplicit (kindIs "invalid" $autoEnableExplicit) -}}
+{{- $preseedExplicit := index (dig "kasmConfig" dict $kasmHelm) "generatePreseed" -}}
+{{- $preseed := ternary $rancher $preseedExplicit (kindIs "invalid" $preseedExplicit) -}}
+{{- $autoEnable = and $autoEnable $preseed -}}
 {{- $nodePrepEnabled := dig "nodePrep" "enabled" false $kasmAgent -}}
 {{- $videoEnabled := dig "videoDevicePlugin" "enabled" false $kasmAgent -}}
 {{- $egressEnabled := dig "egressInstaller" "enabled" false $kasmAgent -}}
@@ -107,6 +117,10 @@ CONTROL PLANE: URL AND CREDENTIALS
 
   Helm renders these notes before it creates anything, so the first install cannot show the
   address. From the next helm upgrade on (same values) it is read back and printed here.
+{{- else if and (eq $proxyType "NodePort") $pinnedNodePort }}
+  The proxy is published on node port {{ $pinnedNodePort }}{{ if $rancherNodePort }} (the chart's default for a release Rancher
+  installed, because RKE2 ships no LoadBalancer implementation){{ end }}; browse to
+  https://<any node address>:{{ $pinnedNodePort }}.{{ if $preseed }} The seeded default zone advertises that port in session URLs.{{ end }}
 {{- else if eq $proxyType "NodePort" }}
   The proxy is published on a NodePort; browse to https://<any node address>:<port>, where port is:
 
@@ -158,15 +172,28 @@ KUBERNETES AGENT
 
     kubectl get agents.agent.kasm.com -n {{ .Release.Namespace }}
 
+{{- if $autoEnable }}
+  The agent enables itself as it registers: this release seeded the manager setting
+  "Automatically Enable Agents" (kasm-helm.kasmConfig.autoEnableAgents). Allow one heartbeat
+  interval (~15s) after registration before launching anything.
+
+  One click in the admin UI, which no chart can do for you:
+
+    Workspaces -> the image -> assign it to the users' group, or launches fail with
+    "Image Not Authorized".
+{{- else }}
   Then two clicks in the admin UI, which no chart can do for you:
 
     1. Infrastructure -> the registered agent -> Enable. New agents register DISABLED, and a
        session requested before that fails with "No resources are available". Allow one
        heartbeat interval (~15s) after enabling. The manager keeps one server record per agent
        hostname and re-uses it, enabled state included, when that agent registers again.
-       (To skip this click on future registrations, enable the manager setting "Automatically Enable Agents" - see docs/how-to/enable-agents-automatically.md.)
+       (To skip this click on future registrations, set kasm-helm.kasmConfig.autoEnableAgents=true
+       before the database initializes, or enable "Automatically Enable Agents" in the admin UI -
+       see docs/how-to/enable-agents-automatically.md.)
     2. Workspaces -> the image -> assign it to the users' group, or launches fail with
        "Image Not Authorized".
+{{- end }}
 {{- if and (not $cpEnabled) (or $managerDerived $tokenDerived $publicDerived) }}
 
   WARNING: kasm-helm.enabled is false, but kasm-agent.agent.inClusterControlPlane is still true
