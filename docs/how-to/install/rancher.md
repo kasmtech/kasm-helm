@@ -52,7 +52,7 @@ values themselves are the same as on every other page, so the how-to for your la
 
    | Group | What it sets |
    | --- | --- |
-   | Control plane | `kasm-helm.enabled`, the public hostname, deployment size, Ingress |
+   | Control plane | `kasm-helm.enabled`, the public hostname, deployment size, Ingress. Without an Ingress the proxy is published by a NodePort Service: RKE2 ships no LoadBalancer implementation, so the chart picks NodePort whenever Rancher installed it (`kasm-helm.proxyService.type` overrides) |
    | Certificate | cert-manager issuer, or an existing TLS Secret; otherwise self-signed |
    | Credentials | admin password and manager token; empty generates them |
    | Database | external PostgreSQL, or the bundled one's StorageClass |
@@ -101,6 +101,19 @@ kasm             kasm       1         deployed  kasm-platform-<version>        <
 kasm-agent-crds  kasm       1         deployed  kasm-agent-crds-<version>      <version>
 ```
 
+Without a public hostname or an Ingress, the UI is at any node's address on the proxy's node port:
+
+```console
+kubectl -n kasm get svc kasm-proxy-ext-default -o jsonpath='{.spec.type} {.spec.ports[0].nodePort}{"\n"}'
+```
+
+```
+NodePort 31972
+```
+
+Open `https://<node address>:<that port>`; the release notes Rancher shows after the install print the
+same URL once the port is known.
+
 On an air-gapped cluster, every image carries the system default registry:
 
 ```console
@@ -115,12 +128,17 @@ registry.internal.example.com/kasmweb/kasm-agent-operator:<tag>
 
 ## Chart values
 
-None beyond what the form sets. The one value Rancher adds on its own:
+None beyond what the form sets. The values Rancher adds on its own, and the one default that reacts
+to them:
 
 ```yaml
 global:
   cattle:
+    clusterId: c-m-xxxxxxxx                                 # set by Rancher; makes proxyService.type resolve to NodePort
     systemDefaultRegistry: registry.internal.example.com   # set by Rancher; leave empty elsewhere
+kasm-helm:
+  proxyService:
+    type: ""                                               # empty: LoadBalancer, or NodePort under Rancher. Set LoadBalancer only with MetalLB or a cloud LB present
 ```
 
 ## Troubleshooting
@@ -131,6 +149,7 @@ global:
 | The chart is listed but greyed out for this cluster | The cluster is below `catalog.cattle.io/kube-version`, or Rancher is below `catalog.cattle.io/rancher-version` | Upgrade the cluster; the floors are in [Supported platforms](../../explanation/supported-platforms.md) |
 | The install form reports that `kasm-agent-crds` cannot be found | `catalog.cattle.io/auto-install` is resolved within the app chart's repository, and a one-chart OCI entry has no other chart in it | Install `kasm-agent-crds` first from its own OCI entry, or use an HTTP index that lists both |
 | A privileged DaemonSet has `desired` pods and none `ready`, events say `violates PodSecurity` | RKE2 CIS profile, or another cluster-wide `restricted` enforcement | Exempt the namespace in the cluster's Pod Security Admission configuration: [Privileged workloads](../nodes/privileged-workloads.md) |
+| The control-plane proxy Service stays `<pending>` | `kasm-helm.proxyService.type` was set to `LoadBalancer` on a cluster with no LoadBalancer implementation (RKE2 ships none) | Leave the type empty so it resolves to NodePort, or install MetalLB and keep LoadBalancer |
 | GPU Operator or NFS provisioner pods pull from `docker.io` on an air-gapped cluster | Third-party dependencies do not read `global.cattle.systemDefaultRegistry` | Set their image values in **Edit YAML** |
 
 ## Decisions

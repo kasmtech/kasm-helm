@@ -8,7 +8,9 @@
 {{- $adminUser := dig "kasmConfig" "adminUsername" "admin@kasm.local" $kasmHelm -}}
 {{- $secretsCreate := dig "kasmSecrets" "create" true $kasmHelm -}}
 {{- $secretsName := dig "kasmSecrets" "name" "" $kasmHelm | default (printf "%s-secrets" .Release.Name) -}}
-{{- $proxyType := dig "proxyService" "type" "LoadBalancer" $kasmHelm -}}
+{{- /* Mirrors kasm.proxyServiceType: an explicit type wins; empty means LoadBalancer, or NodePort when Rancher
+       installed the release (global.cattle.clusterId), because RKE2 ships no LoadBalancer implementation. */ -}}
+{{- $proxyType := dig "proxyService" "type" "" $kasmHelm | default (ternary "NodePort" "LoadBalancer" (ne (dig "cattle" "clusterId" "" (.Values.global | default dict)) "")) -}}
 {{- $cpFronted := or (dig "ingress" "enabled" false $kasmHelm) (dig "route" "enabled" false $kasmHelm) (dig "httpRoute" "enabled" false $kasmHelm) (dig "tlsRoute" "enabled" false $kasmHelm) -}}
 {{- $zones := dig "kasmZones" (list) $kasmHelm | default (list) -}}
 {{- /* What the control plane is reachable at, as far as a render can tell (kasm-helm's helper: publicAddr,

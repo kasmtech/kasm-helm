@@ -9,7 +9,8 @@ has its own toggle, so the same chart installs a control plane alone, or an agen
 with a control plane elsewhere.
 
 The form covers what an install cannot guess: the public hostname, how the control plane is
-published (a LoadBalancer Service, the default, or an Ingress), the certificate, and the hostname
+published (from Rancher a NodePort Service by default, because RKE2 ships no LoadBalancer
+implementation; a LoadBalancer or an Ingress by choice), the certificate, and the hostname
 sessions are reached on. Everything else keeps the chart defaults and can be changed in the YAML
 editor; the chart README is the full value reference.
 
