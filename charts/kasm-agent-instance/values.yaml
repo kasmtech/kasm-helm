@@ -52,14 +52,19 @@ commonAnnotations: {}
 #   under its `manager-token` key
 # * `publicHostname` becomes `<name>-session-proxy.<namespace>.svc.cluster.local`
 #
-# Anything you set explicitly still wins. The derived `manager.hostname` assumes the default zone;
+# Anything you set explicitly still wins. Unset (null, the default), the `kasm-platform` umbrella's
+# `global.kasm.inClusterControlPlane` decides, and without that it is off. That fallback exists
+# because Rancher's install form can submit an untouched toggle as null, which deletes an umbrella's
+# per-subchart override; an explicit `false` here still wins over the global.
+# The derived `manager.hostname` assumes the default zone;
 # set it yourself when `kasm-helm.kasmZones` names something else.
 #
 # The derived `publicHostname` is an in-cluster address, so it only works while the control plane
 # relays session traffic (`proxy_connections: true`, Kasm's default). Publishing sessions directly
 # to browsers needs a real external hostname here - see the networking documentation.
 #
-inClusterControlPlane: false
+# @default -- `null`: follow `global.kasm.inClusterControlPlane`, else `false`
+inClusterControlPlane: null
 
 # name -- Name of the Agent custom resource. The operator derives the names of the objects it creates from this,
 # most visibly the session-proxy Service, which it names `<name>-session-proxy`.

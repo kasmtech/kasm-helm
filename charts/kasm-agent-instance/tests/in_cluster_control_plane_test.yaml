@@ -95,3 +95,23 @@ tests:
     asserts:
       - hasDocuments:
           count: 0
+
+  - it: follows global.kasm.inClusterControlPlane when the flag is left null (Rancher form nulls it)
+    template: templates/agent.yaml
+    set:
+      global:
+        kasm:
+          inClusterControlPlane: true
+    asserts:
+      - equal:
+          path: spec.manager.hostname
+          value: RELEASE-NAME-proxy-default.NAMESPACE.svc.cluster.local
+      - equal:
+          path: spec.publicHostname
+          value: k8s-agent-session-proxy.NAMESPACE.svc.cluster.local
+
+  # An explicit `inClusterControlPlane: false` wins over the global and makes the three values
+  # required again. helm-unittest cannot express it: its value merge drops a `false` set over the
+  # chart's `null` default. Covered by
+  #   helm template kasm charts/kasm-platform --set kasm-agent.agent.inClusterControlPlane=false
+  # which fails on agent.manager.hostname.

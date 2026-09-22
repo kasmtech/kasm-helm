@@ -1,0 +1,22 @@
+suite: values Rancher's install form submits (untouched toggles arrive as null)
+
+# Rancher's dashboard can submit a boolean question the user never touched as `null`. A null in user
+# values deletes this chart's override, so the subchart's own default takes over. The two `enabled`
+# toggles survive that (Helm treats a non-bool condition as enabled); the agent's
+# inClusterControlPlane survives through global.kasm.inClusterControlPlane, which is not on the form.
+# helm-unittest cannot express a null override, so the null case itself is checked by
+#   helm template kasm charts/kasm-platform --set kasm-agent.agent.inClusterControlPlane=null
+# in `make render-agent` scenarios; this suite pins the global fallback the null relies on.
+
+templates:
+  - charts/kasm-agent/charts/agent/templates/agent.yaml
+
+tests:
+  - it: sets the global the agent subchart falls back to
+    asserts:
+      - equal:
+          path: spec.publicHostname
+          value: k8s-agent-session-proxy.NAMESPACE.svc.cluster.local
+        documentSelector:
+          path: kind
+          value: Agent

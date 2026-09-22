@@ -26,6 +26,13 @@ global:
     # ignored, following Rancher's convention. The three third-party dependencies of `kasm-agent` do not read
     # it. Rancher sets it on install from its catalog; leave it empty everywhere else.
     systemDefaultRegistry: ""
+  kasm:
+    # global.kasm.inClusterControlPlane -- What `kasm-agent.agent.inClusterControlPlane` falls back to when it is
+    # unset or null: the agent registers with the control plane this release installs. Kept as a global because
+    # Rancher's install form can submit an untouched toggle as null, which deletes the per-subchart value above;
+    # this one is not on the form and survives. An explicit `kasm-agent.agent.inClusterControlPlane: false` still
+    # wins.
+    inClusterControlPlane: true
 
 # kasm-helm -- The Kasm Workspaces control plane (the `kasm-helm` chart). The web UI, the
 # manager/API services, the session proxy, Guacamole, the RDP gateways, and the PostgreSQL database.

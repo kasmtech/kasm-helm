@@ -4,6 +4,10 @@ All notable changes to the kasm-agent-instance chart are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- `inClusterControlPlane` is nullable: unset (the new default, `null`) it follows the umbrella's `global.kasm.inClusterControlPlane`, and only without that is it off. Rancher's install form can submit an untouched toggle as `null`, which deletes an umbrella's per-subchart override and left a zero-config `kasm-platform` install failing on `agent.publicHostname is required`. An explicit `false` still wins.
+
 ### Changed
 
 - `sessionProxy.routing` (`static` or `dynamic`) now defaults to `dynamic`, and the default `kasmweb/nginx` image carries the njs module it needs. `dynamic` resolves each session per request from a table the sidecar keeps current, with no reload, so heavy session churn no longer stacks up lingering nginx worker generations; `static` writes an nginx location per session and reloads on every change. Set `sessionProxy.routing: static` to keep the old behaviour.

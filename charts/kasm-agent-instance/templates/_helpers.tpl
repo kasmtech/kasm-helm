@@ -114,12 +114,26 @@ app.kubernetes.io/part-of: kasm-ai
 {{- end }}
 
 {{/*
+  Whether the control-plane connection is derived from a kasm-helm release alongside. First source
+  that is set wins: an explicit inClusterControlPlane (true or false), then the umbrella's
+  global.kasm.inClusterControlPlane (kasm-platform sets it true), else false. The explicit value
+  is nullable on purpose: Rancher's install form can submit an untouched toggle as null, and a
+  null in user values deletes the umbrella's per-subchart override; the global survives that.
+  Renders "true" or "".
+*/}}
+{{- define "kasmAgentInstance.inClusterControlPlane" -}}
+{{- $v := .Values.inClusterControlPlane -}}
+{{- if kindIs "invalid" $v -}}{{- $v = dig "kasm" "inClusterControlPlane" false (.Values.global | default dict) -}}{{- end -}}
+{{- if $v -}}true{{- end -}}
+{{- end }}
+
+{{/*
   The manager hostname, which has no default.
 */}}
 {{- define "kasmAgentInstance.managerHostname" -}}
 {{- if .Values.manager.hostname -}}
 {{- .Values.manager.hostname -}}
-{{- else if .Values.inClusterControlPlane -}}
+{{- else if (include "kasmAgentInstance.inClusterControlPlane" .) -}}
 {{- printf "%s-proxy-default.%s.svc.cluster.local" .Release.Name .Release.Namespace -}}
 {{- else -}}
 {{- fail "agent.manager.hostname is required: set it to the hostname of the Kasm manager (or the proxy in front of it) this agent registers with. (With a kasm-helm control plane in this same release, agent.inClusterControlPlane=true derives it instead.)" -}}
@@ -133,7 +147,7 @@ app.kubernetes.io/part-of: kasm-ai
   manager.hostname takes the ordinary manager.port / manager.scheme (443 / https).
 */}}
 {{- define "kasmAgentInstance.managerDerived" -}}
-{{- if and .Values.inClusterControlPlane (not .Values.manager.hostname) -}}true{{- end -}}
+{{- if and (include "kasmAgentInstance.inClusterControlPlane" .) (not .Values.manager.hostname) -}}true{{- end -}}
 {{- end }}
 
 {{- define "kasmAgentInstance.managerPort" -}}
@@ -152,7 +166,7 @@ app.kubernetes.io/part-of: kasm-ai
   else takes 443, because then something in front of the proxy owns the port.
 */}}
 {{- define "kasmAgentInstance.publicPort" -}}
-{{- if and .Values.inClusterControlPlane (not .Values.publicHostname) -}}4444
+{{- if and (include "kasmAgentInstance.inClusterControlPlane" .) (not .Values.publicHostname) -}}4444
 {{- else if .Values.publicPort -}}{{ .Values.publicPort }}
 {{- else if and (eq (toString .Values.sessionProxy.service.type) "NodePort") .Values.sessionProxy.service.httpsNodePort -}}{{ .Values.sessionProxy.service.httpsNodePort }}
 {{- else -}}443
@@ -166,7 +180,7 @@ app.kubernetes.io/part-of: kasm-ai
 {{- define "kasmAgentInstance.publicHostname" -}}
 {{- if .Values.publicHostname -}}
 {{- .Values.publicHostname -}}
-{{- else if .Values.inClusterControlPlane -}}
+{{- else if (include "kasmAgentInstance.inClusterControlPlane" .) -}}
 {{- printf "%s-session-proxy.%s.svc.cluster.local" .Values.name .Release.Namespace -}}
 {{- else -}}
 {{- fail "agent.publicHostname is required: set it to the externally reachable address browsers use to connect to this agent's session proxy. (With a kasm-helm control plane in this same release, agent.inClusterControlPlane=true derives it instead.)" -}}
@@ -194,7 +208,7 @@ app.kubernetes.io/part-of: kasm-ai
 {{- .Values.manager.existingTokenSecret -}}
 {{- else if .Values.manager.token -}}
 {{- printf "%s-manager-token" (include "kasmAgentInstance.fullname" .) -}}
-{{- else if .Values.inClusterControlPlane -}}
+{{- else if (include "kasmAgentInstance.inClusterControlPlane" .) -}}
 {{- printf "%s-secrets" .Release.Name -}}
 {{- else -}}
 {{- fail "agent.manager: no manager token configured. Set agent.manager.existingTokenSecret to the name of a Secret already holding the token (preferred), or agent.manager.token to the token itself so this chart creates one. (With a kasm-helm control plane in this same release, agent.inClusterControlPlane=true reads the token the control plane generated.)" -}}
@@ -208,7 +222,7 @@ app.kubernetes.io/part-of: kasm-ai
 {{- define "kasmAgentInstance.managerTokenSecretKey" -}}
 {{- if .Values.manager.existingTokenSecret -}}
 {{- .Values.manager.tokenSecretKey | default "token" -}}
-{{- else if and .Values.inClusterControlPlane (not .Values.manager.token) -}}
+{{- else if and (include "kasmAgentInstance.inClusterControlPlane" .) (not .Values.manager.token) -}}
 {{- /* kasm-helm stores the registration token under "manager-token" in its secrets Secret.
        Not tokenSecretKey, which already defaults to "token" and so cannot express this;
        point at a different key by setting manager.existingTokenSecret explicitly. */ -}}

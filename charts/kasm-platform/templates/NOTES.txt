@@ -20,7 +20,10 @@
 {{- /* Agent */ -}}
 {{- $agentInstance := dig "agent" dict $kasmAgent -}}
 {{- $agentInstanceEnabled := dig "enabled" true $agentInstance -}}
-{{- $inCluster := dig "inClusterControlPlane" false $agentInstance -}}
+{{- /* Mirrors kasmAgentInstance.inClusterControlPlane: an explicit value wins, a missing or null one follows
+       global.kasm.inClusterControlPlane (which Rancher's form never nulls, unlike the per-subchart toggle). */ -}}
+{{- $inClusterExplicit := index $agentInstance "inClusterControlPlane" -}}
+{{- $inCluster := ternary (dig "kasm" "inClusterControlPlane" false (.Values.global | default dict)) $inClusterExplicit (kindIs "invalid" $inClusterExplicit) -}}
 {{- $agentName := dig "name" "k8s-agent" $agentInstance -}}
 {{- $agentZone := dig "zone" "default" $agentInstance -}}
 {{- $managerHostname := dig "manager" "hostname" "" $agentInstance -}}
