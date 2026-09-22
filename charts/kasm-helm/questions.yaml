@@ -4,9 +4,8 @@ questions:
   # ---------- Control plane ----------
   - variable: publicAddr
     label: Public hostname
-    description: The DNS name users open to reach Kasm and the name the certificate is issued for. It can be a private name; it only has to resolve for the systems that use Kasm.
+    description: The DNS name users open to reach Kasm and the name the certificate is issued for. It can be a private name; it only has to resolve for the systems that use Kasm. Leave empty for the no-values install, reached by the LoadBalancer Service's address.
     type: hostname
-    required: true
     group: Control plane
   - variable: deploymentSize
     label: Deployment size
