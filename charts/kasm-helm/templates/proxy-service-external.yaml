@@ -14,13 +14,13 @@
   sent somewhere nothing is listening.
 */}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
-{{- if or (eq .Values.proxyService.type "LoadBalancer") (eq .Values.proxyService.type "NodePort") -}}
+{{- if or (eq (include "kasm.proxyServiceType" .) "LoadBalancer") (eq (include "kasm.proxyServiceType" .) "NodePort") -}}
 apiVersion: v1
 kind: Service
 metadata:
   {{- include "kasm.metadata" (dict "context" $ "component" "proxy-ext" "resource" "service" "zone" "default" "include" "all") | indent 2 }}
 spec:
-  type: {{ .Values.proxyService.type }}
+  type: {{ (include "kasm.proxyServiceType" .) }}
   selector:
     {{- include "kasm.metadata" (dict "context" $ "component" "proxy" "resource" "service" "zone" "default" "include" "match") | indent 4 }}
   ports:
@@ -28,7 +28,7 @@ spec:
       protocol: TCP
       port: {{ $constants.proxy.extHttps }}
       targetPort: {{ $constants.proxy.portName }}-https
-      {{- if and (eq .Values.proxyService.type "NodePort") .Values.proxyService.nodePort }}
+      {{- if and (eq (include "kasm.proxyServiceType" .) "NodePort") .Values.proxyService.nodePort }}
       nodePort: {{ .Values.proxyService.nodePort }}
       {{- end }}
 {{- end }}

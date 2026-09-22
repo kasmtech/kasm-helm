@@ -101,7 +101,12 @@ nginxResolver: ""
 # documentation for reference), you MUST use either a Route or an Ingress and set the `proxyService.type` to `ClusterIP`.
 #
 proxyService:
-  type: LoadBalancer
+  # proxyService.type -- ClusterIP, LoadBalancer or NodePort. Leave empty for the automatic default: LoadBalancer,
+  # or NodePort when the release is installed through Rancher's catalog (Rancher sets `global.cattle.clusterId` on
+  # every install from it), because RKE2 ships no LoadBalancer implementation and the Service would otherwise
+  # stay pending forever. An explicit value always wins.
+  # @default -- `""`: LoadBalancer, or NodePort under Rancher
+  type: ""
   # proxyService.nodePort -- Pin the node port when `proxyService.type` is NodePort. Leave empty to
   # let Kubernetes assign one from the cluster's service-node-port-range (30000-32767 by default).
   #
