@@ -51,23 +51,23 @@
   {{- fail (printf "Only one proxy exposure method may be enabled, but %s are set. The Ingress, the OpenShift Route, the Gateway API HTTPRoute and the Gateway API TLSRoute all publish the same Kasm proxy Service, so enabling more than one gives the same hostname two owners." (join " and " $proxyExposure)) -}}
 {{- end -}}
 
-{{- if and (or $v.ingress.enabled $v.route.enabled) (eq $v.proxyService.type "LoadBalancer") -}}
+{{- if and (or $v.ingress.enabled $v.route.enabled) (eq (include "kasm.proxyServiceType" .) "LoadBalancer") -}}
   {{- fail "The service.type must not be LoadBalancer when using an ingress or a route - any load balancer or Route should be provisioned using the Ingress/Route settings. Set service.type=ClusterIP or mark ingress.enabled or route.enabled to disabled." -}}
 {{- end -}}
-{{- if and (or $v.httpRoute.enabled $v.tlsRoute.enabled) (eq $v.proxyService.type "LoadBalancer") -}}
+{{- if and (or $v.httpRoute.enabled $v.tlsRoute.enabled) (eq (include "kasm.proxyServiceType" .) "LoadBalancer") -}}
   {{- fail "The proxyService.type must not be LoadBalancer when the proxy is published through the Gateway API - the Gateway owns the external address. Set proxyService.type=ClusterIP, or disable httpRoute.enabled / tlsRoute.enabled." -}}
 {{- end -}}
-{{- if and (eq $v.proxyService.type "LoadBalancer") $v.kasmZones -}}
+{{- if and (eq (include "kasm.proxyServiceType" .) "LoadBalancer") $v.kasmZones -}}
   {{- fail "The service.type must not be LoadBalancer when using a Multi-Zone Kasm deployment - any load balancer or Route should be provisioned using the Ingress/Route settings. Set service.type=ClusterIP or remove your kasmZones settings." -}}
 {{- end -}}
 
 {{/* NodePort publishes the proxy externally exactly as LoadBalancer does, so it carries
      the same two restrictions. Separate messages, because the LoadBalancer wording above
      predates NodePort being renderable at all. */}}
-{{- if and (eq $v.proxyService.type "NodePort") (or $v.ingress.enabled $v.route.enabled $v.httpRoute.enabled $v.tlsRoute.enabled) -}}
+{{- if and (eq (include "kasm.proxyServiceType" .) "NodePort") (or $v.ingress.enabled $v.route.enabled $v.httpRoute.enabled $v.tlsRoute.enabled) -}}
   {{- fail "proxyService.type must not be NodePort when an Ingress, OpenShift Route or Gateway API route already publishes the proxy - that would be a second door onto the same Service carrying none of the front end's TLS, timeouts or host routing. Set proxyService.type=ClusterIP, or disable the front end." -}}
 {{- end -}}
-{{- if and (eq $v.proxyService.type "NodePort") $v.kasmZones -}}
+{{- if and (eq (include "kasm.proxyServiceType" .) "NodePort") $v.kasmZones -}}
   {{- fail "proxyService.type must not be NodePort in a Multi-Zone deployment: a node port cannot route by hostname, so each zone would be unreachable. Use an Ingress, an OpenShift Route or the Gateway API, with proxyService.type=ClusterIP." -}}
 {{- end -}}
 

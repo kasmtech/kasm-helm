@@ -60,3 +60,48 @@ tests:
     asserts:
       - failedTemplate:
           errorMessage: "The service.type must not be LoadBalancer when using a Multi-Zone Kasm deployment - any load balancer or Route should be provisioned using the Ingress/Route settings. Set service.type=ClusterIP or remove your kasmZones settings."
+
+  # ---------- the automatic default: LoadBalancer, or NodePort under Rancher ----------
+  - it: leaves the default empty type as a LoadBalancer Service outside Rancher
+    template: templates/proxy-service-external.yaml
+    asserts:
+      - equal:
+          path: spec.type
+          value: LoadBalancer
+
+  - it: becomes a NodePort Service when Rancher installed the release (global.cattle.clusterId set)
+    template: templates/proxy-service-external.yaml
+    set:
+      global:
+        cattle:
+          clusterId: c-m-abcdef12
+    asserts:
+      - equal:
+          path: spec.type
+          value: NodePort
+
+  - it: keeps an explicit LoadBalancer under Rancher
+    template: templates/proxy-service-external.yaml
+    set:
+      proxyService:
+        type: LoadBalancer
+      global:
+        cattle:
+          clusterId: c-m-abcdef12
+    asserts:
+      - equal:
+          path: spec.type
+          value: LoadBalancer
+
+  - it: still refuses the automatic NodePort next to an Ingress under Rancher
+    template: templates/validation.yaml
+    set:
+      global:
+        cattle:
+          clusterId: c-m-abcdef12
+      ingress:
+        enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: proxyService.type must not be NodePort
+

@@ -1644,6 +1644,18 @@ true
 {{- end -}}
 
 {{/*
+  The external proxy Service's type. An explicit proxyService.type wins; empty means
+  LoadBalancer, or NodePort when Rancher installed the release (Rancher sets
+  global.cattle.clusterId on every install from its catalog), because RKE2 ships no
+  LoadBalancer implementation and the Service would stay pending. Call with a context
+  carrying .Values.
+*/}}
+{{- define "kasm.proxyServiceType" -}}
+{{- $t := .Values.proxyService.type | default "" -}}
+{{- if $t -}}{{ $t }}{{- else if dig "cattle" "clusterId" "" (.Values.global | default dict) -}}NodePort{{- else -}}LoadBalancer{{- end -}}
+{{- end }}
+
+{{/*
   The address the Kasm proxy can be reached at from outside the cluster, as far as a render
   can tell. In order of preference:
 
@@ -1665,9 +1677,9 @@ true
 {{- $v := .Values -}}
 {{- if $v.publicAddr -}}
 {{- $v.publicAddr -}}
-{{- else if or (eq $v.proxyService.type "LoadBalancer") (eq $v.proxyService.type "NodePort") -}}
+{{- else if or (eq (include "kasm.proxyServiceType" .) "LoadBalancer") (eq (include "kasm.proxyServiceType" .) "NodePort") -}}
 {{- $svc := lookup "v1" "Service" .Release.Namespace (printf "%s-proxy-ext-default" .Release.Name) -}}
-{{- if eq $v.proxyService.type "LoadBalancer" -}}
+{{- if eq (include "kasm.proxyServiceType" .) "LoadBalancer" -}}
 {{- with (first (dig "status" "loadBalancer" "ingress" (list) $svc)) -}}
 {{- .hostname | default .ip -}}
 {{- end -}}

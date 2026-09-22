@@ -38,6 +38,7 @@ See [Migrating to connection-proxy](./README.md#migrating-to-connection-proxy) f
 
 ### Changed
 
+- `proxyService.type` defaults to empty, which means LoadBalancer everywhere except an install through Rancher's catalog, where it means NodePort: Rancher sets `global.cattle.clusterId`, RKE2 ships no LoadBalancer implementation, and the Service used to sit pending forever. An explicit value still wins, and every validation, NOTES line and the external-address lookup follow the resolved type.
 - Health check paths served through nginx changed to avoid a path collision now that both RDP services share one nginx: `/__healthcheck` was previously served twice, once per sidecar, on two different ports. It is now namespaced per service, and nginx itself serves a bare pod-readiness endpoint: <!-- hash:a5a100c96fdc34e08c415ae7337da9485ad14ebc -->
 
   - `/__healthcheck` (RDP Gateway) → `/rdp-gateway/__healthcheck`

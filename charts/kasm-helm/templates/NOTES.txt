@@ -3,7 +3,7 @@
 {{- $zoneName := $primaryZone.name -}}
 {{- $secretsName := $constants.secrets.name -}}
 {{- $proxySvc := printf "%s-%s" $constants.proxy.svc (include "kasm.zoneName" $zoneName) -}}
-{{- $proxyType := .Values.proxyService.type -}}
+{{- $proxyType := include "kasm.proxyServiceType" . -}}
 {{- $fronted := or .Values.ingress.enabled .Values.route.enabled .Values.httpRoute.enabled .Values.tlsRoute.enabled -}}
 {{- $externalAddress := include "kasm.proxyExternalAddress" . -}}
 CHART NAME: {{ .Chart.Name }}

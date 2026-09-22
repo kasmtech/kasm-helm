@@ -2347,14 +2347,16 @@
           "type": "object"
         },
         "type": {
-          "default": "LoadBalancer",
+          "default": "",
           "title": "type",
           "type": "string",
           "enum": [
+            "",
             "ClusterIP",
             "LoadBalancer",
             "NodePort"
-          ]
+          ],
+          "description": "ClusterIP, LoadBalancer or NodePort. Empty (the default) means LoadBalancer, or NodePort when the release is installed through Rancher's catalog (global.cattle.clusterId is set), because RKE2 ships no LoadBalancer implementation."
         },
         "nodePort": {
           "default": "",
