@@ -262,21 +262,6 @@ tests:
       - failedTemplate:
           errorMessage: "tcpRoute.enabled and directRdpService.enabled both publish the RDP Gateway externally. Set directRdpService.enabled=false: the per-replica RDP Service stays ClusterIP and the Gateway fronts it through the TCPRoute."
 
-  # Every rdp-gateway replica must advertise its own external address, and a TCPRoute matches on
-  # neither hostname nor SNI, so it can only ever front one replica per zone.
-  - it: tcpRoute with more than one connection-proxy replica fails, naming the count
-    template: templates/validation.yaml
-    set:
-      deploymentSize: medium
-      tcpRoute:
-        enabled: true
-        rdpAccessURL: rdp.kasm.example.com
-        parentRefs:
-          - name: kasm-gateway
-    asserts:
-      - failedTemplate:
-          errorPattern: 'tcpRoute\.enabled requires exactly one connection-proxy replica per zone, but components\.connectionProxy resolves to 2 \(deploymentSize medium\)'
-
   - it: tcpRoute without rdpAccessURL fails
     template: templates/validation.yaml
     set:
@@ -323,6 +308,8 @@ tests:
       - failedTemplate:
           errorMessage: "tcpRoute.enabled publishes the RDP Gateway, but components.connectionProxy.enabled or components.connectionProxy.rdpGateway.enabled is false. Enable the component, or disable tcpRoute."
 
+  # Every rdp-gateway replica must advertise its own external address, and a TCPRoute matches on
+  # neither hostname nor SNI, so it can only ever front one replica per zone.
   - it: tcpRoute with more than one connection-proxy replica fails
     template: templates/validation.yaml
     set:

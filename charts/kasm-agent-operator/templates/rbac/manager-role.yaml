@@ -45,8 +45,18 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - endpoints
   - nodes
+  verbs:
+  - get
+  - list
+  - watch
+# The API server's addresses for the session proxy's egress NetworkPolicy come from the
+# default/kubernetes EndpointSlices (the Endpoints API is deprecated since 1.33); listed through
+# the cached client, so list and watch again accompany get.
+- apiGroups:
+  - discovery.k8s.io
+  resources:
+  - endpointslices
   verbs:
   - get
   - list
