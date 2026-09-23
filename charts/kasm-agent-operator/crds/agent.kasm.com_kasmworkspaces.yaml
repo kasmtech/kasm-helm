@@ -3397,6 +3397,14 @@ spec:
                     - LoadBalancer
                     type: string
                 type: object
+              serviceAccountName:
+                description: |-
+                  ServiceAccountName is the ServiceAccount the workspace pod runs under.
+                  The pod never mounts its token (automountServiceAccountToken is false);
+                  the account exists so cluster policy can be bound to workspaces alone,
+                  e.g. an OpenShift SecurityContextConstraint granted to this account and
+                  not to the namespace's default one. Empty means the namespace default.
+                type: string
               shmSize:
                 type: string
               stopTimeoutSeconds:
