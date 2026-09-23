@@ -17,6 +17,8 @@
        an otherwise plain ClusterIP Service included. */}}
 {{- $service := .Values.sessionProxy.service -}}
 {{- $serviceSet := or (and $service.type (ne $service.type "ClusterIP")) $service.annotations $service.externalTrafficPolicy $service.httpsNodePort $service.httpNodePort -}}
+{{- $internalService := .Values.sessionProxy.internalService -}}
+{{- $internalServiceSet := or (and $internalService.type (ne $internalService.type "ClusterIP")) $internalService.annotations $internalService.externalTrafficPolicy $internalService.httpsNodePort $internalService.httpNodePort -}}
 {{- $proxyProtocol := .Values.sessionProxy.proxyProtocol -}}
 apiVersion: agent.kasm.com/v1alpha1
 kind: Agent
@@ -163,6 +165,36 @@ spec:
         {{ $key | quote }}: {{ $value | quote }}
         {{- end }}
       {{- end }}
+    {{- end }}
+    {{- if $internalServiceSet }}
+    internalService:
+      {{- with $internalService.type }}
+      type: {{ . }}
+      {{- end }}
+      {{- with $internalService.externalTrafficPolicy }}
+      externalTrafficPolicy: {{ . }}
+      {{- end }}
+      {{- with $internalService.httpsNodePort }}
+      httpsNodePort: {{ . }}
+      {{- end }}
+      {{- with $internalService.httpNodePort }}
+      httpNodePort: {{ . }}
+      {{- end }}
+      {{- with $internalService.httpsPort }}
+      httpsPort: {{ . }}
+      {{- end }}
+      {{- with $internalService.httpPort }}
+      httpPort: {{ . }}
+      {{- end }}
+      {{- with $internalService.annotations }}
+      annotations:
+        {{- range $key, $value := . }}
+        {{ $key | quote }}: {{ $value | quote }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+    {{- with .Values.sessionProxy.resolver }}
+    resolver: {{ . | quote }}
     {{- end }}
     {{- if or $proxyProtocol.enabled $proxyProtocol.trustedCIDRs }}
     proxyProtocol:

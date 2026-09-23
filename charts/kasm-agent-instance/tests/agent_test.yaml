@@ -171,6 +171,33 @@ tests:
           path: spec.sessionProxy.service
       - isNull:
           path: spec.sessionProxy.proxyProtocol
+      - isNull:
+          path: spec.sessionProxy.internalService
+      - isNull:
+          path: spec.sessionProxy.resolver
+
+  - it: renders the internal-LB second service and the desktop-relay resolver once set
+    set:
+      sessionProxy:
+        internalService:
+          type: LoadBalancer
+          httpsPort: 443
+          annotations:
+            service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+        resolver: 8.8.8.8
+    asserts:
+      - equal:
+          path: spec.sessionProxy.internalService.type
+          value: LoadBalancer
+      - equal:
+          path: spec.sessionProxy.internalService.httpsPort
+          value: 443
+      - equal:
+          path: spec.sessionProxy.internalService.annotations["service.beta.kubernetes.io/aws-load-balancer-internal"]
+          value: "true"
+      - equal:
+          path: spec.sessionProxy.resolver
+          value: 8.8.8.8
 
   - it: omits the optional session proxy scaling and placement blocks while they hold only defaults
     asserts:

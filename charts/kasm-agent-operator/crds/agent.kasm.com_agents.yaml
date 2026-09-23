@@ -1797,6 +1797,81 @@ spec:
                     description: Image is the nginx session-proxy container image.
                     minLength: 1
                     type: string
+                  internalService:
+                    description: |-
+                      InternalService provisions a SECOND Service in front of the same proxy
+                      pods, for a front door distinct from the primary one - typically an
+                      internal LoadBalancer on a private subnet so the control plane can reach
+                      this agent from a peered network or region without a public path
+                      (a ClusterIP is not routable across clusters; an internal LB's private
+                      IP is). Kasm registers one hostname per agent, so pair this with a
+                      split-horizon DNS view that resolves spec.publicHostname to this
+                      Service from the control plane's network and to the primary Service from
+                      browsers; publish both on the same port as spec.publicPort. Unset, only
+                      the primary Service exists.
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        description: Annotations are set on the session-proxy Service
+                          (e.g. cloud LB annotations).
+                        type: object
+                      externalTrafficPolicy:
+                        description: |-
+                          ExternalTrafficPolicy controls whether the Service preserves client
+                          source IP (Local) or SNATs it (Cluster, the Kubernetes default). Set
+                          Local to preserve client IPs through a NodePort/LoadBalancer.
+                        enum:
+                        - Cluster
+                        - Local
+                        type: string
+                      httpNodePort:
+                        description: |-
+                          HTTPNodePort pins the NodePort assigned to the HTTP (4445) listener
+                          when Type is NodePort or LoadBalancer. Leave unset to let Kubernetes
+                          allocate one.
+                        format: int32
+                        maximum: 32767
+                        minimum: 30000
+                        type: integer
+                      httpPort:
+                        description: |-
+                          HTTPPort overrides the Service port for the HTTP (4445) listener. The
+                          container continues to listen on 4445 regardless; only the
+                          Service-facing port changes. Leave unset to publish 4445.
+                        format: int32
+                        maximum: 65535
+                        minimum: 1
+                        type: integer
+                      httpsNodePort:
+                        description: |-
+                          HTTPSNodePort pins the NodePort assigned to the HTTPS (4444) listener
+                          when Type is NodePort or LoadBalancer. Leave unset to let Kubernetes
+                          allocate one.
+                        format: int32
+                        maximum: 32767
+                        minimum: 30000
+                        type: integer
+                      httpsPort:
+                        description: |-
+                          HTTPSPort overrides the Service port for the HTTPS (4444) listener.
+                          The container continues to listen on 4444 regardless; only the
+                          Service-facing port changes. Useful with Type LoadBalancer to publish
+                          443 instead of 4444, matching an Ingress and avoiding a zone proxy_port
+                          mismatch. Leave unset to publish 4444.
+                        format: int32
+                        maximum: 65535
+                        minimum: 1
+                        type: integer
+                      type:
+                        default: ClusterIP
+                        description: Type overrides the session-proxy Service type.
+                        enum:
+                        - ClusterIP
+                        - NodePort
+                        - LoadBalancer
+                        type: string
+                    type: object
                   networkPolicy:
                     description: |-
                       NetworkPolicy bounds where the proxy pods may connect. A session's
@@ -2109,6 +2184,19 @@ spec:
                     format: int32
                     minimum: 1
                     type: integer
+                  resolver:
+                    description: |-
+                      Resolver is the DNS server nginx uses to resolve a downstream agent's
+                      hostname for the /desktop relay, whose proxy_pass target comes from the
+                      control plane and so is a variable - which nginx resolves at request
+                      time and, without a resolver, fails with "no resolver defined" for any
+                      name (only a bare IP works). Unset, the pod's own cluster DNS is used
+                      (read from /etc/resolv.conf at start): CoreDNS resolves in-cluster
+                      names and forwards the rest, so both relayed in-cluster sessions and
+                      external VM-based agents resolve. Set an explicit resolver (e.g.
+                      "8.8.8.8" or a corporate DNS) for a cluster whose DNS won't resolve the
+                      downstream's name.
+                    type: string
                   resources:
                     description: |-
                       Resources are the nginx container's. Set requests: without them the

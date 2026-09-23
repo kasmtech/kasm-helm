@@ -352,6 +352,38 @@ sessionProxy:
     # sessionProxy.service.httpPort -- Service-facing port for the HTTP (4445) listener, for example `80`. The
     # container keeps listening on 4445. Empty keeps 4445.
     httpPort: ""
+  # sessionProxy.internalService -- Provision a SECOND Service in front of the same proxy pods, a front door
+  # distinct from `sessionProxy.service` above — typically an internal `LoadBalancer` on a private subnet so a
+  # control plane on a peered network or in another region can reach this agent without a public path (a
+  # ClusterIP is not routable across clusters; an internal LB's private IP is). Kasm registers one hostname per
+  # agent, so pair this with split-horizon DNS that resolves `publicHostname` to this Service from the control
+  # plane's network and to the primary Service from browsers, both on `publicPort`. Same fields as
+  # `sessionProxy.service`; omitted from the Agent while it holds only defaults, so only the primary Service
+  # exists unless you set something here.
+  internalService:
+    # sessionProxy.internalService.type -- Type of the second Service — usually `LoadBalancer` with an
+    # internal-scheme annotation below. Same options as `sessionProxy.service.type`.
+    type: ClusterIP
+    # sessionProxy.internalService.annotations -- Annotations on the second Service. This is where the cloud
+    # "internal load balancer" attribute goes (an internal scheme, a private subnet). Omitted when empty.
+    annotations: {}
+    # sessionProxy.internalService.externalTrafficPolicy -- `Cluster` or `Local`, as `sessionProxy.service`.
+    externalTrafficPolicy: ""
+    # sessionProxy.internalService.httpsNodePort -- Pin the HTTPS node port (`NodePort`/`LoadBalancer` only).
+    httpsNodePort: ""
+    # sessionProxy.internalService.httpNodePort -- Pin the plain-HTTP node port (`NodePort`/`LoadBalancer` only).
+    httpNodePort: ""
+    # sessionProxy.internalService.httpsPort -- Service-facing port for the HTTPS (4444) listener.
+    httpsPort: ""
+    # sessionProxy.internalService.httpPort -- Service-facing port for the HTTP (4445) listener.
+    httpPort: ""
+  # sessionProxy.resolver -- DNS server nginx uses to resolve a downstream agent's hostname for the `/desktop`
+  # relay, whose upstream comes from the control plane and so is an nginx variable — without a resolver nginx
+  # fails those with "no resolver defined" and only a bare IP works. Empty (the default) uses the pod's own
+  # cluster DNS (CoreDNS resolves in-cluster names and forwards the rest, so both relayed in-cluster sessions
+  # and external VM agents resolve). Set an explicit resolver (e.g. `8.8.8.8` or a corporate DNS) for a cluster
+  # whose DNS won't resolve the downstream's name. Omitted from the Agent when empty.
+  resolver: ""
   # sessionProxy.proxyProtocol -- PROXY protocol on the session proxy's nginx listeners, so the real client
   # address survives an external L4 proxy that cannot set `X-Forwarded-For`. This is the layer-7 companion to
   # `sessionProxy.service.externalTrafficPolicy: Local`; use one or the other, whichever matches how traffic
