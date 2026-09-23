@@ -1,0 +1,129 @@
+{{/*
+  The OpenShift SecurityContextConstraint for this agent's sessions, and the grants that attach it.
+
+  Every workspace pod the operator creates runs as root (the image's own startup drops to kasm-user
+  with su), adds a fixed capability set on top of drop ALL, allows privilege escalation, pins
+  fsGroup 1000, and may carry a Localhost seccomp profile. OpenShift's default restricted-v2 SCC
+  refuses all of that, and the built-in anyuid SCC admits no capability adds, so sessions need an
+  SCC of their own. It is granted to the `<name>-workspace` ServiceAccount the operator creates for
+  the agent, the way `oc adm policy add-scc-to-user` would: a ClusterRole holding `use` on that one
+  SCC, bound by a namespaced RoleBinding. The RoleBinding may reference the account before the
+  operator has created it; the grant takes effect once it exists.
+
+  The SCC is cluster-scoped, so its default name carries the namespace and agent name. Its
+  restrictiveness sits above restricted-v2 in OpenShift's ordering, which is what makes admission
+  fall through to it only for pods restricted-v2 cannot admit: the agent's own Deployment, the
+  session proxy, the image puller and the standby placeholders set no UID and keep restricted-v2.
+
+  With the seccomp installer backend on, its DaemonSet also runs as root with a hostPath mount under
+  the kubelet's seccomp directory and an spc_t SELinux type; only the built-in privileged SCC admits
+  that, so a second grant attaches it to the `<name>-seccomp-installer` ServiceAccount.
+*/}}
+{{- if .Values.openshift.scc.enabled }}
+{{- $ws := .Values.openshift.scc.workspace }}
+{{- $sccName := $ws.name | default (printf "kasm-%s-%s-workspace" .Release.Namespace .Values.name) | trunc 63 | trimSuffix "-" }}
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
+metadata:
+  name: {{ $sccName }}
+  labels:
+    {{- include "kasmAgentInstance.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+allowHostDirVolumePlugin: {{ $ws.allowHostPath }}
+allowHostIPC: false
+allowHostNetwork: false
+allowHostPID: false
+allowHostPorts: false
+allowPrivilegeEscalation: true
+allowPrivilegedContainer: {{ $ws.allowPrivileged }}
+allowedCapabilities:
+  {{- range $ws.capabilities }}
+  - {{ . | quote }}
+  {{- end }}
+defaultAddCapabilities: []
+requiredDropCapabilities: []
+fsGroup:
+  type: RunAsAny
+runAsUser:
+  type: RunAsAny
+seLinuxContext:
+  type: MustRunAs
+supplementalGroups:
+  type: RunAsAny
+seccompProfiles:
+  {{- range $ws.seccompProfiles }}
+  - {{ . | quote }}
+  {{- end }}
+readOnlyRootFilesystem: false
+volumes:
+  {{- range $ws.volumes }}
+  - {{ . | quote }}
+  {{- end }}
+  {{- if $ws.allowHostPath }}
+  - hostPath
+  {{- end }}
+users: []
+groups: []
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ $sccName }}
+  labels:
+    {{- include "kasmAgentInstance.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["security.openshift.io"]
+    resources: ["securitycontextconstraints"]
+    resourceNames: [{{ $sccName | quote }}]
+    verbs: ["use"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Values.name }}-workspace-scc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kasmAgentInstance.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ $sccName }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.name }}-workspace
+    namespace: {{ .Release.Namespace }}
+{{- if and .Values.seccomp.enabled (eq .Values.seccomp.backend "installer") }}
+{{- $installerRole := printf "kasm-%s-%s-seccomp-installer" .Release.Namespace .Values.name | trunc 63 | trimSuffix "-" }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ $installerRole }}
+  labels:
+    {{- include "kasmAgentInstance.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["security.openshift.io"]
+    resources: ["securitycontextconstraints"]
+    resourceNames: ["privileged"]
+    verbs: ["use"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Values.name }}-seccomp-installer-scc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kasmAgentInstance.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ $installerRole }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.name }}-seccomp-installer
+    namespace: {{ .Release.Namespace }}
+{{- end }}
+{{- end }}

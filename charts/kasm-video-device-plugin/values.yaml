@@ -121,3 +121,38 @@ podAnnotations: {}
 # podLabels -- Extra labels to add to the DaemonSet pods, merged with the chart's standard selector labels.
 #
 podLabels: {}
+
+# serviceAccount -- The ServiceAccount the DaemonSet pods run under. The chart creates one by default so
+# that cluster policy - an OpenShift SecurityContextConstraint, a Kyverno `PolicyException` - can be granted
+# to this DaemonSet alone instead of to every pod that uses the namespace's `default` account. The account
+# holds no RBAC and mounts no token; the plugin talks to the kubelet over its socket, not to the API server.
+#
+serviceAccount:
+  # serviceAccount.create -- Create the ServiceAccount. Set to `false` to run under an existing one named by
+  # `serviceAccount.name`, or under the namespace `default` account when that is empty.
+  #
+  create: true
+  # serviceAccount.name -- Name of the ServiceAccount to create or to use. Leave empty to derive it from the
+  # release name (`<release>-kasm-video-device-plugin`).
+  #
+  name: ""
+  # serviceAccount.annotations -- Annotations to add to the created ServiceAccount.
+  #
+  annotations: {}
+
+# openshift -- OpenShift-only objects. Leave every switch here off on any other distribution: the
+# kinds involved exist only on OpenShift and the release would fail to install.
+#
+openshift:
+  scc:
+    # openshift.scc.enabled -- Grant the DaemonSet's ServiceAccount the right to use the SecurityContextConstraint
+    # named by `openshift.scc.name`, through a ClusterRole holding `use` on that one SCC and a RoleBinding in the
+    # release namespace. OpenShift's default `restricted-v2` SCC rejects this privileged, hostPath-mounting
+    # DaemonSet regardless of the namespace's Pod Security labels; this is the grant that admits it. Requires
+    # cluster-admin at install time, as any ClusterRole does.
+    #
+    enabled: false
+    # openshift.scc.name -- The SecurityContextConstraint to grant. The built-in `privileged` SCC is the only one
+    # that admits `privileged: true` with hostPath mounts of `/dev` and the kubelet's device-plugin directory.
+    #
+    name: privileged

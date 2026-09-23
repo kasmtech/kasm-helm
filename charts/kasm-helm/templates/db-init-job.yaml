@@ -54,17 +54,7 @@ spec:
             - name: KASM_AUTH_DOMAIN
               value: {{ $authDomain | quote }}
           {{- end }}
-          securityContext:
-            runAsUser: 1000
-            runAsGroup: 1000
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            runAsNonRoot: true
-            capabilities:
-              drop:
-                - ALL
-            seccompProfile:
-              type: RuntimeDefault
+          {{- include "kasm.securityContext" (list . 1000 "container") | nindent 10 }}
           command:
             - /bin/bash
             - -c

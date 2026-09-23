@@ -40,6 +40,7 @@ See [Migrating to connection-proxy](./README.md#migrating-to-connection-proxy) f
 
 ### Changed
 
+- `route.annotations` defaults to `haproxy.router.openshift.io/timeout: "3600s"`. The OpenShift router closes an idle connection after 30 seconds, and in the relayed topology (the default) every session's websocket crosses the control-plane Route; the agent Route already documented the annotation, the control plane's did not carry it. Values set under `route.annotations` merge over the default. Annotations rendered through `kasm.metadata` are now quoted, so a bare number or boolean in a values file (a `3600`, a `true`) reaches the API server as the string it must be instead of being refused.
 - `proxyService.type` defaults to empty, which means LoadBalancer everywhere except an install through Rancher's catalog, where it means NodePort: Rancher sets `global.cattle.clusterId`, RKE2 ships no LoadBalancer implementation, and the Service used to sit pending forever. An explicit value still wins, and every validation, NOTES line and the external-address lookup follow the resolved type.
 - Health check paths served through nginx changed to avoid a path collision now that both RDP services share one nginx: `/__healthcheck` was previously served twice, once per sidecar, on two different ports. It is now namespaced per service, and nginx itself serves a bare pod-readiness endpoint: <!-- hash:a5a100c96fdc34e08c415ae7337da9485ad14ebc -->
 
@@ -57,6 +58,7 @@ See [Migrating to connection-proxy](./README.md#migrating-to-connection-proxy) f
 
 ### Fixed
 
+- The `prepare-db-preseed` init container of the DB init Job carried its own hard-coded `runAsUser`/`runAsGroup` `1000` that `isOpenshift` did not gate, so any install that set `kasmConfig.authDomain` or a preseed Secret was refused by OpenShift's `restricted-v2` SCC. It now goes through the shared `kasm.securityContext` helper like every other container.
 - `kasmConfig.generatePreseed`: `group_permissions`, `group_settings` and `user_groups` rendered as `null` instead of `[]` whenever their parents existed without the nested field (an `apiConfigs` entry or a group with no `permissions`, a group with no `settings`, a user in no group). The importer rejects `null` and db-init crash-looped on an otherwise valid preseed. Each list now checks for actual entries.
 
 - A deployed zone without `proxy_hostname` added a bogus empty SAN (rendered from Go's `<no value>`) to the certificates instead of being skipped; the cert-manager Certificate also failed the render outright where the self-signed path skipped. Both now skip hostname-less zones.

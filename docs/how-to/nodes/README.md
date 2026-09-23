@@ -33,6 +33,7 @@ to the control plane, which runs as ordinary workloads on any node.
 | [Secure Boot](secure-boot.md) | Sign modules so they load on Secure Boot nodes | `nodePrep.secureBoot.existingMokSecret`<br>`nodePrep.modules.v4l2loopback.kmm.sign.enabled` |
 | [Node tuning and swap](tuning-and-swap.md) | Node sysctls and swap, kubelet first | `nodePrep.tuning.swap.enabled`<br>`nodePrep.tuning.sysctls.enabled` |
 | [Workspace seccomp profiles](seccomp-profiles.md) | Honour a workspace image's inline seccomp profile by installing it on the nodes | `agent.seccompInstaller.enabled`<br>`agent.seccompInstaller.kubeletSeccompDir` |
+| [Admit the agent on OpenShift](openshift.md) | Grant sessions and the privileged DaemonSets the SecurityContextConstraints they need; which features change mode there | `agent.openshift.scc.enabled`<br>`nodePrep.openshift.scc.enabled`<br>`videoDevicePlugin.openshift.scc.enabled` |
 
 Two decisions come before any of them. **Which nodes run sessions:** `agent.workspacesNodeSelector`
 pins sessions, and the module installer and device plugin that follow them, to a labelled pool;

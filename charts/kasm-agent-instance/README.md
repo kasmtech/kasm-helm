@@ -966,6 +966,161 @@ object
 			<td>Node selector pinning the agent and session-proxy pods. Omitted from the Agent resource entirely when empty. </td>
 		</tr>
 		<tr>
+			<td id="openshift"><a href="./values.yaml#L870">openshift</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+scc:
+    enabled: false
+    workspace:
+        allowHostPath: false
+        allowPrivileged: false
+        capabilities:
+            - SETUID
+            - SETGID
+            - CHOWN
+            - DAC_OVERRIDE
+            - FOWNER
+            - KILL
+            - NET_BIND_SERVICE
+            - SYS_CHROOT
+        name: ""
+        seccompProfiles:
+            - runtime/default
+            - localhost/*
+            - unconfined
+        volumes:
+            - configMap
+            - csi
+            - downwardAPI
+            - emptyDir
+            - ephemeral
+            - persistentVolumeClaim
+            - projected
+            - secret
+</pre>
+</div>
+			</td>
+			<td>OpenShift-only objects. Leave every switch here off on any other distribution: the kinds involved exist only on OpenShift and the release would fail to install.  Sessions are ordinary pods, and on OpenShift ordinary pods are admitted by the `restricted-v2` SecurityContextConstraint, which refuses what every Kasm workspace needs: the container starts as root and drops to `kasm-user` itself, keeps a fixed set of Linux capabilities, allows privilege escalation (`su`), pins `fsGroup: 1000`, and may reference a `Localhost` seccomp profile. The operator runs each session under a ServiceAccount of its own, `<name>-workspace`, so an SCC that admits exactly that can be granted to sessions alone and to nothing else in the namespace. This block ships that SCC and the grant. </td>
+		</tr>
+		<tr>
+			<td id="openshift--scc--enabled"><a href="./values.yaml#L880">openshift.scc.enabled</a></td>
+			<td>
+bool
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+false
+</pre>
+</div>
+			</td>
+			<td>Render the workspace SecurityContextConstraint, a ClusterRole holding `use` on it, and the RoleBinding that grants it to the `<name>-workspace` ServiceAccount the operator creates for this agent. With `seccomp.enabled` and the `installer` backend, also grant the built-in `privileged` SCC to the `<name>-seccomp-installer` ServiceAccount (root with a hostPath mount of the kubelet's seccomp directory, `spc_t`). Requires cluster-admin at install time, as any SCC or ClusterRole does. The agent Deployment, the session proxy, the image puller and the standby placeholders set no UID and stay under `restricted-v2`. </td>
+		</tr>
+		<tr>
+			<td id="openshift--scc--workspace--allowHostPath"><a href="./values.yaml#L909">openshift.scc.workspace.allowHostPath</a></td>
+			<td>
+bool
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+false
+</pre>
+</div>
+			</td>
+			<td>Admit hostPath volumes. The operator renders a workspace's `devices` (`/dev/dri`, `/dev/video*` passed through by path) and its Docker-style `volumeMappings` (host bind mounts from the manager's volume mappings) as hostPath volumes; without this they are refused. Webcam sessions through `videoDevicePlugin` use a device-plugin resource instead and need no hostPath. </td>
+		</tr>
+		<tr>
+			<td id="openshift--scc--workspace--allowPrivileged"><a href="./values.yaml#L903">openshift.scc.workspace.allowPrivileged</a></td>
+			<td>
+bool
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+false
+</pre>
+</div>
+			</td>
+			<td>Admit sessions whose image run config asks for `privileged: true`. Off by default: no stock Kasm image needs it. </td>
+		</tr>
+		<tr>
+			<td id="openshift--scc--workspace--capabilities"><a href="./values.yaml#L891">openshift.scc.workspace.capabilities</a></td>
+			<td>
+list
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+- SETUID
+- SETGID
+- CHOWN
+- DAC_OVERRIDE
+- FOWNER
+- KILL
+- NET_BIND_SERVICE
+- SYS_CHROOT
+</pre>
+</div>
+			</td>
+			<td>Capabilities the SCC lets a session add. The default is the set the operator adds to every workspace container on top of `drop: ALL`; a workspace whose image `cap_add`s more (the manager passes the image's run config through) needs those listed here too, or the pod is refused. </td>
+		</tr>
+		<tr>
+			<td id="openshift--scc--workspace--name"><a href="./values.yaml#L886">openshift.scc.workspace.name</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+""
+</pre>
+</div>
+			</td>
+			<td>Name of the cluster-scoped SecurityContextConstraint and of the ClusterRole that grants it. Leave empty to derive one unique to this agent and namespace (`kasm-<namespace>-<name>-workspace`). </td>
+		</tr>
+		<tr>
+			<td id="openshift--scc--workspace--seccompProfiles"><a href="./values.yaml#L930">openshift.scc.workspace.seccompProfiles</a></td>
+			<td>
+list
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+- runtime/default
+- localhost/*
+- unconfined
+</pre>
+</div>
+			</td>
+			<td>seccomp profiles the SCC admits. `runtime/default` is what the operator sets when an image carries no profile; `localhost/*` is the `Localhost` profile the agent sets for an image that ships an inline profile (`seccomp.enabled`, either backend); `unconfined` is the fallback for such an image when `seccomp.enabled` is off. </td>
+		</tr>
+		<tr>
+			<td id="openshift--scc--workspace--volumes"><a href="./values.yaml#L916">openshift.scc.workspace.volumes</a></td>
+			<td>
+list
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+- configMap
+- csi
+- downwardAPI
+- emptyDir
+- ephemeral
+- persistentVolumeClaim
+- projected
+- secret
+</pre>
+</div>
+			</td>
+			<td>Volume kinds the SCC admits. The default covers everything the operator renders for a session: the startup-script ConfigMaps, the memory-backed `/dev/shm` and `/tmp`, persistent profiles (PersistentVolumeClaim) and cloud storage mappings (CSI). `hostPath` is added by `allowHostPath`. Add `image` for `imageMounts` (OCI image volumes, Kubernetes 1.35+), which this list leaves out because an SCC naming a volume kind the API server does not know is refused outright. </td>
+		</tr>
+		<tr>
 			<td id="operatorRBAC--serviceAccount--name"><a href="./values.yaml#L421">operatorRBAC.serviceAccount.name</a></td>
 			<td>
 string

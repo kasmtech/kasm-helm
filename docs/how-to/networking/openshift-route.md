@@ -50,10 +50,12 @@ flowchart LR
 - Certificates: for the control plane's `edge` termination, a certificate the router serves; for
   the agent's `passthrough`, a publicly trusted certificate on the session proxy covering the
   hostname and its wildcard ([Certificates](certificates.md)).
-- The router's default connection timeout is **30 seconds**; the annotation in
-  [Idle timeouts](loadbalancer-nodeport.md#idle-timeouts) is effectively mandatory on the agent.
-- SecurityContextConstraints gate the privileged charts on OpenShift in addition to Pod Security
-  admission: [Privileged workloads and cluster policy](../nodes/privileged-workloads.md).
+- The router's default connection timeout is **30 seconds**. The control-plane Route raises it to
+  `3600s` by default (`kasm-helm.route.annotations`), because relayed sessions cross that Route;
+  the agent Route needs the same annotation set by hand, as in
+  [Idle timeouts](loadbalancer-nodeport.md#idle-timeouts).
+- SecurityContextConstraints admit the agent half, sessions included:
+  [Admit the agent on OpenShift](../nodes/openshift.md).
 
 ## Steps
 
@@ -180,4 +182,4 @@ Installing the charts directly, drop the `kasm-helm:` and `kasm-agent:` keys.
 - [ ] Hostnames under the router's domain, or DNS records pointing at the router.
 - [ ] `haproxy.router.openshift.io/timeout: "3600s"` on the agent Route.
 - [ ] Session-proxy certificate publicly trusted for `passthrough`.
-- [ ] SCC bindings handled for any privileged chart.
+- [ ] The agent half admitted: [Admit the agent on OpenShift](../nodes/openshift.md).

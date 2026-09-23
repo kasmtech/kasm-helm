@@ -855,3 +855,79 @@ gatewayRoute:
   #     - agent.example.com
   #     - alt.example.com
   hostnames: []
+
+# openshift -- OpenShift-only objects. Leave every switch here off on any other distribution: the
+# kinds involved exist only on OpenShift and the release would fail to install.
+#
+# Sessions are ordinary pods, and on OpenShift ordinary pods are admitted by the `restricted-v2`
+# SecurityContextConstraint, which refuses what every Kasm workspace needs: the container starts as
+# root and drops to `kasm-user` itself, keeps a fixed set of Linux capabilities, allows privilege
+# escalation (`su`), pins `fsGroup: 1000`, and may reference a `Localhost` seccomp profile. The
+# operator runs each session under a ServiceAccount of its own, `<name>-workspace`, so an SCC that
+# admits exactly that can be granted to sessions alone and to nothing else in the namespace. This
+# block ships that SCC and the grant.
+#
+openshift:
+  scc:
+    # openshift.scc.enabled -- Render the workspace SecurityContextConstraint, a ClusterRole holding `use` on it,
+    # and the RoleBinding that grants it to the `<name>-workspace` ServiceAccount the operator creates for this
+    # agent. With `seccomp.enabled` and the `installer` backend, also grant the built-in `privileged` SCC to the
+    # `<name>-seccomp-installer` ServiceAccount (root with a hostPath mount of the kubelet's seccomp directory,
+    # `spc_t`). Requires cluster-admin at install time, as any SCC or ClusterRole does. The agent Deployment,
+    # the session proxy, the image puller and the standby placeholders set no UID and stay under
+    # `restricted-v2`.
+    #
+    enabled: false
+    workspace:
+      # openshift.scc.workspace.name -- Name of the cluster-scoped SecurityContextConstraint and of the ClusterRole
+      # that grants it. Leave empty to derive one unique to this agent and namespace
+      # (`kasm-<namespace>-<name>-workspace`).
+      #
+      name: ""
+      # openshift.scc.workspace.capabilities -- Capabilities the SCC lets a session add. The default is the set the
+      # operator adds to every workspace container on top of `drop: ALL`; a workspace whose image `cap_add`s more
+      # (the manager passes the image's run config through) needs those listed here too, or the pod is refused.
+      #
+      capabilities:
+        - SETUID
+        - SETGID
+        - CHOWN
+        - DAC_OVERRIDE
+        - FOWNER
+        - KILL
+        - NET_BIND_SERVICE
+        - SYS_CHROOT
+      # openshift.scc.workspace.allowPrivileged -- Admit sessions whose image run config asks for `privileged: true`.
+      # Off by default: no stock Kasm image needs it.
+      #
+      allowPrivileged: false
+      # openshift.scc.workspace.allowHostPath -- Admit hostPath volumes. The operator renders a workspace's `devices`
+      # (`/dev/dri`, `/dev/video*` passed through by path) and its Docker-style `volumeMappings` (host bind mounts
+      # from the manager's volume mappings) as hostPath volumes; without this they are refused. Webcam sessions
+      # through `videoDevicePlugin` use a device-plugin resource instead and need no hostPath.
+      #
+      allowHostPath: false
+      # openshift.scc.workspace.volumes -- Volume kinds the SCC admits. The default covers everything the operator
+      # renders for a session: the startup-script ConfigMaps, the memory-backed `/dev/shm` and `/tmp`, persistent
+      # profiles (PersistentVolumeClaim) and cloud storage mappings (CSI). `hostPath` is added by `allowHostPath`.
+      # Add `image` for `imageMounts` (OCI image volumes, Kubernetes 1.35+), which this list leaves out because
+      # an SCC naming a volume kind the API server does not know is refused outright.
+      #
+      volumes:
+        - configMap
+        - csi
+        - downwardAPI
+        - emptyDir
+        - ephemeral
+        - persistentVolumeClaim
+        - projected
+        - secret
+      # openshift.scc.workspace.seccompProfiles -- seccomp profiles the SCC admits. `runtime/default` is what the
+      # operator sets when an image carries no profile; `localhost/*` is the `Localhost` profile the agent sets for an
+      # image that ships an inline profile (`seccomp.enabled`, either backend); `unconfined` is the fallback for
+      # such an image when `seccomp.enabled` is off.
+      #
+      seccompProfiles:
+        - runtime/default
+        - localhost/*
+        - unconfined

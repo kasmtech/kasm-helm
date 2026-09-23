@@ -1,0 +1,67 @@
+suite: OpenShift security mode across every pod template
+templates:
+  - templates/db-init-job.yaml
+  - templates/route.yaml
+tests:
+  # Regression: the prepare-db-preseed init container carried its own hard-coded
+  # runAsUser/runAsGroup block that isOpenshift did not gate, so any install with an
+  # authDomain or a preseed Secret was refused by the restricted-v2 SCC.
+  - it: the preseed init container drops its UID under isOpenshift like every other container
+    template: templates/db-init-job.yaml
+    values:
+      - ../../../tests/values/route-openshift.yaml
+    set:
+      kasmConfig:
+        authDomain: example.test
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: prepare-db-preseed
+      - notExists:
+          path: spec.template.spec.initContainers[0].securityContext.runAsUser
+      - notExists:
+          path: spec.template.spec.initContainers[0].securityContext.runAsGroup
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.readOnlyRootFilesystem
+          value: true
+
+  - it: the preseed init container keeps UID 1000 off OpenShift
+    template: templates/db-init-job.yaml
+    set:
+      publicAddr: kasm.example.test
+      kasmConfig:
+        authDomain: example.test
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.runAsUser
+          value: 1000
+
+  # The router's default idle timeout is 30s; relayed sessions cross this Route.
+  - it: the Route raises the router's idle timeout by default
+    template: templates/route.yaml
+    values:
+      - ../../../tests/values/route-openshift.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["haproxy.router.openshift.io/timeout"]
+          value: "3600s"
+
+  - it: a user annotation merges over the default and a bare number renders as a string
+    template: templates/route.yaml
+    values:
+      - ../../../tests/values/route-openshift.yaml
+    set:
+      route:
+        annotations:
+          haproxy.router.openshift.io/timeout: "7200s"
+          haproxy.router.openshift.io/rate-limit-connections.rate-http: 100
+    asserts:
+      - equal:
+          path: metadata.annotations["haproxy.router.openshift.io/timeout"]
+          value: "7200s"
+      - equal:
+          path: metadata.annotations["haproxy.router.openshift.io/rate-limit-connections.rate-http"]
+          value: "100"

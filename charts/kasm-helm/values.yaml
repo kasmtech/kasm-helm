@@ -231,7 +231,13 @@ route:
   #     [...]
   #     -----END CERTIFICATE-----
   #
-  annotations: {}
+  # route.annotations -- Annotations on the Route. The OpenShift router closes an idle connection after 30
+  # seconds by default, and in the relayed topology (the default) every session's websocket crosses this
+  # Route, so the default here raises that to the hour the session proxy itself allows. Values set here merge
+  # over the default; set the timeout key to override it.
+  #
+  annotations:
+    haproxy.router.openshift.io/timeout: "3600s"
   labels: {}
 
 # Configure a Gateway API HTTPRoute for your Kasm deployment, for clusters fronted by a Gateway

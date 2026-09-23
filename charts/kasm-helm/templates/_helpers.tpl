@@ -803,7 +803,12 @@ labels:
 {{- toYaml $labels | nindent 2 }}
 {{- with $annotations }}
 annotations:
-{{- toYaml . | nindent 2 }}
+{{- /* Every value quoted: an annotation is a string, and a bare number or boolean in a values file
+       (haproxy.router.openshift.io/timeout: 3600, a "true") would otherwise render as one and be
+       refused by the API server. */}}
+{{- range $k, $v := . }}
+  {{ $k | quote }}: {{ $v | toString | quote }}
+{{- end }}
 {{- end }}
 {{- end }}
 {{- if eq .include "match" }}

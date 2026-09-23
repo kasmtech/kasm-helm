@@ -288,6 +288,50 @@ object
 			<td>Node labels that select which nodes run the device plugin. Set this to the same selector used by the `kasm-node-prep` chart so `kasm.com/video` is only advertised on nodes where the v4l2loopback module is actually loaded; otherwise the scheduler can place a webcam session on a node with no devices. </td>
 		</tr>
 		<tr>
+			<td id="openshift"><a href="./values.yaml#L146">openshift</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+scc:
+    enabled: false
+    name: privileged
+</pre>
+</div>
+			</td>
+			<td>OpenShift-only objects. Leave every switch here off on any other distribution: the kinds involved exist only on OpenShift and the release would fail to install. </td>
+		</tr>
+		<tr>
+			<td id="openshift--scc--enabled"><a href="./values.yaml#L154">openshift.scc.enabled</a></td>
+			<td>
+bool
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+false
+</pre>
+</div>
+			</td>
+			<td>Grant the DaemonSet's ServiceAccount the right to use the SecurityContextConstraint named by `openshift.scc.name`, through a ClusterRole holding `use` on that one SCC and a RoleBinding in the release namespace. OpenShift's default `restricted-v2` SCC rejects this privileged, hostPath-mounting DaemonSet regardless of the namespace's Pod Security labels; this is the grant that admits it. Requires cluster-admin at install time, as any ClusterRole does. </td>
+		</tr>
+		<tr>
+			<td id="openshift--scc--name"><a href="./values.yaml#L158">openshift.scc.name</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+privileged
+</pre>
+</div>
+			</td>
+			<td>The SecurityContextConstraint to grant. The built-in `privileged` SCC is the only one that admits `privileged: true` with hostPath mounts of `/dev` and the kubelet's device-plugin directory. </td>
+		</tr>
+		<tr>
 			<td id="podAnnotations"><a href="./values.yaml#L119">podAnnotations</a></td>
 			<td>
 object
@@ -417,6 +461,64 @@ string
 </div>
 			</td>
 			<td>Memory request for the device plugin container. It holds only the list of matching device files (at most `maxDevices` entries) and its gRPC server, so this stays flat no matter how many webcam sessions are running on the node. </td>
+		</tr>
+		<tr>
+			<td id="serviceAccount"><a href="./values.yaml#L130">serviceAccount</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+annotations: {}
+create: true
+name: ""
+</pre>
+</div>
+			</td>
+			<td>The ServiceAccount the DaemonSet pods run under. The chart creates one by default so that cluster policy - an OpenShift SecurityContextConstraint, a Kyverno `PolicyException` - can be granted to this DaemonSet alone instead of to every pod that uses the namespace's `default` account. The account holds no RBAC and mounts no token; the plugin talks to the kubelet over its socket, not to the API server. </td>
+		</tr>
+		<tr>
+			<td id="serviceAccount--annotations"><a href="./values.yaml#L141">serviceAccount.annotations</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+{}
+</pre>
+</div>
+			</td>
+			<td>Annotations to add to the created ServiceAccount. </td>
+		</tr>
+		<tr>
+			<td id="serviceAccount--create"><a href="./values.yaml#L134">serviceAccount.create</a></td>
+			<td>
+bool
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+true
+</pre>
+</div>
+			</td>
+			<td>Create the ServiceAccount. Set to `false` to run under an existing one named by `serviceAccount.name`, or under the namespace `default` account when that is empty. </td>
+		</tr>
+		<tr>
+			<td id="serviceAccount--name"><a href="./values.yaml#L138">serviceAccount.name</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+""
+</pre>
+</div>
+			</td>
+			<td>Name of the ServiceAccount to create or to use. Leave empty to derive it from the release name (`<release>-kasm-video-device-plugin`). </td>
 		</tr>
 		<tr>
 			<td id="tolerations"><a href="./values.yaml#L77">tolerations</a></td>

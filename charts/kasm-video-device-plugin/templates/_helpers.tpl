@@ -91,3 +91,17 @@ app.kubernetes.io/part-of: kasm-ai
 {{- $global := dig "cattle" "systemDefaultRegistry" "" (.Values.global | default dict) -}}
 {{- if $global -}}{{ trimSuffix "/" $global }}{{- else -}}{{ trimSuffix "/" (.Values.image.registry | default "") }}{{- end -}}
 {{- end -}}
+
+{{/*
+  The ServiceAccount the DaemonSet runs under: serviceAccount.name when set, else the release's own
+  fullname when the chart creates one, else the namespace default. A dedicated account is what lets a
+  cluster policy (an OpenShift SecurityContextConstraint, a Kyverno PolicyException) be granted to this
+  DaemonSet alone rather than to every pod that uses the namespace's default account.
+*/}}
+{{- define "kasmVideoDevicePlugin.serviceAccountName" -}}
+{{- if .Values.serviceAccount.create -}}
+{{- default (include "kasmVideoDevicePlugin.fullname" .) .Values.serviceAccount.name -}}
+{{- else -}}
+{{- default "default" .Values.serviceAccount.name -}}
+{{- end -}}
+{{- end -}}

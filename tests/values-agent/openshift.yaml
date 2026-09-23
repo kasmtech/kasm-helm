@@ -1,0 +1,22 @@
+# OpenShift: the agent's sessions admitted through their own SecurityContextConstraint, the seccomp
+# installer through the built-in privileged one, and the session proxy published by a passthrough
+# Route. Only cluster-scoped policy objects and a Route are added on top of the default render, so
+# this scenario stays under the Kyverno PSS gate; the privileged DaemonSets and their SCC grants are
+# exercised by infra.yaml's siblings, not here.
+agent:
+  manager:
+    hostname: kasm.example.test
+    token: "placeholder-not-a-real-token"
+  publicHostname: sessions.apps.ocp.example.test
+  route:
+    enabled: true
+    annotations:
+      haproxy.router.openshift.io/timeout: "3600s"
+    tls:
+      termination: passthrough
+  seccomp:
+    enabled: true
+    backend: installer
+  openshift:
+    scc:
+      enabled: true

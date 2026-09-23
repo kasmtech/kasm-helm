@@ -1,0 +1,41 @@
+{{- include "kasmNodePrep.validateEnabled" . }}
+{{- include "kasmNodePrep.validateMethods" . }}
+{{- include "kasmNodePrep.validateInputs" . }}
+{{/*
+  OpenShift admits pods through SecurityContextConstraints, and the default `restricted-v2` refuses a
+  privileged container with hostPath mounts no matter what the namespace's Pod Security labels say.
+  This grants the DaemonSet's ServiceAccount, and nothing else in the namespace, the right to use
+  the cluster's built-in `privileged` SCC (or the one named in openshift.scc.name), the same way
+  `oc adm policy add-scc-to-user` does: a ClusterRole holding `use` on that one SCC, bound by a
+  namespaced RoleBinding. Off by default: the objects are OpenShift API kinds and would fail on any
+  other cluster. Like the ServiceAccount, it only renders when there is a DaemonSet to admit.
+*/}}
+{{- if and .Values.openshift.scc.enabled (include "kasmNodePrep.daemonSetNeeded" .) }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "kasmNodePrep.fullname" . }}-scc
+  labels:
+    {{- include "kasmNodePrep.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["security.openshift.io"]
+    resources: ["securitycontextconstraints"]
+    resourceNames: [{{ .Values.openshift.scc.name | quote }}]
+    verbs: ["use"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "kasmNodePrep.fullname" . }}-scc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kasmNodePrep.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "kasmNodePrep.fullname" . }}-scc
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "kasmNodePrep.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

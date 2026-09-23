@@ -21,6 +21,7 @@ The installer writes under the kubelet's root-owned seccomp directory, so it run
 
 - **A `privileged` Pod Security namespace.** Label the agent's namespace `pod-security.kubernetes.io/enforce=privileged` (or run it in a namespace that already permits privileged workloads, as node-prep and egress need too). Under `restricted`/`baseline` the installer pod is rejected.
 - **Nodes that allow hostPath.** Serverless node pools that forbid hostPath or DaemonSets (e.g. GKE Autopilot, Fargate) cannot run it — there, use the `spo` backend or accept `Unconfined`.
+- **On OpenShift, the `privileged` SCC.** The installer also sets the `spc_t` SELinux type, which only that SCC admits; `agent.openshift.scc.enabled` grants it to the installer's own ServiceAccount, and the sessions' SCC admits the resulting `Localhost` profiles. [Admit the agent on OpenShift](openshift.md).
 
 It follows `agent.workspacesNodeSelector` / `agent.workspacesTolerations`, so it stages profiles on exactly the nodes sessions run on — nothing extra to place.
 

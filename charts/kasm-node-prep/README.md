@@ -1002,6 +1002,50 @@ object
 			<td>Node labels that select which nodes get prepared. Leave empty to run on every node, or restrict it to the nodes that host Kasm workspace sessions. Pair it with the matching `kasm-video-device-plugin` selector so the device plugin only advertises `kasm.com/video` where the module is actually loaded. </td>
 		</tr>
 		<tr>
+			<td id="openshift"><a href="./values.yaml#L419">openshift</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+scc:
+    enabled: false
+    name: privileged
+</pre>
+</div>
+			</td>
+			<td>OpenShift-only objects. Leave every switch here off on any other distribution: the kinds involved exist only on OpenShift and the release would fail to install. </td>
+		</tr>
+		<tr>
+			<td id="openshift--scc--enabled"><a href="./values.yaml#L427">openshift.scc.enabled</a></td>
+			<td>
+bool
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+false
+</pre>
+</div>
+			</td>
+			<td>Grant the DaemonSet's ServiceAccount the right to use the SecurityContextConstraint named by `openshift.scc.name`, through a ClusterRole holding `use` on that one SCC and a RoleBinding in the release namespace. OpenShift's default `restricted-v2` SCC rejects this privileged, hostPath-mounting DaemonSet regardless of the namespace's Pod Security labels; this is the grant that admits it. Requires cluster-admin at install time, as any ClusterRole does. </td>
+		</tr>
+		<tr>
+			<td id="openshift--scc--name"><a href="./values.yaml#L431">openshift.scc.name</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+privileged
+</pre>
+</div>
+			</td>
+			<td>The SecurityContextConstraint to grant. The built-in `privileged` SCC is the only one that admits `privileged: true` with hostPath mounts of `/dev`, `/lib/modules` and `/usr/src`. </td>
+		</tr>
+		<tr>
 			<td id="podAnnotations"><a href="./values.yaml#L392">podAnnotations</a></td>
 			<td>
 object
@@ -1131,6 +1175,64 @@ string
 </div>
 			</td>
 			<td>Name of an existing Secret holding the MOK signing key pair, with keys `mokPrivateKey` (PEM private key) and `mokPublicKey` (DER certificate). When set, the Secret is mounted read-only at `/etc/kasm-mok` and every built module is signed with the kernel's `sign-file` helper before it is inserted. Leave empty on nodes that do not enforce Secure Boot. </td>
+		</tr>
+		<tr>
+			<td id="serviceAccount"><a href="./values.yaml#L403">serviceAccount</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+annotations: {}
+create: true
+name: ""
+</pre>
+</div>
+			</td>
+			<td>The ServiceAccount the DaemonSet pods run under. The chart creates one by default so that cluster policy - an OpenShift SecurityContextConstraint, a Kyverno `PolicyException` - can be granted to this DaemonSet alone instead of to every pod that uses the namespace's `default` account. The account holds no RBAC and mounts no token. </td>
+		</tr>
+		<tr>
+			<td id="serviceAccount--annotations"><a href="./values.yaml#L414">serviceAccount.annotations</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+{}
+</pre>
+</div>
+			</td>
+			<td>Annotations to add to the created ServiceAccount. </td>
+		</tr>
+		<tr>
+			<td id="serviceAccount--create"><a href="./values.yaml#L407">serviceAccount.create</a></td>
+			<td>
+bool
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+true
+</pre>
+</div>
+			</td>
+			<td>Create the ServiceAccount. Set to `false` to run under an existing one named by `serviceAccount.name`, or under the namespace `default` account when that is empty. </td>
+		</tr>
+		<tr>
+			<td id="serviceAccount--name"><a href="./values.yaml#L411">serviceAccount.name</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+""
+</pre>
+</div>
+			</td>
+			<td>Name of the ServiceAccount to create or to use. Leave empty to derive it from the release name (`<release>-kasm-node-prep`). </td>
 		</tr>
 		<tr>
 			<td id="tolerations"><a href="./values.yaml#L352">tolerations</a></td>

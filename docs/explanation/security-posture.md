@@ -22,8 +22,10 @@ in the namespace, which is the main reason for the two-namespace layout
 ([Deployment topologies](topologies.md)). Host namespaces are beyond what the label grants: a
 blanket `disallow-host-namespaces` Kyverno or Gatekeeper rule rejects the egress installer even in a
 `privileged` namespace, so it needs a scoped exception or a recorded accepted risk. On OpenShift,
-SecurityContextConstraints gate privileged pods in addition to Pod Security admission, and the
-label alone is not enough. On RKE2 with the CIS profile, Pod Security admission enforces
+SecurityContextConstraints admit pods instead of the label, which the SCC label syncer sets on the
+namespace for you; each privileged chart grants the `privileged` SCC to its own ServiceAccount, and
+sessions get an SCC of their own
+([Admit the agent on OpenShift](../how-to/nodes/openshift.md)). On RKE2 with the CIS profile, Pod Security admission enforces
 `restricted` on every namespace from the API server's admission configuration, and a namespace
 label cannot loosen it: the exemption is an entry in that configuration. Procedure:
 [Privileged workloads and cluster policy](../how-to/nodes/privileged-workloads.md).

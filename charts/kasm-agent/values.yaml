@@ -104,6 +104,9 @@ otelCollector:
 # `publicHostname`, `publicPort`, `zone`, `sessionProxy.*`, `otel.*`, `gpu.enabled`,
 # `storageMappings.*`, `imagePuller.*`, `httpRoute.*`, `env`, ...).
 #
+# On OpenShift, `agent.openshift.scc.enabled` ships the SecurityContextConstraint the sessions need and
+# grants it to the workspace ServiceAccount the operator creates; see the `kasm-agent-instance` chart.
+#
 agent:
   # agent.enabled -- Install the Kasm agent instance with this release. Disable it to install only
   # the operator and cluster infrastructure, and create Agent resources separately.
@@ -140,7 +143,8 @@ agent:
 # See the `kasm-node-prep` chart for its values (`modules.v4l2loopback.enabled`,
 # `modules.v4l2loopback.videoDevices`, `modules.v4l2loopback.exclusiveCaps`,
 # `modules.wireguard.enabled`, `tuning.swap.enabled`, `tuning.sysctls.enabled`,
-# `secureBoot.existingMokSecret`, `nodeSelector`, ...).
+# `secureBoot.existingMokSecret`, `nodeSelector`, ...). On OpenShift, `nodePrep.openshift.scc.enabled`
+# grants its ServiceAccount the `privileged` SCC.
 #
 nodePrep:
   # nodePrep.enabled -- Install the privileged node preparation DaemonSet with this release.
@@ -160,7 +164,8 @@ nodePrep:
 # `nodePrep.modules.v4l2loopback.enabled` unless the nodes provide real capture devices.
 #
 # See the `kasm-video-device-plugin` chart for its values (`devicePrefix`, `maxDevices`, `resourceName`,
-# `nodeSelector`, ...).
+# `nodeSelector`, ...). On OpenShift, `videoDevicePlugin.openshift.scc.enabled` grants its ServiceAccount
+# the `privileged` SCC.
 #
 videoDevicePlugin:
   # videoDevicePlugin.enabled -- Install the video device plugin DaemonSet with this release.
