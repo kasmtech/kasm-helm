@@ -1,8 +1,7 @@
 # Kasm Agent CRDs
 
-The five CustomResourceDefinitions the Kasm agent operator owns (`agents`, `kasmworkspaces` and
-`kasmimagepullers` in `agent.kasm.com`; `warmpools` and `warmpoolinstances` in `pools.kasm.ai`),
-and nothing else. Rancher installs this chart automatically before `kasm-agent` or `kasm-platform`
+The three CustomResourceDefinitions the Kasm agent operator owns (`agents`, `kasmworkspaces` and
+`kasmimagepullers` in `agent.kasm.com`), and nothing else. Rancher installs this chart automatically before `kasm-agent` or `kasm-platform`
 and upgrades it with them, so CRD schema changes arrive through Helm rather than through a manual
 `kubectl apply`. It has no values.
 

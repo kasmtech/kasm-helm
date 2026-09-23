@@ -2,7 +2,7 @@
 
 ![Version: 1.1200.0-develop](https://img.shields.io/badge/Version-1.1200.0--develop-informational?style=flat-square) ![AppVersion: develop](https://img.shields.io/badge/AppVersion-develop-informational?style=flat-square)
 
-The CustomResourceDefinitions the Kasm Agent operator owns — agents, kasmworkspaces and kasmimagepullers in the agent.kasm.com group, warmpools and warmpoolinstances in pools.kasm.ai — and nothing else. It ships them as ordinary Helm templates so that a release of this chart owns their lifecycle and `helm upgrade` applies schema changes, for fleets that would rather upgrade CRDs through Helm than through the documented kubectl side channel. The kasm-agent-operator chart keeps its own copy in crds/ for one-command installs; install and upgrade this release before the kasm-agent or kasm-platform releases.
+The CustomResourceDefinitions the Kasm Agent operator owns — agents, kasmworkspaces and kasmimagepullers in the agent.kasm.com group — and nothing else. It ships them as ordinary Helm templates so that a release of this chart owns their lifecycle and `helm upgrade` applies schema changes, for fleets that would rather upgrade CRDs through Helm than through the documented kubectl side channel. The kasm-agent-operator chart keeps its own copy in crds/ for one-command installs; install and upgrade this release before the kasm-agent or kasm-platform releases.
 
 ## Maintainers
 
@@ -25,8 +25,6 @@ The CustomResourceDefinitions the Kasm Agent operator owns, and nothing else:
 | `agents.agent.kasm.com` | `agent.kasm.com` | `Agent` |
 | `kasmworkspaces.agent.kasm.com` | `agent.kasm.com` | `KasmWorkspace` |
 | `kasmimagepullers.agent.kasm.com` | `agent.kasm.com` | `KasmImagePuller` |
-| `warmpools.pools.kasm.ai` | `pools.kasm.ai` | `WarmPool` |
-| `warmpoolinstances.pools.kasm.ai` | `pools.kasm.ai` | `WarmPoolInstance` |
 
 No ServiceAccount, no RBAC, no operator Deployment — those belong to
 [`kasm-agent-operator`](../kasm-agent-operator). This chart has **no values**: the templates are
@@ -115,7 +113,7 @@ upgrade again.
 ## The `keep` annotation
 
 Every CRD in this chart carries `helm.sh/resource-policy: keep`. `helm uninstall` therefore leaves
-all five definitions — and every custom resource stored in them: every `Agent`, every live
+all three definitions — and every custom resource stored in them: every `Agent`, every live
 `KasmWorkspace` — in place. Uninstalling this release gives up Helm's ownership of the CRDs; it does
 not delete anything.
 
@@ -146,8 +144,7 @@ Label and annotate the existing CRDs so Helm recognises them as belonging to thi
 install as normal. Substitute your release name and namespace:
 
 ```console
-for crd in agents.agent.kasm.com kasmimagepullers.agent.kasm.com kasmworkspaces.agent.kasm.com \
-           warmpools.pools.kasm.ai warmpoolinstances.pools.kasm.ai; do
+for crd in agents.agent.kasm.com kasmimagepullers.agent.kasm.com kasmworkspaces.agent.kasm.com; do
   kubectl label crd "$crd" app.kubernetes.io/managed-by=Helm --overwrite
   kubectl annotate crd "$crd" meta.helm.sh/release-name=<release> \
     meta.helm.sh/release-namespace=<namespace> --overwrite

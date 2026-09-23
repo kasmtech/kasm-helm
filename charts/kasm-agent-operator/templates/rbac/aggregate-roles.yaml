@@ -1,23 +1,20 @@
 {{/*
   Convenience admin/editor/viewer ClusterRoles, one trio per custom resource kind. Translated from the
   scaffolded per-CRD role files in config/rbac of the kasm-agent-operator repo
-  (agent_agent_*_role.yaml, agent_kasmimagepuller_*_role.yaml, agent_kasmworkspace_*_role.yaml,
-  warmpool_*_role.yaml, warmpoolinstance_*_role.yaml).
+  (agent_agent_*_role.yaml, agent_kasmimagepuller_*_role.yaml, agent_kasmworkspace_*_role.yaml).
 
   These rules are not used by the operator itself. They exist so a cluster administrator can delegate
   access to the Kasm custom resources: `admin` grants full permissions ('*') over the kind, `editor`
   grants create/update/delete without control over RBAC, and `viewer` grants read-only access. Each
   trio also grants `get` on the kind's status subresource.
 
-  All fifteen are gated behind `rbac.aggregateRoles`; the operator keeps working without them.
+  All nine are gated behind `rbac.aggregateRoles`; the operator keeps working without them.
 */}}
 {{- if .Values.rbac.aggregateRoles }}
 {{- $kinds := list
       (dict "prefix" "agent-agent" "group" "agent.kasm.com" "resource" "agents")
       (dict "prefix" "agent-kasmimagepuller" "group" "agent.kasm.com" "resource" "kasmimagepullers")
       (dict "prefix" "agent-kasmworkspace" "group" "agent.kasm.com" "resource" "kasmworkspaces")
-      (dict "prefix" "warmpool" "group" "pools.kasm.ai" "resource" "warmpools")
-      (dict "prefix" "warmpoolinstance" "group" "pools.kasm.ai" "resource" "warmpoolinstances")
 }}
 {{- $tiers := list
       (dict "tier" "admin" "verbs" (list "*"))

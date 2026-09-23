@@ -45,7 +45,7 @@ aliases and conditions, and those stay reachable from the top: `kasm-agent.opera
 `kasm-agent.nodePrep.enabled`, `kasm-agent.gpuOperator.enabled`, and so on all work from a
 top-level values file.
 
-The operator's five CustomResourceDefinitions arrive with the install, from the operator chart's
+The operator's three CustomResourceDefinitions arrive with the install, from the operator chart's
 `crds/` directory: created once, never upgraded by a later `helm upgrade`. To put them under Helm's
 control instead, install the [`kasm-agent-crds`](../kasm-agent-crds) chart as its own release
 **before** this one and upgrade it first thereafter. See [Install the CRDs](../../docs/how-to/install/crds.md).

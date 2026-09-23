@@ -14,9 +14,8 @@ The Kasm Agent Kubernetes operator. Installs the agent.kasm.com CustomResourceDe
      re-run `make readme-all` from the repository root. -->
 ## What this chart installs
 
-* The five CustomResourceDefinitions the operator owns: `agents`, `kasmworkspaces` and
-  `kasmimagepullers` in the `agent.kasm.com` group, and `warmpools` and `warmpoolinstances` in the
-  `pools.kasm.ai` group.
+* The three CustomResourceDefinitions the operator owns: `agents`, `kasmworkspaces` and
+  `kasmimagepullers` in the `agent.kasm.com` group.
 * The cluster RBAC the operator needs (`manager-role` and its binding, the namespaced
   `leader-election-role`, and the metrics authn/authz roles), plus the `kasm-agent` and
   `kasm-nginx-sidecar` ClusterRoles that the operator binds to at runtime.
@@ -48,7 +47,7 @@ another namespace will fight the first one for ownership of those cluster-scoped
 
 ## CustomResourceDefinition lifecycle
 
-There are two supported ways to get these five CRDs onto a cluster, and one supported way to change them
+There are two supported ways to get these three CRDs onto a cluster, and one supported way to change them
 afterwards. Pick the pair that matches how the fleet is run; they interoperate.
 
 ### 1. This chart's `crds/` directory — the default, and what makes a one-command install work
@@ -64,7 +63,7 @@ mechanism apply:
 
 ### 2. The `kasm-agent-crds` release — Helm-native CRD upgrades
 
-[`charts/kasm-agent-crds`](../kasm-agent-crds) ships the same five CRDs as ordinary templates, so a
+[`charts/kasm-agent-crds`](../kasm-agent-crds) ships the same three CRDs as ordinary templates, so a
 release of *that* chart owns their lifecycle and `helm upgrade` applies schema changes like any other
 resource. Install it **before** `kasm-agent` or `kasm-platform` on a fresh fleet, and upgrade it before
 them thereafter; its `helm.sh/resource-policy: keep` annotations mean uninstalling it never deletes a CRD

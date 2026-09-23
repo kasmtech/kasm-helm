@@ -149,35 +149,6 @@ rules:
   - patch
   - update
   - watch
-- apiGroups:
-  - pools.kasm.ai
-  resources:
-  - warmpoolinstances
-  - warmpools
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - pools.kasm.ai
-  resources:
-  - warmpoolinstances/finalizers
-  - warmpools/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - pools.kasm.ai
-  resources:
-  - warmpoolinstances/status
-  - warmpools/status
-  verbs:
-  - get
-  - patch
-  - update
 # The per-Agent ClusterRoleBinding is created, updated and deleted by a name the operator computes
 # itself; it never lists or patches bindings. The per-Agent RoleBinding is owned by the Agent and
 # garbage-collected, so no delete verb is needed on rolebindings.

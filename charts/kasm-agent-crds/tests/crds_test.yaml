@@ -4,12 +4,10 @@ templates:
   - templates/agent.kasm.com_agents.yaml
   - templates/agent.kasm.com_kasmimagepullers.yaml
   - templates/agent.kasm.com_kasmworkspaces.yaml
-  - templates/pools.kasm.ai_warmpools.yaml
-  - templates/pools.kasm.ai_warmpoolinstances.yaml
 
 tests:
   # ---------- the full set renders ----------
-  - it: renders exactly one CustomResourceDefinition per template, five in all
+  - it: renders exactly one CustomResourceDefinition per template, three in all
     asserts:
       - hasDocuments:
           count: 1
@@ -20,12 +18,6 @@ tests:
       - hasDocuments:
           count: 1
         template: templates/agent.kasm.com_kasmworkspaces.yaml
-      - hasDocuments:
-          count: 1
-        template: templates/pools.kasm.ai_warmpools.yaml
-      - hasDocuments:
-          count: 1
-        template: templates/pools.kasm.ai_warmpoolinstances.yaml
       - isKind:
           of: CustomResourceDefinition
       - isAPIVersion:
@@ -71,35 +63,8 @@ tests:
           value: agent.kasm.com
         template: templates/agent.kasm.com_kasmworkspaces.yaml
 
-  - it: installs the two pools.kasm.ai definitions under their canonical names
-    asserts:
-      - equal:
-          path: metadata.name
-          value: warmpools.pools.kasm.ai
-        template: templates/pools.kasm.ai_warmpools.yaml
-      - equal:
-          path: spec.names.kind
-          value: WarmPool
-        template: templates/pools.kasm.ai_warmpools.yaml
-      - equal:
-          path: metadata.name
-          value: warmpoolinstances.pools.kasm.ai
-        template: templates/pools.kasm.ai_warmpoolinstances.yaml
-      - equal:
-          path: spec.names.kind
-          value: WarmPoolInstance
-        template: templates/pools.kasm.ai_warmpoolinstances.yaml
-      - equal:
-          path: spec.group
-          value: pools.kasm.ai
-        template: templates/pools.kasm.ai_warmpools.yaml
-      - equal:
-          path: spec.group
-          value: pools.kasm.ai
-        template: templates/pools.kasm.ai_warmpoolinstances.yaml
-
   # ---------- the resource policy that makes uninstall non-destructive ----------
-  # Without this annotation on every one of the five, `helm uninstall` would delete the CRD and
+  # Without this annotation on every one of the three, `helm uninstall` would delete the CRD and
   # cascade-delete every custom resource stored in it — every Agent, every live KasmWorkspace.
   - it: keeps every definition, and its stored custom resources, on uninstall
     asserts:
@@ -133,8 +98,8 @@ tests:
         template: templates/agent.kasm.com_agents.yaml
       - equal:
           path: metadata.name
-          value: warmpoolinstances.pools.kasm.ai
-        template: templates/pools.kasm.ai_warmpoolinstances.yaml
+          value: kasmimagepullers.agent.kasm.com
+        template: templates/agent.kasm.com_kasmimagepullers.yaml
       - matchRegex:
           path: metadata.name
           pattern: ^[a-z.]+$

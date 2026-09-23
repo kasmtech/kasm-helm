@@ -134,22 +134,6 @@ tests:
               - patch
               - update
               - watch
-      - contains:
-          path: rules
-          content:
-            apiGroups:
-              - pools.kasm.ai
-            resources:
-              - warmpoolinstances
-              - warmpools
-            verbs:
-              - create
-              - delete
-              - get
-              - list
-              - patch
-              - update
-              - watch
 
   # ---------- leader election ----------
   - it: scopes the leader election role and binding to the release namespace
@@ -396,11 +380,11 @@ tests:
         documentIndex: 0
 
   # ---------- aggregate convenience roles ----------
-  - it: renders the fifteen convenience roles by default
+  - it: renders the nine convenience roles by default
     template: templates/rbac/aggregate-roles.yaml
     asserts:
       - hasDocuments:
-          count: 15
+          count: 9
 
   - it: gives the admin tier full verbs and the viewer tier read-only verbs
     template: templates/rbac/aggregate-roles.yaml
@@ -437,8 +421,8 @@ tests:
         documentIndex: 2
       - equal:
           path: metadata.name
-          value: warmpoolinstance-editor-role
-        documentIndex: 13
+          value: agent-kasmworkspace-viewer-role
+        documentIndex: 8
 
   - it: removes the convenience roles when rbac.aggregateRoles is false
     template: templates/rbac/aggregate-roles.yaml
@@ -595,5 +579,5 @@ tests:
               - watch
       - lengthEqual:
           path: rules
-          count: 17
+          count: 14
 

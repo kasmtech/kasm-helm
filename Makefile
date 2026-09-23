@@ -521,7 +521,7 @@ crds-sync-check: $(YQ) ## Verify charts/kasm-agent-crds templates carry the same
 	    echo "keeping each file's own header comment and the templated copy's resource-policy annotation."; \
 	    exit 1; \
 	  fi; \
-	  echo "crds-sync-check: both copies of all 5 CRDs agree."
+	  echo "crds-sync-check: both copies of all $$(ls $(AGENT_CRDS_SOURCE_DIR)/*.yaml | wc -l | tr -d ' ') CRDs agree."
 
 # The companion to crds-sync-check: that one guards the *content* of the two CRD copies, this one
 # guards the *versions* that tie the agent-family charts together. Every file:// dependency in

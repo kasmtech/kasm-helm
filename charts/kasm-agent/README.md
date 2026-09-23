@@ -23,7 +23,7 @@ Each dependency is aliased, so every value below is set as `<alias>.<subchart va
 
 | Alias | Chart | Default | What it is |
 | ----- | ----- | ------- | ---------- |
-| `operator` | `kasm-agent-operator` | enabled | The five CRDs (`Agent`, `KasmWorkspace`, `KasmImagePuller`, `WarmPool`, `WarmPoolInstance`), the cluster RBAC, and the controller-manager that reconciles them. |
+| `operator` | `kasm-agent-operator` | enabled | The three CRDs (`Agent`, `KasmWorkspace`, `KasmImagePuller`), the cluster RBAC, and the controller-manager that reconciles them. |
 | `otelCollector` | `kasm-otel-collector` | enabled | An OpenTelemetry collector that receives traces, metrics, and logs from the operator, the agent, and workspace pods on ports 4317/4318, and forwards them to your telemetry backends. |
 | `agent` | `kasm-agent-instance` | enabled | The `Agent` resource that registers this cluster as a Kasm deployment zone, plus the session proxy users' browsers connect to. |
 | `nodePrep` | `kasm-node-prep` | disabled | A privileged DaemonSet that builds and loads host kernel modules (`v4l2loopback`, `wireguard`). |
@@ -36,7 +36,7 @@ Each dependency is aliased, so every value below is set as `<alias>.<subchart va
 On top of the subcharts, the umbrella itself owns only two things: an optional set of baseline
 namespace NetworkPolicies (`networkPolicies.*`) and an `extraObjects` escape hatch.
 
-The operator's five CustomResourceDefinitions arrive from its `crds/` directory: Helm creates them
+The operator's three CustomResourceDefinitions arrive from its `crds/` directory: Helm creates them
 on install and never upgrades them. To put them under Helm's control instead, install
 [`kasm-agent-crds`](../kasm-agent-crds/README.md) as its own release before this one and upgrade it
 first thereafter; otherwise apply schema changes out of band with
