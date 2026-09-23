@@ -77,7 +77,7 @@ pods' network namespaces and the node's own CNI configuration.
   `cniConfDirs` (write, to patch conflists), the containerd config directories for k3s and RKE2 (read-only,
   to detect a non-default `conf_dir`), and its own socket directory (write — must be a host path, since the
   shim that connects to it runs directly on the host, outside any pod).
-* RBAC is minimal: a `ClusterRole` with `get` (never list or watch) on `pods`, `nodes`, and `services`,
+* RBAC is minimal: a `ClusterRole` with `get` (never list or watch) on `pods` alone,
   used only for optional annotation-based config discovery and looking up a sibling container's env vars.
 * The namespace this is installed into must allow privileged, host-namespace pods. With
   [Pod Security Admission](https://kubernetes.io/docs/concepts/security/pod-security-admission/) that means

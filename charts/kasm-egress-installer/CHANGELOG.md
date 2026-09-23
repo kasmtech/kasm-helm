@@ -6,6 +6,7 @@ All notable changes to the kasm-egress-installer chart are documented here.
 
 ### Fixed
 
+- The ClusterRole no longer grants `get` on `nodes` and `services`. The daemon only ever reads a session's own pod (its egress annotation, and a sibling container's env for the manager address); the node and service lookups the grant covered had no callers and are gone from the daemon, so the grant is `pods` alone now.
 - `containerdConfigPaths` and `containerdConfigDirs` covered only k3s and RKE2, so on kubeadm and most managed distributions the daemon never saw `/etc/containerd/config.toml`; both lists now include the standard containerd paths. `appVersion` was `latest`, which resolved the default image to a floating tag; it follows the agent family's `develop` now.
 
 ### Changed
