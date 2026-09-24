@@ -4,6 +4,7 @@ Kasm API server Deployment definition
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- $apiReplicas := ternary .Values.components.api.replicas (include "replicas.preset" (dict "node" ($constants.api.component) "size" .Values.deploymentSize)) (gt (int .Values.components.api.replicas) 0) -}}
 {{- $merged := fromYaml (include "kasm.mergedValues" (dict "root" . "componentName" "api")) -}}
+{{- $sa := fromYaml (include "kasm.serviceAccount" (dict "context" . "component" "api")) -}}
 {{- range $idx, $zone := (include "kasm.zones" $ | fromYamlArray) }}
 ---
 apiVersion: apps/v1
@@ -25,6 +26,9 @@ spec:
       {{- include "kasm.metadata" (dict "context" $ "component" "api" "resource" "pod" "zone" $zone.name "include" "la") | indent 6 }}
     spec:
       restartPolicy: {{ $.Values.restartPolicy }}
+      {{- with $sa.name }}
+      serviceAccountName: {{ . }}
+      {{- end }}
       {{- if $.Values.imagePullSecrets.enabled }}
       imagePullSecrets:
         - name: {{ $.Values.imagePullSecrets.name | default (printf "%s-image-pull-secret" $.Release.Name) }}

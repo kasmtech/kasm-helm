@@ -6,6 +6,10 @@ networking:
   apiServerPort: 6443
 nodes:
   - role: control-plane
+    # Explicit node image pin (kind v0.33.0's default), matching KUBECTL_VERSION in
+    # the Makefile. Must be >=1.31 for cloud-provider-kind's Ingress/Gateway API
+    # controllers, which require the Kubernetes ServiceCIDR API (GA in 1.31). See F12.
+    image: kindest/node:v1.34.11@sha256:44e222ee2132dab25ff87301682f89eb82c7880ea3a1bf543bfe9708fd08d67d
     kubeadmConfigPatches:
       - |
         kind: ClusterConfiguration

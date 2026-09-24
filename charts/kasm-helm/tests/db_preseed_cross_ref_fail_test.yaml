@@ -343,3 +343,21 @@ tests:
     asserts:
       - failedTemplate:
           errorMessage: "No matching group found for group 'nonexistent-group'"
+
+  - it: server_pools type "Bogus" fails render
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.server_pools:
+        - name: "primary-pool"
+          type: "Bogus"
+    asserts:
+      - failedTemplate:
+          errorMessage: "kasmConfig.config.server_pools[0].type: invalid value \"Bogus\"; valid values are \"Docker Agent\" (aliases: docker, agent, docker agent) or \"Server Pool\" (aliases: server, server pool)"

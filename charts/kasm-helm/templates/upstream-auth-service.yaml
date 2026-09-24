@@ -1,0 +1,35 @@
+{{/*
+  The upstream auth (management) endpoint Service, when upstreamAuth.service.enabled.
+
+  Publishes the zone's Upstream Auth Address - the out-of-band URL external Kasm
+  Agents and Windows services use for /api/ and /manager_api/ - straight onto the
+  proxy pods, port 443 to the proxy's HTTPS port. A private load balancer scheme
+  is selected through upstreamAuth.service.annotations (for example
+  service.beta.kubernetes.io/aws-load-balancer-scheme: internal).
+
+  One Service per zone: this is raw L4 with no host routing, so each zone's
+  address needs its own load balancer, unlike the L7 publishers
+  (upstream-auth-ingress/httproute/route/tlsroute) which share one.
+*/}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- if .Values.upstreamAuth.service.enabled -}}
+{{- range $idx, $zone := (include "kasm.zones" . | fromYamlArray) }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  {{- include "kasm.metadata" (dict "context" $ "component" "upstream-auth" "resource" "service" "zone" $zone.name "include" "all") | indent 2 }}
+spec:
+  type: {{ $.Values.upstreamAuth.service.type }}
+  selector:
+    {{- include "kasm.metadata" (dict "context" $ "component" "proxy" "resource" "service" "zone" $zone.name "include" "match") | indent 4 }}
+  ports:
+    - name: {{ printf "%s-%s-ua-%s" $constants.proxy.svc (include "kasm.zoneName" $zone.name) ($constants.proxy.extHttps | toString) }}
+      protocol: TCP
+      port: {{ $constants.proxy.extHttps }}
+      targetPort: {{ $constants.proxy.portName }}-https
+      {{- if and (eq $.Values.upstreamAuth.service.type "NodePort") $.Values.upstreamAuth.service.nodePort }}
+      nodePort: {{ $.Values.upstreamAuth.service.nodePort }}
+      {{- end }}
+{{- end }}
+{{- end }}

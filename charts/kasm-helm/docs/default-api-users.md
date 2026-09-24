@@ -2,8 +2,8 @@
 
 This document describes every API credential that `kasmConfig.defaultApiUsers: true` seeds into the database. All entries are generated at DB initialization time via the preseed mechanism and are not re-applied on upgrade.
 
->>> [!warning] The current version of Kasm does not apply the permissions listed below at DB initialization time. This is an application bug, not a Helm chart defect, and is queued for a fix. The API configs are created, but with no permissions granted; assign them manually via the Kasm API/UI after install until the bug is resolved.
->>>
+> [!WARNING]
+> The current version of Kasm does not apply the API User permissions listed below at DB initialization time. This is an application bug, not a Helm chart defect, and is queued for a fix. The API configs are created, but with no permissions granted; assign them manually via the Kasm API/UI after install until the bug is resolved.
 
 ## Control flag
 

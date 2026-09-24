@@ -25,7 +25,8 @@ kind-fix-kubeconfig:
 	if [ "$${CI:-}" = "true" ] || echo "$${DOCKER_HOST:-}" | grep -q 'tcp://docker'; then \
 	  docker_ip=$$(getent hosts docker | awk '{print $$1}' | head -n1); \
 	  if [ -n "$$docker_ip" ]; then \
-	    echo "$$docker_ip kind.kasm.local" >> /etc/hosts; \
+	    grep -qE "[[:space:]]kind.kasm.local$$" /etc/hosts || echo "$$docker_ip kind.kasm.local" >> /etc/hosts; \
+	    grep -qE "[[:space:]]$(KIND_CLUSTER_NAME)-control-plane$$" /etc/hosts || echo "$$docker_ip $(KIND_CLUSTER_NAME)-control-plane" >> /etc/hosts; \
 	    sed -E -i 's#https://[^:]+:([0-9]+)#https://kind.kasm.local:\1#g' $(KIND_KUBECONFIG); \
 	  fi; \
 	fi
@@ -37,9 +38,19 @@ HELM_VERSION := v3.18.6
 KUBECONFORM_VERSION := v0.7.0
 KYVERNO_VERSION := v1.16.2
 HELM_UNITTEST_VERSION := v1.0.3
-KIND_VERSION := v0.23.0
-KUBECTL_VERSION := v1.30.7
+KIND_VERSION := v0.33.0
+KUBECTL_VERSION := v1.34.11
+# Node image pinned in tests/e2e/kind-config.yaml (kindest/node:v1.34.11, matches
+# this KUBECTL_VERSION, which is the host-side bin/kubectl only); this must be
+# >=1.31 so cloud-provider-kind's Ingress and Gateway API controllers can reach the
+# Kubernetes ServiceCIDR API (GA in 1.31). See F12. tests/e2e/Dockerfile pins its
+# own ARG KUBECTL_VERSION for the pytest container's kubectl and must be bumped
+# in lockstep with this value.
 CLOUD_PROVIDER_KIND_VERSION := v0.9.0
+# Runs as a container on the kind network (F14: the host process can't reach the
+# envoy LB containers cloud-provider-kind creates there). Pinned by digest per the
+# org's supply-chain standard; resolve with `bin/crane digest <ref>`.
+CLOUD_PROVIDER_KIND_IMAGE := registry.k8s.io/cloud-provider-kind/cloud-controller-manager:v0.9.0@sha256:4dc6fea7fcc986eeaf6b59d332599b125fc97f015fc87f7e2d2f9e0b1d5e6196
 CRANE_VERSION := v0.20.6
 # helm-docs regenerates charts/kasm-helm/README.md from values.yaml + README.md.gotmpl.
 # Pinned so `make readme` and the readme-check guard in `make test` stay reproducible.
@@ -114,10 +125,10 @@ else
   CRANE_OS := Linux
 endif
 CRANE_ARCH := $(subst amd64,x86_64,$(ARCH))
-CLOUD_PROVIDER_KIND_PID_FILE ?= $(CURDIR)/.kind/cloud-provider-kind.pid
+CLOUD_PROVIDER_KIND_CONTAINER ?= cpk-$(KIND_CLUSTER_NAME)
 CLOUD_PROVIDER_KIND_LOG ?= $(CURDIR)/.kind/cloud-provider-kind.log
 
-.PHONY: tools lint render kubeconform kyverno unittest readme readme-check changelog changelog-llm changelog-console changelog-console-llm changelog-check docs test build-pytest kind-up kind-down kind-recreate kind-ensure kind-load-images kind-load-old-images kind-clean-namespace kind-prep pytest-docker e2e e2e-basic e2e-trustedca e2e-multizone e2e-externaldb e2e-backup e2e-backup-pss e2e-pss e2e-json-logging e2e-upgrade e2e-upgrade-included e2e-upgrade-standalone e2e-settle e2e-preseed validate-preseed extract-old-chart clean
+.PHONY: tools lint render kubeconform kyverno unittest readme readme-check changelog changelog-llm changelog-console changelog-console-llm changelog-check docs test build-pytest kind-up kind-down kind-recreate kind-ensure kind-load-images kind-load-old-images kind-clean-namespace kind-prep pytest-docker e2e e2e-basic e2e-trustedca e2e-multizone e2e-upstream-sa e2e-externaldb e2e-backup e2e-backup-pss e2e-pss e2e-json-logging e2e-upgrade e2e-upgrade-included e2e-upgrade-standalone e2e-settle e2e-preseed e2e-upstream-preseed validate-preseed extract-old-chart clean
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*## "; printf "\nUsage: make \033[36m<target>\033[0m\n"} \
@@ -423,11 +434,7 @@ kind-up: tools $(CURDIR)/.kind ## Create the kind cluster
 kind-down: ## Destroy the kind cluster
 	@if [ -f $(KIND) ]; then \
 		if $(KIND) get clusters 2>/dev/null | grep -q "^$(KIND_CLUSTER_NAME)"; then \
-			if [ -f "$(CLOUD_PROVIDER_KIND_PID_FILE)" ]; then \
-				pid=$$(cat "$(CLOUD_PROVIDER_KIND_PID_FILE)"); \
-				kill "$$pid" >/dev/null 2>&1 || true; \
-				rm -f "$(CLOUD_PROVIDER_KIND_PID_FILE)"; \
-			fi; \
+			docker rm -f "$(CLOUD_PROVIDER_KIND_CONTAINER)" >/dev/null 2>&1 || true; \
 			$(KIND) delete cluster --name $(KIND_CLUSTER_NAME); \
 		fi; \
 	fi
@@ -574,6 +581,9 @@ e2e: ## Run all e2e scenarios sequentially (requires kind cluster)
 	$(MAKE) e2e-multizone E2E_NAMESPACE=kasm-e2e-multizone
 	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-multizone
 	$(MAKE) e2e-settle
+	$(MAKE) e2e-upstream-sa E2E_NAMESPACE=kasm-e2e-upstream-sa
+	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-upstream-sa
+	$(MAKE) e2e-settle
 	$(MAKE) e2e-externaldb E2E_NAMESPACE=kasm-e2e-externaldb
 	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-externaldb
 	$(MAKE) e2e-settle
@@ -597,6 +607,9 @@ e2e: ## Run all e2e scenarios sequentially (requires kind cluster)
 	$(MAKE) e2e-settle
 	$(MAKE) e2e-preseed E2E_NAMESPACE=kasm-e2e-preseed
 	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-preseed
+	$(MAKE) e2e-settle
+	$(MAKE) e2e-upstream-preseed E2E_NAMESPACE=kasm-e2e-upstream-preseed
+	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-upstream-preseed
 	@# Final cleanup of host-side artefacts left behind by the
 	@# external-postgres-using tests (e2e-externaldb, e2e-upgrade-standalone)
 	@# and the chart-extraction step from e2e-upgrade-*.
@@ -609,14 +622,32 @@ e2e-basic: kind-prep build-pytest ## Basic install and login page verification
 e2e-trustedca: kind-prep build-pytest ## Install with custom CA bundle
 	$(MAKE) pytest-docker E2E_SCENARIO=e2e-trustedca PYTEST_ARGS="-m e2e -q test_02_trusted_ca.py"
 
+# cloud-provider-kind (controller process + the envoy LB containers it spawns) is
+# torn down via a trap on EXIT, same pattern as e2e-externaldb's postgres container,
+# so a failed run doesn't leak them into the next invocation.
 e2e-multizone: kind-prep build-pytest ## Multi-zone topology with ingress-nginx
-	@export PATH="$(BIN_DIR):$$PATH" && \
-	export KUBECONFIG=$(KIND_KUBECONFIG) && \
-	export CLOUD_PROVIDER_KIND=$(CLOUD_PROVIDER_KIND) && \
-	export CLOUD_PROVIDER_KIND_PID_FILE=$(CLOUD_PROVIDER_KIND_PID_FILE) && \
-	export CLOUD_PROVIDER_KIND_LOG=$(CLOUD_PROVIDER_KIND_LOG) && \
+	@set -e; \
+	export PATH="$(BIN_DIR):$$PATH"; \
+	export KUBECONFIG=$(KIND_KUBECONFIG); \
+	export CLOUD_PROVIDER_KIND_IMAGE=$(CLOUD_PROVIDER_KIND_IMAGE); \
+	export CLOUD_PROVIDER_KIND_CONTAINER=$(CLOUD_PROVIDER_KIND_CONTAINER); \
+	export CLOUD_PROVIDER_KIND_LOG=$(CLOUD_PROVIDER_KIND_LOG); \
+	export KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME); \
+	trap './tests/e2e/stop_cloud_provider_kind.sh' EXIT; \
 	./tests/e2e/install_ingress_nginx.sh && \
 	$(MAKE) pytest-docker E2E_SCENARIO=e2e-multizone PYTEST_ARGS="-m e2e -q test_03_multizone_ingress.py"
+
+e2e-upstream-sa: kind-prep build-pytest ## serviceAccount dedupe + upstreamAuth service LoadBalancer, via cloud-provider-kind
+	@set -e; \
+	export PATH="$(BIN_DIR):$$PATH"; \
+	export KUBECONFIG=$(KIND_KUBECONFIG); \
+	export CLOUD_PROVIDER_KIND_IMAGE=$(CLOUD_PROVIDER_KIND_IMAGE); \
+	export CLOUD_PROVIDER_KIND_CONTAINER=$(CLOUD_PROVIDER_KIND_CONTAINER); \
+	export CLOUD_PROVIDER_KIND_LOG=$(CLOUD_PROVIDER_KIND_LOG); \
+	export KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME); \
+	trap './tests/e2e/stop_cloud_provider_kind.sh' EXIT; \
+	./tests/e2e/install_ingress_nginx.sh && \
+	$(MAKE) pytest-docker E2E_SCENARIO=e2e-upstream-sa PYTEST_ARGS="-m e2e -q test_12_upstream_auth_sa.py"
 
 # The external-DB tests run a postgres container outside kind on the dind
 # host.  We trap EXIT so the container + data volumes are torn down even
@@ -642,6 +673,9 @@ e2e-pss: kind-prep build-pytest ## Pod Security Standards restricted namespace t
 
 e2e-preseed: kind-prep build-pytest ## Preseed verification: group, settings, and user seeded via custom_properties.yaml
 	$(MAKE) pytest-docker E2E_SCENARIO=e2e-preseed PYTEST_ARGS="-m e2e -q test_11_preseed.py"
+
+e2e-upstream-preseed: kind-prep build-pytest ## Preseed verification: upstreamAuth.hostname fallback vs. per-zone upstream_auth_address override
+	$(MAKE) pytest-docker E2E_SCENARIO=e2e-upstream-preseed PYTEST_ARGS="-m e2e -q test_13_upstream_auth_preseed.py"
 
 e2e-json-logging: kind-prep build-pytest ## Verify all non-Guac pods emit JSON logs when logFormat=json
 	$(MAKE) pytest-docker E2E_SCENARIO=e2e-json-logging PYTEST_ARGS="-m e2e -q test_10_json_logging.py"

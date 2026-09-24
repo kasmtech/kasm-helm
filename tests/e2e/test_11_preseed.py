@@ -56,7 +56,7 @@ preseed_values = {
             "server_pools": [
                 {
                     "name": POOL_NAME,
-                    "server_pool_type": "Docker",
+                    "server_pool_type": "Docker Agent",
                 }
             ],
             "digital_ocean_vm_configs": [

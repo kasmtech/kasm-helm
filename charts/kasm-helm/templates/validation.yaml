@@ -1,0 +1,10 @@
+{{/*
+  Renders no manifest.
+
+  It exists so the cross-value checks in _validation.tpl run on every render -
+  `helm install`, `helm upgrade`, `helm template` and `--dry-run` alike - even
+  when none of the templates they would otherwise gate happen to render.
+*/}}
+{{- include "kasm.validateFrontDoorExposure" . -}}
+{{- include "kasm.validateUpstreamAuthExposure" . -}}
+{{- include "kasm.validateRdpExposure" . -}}

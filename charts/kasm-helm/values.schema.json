@@ -104,6 +104,12 @@
           "title": "service",
           "type": "object"
         },
+        "serviceAccount": {
+          "additionalProperties": true,
+          "description": "Additional serviceAccount annotations to apply to resources created by this chart",
+          "title": "serviceAccount",
+          "type": "object"
+        },
         "statefulSet": {
           "additionalProperties": true,
           "description": "Additional statefulSet annotations to apply to resources created by this chart",
@@ -123,6 +129,7 @@
         "pvc",
         "service",
         "secret",
+        "serviceAccount",
         "statefulSet"
       ]
     },
@@ -359,6 +366,27 @@
               "additionalProperties": true,
               "description": "Manually configure the Kasm api Deployment resources. This overrides the pre-defined `deploymentSize` values.",
               "title": "resources",
+              "type": "object"
+            },
+            "serviceAccount": {
+              "additionalProperties": false,
+              "description": "Overrides the global `serviceAccount` block for this component. All keys are optional and merged over the global defaults.",
+              "properties": {
+                "annotations": {
+                  "additionalProperties": {"type": "string"},
+                  "title": "annotations",
+                  "type": "object"
+                },
+                "create": {
+                  "title": "create",
+                  "type": "boolean"
+                },
+                "name": {
+                  "title": "name",
+                  "type": "string"
+                }
+              },
+              "title": "serviceAccount",
               "type": "object"
             },
             "threadPool": {
@@ -792,6 +820,27 @@
               "additionalProperties": true,
               "description": "Manually configure the Kasm Manager Deployment resources. This overrides the pre-defined `deploymentSize` values.",
               "title": "resources",
+              "type": "object"
+            },
+            "serviceAccount": {
+              "additionalProperties": false,
+              "description": "Overrides the global `serviceAccount` block for this component. All keys are optional and merged over the global defaults.",
+              "properties": {
+                "annotations": {
+                  "additionalProperties": {"type": "string"},
+                  "title": "annotations",
+                  "type": "object"
+                },
+                "create": {
+                  "title": "create",
+                  "type": "boolean"
+                },
+                "name": {
+                  "title": "name",
+                  "type": "string"
+                }
+              },
+              "title": "serviceAccount",
               "type": "object"
             },
             "updateTimer": {
@@ -2028,6 +2077,12 @@
           "title": "service",
           "type": "object"
         },
+        "serviceAccount": {
+          "additionalProperties": true,
+          "description": "Additional serviceAccount labels to apply to resources created by this chart",
+          "title": "serviceAccount",
+          "type": "object"
+        },
         "statefulSet": {
           "additionalProperties": true,
           "description": "Additional statefulSet labels to apply to resources created by this chart",
@@ -2043,6 +2098,7 @@
         "pod",
         "secret",
         "service",
+        "serviceAccount",
         "job",
         "cronJob",
         "cronPod",
@@ -2156,6 +2212,37 @@
       },
       "required": ["create", "name", "passwords", "annotations", "labels"]
     },
+    "serviceAccount": {
+      "additionalProperties": false,
+      "description": "Global default for the ServiceAccount used by components.api and components.manager pods. Useful for EKS Pod Identity (reference an externally-associated SA by name) or IRSA (chart-created SA annotated with a role ARN). Override per-component under components.api.serviceAccount / components.manager.serviceAccount.",
+      "properties": {
+        "annotations": {
+          "additionalProperties": {"type": "string"},
+          "description": "Annotations to add to the created ServiceAccount (e.g. IRSA's eks.amazonaws.com/role-arn). Only applied when create is true.",
+          "title": "annotations",
+          "type": "object"
+        },
+        "create": {
+          "default": false,
+          "description": "Create the ServiceAccount named below. Set false to only reference an existing ServiceAccount by name (e.g. for EKS Pod Identity associations).",
+          "title": "create",
+          "type": "boolean"
+        },
+        "name": {
+          "default": "",
+          "description": "ServiceAccount name to set on the pod spec. Leave blank to use the default ServiceAccount.",
+          "title": "name",
+          "type": "string"
+        }
+      },
+      "title": "serviceAccount",
+      "type": "object",
+      "required": [
+        "create",
+        "name",
+        "annotations"
+      ]
+    },
     "imagePullSecrets": {
       "additionalProperties": false,
       "properties": {
@@ -2235,7 +2322,8 @@
           "default": "http",
           "description": "The backend protocol to for the Ingress to communicate with the Kasm proxy service. Valid values: http or https",
           "title": "backendProtocol",
-          "type": "string"
+          "type": "string",
+          "enum": ["http", "https"]
         },
         "enabled": {
           "default": false,
@@ -2517,7 +2605,8 @@
           "default": "http",
           "description": "The backend protocol to for the OpenShift Route to communicate with the Kasm proxy service. Valid values: http or https",
           "title": "backendProtocol",
-          "type": "string"
+          "type": "string",
+          "enum": ["http", "https"]
         },
         "wildcardPolicy": {
           "default": "None",
@@ -2566,6 +2655,452 @@
         "tls",
         "annotations",
         "labels"
+      ]
+    },
+    "httpRoute": {
+      "additionalProperties": false,
+      "description": "Configure a Gateway API HTTPRoute for your Kasm deployment.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Set to `true` to publish the Kasm proxy through a Gateway API HTTPRoute.",
+          "title": "enabled",
+          "type": "boolean"
+        },
+        "parentRefs": {
+          "default": [],
+          "description": "Gateways to attach the route to, passed through verbatim.",
+          "title": "parentRefs",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "backendProtocol": {
+          "default": "http",
+          "description": "The protocol the Gateway uses to reach the Kasm proxy Service. Valid values: http or https",
+          "title": "backendProtocol",
+          "type": "string",
+          "enum": ["http", "https"]
+        },
+        "annotations": {
+          "additionalProperties": true,
+          "title": "annotations",
+          "type": "object"
+        },
+        "labels": {
+          "additionalProperties": true,
+          "title": "labels",
+          "type": "object"
+        }
+      },
+      "title": "httpRoute",
+      "type": "object",
+      "required": [
+        "enabled",
+        "parentRefs",
+        "annotations",
+        "labels"
+      ]
+    },
+    "tlsRoute": {
+      "additionalProperties": false,
+      "description": "Configure a Gateway API TLSRoute for your Kasm deployment (SNI passthrough).",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Set to `true` to publish the Kasm proxy by SNI passthrough through a Gateway API TLSRoute.",
+          "title": "enabled",
+          "type": "boolean"
+        },
+        "apiVersion": {
+          "default": "gateway.networking.k8s.io/v1",
+          "description": "API version to render the TLSRoute at.",
+          "title": "apiVersion",
+          "type": "string"
+        },
+        "parentRefs": {
+          "default": [],
+          "description": "Gateways to attach the route to, in the same shape as `httpRoute.parentRefs`.",
+          "title": "parentRefs",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "annotations": {
+          "additionalProperties": true,
+          "title": "annotations",
+          "type": "object"
+        },
+        "labels": {
+          "additionalProperties": true,
+          "title": "labels",
+          "type": "object"
+        }
+      },
+      "title": "tlsRoute",
+      "type": "object",
+      "required": [
+        "enabled",
+        "apiVersion",
+        "parentRefs",
+        "annotations",
+        "labels"
+      ]
+    },
+    "tcpRoute": {
+      "additionalProperties": false,
+      "description": "Configure a Gateway API TCPRoute for the Kasm RDP Gateway.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Set to `true` to publish the RDP Gateway through a Gateway API TCPRoute.",
+          "title": "enabled",
+          "type": "boolean"
+        },
+        "apiVersion": {
+          "default": "gateway.networking.k8s.io/v1",
+          "description": "API version to render the TCPRoute at.",
+          "title": "apiVersion",
+          "type": "string"
+        },
+        "parentRefs": {
+          "default": [],
+          "description": "Gateways to attach the route to, in the same shape as `httpRoute.parentRefs`. Single-zone shorthand.",
+          "title": "parentRefs",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "zones": {
+          "default": [],
+          "description": "Per-zone Gateway attachment, required when more than one primary-region zone is configured.",
+          "title": "zones",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "name": {
+                "title": "name",
+                "type": "string"
+              },
+              "parentRefs": {
+                "title": "parentRefs",
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            },
+            "required": ["name"]
+          }
+        },
+        "annotations": {
+          "additionalProperties": true,
+          "title": "annotations",
+          "type": "object"
+        },
+        "labels": {
+          "additionalProperties": true,
+          "title": "labels",
+          "type": "object"
+        }
+      },
+      "title": "tcpRoute",
+      "type": "object",
+      "required": [
+        "enabled",
+        "apiVersion",
+        "parentRefs",
+        "zones",
+        "annotations",
+        "labels"
+      ]
+    },
+    "upstreamAuth": {
+      "additionalProperties": false,
+      "description": "Publish a separate, out-of-band URL for Kasm management traffic (the zone's Upstream Auth Address).",
+      "properties": {
+        "hostname": {
+          "default": "",
+          "description": "The upstream auth hostname for the primary (or implicit default) zone.",
+          "title": "hostname",
+          "type": "string"
+        },
+        "service": {
+          "additionalProperties": false,
+          "description": "Publish the upstream auth endpoint with one Service per zone.",
+          "properties": {
+            "enabled": {
+              "default": false,
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "type": {
+              "default": "LoadBalancer",
+              "title": "type",
+              "type": "string",
+              "enum": ["LoadBalancer", "NodePort"]
+            },
+            "nodePort": {
+              "default": "",
+              "title": "nodePort",
+              "type": "string"
+            },
+            "annotations": {
+              "additionalProperties": true,
+              "title": "annotations",
+              "type": "object"
+            },
+            "labels": {
+              "additionalProperties": true,
+              "title": "labels",
+              "type": "object"
+            }
+          },
+          "title": "service",
+          "type": "object",
+          "required": [
+            "enabled",
+            "type",
+            "annotations",
+            "labels"
+          ]
+        },
+        "ingress": {
+          "additionalProperties": false,
+          "description": "Publish the upstream auth endpoint through an Ingress, one host rule per zone.",
+          "properties": {
+            "enabled": {
+              "default": false,
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "tls": {
+              "default": true,
+              "title": "tls",
+              "type": "boolean"
+            },
+            "secretName": {
+              "default": "",
+              "title": "secretName",
+              "type": "string"
+            },
+            "backendProtocol": {
+              "default": "http",
+              "title": "backendProtocol",
+              "type": "string",
+              "enum": ["http", "https"]
+            },
+            "ingressClassName": {
+              "default": "",
+              "title": "ingressClassName",
+              "type": "string"
+            },
+            "annotations": {
+              "additionalProperties": true,
+              "title": "annotations",
+              "type": "object"
+            },
+            "labels": {
+              "additionalProperties": true,
+              "title": "labels",
+              "type": "object"
+            }
+          },
+          "title": "ingress",
+          "type": "object",
+          "required": [
+            "enabled",
+            "tls",
+            "annotations",
+            "labels"
+          ]
+        },
+        "route": {
+          "additionalProperties": false,
+          "description": "Publish the upstream auth endpoint through OpenShift Routes, one per zone.",
+          "properties": {
+            "enabled": {
+              "default": false,
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "backendProtocol": {
+              "default": "http",
+              "title": "backendProtocol",
+              "type": "string",
+              "enum": ["http", "https"]
+            },
+            "wildcardPolicy": {
+              "default": "None",
+              "title": "wildcardPolicy",
+              "type": "string"
+            },
+            "tls": {
+              "additionalProperties": true,
+              "title": "tls",
+              "type": "object"
+            },
+            "annotations": {
+              "additionalProperties": true,
+              "title": "annotations",
+              "type": "object"
+            },
+            "labels": {
+              "additionalProperties": true,
+              "title": "labels",
+              "type": "object"
+            }
+          },
+          "title": "route",
+          "type": "object",
+          "required": [
+            "enabled",
+            "tls",
+            "annotations",
+            "labels"
+          ]
+        },
+        "httpRoute": {
+          "additionalProperties": false,
+          "description": "Publish the upstream auth endpoint through Gateway API HTTPRoutes, one per zone.",
+          "properties": {
+            "enabled": {
+              "default": false,
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "parentRefs": {
+              "default": [],
+              "title": "parentRefs",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            },
+            "zones": {
+              "default": [],
+              "title": "zones",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                  "name": {
+                    "title": "name",
+                    "type": "string"
+                  }
+                },
+                "required": ["name"]
+              }
+            },
+            "backendProtocol": {
+              "default": "http",
+              "title": "backendProtocol",
+              "type": "string",
+              "enum": ["http", "https"]
+            },
+            "annotations": {
+              "additionalProperties": true,
+              "title": "annotations",
+              "type": "object"
+            },
+            "labels": {
+              "additionalProperties": true,
+              "title": "labels",
+              "type": "object"
+            }
+          },
+          "title": "httpRoute",
+          "type": "object",
+          "required": [
+            "enabled",
+            "parentRefs",
+            "zones",
+            "annotations",
+            "labels"
+          ]
+        },
+        "tlsRoute": {
+          "additionalProperties": false,
+          "description": "Publish the upstream auth endpoint by SNI passthrough through Gateway API TLSRoutes, one per zone.",
+          "properties": {
+            "enabled": {
+              "default": false,
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "apiVersion": {
+              "default": "gateway.networking.k8s.io/v1",
+              "title": "apiVersion",
+              "type": "string"
+            },
+            "parentRefs": {
+              "default": [],
+              "title": "parentRefs",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            },
+            "zones": {
+              "default": [],
+              "title": "zones",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                  "name": {
+                    "title": "name",
+                    "type": "string"
+                  }
+                },
+                "required": ["name"]
+              }
+            },
+            "annotations": {
+              "additionalProperties": true,
+              "title": "annotations",
+              "type": "object"
+            },
+            "labels": {
+              "additionalProperties": true,
+              "title": "labels",
+              "type": "object"
+            }
+          },
+          "title": "tlsRoute",
+          "type": "object",
+          "required": [
+            "enabled",
+            "apiVersion",
+            "parentRefs",
+            "zones",
+            "annotations",
+            "labels"
+          ]
+        }
+      },
+      "title": "upstreamAuth",
+      "type": "object",
+      "required": [
+        "hostname",
+        "service",
+        "ingress",
+        "route",
+        "httpRoute",
+        "tlsRoute"
       ]
     }
   }

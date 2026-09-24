@@ -1,0 +1,41 @@
+{{/*
+  Gateway API TCPRoute publishing the RDP Gateway, when tcpRoute.enabled.
+
+  The RDP Gateway speaks raw RDP, so this is the only route kind that can carry
+  it - a TCPRoute matches on neither hostname nor SNI. Each zone's RDP Gateway
+  needs a Gateway listener of its own, selected with parentRefs[].sectionName.
+  tcpRoute.zones carries those per-zone refs; tcpRoute.parentRefs is the
+  single-zone shorthand.
+
+  TCPRoute has been standard-channel `v1` since Gateway API 1.6, and being in
+  the bundle is not the same as the data plane implementing it - check the
+  implementation's conformance before choosing this over a LoadBalancer.
+
+  The backend is the per-zone RDP Gateway Service that rdp-gateway-service.yaml
+  renders whenever components.rdpGateway.enabled is true; leave
+  directRdpService.enabled false so that Service stays ClusterIP while the
+  Gateway fronts it.
+*/}}
+{{- if .Values.tcpRoute.enabled }}
+{{- $api := .Values.tcpRoute.apiVersion | default "gateway.networking.k8s.io/v1" -}}
+{{- $backendPort := .Values.directRdpService.loadBalancerPort | default 3389 -}}
+{{- $zoneRefs := dict -}}
+{{- range $z := .Values.tcpRoute.zones -}}
+  {{- $zoneRefs = set $zoneRefs $z.name $z.parentRefs -}}
+{{- end -}}
+{{- range $zone := (include "kasm.primaryRegionZones" $ | fromYamlArray) }}
+{{- $refs := (get $zoneRefs $zone.name) | default $.Values.tcpRoute.parentRefs }}
+---
+apiVersion: {{ $api }}
+kind: TCPRoute
+metadata:
+  {{- include "kasm.metadata" (dict "context" $ "component" "rdpGateway" "resource" "tcpRoute" "zone" $zone.name "include" "all") | indent 2 }}
+spec:
+  parentRefs:
+    {{- toYaml $refs | nindent 4 }}
+  rules:
+    - backendRefs:
+        - name: {{ printf "%s-rdp-gateway-%s" $.Release.Name (include "kasm.zoneName" $zone.name) }}
+          port: {{ $backendPort }}
+{{- end }}
+{{- end }}

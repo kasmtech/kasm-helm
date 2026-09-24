@@ -168,6 +168,220 @@ route:
   annotations: {}
   labels: {}
 
+# Configure a Gateway API HTTPRoute for your Kasm deployment, for clusters fronted by a Gateway
+# rather than by an ingress controller.
+#
+# `ingress`, `route` and `httpRoute` are alternatives - enable at most one of the three, since
+# all of them publish the same Kasm proxy Service.
+#
+# Unlike an Ingress, a Gateway API route carries no certificate: the Gateway's listener does. This
+# chart still mints the Secret (see `certificate` below), but you have to reference it from that
+# listener's `certificateRefs` yourself, and add a ReferenceGrant when the Gateway is in another
+# namespace.
+#
+# `publicAddr` is the only hostname either of the two Gateway API routes publish. Zone
+# `proxy_hostname`s are associated with a different backend, usually behind a different ingress
+# or load balancer entirely, so this chart publishes no routing rules for them.
+#
+httpRoute:
+  # httpRoute.enabled -- Set to `true` to publish the Kasm proxy through a Gateway API HTTPRoute.
+  # Requires the Gateway API CRDs and a Gateway in the cluster.
+  #
+  enabled: false
+  # httpRoute.parentRefs -- Gateways to attach the route to, passed through verbatim, so any field of
+  # a Gateway API `ParentReference` is accepted - `name`, `namespace`, `sectionName`, `port`, `kind`.
+  # The route attaches to nothing, and the proxy stays unreachable, if this is left empty. The
+  # Gateway's listener must also admit routes from this namespace (its `allowedRoutes`).
+  # Example:
+  #   parentRefs:
+  #     - name: kasm-gateway
+  #       namespace: kube-system
+  #
+  parentRefs: []
+  # httpRoute.backendProtocol -- The protocol the Gateway uses to reach the Kasm proxy Service.
+  # Valid values: http or https
+  #
+  backendProtocol: http
+  annotations: {}
+  labels: {}
+
+# Configure a Gateway API TLSRoute for your Kasm deployment - SNI passthrough, where the Gateway
+# forwards the connection untouched and the Kasm proxy terminates TLS itself. The option to reach
+# for when TLS must not terminate on shared cluster infrastructure; the Gateway API equivalent of
+# the OpenShift Route's `passthrough` termination.
+#
+# The Gateway needs a listener with `protocol: TLS` and `tls.mode: Passthrough` whose `allowedRoutes`
+# admit this namespace. A terminating HTTPS listener will not serve a TLSRoute.
+#
+tlsRoute:
+  # tlsRoute.enabled -- Set to `true` to publish the Kasm proxy by SNI passthrough through a Gateway
+  # API TLSRoute. `ingress`, `route`, `httpRoute` and `tlsRoute` are alternatives - enable at most one.
+  #
+  enabled: false
+  # tlsRoute.apiVersion -- API version to render the TLSRoute at. TLSRoute has been standard-channel
+  # `v1` since Gateway API 1.5; set `gateway.networking.k8s.io/v1alpha2` for older, experimental-channel
+  # CRD bundles.
+  #
+  apiVersion: gateway.networking.k8s.io/v1
+  # tlsRoute.parentRefs -- Gateways to attach the route to, in the same shape as `httpRoute.parentRefs`.
+  #
+  parentRefs: []
+  annotations: {}
+  labels: {}
+
+# Configure a Gateway API TCPRoute for the Kasm RDP Gateway, as an alternative to publishing it
+# through `directRdpService`. Only applicable when `components.rdpGateway.enabled` is set.
+#
+# Requires Gateway API 1.6 or newer, where TCPRoute is standard-channel `v1`, and a Gateway with a
+# `protocol: TCP` listener. Note that shipping in the standard bundle is not the same as the data
+# plane implementing it - confirm your Gateway implementation supports TCPRoute before choosing this
+# over a LoadBalancer/NodePort Service.
+#
+# The backend is the same per-zone RDP Gateway Service that `rdp-gateway-service.yaml` renders;
+# leave `directRdpService.enabled` false so that Service stays ClusterIP while the Gateway fronts it.
+#
+tcpRoute:
+  # tcpRoute.enabled -- Set to `true` to publish the RDP Gateway through a Gateway API TCPRoute.
+  #
+  enabled: false
+  # tcpRoute.apiVersion -- API version to render the TCPRoute at. TCPRoute has been standard-channel
+  # `v1` since Gateway API 1.6; set `gateway.networking.k8s.io/v1alpha2` for older, experimental-channel
+  # CRD bundles, where it is deprecated as of 1.6.
+  #
+  apiVersion: gateway.networking.k8s.io/v1
+  # tcpRoute.parentRefs -- Gateways to attach the route to, in the same shape as `httpRoute.parentRefs`.
+  # Single-zone shorthand; with multiple primary-region zones use `tcpRoute.zones` instead, since
+  # each zone needs its own listener.
+  #
+  parentRefs: []
+  # tcpRoute.zones -- Per-zone Gateway attachment, required when `kasmZones` defines more than one
+  # zone in the primary region. A TCPRoute matches on neither hostname nor SNI, so zones cannot
+  # share a listener the way they share one for `httpRoute`: give each zone its own listener and
+  # select it with `sectionName`.
+  # Example:
+  #   zones:
+  #     - name: zonea
+  #       parentRefs:
+  #         - name: kasm-gateway
+  #           namespace: kube-system
+  #           sectionName: rdp-zonea
+  #     - name: zoneb
+  #       parentRefs:
+  #         - name: kasm-gateway
+  #           namespace: kube-system
+  #           sectionName: rdp-zoneb
+  #
+  zones: []
+  annotations: {}
+  labels: {}
+
+# Publish a separate, out-of-band URL for Kasm management traffic: the zone's "Upstream Auth
+# Address", used by external Kasm Agents and Windows services to reach the API and manager
+# (`/api/`, `/manager_api/`) without going through the user-facing front door. Typically a
+# private load balancer or an internal ingress class/Gateway, though nothing requires it to
+# be private.
+#
+# The backend is the same per-zone Kasm proxy Service the front door publishes; the proxy's
+# nginx is hostname-agnostic, so no extra workload is deployed. Exactly one of
+# `upstreamAuth.service`, `upstreamAuth.ingress`, `upstreamAuth.route`, `upstreamAuth.httpRoute`
+# or `upstreamAuth.tlsRoute` may be enabled; all of them are independent of the front-door choice,
+# so e.g. `ingress.enabled` for users plus an internal `upstreamAuth.service` LoadBalancer for
+# agents is a valid combination.
+#
+# Per-zone hostnames come from `kasmZones[].upstream_auth_address`; the primary (or implicit
+# default) zone falls back to `upstreamAuth.hostname`. Each zone's hostname routes to that zone's
+# own proxy Service. The resolved hostnames are NOT added to the cert-manager/self-signed
+# certificate SANs; upstream auth addresses typically live in a private DNS zone a public issuer
+# cannot validate, and Kasm agents do not validate the certificate.
+#
+upstreamAuth:
+  # upstreamAuth.hostname -- The upstream auth hostname for the primary (or implicit default)
+  # zone, e.g. kasm-mgmt.example.com. Zones with `kasmZones[].upstream_auth_address` set keep
+  # their own value. Required by the ingress/route/httpRoute/tlsRoute publishers below; the
+  # service publisher works without it (the preseed then keeps `$request_host$`, and you set
+  # the address in the admin UI once the load balancer has one).
+  #
+  hostname: ""
+  # upstreamAuth.service -- Publish the upstream auth endpoint with one Service per zone
+  # (`<release>-upstream-auth-<zone>`), port 443 to the proxy's HTTPS port. This is raw L4: it
+  # cannot route by hostname, so multi-zone deployments get one load balancer per zone.
+  #
+  service:
+    # upstreamAuth.service.enabled -- Set to `true` to publish the upstream auth endpoint
+    # through a Service of the type below.
+    #
+    enabled: false
+    # upstreamAuth.service.type -- Service type. Allowed values: LoadBalancer, NodePort.
+    #
+    type: LoadBalancer
+    # upstreamAuth.service.nodePort -- Pin the node port when `type` is NodePort. Leave empty
+    # to let Kubernetes assign one. Only valid with a single zone, since every zone's Service
+    # would otherwise claim the same port.
+    #
+    nodePort: ""
+    # upstreamAuth.service.annotations -- Annotations for the per-zone Services. This is where
+    # a private/internal load balancer scheme is selected, e.g.
+    #   service.beta.kubernetes.io/aws-load-balancer-scheme: internal
+    #
+    annotations: {}
+    labels: {}
+  # upstreamAuth.ingress -- Publish the upstream auth endpoint through an Ingress, one host rule
+  # per zone. Point `ingressClassName` at an internal controller class to keep the endpoint
+  # private while the front-door Ingress stays public.
+  #
+  ingress:
+    enabled: false
+    # upstreamAuth.ingress.tls -- Set to `true` to add a TLS section covering every zone's
+    # upstream auth hostname, using the certificate Secret below.
+    #
+    tls: true
+    # upstreamAuth.ingress.secretName -- Certificate Secret for the upstream auth Ingress.
+    # Empty (the default) uses the front door's chain: `certificate.secretName`, else the
+    # chart-minted Secret. The chart-minted certificates do NOT cover the upstream auth
+    # hostnames, so set this to a Secret that does when the front end must present a
+    # matching certificate.
+    #
+    secretName: ""
+    # upstreamAuth.ingress.backendProtocol -- Protocol the Ingress uses to reach the Kasm
+    # proxy Service. Valid values: http or https
+    #
+    backendProtocol: http
+    ingressClassName: ""
+    annotations: {}
+    labels: {}
+  # upstreamAuth.route -- Publish the upstream auth endpoint through OpenShift Routes, one per
+  # zone. Same shape as `route`.
+  #
+  route:
+    enabled: false
+    backendProtocol: http
+    wildcardPolicy: None
+    tls: {}
+    annotations: {}
+    labels: {}
+  # upstreamAuth.httpRoute -- Publish the upstream auth endpoint through Gateway API HTTPRoutes,
+  # one per zone. Same shape as `httpRoute`, including per-zone `zones[].parentRefs` overrides
+  # for zones that need their own listener.
+  #
+  httpRoute:
+    enabled: false
+    parentRefs: []
+    zones: []
+    backendProtocol: http
+    annotations: {}
+    labels: {}
+  # upstreamAuth.tlsRoute -- Publish the upstream auth endpoint by SNI passthrough through
+  # Gateway API TLSRoutes, one per zone; the Kasm proxy terminates TLS itself. Same shape as
+  # `tlsRoute`, plus per-zone `zones[].parentRefs` overrides.
+  #
+  tlsRoute:
+    enabled: false
+    apiVersion: gateway.networking.k8s.io/v1
+    parentRefs: []
+    zones: []
+    annotations: {}
+    labels: {}
+
 # Configure certificate settings.
 # You can create your own certificate and upload it to the `secretName` supplied below, or if you have
 # an existing cert-manager configured and you wish to use that, set the `secretName` and configure the
@@ -619,6 +833,9 @@ components:
     # components.api.threadPoolLogInterval -- Seconds between background logs of CherryPy thread-pool usage
     #  (Threads/Active/Idle/Queue). Set to 0 to disable. Default is 0.
     threadPoolLogInterval: 0
+    # components.api.serviceAccount -- Overrides the global `serviceAccount` block for this component.
+    #  All keys are optional and merged over the global defaults.
+    serviceAccount: {}
 
   # Configuration settings for the Kasm Manager service
   #
@@ -692,6 +909,9 @@ components:
     #  This value determines how often the system checks for support bundle completion and expiration.
     #  Default value is 60s.
     supportBundleTimer: 60
+    # components.manager.serviceAccount -- Overrides the global `serviceAccount` block for this component.
+    #  All keys are optional and merged over the global defaults.
+    serviceAccount: {}
 
   # Configuration settings for the Kasm Guac RDP service
   #
@@ -1070,6 +1290,29 @@ imagePullSecrets:
   # imagePullSecrets.annotations -- Additional annotations for this secret
   annotations: {}
 
+# Global default for the ServiceAccount used by components.api and components.manager pods.
+# Useful for EKS Pod Identity (reference an externally-associated SA by name) or IRSA
+# (chart-created SA annotated with a role ARN). Override per-component under
+# components.api.serviceAccount / components.manager.serviceAccount.
+#
+# The render fails if:
+#  - create is true (globally or for a component) but no name resolves for that component
+#    (set serviceAccount.name or components.<c>.serviceAccount.name).
+#  - api and manager resolve to the same ServiceAccount name but disagree on the value of an
+#    annotation key (global vs. per-component overrides are merged; a real conflict, not just
+#    one side inheriting the global default, is what triggers the fail).
+#
+serviceAccount:
+  # serviceAccount.create -- Create the ServiceAccount named below. Set false to only reference
+  # an existing ServiceAccount by name (e.g. for EKS Pod Identity associations).
+  create: false
+  # serviceAccount.name -- ServiceAccount name to set on the pod spec. Leave blank to use the
+  # default ServiceAccount.
+  name: ""
+  # serviceAccount.annotations -- Annotations to add to the created ServiceAccount (e.g. IRSA's
+  # eks.amazonaws.com/role-arn). Only applied when create is true.
+  annotations: {}
+
 # clusterDomain -- Cluster-wide Kubernetes DNS domain name
 #
 clusterDomain: "cluster.local"
@@ -1130,6 +1373,8 @@ extraAnnotations:
   service: {}
   # extraAnnotations.secret -- Additional secret annotations to apply to resources created by this chart
   secret: {}
+  # extraAnnotations.serviceAccount -- Additional serviceAccount annotations to apply to resources created by this chart
+  serviceAccount: {}
   # extraAnnotations.statefulSet -- Additional statefulSet annotations to apply to resources created by this chart
   statefulSet: {}
 
@@ -1156,6 +1401,8 @@ extraLabels:
   cronPod: {}
   # extraLabels.pvc -- Additional PersistentVolumeClaim labels to apply to resources created by this chart
   pvc: {}
+  # extraLabels.serviceAccount -- Additional serviceAccount labels to apply to resources created by this chart
+  serviceAccount: {}
   # extraLabels.statefulSet -- Additional statefulSet labels to apply to resources created by this chart
   statefulSet: {}
 

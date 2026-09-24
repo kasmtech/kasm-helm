@@ -91,6 +91,62 @@ tests:
           path: stringData["custom_properties.yaml"]
           pattern: "zone_name: my-zone"
 
+  - it: preseeds the primary zone's upstream_auth_address from upstreamAuth.hostname when the zone sets none of its own
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      upstreamAuth:
+        hostname: mgmt.example.com:8443
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'upstream_auth_address: "mgmt\.example\.com:8443"'
+
+  - it: an explicit per-zone upstream_auth_address still wins over upstreamAuth.hostname
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+          upstream_auth_address: explicit.example.com:9443
+      upstreamAuth:
+        hostname: mgmt.example.com:8443
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'upstream_auth_address: "explicit\.example\.com:9443"'
+
+  - it: falls back to $request_host$ when neither the zone nor upstreamAuth.hostname is set
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'upstream_auth_address: "\$request_host\$"'
+
   - it: prefers proxy_hostname when a zone sets both proxyAddress and proxy_hostname
     set:
       publicAddr: kasm.example.com
@@ -134,6 +190,103 @@ tests:
         matchRegex:
           path: stringData["custom_properties.yaml"]
           pattern: "standby_memory_bytes: 2147483648"
+
+  - it: autoscale connection_info renders as {} object when omitted
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.autoscale:
+        - autoscale_config_name: "Test AS"
+          server_pool_id: "${uuid:server_pool_id:1}"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "connection_info: \\{\\}"
+      - documentIndex: 1
+        notMatchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'connection_info: "'
+
+  - it: autoscale connection_info renders as {} object when set to {}
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.autoscale:
+        - autoscale_config_name: "Test AS"
+          server_pool_id: "${uuid:server_pool_id:1}"
+          connection_info: {}
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "connection_info: \\{\\}"
+      - documentIndex: 1
+        notMatchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'connection_info: "'
+
+  - it: autoscale connection_info renders as a JSON object with keys
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.autoscale:
+        - autoscale_config_name: "Test AS"
+          server_pool_id: "${uuid:server_pool_id:1}"
+          connection_info:
+            host: example.com
+            port: 22
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'connection_info: \{"host":"example\.com","port":22\}'
+
+  - it: autoscale hooks renders as {} object when set to {}
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.autoscale:
+        - autoscale_config_name: "Test AS"
+          server_pool_id: "${uuid:server_pool_id:1}"
+          hooks: {}
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "hooks: \\{\\}"
+      - documentIndex: 1
+        notMatchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'hooks: "'
 
   - it: saml section key is saml_config
     set:
@@ -300,6 +453,106 @@ tests:
         matchRegex:
           path: stringData["custom_properties.yaml"]
           pattern: "server_pool_id: pool-uuid-001"
+
+  - it: server_pool_type omitted defaults to Docker Agent
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.server_pools:
+        - name: "primary-pool"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'server_pool_type: "Docker Agent"'
+
+  - it: server_pool_type "Docker" normalizes to Docker Agent
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.server_pools:
+        - name: "primary-pool"
+          type: "Docker"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'server_pool_type: "Docker Agent"'
+
+  - it: server_pool_type "server" normalizes to Server Pool
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.server_pools:
+        - name: "primary-pool"
+          type: "server"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'server_pool_type: "Server Pool"'
+
+  - it: server_pool_type "Server Pool" passes through unchanged
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.server_pools:
+        - name: "primary-pool"
+          type: "Server Pool"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'server_pool_type: "Server Pool"'
+
+  - it: server_pool_type takes precedence over type
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.server_pools:
+        - name: "primary-pool"
+          type: "Server Pool"
+          server_pool_type: "Docker Agent"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'server_pool_type: "Docker Agent"'
 
   - it: last_provision is a fixed sentinel and not the current time
     set:

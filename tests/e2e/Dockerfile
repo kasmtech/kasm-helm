@@ -1,6 +1,8 @@
 FROM python:3.12-slim
 
-ARG KUBECTL_VERSION=1.29.2
+ARG KUBECTL_VERSION=1.34.11
+# Pinned to match KUBECTL_VERSION in the Makefile (the kind node image's apiserver
+# version) so this container's kubectl stays within the supported +/-1 minor skew.
 # Pinned to match the documented minimum in README.md ("Helm 3.18.x+").
 # Bump in lockstep with the README requirement and the Makefile pin.
 ARG HELM_VERSION=3.18.6
