@@ -89,7 +89,7 @@ pods' network namespaces and the node's own CNI configuration.
 
 ## Ziti version support
 
-The image bundles three pinned Ziti CLI versions (2.0.0-pre7, 1.6.14, 1.5.12). The daemon queries a
+The image bundles three pinned Ziti CLI versions (2.0.4, 1.6.21, 1.5.18). The daemon queries a
 session's Ziti identity for its controller version and picks the installed binary whose major.minor matches
 — a controller running a newer minor version than all three bundled here will fail with "no installed ziti
 binary matches controller major.minor version". Keep this list current with whatever Ziti controller

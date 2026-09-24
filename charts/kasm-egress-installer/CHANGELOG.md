@@ -11,6 +11,7 @@ All notable changes to the kasm-egress-installer chart are documented here.
 
 ### Changed
 
+- The daemon image bundles Ziti CLIs 2.0.4, 1.6.21 and 1.5.18 (was 2.0.0-pre7, 1.6.14 and 1.5.12), the newest stable release on each line. The old binaries carried three critical `rabbitmq/amqp091-go` CVEs and around 140 high-severity ones in older Go dependencies; the new ones have none.
 - `cniBinDir` now derives from a `distro` preset (`k3s` default -> `/var/lib/rancher/k3s/data/cni`, `vanilla` -> `/opt/cni/bin`) when left empty, instead of hardcoding `/opt/cni/bin`. The old default was wrong for k3s: the shim installed where the k3s runtime never reads plugins, so it was silently never invoked (pods got no egress tunnel, with no error). An explicit `cniBinDir` still overrides the preset; an unrecognized `distro` fails rendering rather than guessing a path.
 - README states the two security findings plainly, without the references to an unmerged branch and to a file in another repository; the first section links the docs index. The HTML values-table template moved to the shared `_templates.gotmpl`.
 
