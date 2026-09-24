@@ -48,7 +48,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: docker.io/kasmweb/kasm-video-device-plugin:latest
+          value: docker.io/kasmweb/kasm-video-device-plugin:develop
       - equal:
           path: spec.template.spec.containers[0].imagePullPolicy
           value: IfNotPresent
@@ -200,7 +200,7 @@ tests:
           value: kasm-video-device-plugin-1.1200.0-develop
       - equal:
           path: metadata.labels["app.kubernetes.io/version"]
-          value: latest
+          value: develop
 
   - it: honors fullnameOverride
     set:

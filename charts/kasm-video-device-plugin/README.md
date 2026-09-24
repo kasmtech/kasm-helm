@@ -1,6 +1,6 @@
 # Kasm Video Device Plugin
 
-![Version: 1.1200.0-develop](https://img.shields.io/badge/Version-1.1200.0--develop-informational?style=flat-square) ![AppVersion: latest](https://img.shields.io/badge/AppVersion-latest-informational?style=flat-square)
+![Version: 1.1200.0-develop](https://img.shields.io/badge/Version-1.1200.0--develop-informational?style=flat-square) ![AppVersion: develop](https://img.shields.io/badge/AppVersion-develop-informational?style=flat-square)
 
 Kubelet device plugin DaemonSet that advertises the v4l2loopback video devices on each node as the extended resource kasm.com/video, so Kasm Workspaces sessions with webcam support can request kasm.com/video and have kubelet assign them a dedicated /dev/video* device.
 
