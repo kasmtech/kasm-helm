@@ -16,22 +16,24 @@ there.
 
 ### NFS profiles and root sessions
 
-A session that runs as root does so, by default, inside a pod user namespace
-(`agent.workspaceSecurity.rootMode: userns`), and every volume on such a pod is idmap-mounted.
-The NFS client cannot do that: a root session with an NFS-backed profile is admitted and scheduled,
-then fails to create its container with a `mount_setattr` / `idmap` error. That covers the bundled
-`nfs-server-provisioner`, NFS-CSI, Amazon EFS and GCP Filestore. Ordinary uid-1000 sessions, which is
-most of a stock catalog, are unaffected, unless `workspaceSecurity.userNamespaces` is `always`.
+A session that runs as root does so, by default, as host root
+(`agent.workspaceSecurity.rootMode: host`), and NFS profiles work on it as on any other pod. This
+section applies only once root sessions are locked down into a pod user namespace
+(`rootMode: userns`), where every volume on the pod is idmap-mounted. The NFS client cannot do
+that: a root session with an NFS-backed profile is admitted and scheduled, then fails to create its
+container with a `mount_setattr` / `idmap` error. That covers the bundled `nfs-server-provisioner`,
+NFS-CSI, Amazon EFS and GCP Filestore. Ordinary uid-1000 sessions, which is most of a stock catalog,
+are unaffected, unless `workspaceSecurity.userNamespaces` is `always`.
 
-For an image that needs root (a `user: root` run config, root `exec_configs`, session recording)
-and a user who needs their profile on it, pick one:
+Under `rootMode: userns`, for an image that needs root (a `user: root` run config, root
+`exec_configs`, session recording) and a user who needs their profile on it, pick one:
 
 | Option | Trade-off |
 | ------ | --------- |
 | An S3 profile (the manager's S3-style persistent profiles) | Nothing is mounted, so nothing to idmap; the profile syncs at session start and stop |
 | A block-storage class (ext4 or XFS on EBS, PD, Azure Disk, Ceph RBD) | Idmap-mounts fine, but `ReadWriteOnce`: the profile pins its user's sessions to one node at a time |
 | `agent.workspaceSecurity.rootFeatures: downgrade` | Works only where root is asked for through `exec_configs` or recording, not a `user: root` run config: the session stays at uid 1000, the root commands run as `kasm-user`, recording is off |
-| `agent.workspaceSecurity.rootMode: host` | Root sessions run as host root, with no user namespace and no idmap; a container escape is root on the node |
+| `agent.workspaceSecurity.rootMode: host` (the default) | Root sessions run as host root, with no user namespace and no idmap; a container escape is root on the node |
 
 ## Before you start
 
@@ -204,4 +206,4 @@ Installing `kasm-agent` directly? Drop the `kasm-agent:` key and start at `nfs-s
 - [ ] Persistent Profile Path set on the workspace and allowed for the group, in the manager
 - [ ] A launched session's `kasm-profile-*` PVC shows the RWX class
 - [ ] Two concurrent sessions for the same user start on different nodes
-- [ ] On an NFS-backed class: root-needing images either get S3 or block profiles, `rootFeatures: downgrade`, or `rootMode: host`
+- [ ] On an NFS-backed class under `rootMode: userns`: root-needing images either get S3 or block profiles, `rootFeatures: downgrade`, or `rootMode: host` (the default)

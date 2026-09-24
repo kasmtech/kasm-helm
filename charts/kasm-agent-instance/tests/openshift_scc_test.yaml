@@ -12,7 +12,7 @@ tests:
       - hasDocuments:
           count: 0
 
-  - it: renders the uid-1000 SCC, the user-namespace root SCC, their ClusterRole and the grant by default
+  - it: renders the uid-1000 SCC, the host-root SCC, their ClusterRole and the grant by default
     set:
       openshift.scc.enabled: true
     asserts:
@@ -80,9 +80,8 @@ tests:
           path: runAsUser.type
           value: RunAsAny
       - documentIndex: 1
-        equal:
+        notExists:
           path: userNamespaceLevel
-          value: RequirePodLevel
       - documentIndex: 1
         equal:
           path: allowPrivilegeEscalation
@@ -239,6 +238,7 @@ tests:
   - it: requires a pod user namespace on both SCCs with userNamespaces always
     set:
       openshift.scc.enabled: true
+      workspaceSecurity.rootMode: userns
       workspaceSecurity.userNamespaces: always
     asserts:
       - documentIndex: 0
@@ -249,6 +249,46 @@ tests:
         equal:
           path: userNamespaceLevel
           value: RequirePodLevel
+
+  - it: admits only NET_BIND_SERVICE on the uid-1000 SCC for profile restricted, and host root on the root SCC by default
+    set:
+      openshift.scc.enabled: true
+      workspaceSecurity.profile: restricted
+    asserts:
+      - hasDocuments:
+          count: 4
+      - documentIndex: 0
+        equal:
+          path: allowedCapabilities
+          value: [NET_BIND_SERVICE]
+      - documentIndex: 0
+        equal:
+          path: runAsUser.type
+          value: MustRunAsNonRoot
+      - documentIndex: 1
+        equal:
+          path: runAsUser.type
+          value: RunAsAny
+      - documentIndex: 1
+        equal:
+          path: allowedCapabilities
+          value: [SETUID, SETGID, CHOWN, DAC_OVERRIDE, FOWNER, KILL, NET_BIND_SERVICE, SYS_CHROOT]
+      - documentIndex: 1
+        notExists:
+          path: userNamespaceLevel
+
+  - it: requires a pod user namespace only on the uid-1000 SCC with userNamespaces always and the default host mode
+    set:
+      openshift.scc.enabled: true
+      workspaceSecurity.userNamespaces: always
+    asserts:
+      - documentIndex: 0
+        equal:
+          path: userNamespaceLevel
+          value: RequirePodLevel
+      - documentIndex: 1
+        notExists:
+          path: userNamespaceLevel
 
   - it: lets an explicit capability list win over the derived sets on both SCCs
     set:

@@ -2780,11 +2780,12 @@ spec:
                     - reject
                     type: string
                   rootMode:
-                    default: userns
+                    default: host
                     description: |-
-                      RootMode is how a session that needs root gets it: uid 0 in a pod user
-                      namespace (userns, the default), host uid 0 (host), or not at all
-                      (forbid).
+                      RootMode is how a session that needs root gets it: host uid 0 (host,
+                      the default, which works everywhere), uid 0 in a pod user namespace
+                      (userns, which needs Kubernetes 1.33+, a 6.3+ kernel, and no NFS or, on
+                      runc, OCI image volumes), or not at all (forbid).
                     enum:
                     - userns
                     - host
@@ -2817,10 +2818,6 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-validations:
-                - message: profile "restricted" cannot run root sessions as host root;
-                    use rootMode userns or forbid
-                  rule: '!(has(self.profile) && self.profile == ''restricted'' &&
-                    has(self.rootMode) && self.rootMode == ''host'')'
                 - message: sudo needs privilege escalation, which profile "restricted"
                     forbids
                   rule: '!(has(self.sudo) && self.sudo && has(self.profile) && self.profile

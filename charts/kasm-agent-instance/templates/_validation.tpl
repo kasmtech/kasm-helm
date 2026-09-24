@@ -53,10 +53,11 @@
 {{/*
   Cross-value validation for workspaceSecurity, rendered as the Agent's spec.workspaceSecurity.
 
-  The first two pair rules repeat the Agent CRD's CEL rules, so a bad pair fails at render time
-  rather than halfway through an apply. The third has no CEL counterpart - the operator would
-  simply not give a host-root session a user namespace - but asking for both is a contradiction,
-  and the SCC template cannot honour it either. The enum checks mirror the CRD's, and keep
+  profile and userNamespaces shape uid-1000 sessions and rootMode shapes root sessions; the two
+  are independent, so any profile or userNamespaces value pairs with any rootMode, host included.
+  The one real contradiction is sudo with profile restricted: sudo needs privilege escalation,
+  which restricted forbids, and the Agent CRD's CEL rule refuses the pair, so it fails here at
+  render time rather than halfway through an apply. The enum checks mirror the CRD's, and keep
   openshift-scc.yaml, which branches on rootMode and profile, from rendering a policy for a value
   the Agent would be rejected over.
 */}}
@@ -69,13 +70,7 @@
   {{- fail (printf "agent.workspaceSecurity.%s is %q; it must be one of %s, or empty for the default." $key $value (join ", " (index $enums $key))) -}}
 {{- end -}}
 {{- end -}}
-{{- if and (eq (toString $w.profile) "restricted") (eq (toString $w.rootMode) "host") -}}
-  {{- fail "agent.workspaceSecurity.profile is restricted but agent.workspaceSecurity.rootMode is host - profile \"restricted\" cannot run root sessions as host root. Use rootMode userns or forbid, or profile baseline." -}}
-{{- end -}}
 {{- if and $w.sudo (eq (toString $w.profile) "restricted") -}}
   {{- fail "agent.workspaceSecurity.sudo is on but agent.workspaceSecurity.profile is restricted - sudo needs privilege escalation, which profile \"restricted\" forbids. Turn sudo off or use profile baseline." -}}
-{{- end -}}
-{{- if and (eq (toString $w.userNamespaces) "always") (eq (toString $w.rootMode) "host") -}}
-  {{- fail "agent.workspaceSecurity.userNamespaces is always but agent.workspaceSecurity.rootMode is host - a session cannot run in a pod user namespace and as host root at once. Use rootMode userns (or forbid) with userNamespaces always, or userNamespaces rootOnly with rootMode host." -}}
 {{- end -}}
 {{- end -}}

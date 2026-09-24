@@ -98,11 +98,12 @@ EGL/DRI graphics acceleration is a **node-image** concern: drivers pre-installed
        supplementalGroups: [109, 44]   # the render and video gids stat printed
    ```
 
-   The gids have to agree across the GPU nodes. A root session in a user namespace (the default
-   for an image that needs root, `workspaceSecurity.rootMode: userns`) may not get device access at
-   all: the device keeps its host owner and group, which are unmapped inside the namespace, and
-   whether the NVIDIA device plugin's devices work in user-namespace pods is still open. Run GPU
-   images at uid 1000, or use `rootMode: host` for a root GPU image.
+   The gids have to agree across the GPU nodes. A root session under the default
+   `workspaceSecurity.rootMode: host` gets the devices as it always did. Locked down with
+   `rootMode: userns`, it may not get device access at all: the device keeps its host owner and
+   group, which are unmapped inside the namespace, and whether the NVIDIA device plugin's devices
+   work in user-namespace pods is still open. Run GPU images at uid 1000, or keep `rootMode: host`
+   for a root GPU image.
 
 5. **Airgapped?** Do **not** mirror the GPU Operator from `make images-agent`; it pulls a much larger
    operand set at runtime. Follow NVIDIA's air-gapped procedure and pass its values through with the
@@ -173,7 +174,7 @@ Installing `kasm-agent` directly? Drop the `kasm-agent:` key and start at `gpuOp
 | Sessions land on non-GPU nodes | No node targeting | `agent.workspacesNodeSelector` (and tolerate the GPU taint) |
 | EGL session falls back to software rendering | `/dev/dri` missing on the node image, or the workspace image lacks the EGL label | Prepare the node image; use a workspace image with `com.kasmweb.gpu_acceleration_egl=nvidia` |
 | `/dev/dri/renderD128` is present in the session but `Permission denied` to `kasm-user` | The session runs as uid 1000 without the device's `render`/`video` group | `agent.workspaceSecurity.supplementalGroups` with the node's gids, or `group_add` in the image's run config (step 4) |
-| A root GPU image sees the devices but cannot open them, or its pod fails to start | It runs as root in a pod user namespace, where the host device ownership is unmapped | Run it at uid 1000 with the groups above, or `agent.workspaceSecurity.rootMode: host` |
+| A root GPU image sees the devices but cannot open them, or its pod fails to start | It runs as root in a pod user namespace (`rootMode: userns`), where the host device ownership is unmapped | Run it at uid 1000 with the groups above, or `agent.workspaceSecurity.rootMode: host` (the default) |
 | Airgapped install of `gpuOperator` fails pulling operands | The operand set is not in `dist/kasm-agent-images.txt` | Follow NVIDIA's air-gapped procedure, values passed through as `gpuOperator.*` |
 
 ## Decisions

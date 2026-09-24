@@ -42,17 +42,20 @@ profile adds (`SYS_CHROOT` for the browser sandbox under the default `baseline`,
 `NET_BIND_SERVICE` under `restricted`). That is the Docker agent's user too; what the Docker agent
 has and a pod does not is `docker exec -u root`, so the images and features that relied on it
 (a `user: root` run config, root `exec_configs`, session recording) now need a root session of
-their own. `agent.workspaceSecurity.rootMode` says where that comes from:
+their own. `agent.workspaceSecurity.rootMode` says where that comes from. The default is the one
+that works everywhere, and the other two lock root down:
 
-- `userns` (the default) runs the container as uid 0 inside a Linux user namespace
-  (`hostUsers: false`). Root in the pod maps to an unprivileged, per-pod uid range on the node, so a
-  container escape lands as nobody in particular. It needs Kubernetes 1.33 or newer (user
-  namespaces on by default; GA in 1.36), containerd 2.0 or CRI-O 1.25, a 6.3+ kernel on the session
-  nodes, and no NFS-backed volume on the pod: the NFS client cannot idmap-mount, and the container
-  fails to create ([Storage](../how-to/storage/README.md)). Device passthrough into it is limited,
-  since device ownership is not remapped ([GPU workspaces](../how-to/nodes/gpu.md)).
-- `host` runs it as host uid 0, the way every session ran before. It works everywhere, and a
-  container escape is root on the node.
+- `host` (the default) runs it as host uid 0, the way every session ran before. It works on any
+  node, runtime and volume, only images that need root run this way, and a container escape from
+  such a session is root on the node.
+- `userns` runs the container as uid 0 inside a Linux user namespace (`hostUsers: false`). Root in
+  the pod maps to an unprivileged, per-pod uid range on the node, so a container escape lands as
+  nobody in particular. It needs Kubernetes 1.33 or newer (user namespaces on by default; GA in
+  1.36), containerd 2.0 or CRI-O 1.25, a 6.3+ kernel on the session nodes, no NFS-backed volume on
+  the pod (the NFS client cannot idmap-mount, and the container fails to create;
+  [Storage](../how-to/storage/README.md)), and no OCI image volume (a Nix image's `imageMounts`) on
+  a runc node, since runc idmaps bind mounts only. Device passthrough into it is limited, since
+  device ownership is not remapped ([GPU workspaces](../how-to/nodes/gpu.md)).
 - `forbid` refuses root: such an image fails to launch.
 
 `rootFeatures` decides what an otherwise uid-1000 image gets when it asks for root through its
@@ -70,6 +73,14 @@ The Pod Security Standard a session pod satisfies follows from its run mode:
 | `nonroot`, `profile: baseline` (default) | as above plus `SYS_CHROOT` and the image's own `cap_add`s | `baseline`, since `restricted` admits no add but `NET_BIND_SERVICE`; `sudo` (escalation, `SETUID`/`SETGID`) also stays at `baseline` |
 | `userns-root` | uid 0 in a user namespace, escalation allowed, the eight root capabilities | `baseline`. `restricted` stays out of reach even behind the alpha `UserNamespacesPodSecurityStandards` API-server gate, which relaxes only the non-root checks for user-namespace pods, not the capability or escalation ones |
 | `host-root` | host uid 0, escalation allowed, the eight root capabilities | `baseline` on paper, since no Pod Security control looks at the uid; treat it as needing a `privileged` namespace, because that is what it amounts to on escape |
+
+`profile` (with `userNamespaces` and `sudo`) shapes uid-1000 sessions and `rootMode` shapes root
+sessions, and the two are independent: `profile: restricted` with the default `rootMode: host` is a
+coherent pair, restricted-shaped desktops while root-needing images still run as host root. In a
+namespace that enforces `restricted`, only `profile: restricted` sessions are admitted; every root
+session, `userns-root` or `host-root`, is refused at admission. `rootMode: forbid` is the companion
+knob for such a namespace, so a root-needing image fails at launch with a clear reason instead of
+leaving a pod-less Deployment, but it is not a requirement.
 
 Whatever the mode, an image with an inline seccomp profile and no `seccomp` backend falls back to
 `Unconfined` under the `baseline` profile, which no Pod Security level admits; turn the backend on
@@ -136,7 +147,7 @@ the Helm release history.
 | Decision | What it costs | Procedure |
 | -------- | ------------- | --------- |
 | `privileged` PSS scope | The label covers everything in the namespace, the control plane included in a shared one | [Privileged workloads and cluster policy](../how-to/nodes/privileged-workloads.md) |
-| Root sessions (`agent.workspaceSecurity.rootMode`) | `userns` needs Kubernetes 1.33+, containerd 2.0 / CRI-O 1.25, a 6.3+ kernel, and no NFS-backed volume on a root session; `host` makes a container escape root on the node | [Session run identity](#session-run-identity) |
+| Root sessions (`agent.workspaceSecurity.rootMode`) | `host`, the default, makes a container escape from a root session root on the node; `userns` needs Kubernetes 1.33+, containerd 2.0 / CRI-O 1.25, a 6.3+ kernel, and neither an NFS-backed volume nor, on runc, an image volume on a root session | [Session run identity](#session-run-identity) |
 | Host namespaces for the egress installer | `hostPID` and `hostNetwork` on a privileged container; its shim fails **every** pod sandbox on a node while no daemon runs | [Egress installer: node prerequisites](../how-to/networking/egress.md) |
 | Operator RBAC | Re-applied on every `helm upgrade` | [Architecture, cluster singletons](architecture.md#cluster-singletons) |
 | NetworkPolicy enforcement | Inert without an enforcing CNI; the manager allow needs the post-DNAT port behind a hostPort ingress | [NetworkPolicy enforcement](../how-to/networking/network-policies.md) |

@@ -31,8 +31,8 @@ shapes its SCCs to match. A uid-1000 session is the same in every mode.
 
 | `rootMode` | Root sessions run as | OpenShift needs | SCCs the chart ships |
 | ---------- | -------------------- | --------------- | -------------------- |
-| `userns` (default) | uid 0 inside a pod user namespace (`hostUsers: false`): root in the pod, an unprivileged uid on the node | OpenShift 4.20 or newer (user namespaces GA; tech preview in 4.17 to 4.19) | `<name>` for uid 1000, and `<name>-root`: any uid, the eight root capabilities, `userNamespaceLevel: RequirePodLevel`, so uid 0 is admitted only in a pod user namespace |
-| `host` | host uid 0, the way every session ran before user namespaces | Any release | `<name>` for uid 1000, and `<name>-root`: any uid, the eight root capabilities, no user-namespace requirement, so a container escape is root on the node |
+| `host` (default) | host uid 0, the way every session ran before user namespaces | Any release | `<name>` for uid 1000, and `<name>-root`: any uid, the eight root capabilities, no user-namespace requirement, so a container escape is root on the node |
+| `userns` | uid 0 inside a pod user namespace (`hostUsers: false`): root in the pod, an unprivileged uid on the node | OpenShift 4.20 or newer (user namespaces GA; tech preview in 4.17 to 4.19) | `<name>` for uid 1000, and `<name>-root`: any uid, the eight root capabilities, `userNamespaceLevel: RequirePodLevel`, so uid 0 is admitted only in a pod user namespace |
 | `forbid` | never; an image that asks for root fails to launch | Any release | `<name>` alone |
 
 `<name>` is `kasm-<namespace>-<agent>-workspace`: `MustRunAsNonRoot`, `drop: ALL` required,
@@ -40,15 +40,22 @@ shapes its SCCs to match. A uid-1000 session is the same in every mode.
 under `restricted`), and privilege escalation plus `SETUID`/`SETGID` only with
 `workspaceSecurity.sudo`. It sits above `root` in OpenShift's restrictiveness ordering, so a
 uid-1000 session is admitted by it and only a root session reaches `<name>-root`. Under
-`userNamespaces: always` it also requires a pod user namespace. The two SCCs are separate because
+`userNamespaces: always` it also requires a pod user namespace. `profile` and `userNamespaces` shape
+only this SCC and `rootMode` only the root one; they are independent, so `profile: restricted` with
+the default `host` is valid. Where the namespace's Pod Security label enforces `restricted`, only
+`profile: restricted` sessions pass and root sessions are refused whatever their `rootMode`;
+`rootMode: forbid` is the natural companion there, not a requirement. The two SCCs are separate because
 one cannot do both jobs: `RequirePodLevel` would refuse the ordinary uid-1000 pods, and without it
 the root SCC would admit host root.
 
-`userns` is the mode to want on 4.20 and later. The user-namespace limits apply on OpenShift too: a
-root session cannot mount an NFS-backed volume (NFS or EFS persistent profiles, NFS storage
-mappings; see [Storage](../storage/README.md)), and device passthrough into it is limited. Use
-`host` on an older release or when a root image has to reach an NFS profile, and `forbid` when no
-image in the catalog should run as root at all.
+`host` is the default because it works on every release, runtime and volume, and only images
+that need root run that way. `userns` locks root sessions down on 4.20 and later, within the
+user-namespace limits, which apply on OpenShift too: a root session cannot mount an NFS-backed
+volume (NFS or EFS persistent profiles, NFS storage mappings; see [Storage](../storage/README.md)),
+cannot mount an OCI image volume (a Nix image's `imageMounts`) on a node whose CRI-O runs runc,
+which idmaps bind mounts only, and device passthrough into it is limited. Stay on `host` on an
+older release or when a root image needs one of those, and use `forbid` when no image in the
+catalog should run as root at all.
 
 The rest of the agent family lands in one of three places:
 
@@ -83,6 +90,9 @@ The rest of the agent family lands in one of three places:
   ```
 
   Expected: `v1.35.x` or later. Earlier releases have no ImageVolume and no fallback.
+- Only to lock root sessions down with `rootMode: userns`: OpenShift 4.20 or newer, no NFS-backed
+  volume on a root session, and no Nix image (`imageMounts`) that needs root on a node whose CRI-O
+  runs runc, which idmaps bind mounts only. The default, `host`, needs none of this.
 
 ## Steps
 
@@ -92,7 +102,7 @@ The rest of the agent family lands in one of three places:
    kasm-agent:
      agent:
        workspaceSecurity:
-         rootMode: userns        # 4.20+; host on older releases; forbid for no root at all
+         rootMode: host          # default; userns on 4.20+ to lock root down; forbid for no root at all
        openshift:
          scc:
            enabled: true
@@ -165,9 +175,9 @@ oc get scc kasm-kasm-k8s-agent-workspace kasm-kasm-k8s-agent-workspace-root \
 oc -n kasm get rolebinding k8s-agent-workspace-scc -o jsonpath='{.subjects[0].name}{"\n"}'
 ```
 
-Expected with `rootMode: userns`: the first SCC with `MustRunAsNonRoot`, the second with `RunAsAny`
-and `RequirePodLevel` (with `host`, `<none>` there; with `forbid`, only the first exists), and
-`k8s-agent-workspace`.
+Expected with the default `rootMode: host`: the first SCC with `MustRunAsNonRoot`, the second with
+`RunAsAny` and `<none>` (with `userns`, `RequirePodLevel` there; with `forbid`, only the first
+exists), and `k8s-agent-workspace`.
 
 Launch a session, then read which SCC admitted its pod, its run mode, and the agent's own pod:
 
@@ -198,7 +208,7 @@ kasm-helm:
 kasm-agent:
   agent:
     workspaceSecurity:
-      rootMode: userns                # OpenShift 4.20+; host before that; forbid for no root
+      rootMode: host                  # default; userns (4.20+) to lock root down; forbid for no root
     openshift:
       scc:
         enabled: true
@@ -233,8 +243,9 @@ Installing the charts directly, drop the `kasm-helm:` and `kasm-agent:` keys.
 
 | Symptom | Cause | Fix |
 | ------- | ----- | --- |
-| A session's Deployment has `0` pods; its events say `unable to validate against any security context constraint` and list `runAsUser: Invalid value: 0` | The image asks for root (a `user: root` run config, root `exec_configs`, recording) and `agent.workspaceSecurity.rootMode` is `forbid`, so no root SCC exists; or the SCCs are not granted at all, or the operator predates the `<agent>-workspace` ServiceAccount and the pods still use `default` | Pick `rootMode: userns` (4.20+) or `host` if the image must run as root, or `rootFeatures: downgrade` if only its root commands or recording ask for it; otherwise `agent.openshift.scc.enabled=true`, and `kubectl -n <ns> get sa <agent>-workspace` must exist |
+| A session's Deployment has `0` pods; its events say `unable to validate against any security context constraint` and list `runAsUser: Invalid value: 0` | The image asks for root (a `user: root` run config, root `exec_configs`, recording) and `agent.workspaceSecurity.rootMode` is `forbid`, so no root SCC exists; or the SCCs are not granted at all, or the operator predates the `<agent>-workspace` ServiceAccount and the pods still use `default` | Pick `rootMode: host` (the default) or `userns` (4.20+) if the image must run as root, or `rootFeatures: downgrade` if only its root commands or recording ask for it; otherwise `agent.openshift.scc.enabled=true`, and `kubectl -n <ns> get sa <agent>-workspace` must exist |
 | The session pod is admitted but stays `ContainerCreating`/`CreateContainerError` with `mount_setattr` and `idmap` in its events | A `userns-root` session (or any session under `userNamespaces: always`) mounts an NFS-backed volume, which cannot be idmap-mounted into a user namespace | Move the profile to S3 or block storage, set `rootFeatures: downgrade` if the image only asks for root through its commands or recording, or `rootMode: host`; see [Storage](../storage/README.md) |
+| The session pod is admitted but stays `CreateContainerError`; its events say `runc create failed: invalid mount` naming the image volume's destination (`/nix`) and `id-mapped mounts are only supported for bind-mounts` | An image with `imageMounts` (the Nix images) runs as a `userns-root` session (or any session under `userNamespaces: always`) on a node whose CRI-O uses runc, which cannot idmap an image volume | `rootMode: host`, or `rootFeatures: downgrade` if the image only asks for root through its commands or recording |
 | The same event lists `capabilities.add: Invalid value: "SYS_ADMIN"` (or another name) | The image's run config adds a capability the SCC does not list | Add it to `agent.openshift.scc.workspace.capabilities`, together with the derived set it replaces |
 | The same event lists `hostPath volumes are not allowed to be used` | The image passes a device or a volume mapping by host path | `agent.openshift.scc.workspace.allowHostPath=true` |
 | The same event lists `image volumes are not allowed to be used` | A Nix image's `imageMounts` | `image` in `agent.openshift.scc.workspace.volumes`, on OpenShift 4.22 or newer |
@@ -247,7 +258,7 @@ Anything else: [Troubleshooting](../../reference/troubleshooting.md).
 ## Decisions
 
 - [ ] `kasm-helm.isOpenshift=true` and the Routes, from [OpenShift Route](../networking/openshift-route.md).
-- [ ] Root mode chosen: `agent.workspaceSecurity.rootMode` `userns` (OpenShift 4.20+, no NFS profiles for root images), `host`, or `forbid`.
+- [ ] Root mode chosen: `agent.workspaceSecurity.rootMode` `host` (the default), `userns` (OpenShift 4.20+, no NFS profiles or runc image volumes for root images), or `forbid`.
 - [ ] `agent.openshift.scc.enabled=true`; `allowHostPath`, `allowPrivileged`, `capabilities` and `volumes` widened only for what the catalog needs.
 - [ ] Seccomp backend chosen: `spo` (SPO installed) or `installer` (`privileged` SCC granted by the same switch).
 - [ ] Webcams: `nodePrep.modules.v4l2loopback.method=kmm`, `videoDevicePlugin.openshift.scc.enabled=true`.

@@ -16,12 +16,13 @@
                   always it also requires a pod user namespace.
     <name>-root   root sessions, unless rootMode is forbid. runAsUser RunAsAny, privilege escalation
                   allowed, and the eight capabilities the operator adds to every root container on
-                  top of drop ALL. For rootMode userns it carries `userNamespaceLevel:
-                  RequirePodLevel` (security.openshift.io/v1, OpenShift 4.20+; checked against
-                  openshift/api's SecurityContextConstraints type, whose values are AllowHostLevel,
-                  the default, and RequirePodLevel), so uid 0 is admitted only with `hostUsers:
-                  false`: root in the pod, an unprivileged uid on the node. For rootMode host it
-                  omits the field and admits host uid 0, the pre-user-namespace session.
+                  top of drop ALL. For rootMode host (the default, because it works on every node,
+                  runtime and volume) it omits userNamespaceLevel and admits host uid 0, the
+                  pre-user-namespace session. For rootMode userns, the lock-down, it carries
+                  `userNamespaceLevel: RequirePodLevel` (security.openshift.io/v1, OpenShift 4.20+;
+                  checked against openshift/api's SecurityContextConstraints type, whose values are
+                  AllowHostLevel, the default, and RequirePodLevel), so uid 0 is admitted only with
+                  `hostUsers: false`: root in the pod, an unprivileged uid on the node.
 
   One SCC cannot do both jobs under rootMode userns with userNamespaces rootOnly (the default): the
   uid-1000 sessions are ordinary pods (hostUsers unset), which RequirePodLevel refuses, while
@@ -102,7 +103,7 @@ groups: []
 {{- if .Values.openshift.scc.enabled }}
 {{- $ws := .Values.openshift.scc.workspace }}
 {{- $sec := .Values.workspaceSecurity }}
-{{- $rootMode := $sec.rootMode | default "userns" }}
+{{- $rootMode := $sec.rootMode | default "host" }}
 {{- $profile := $sec.profile | default "baseline" }}
 {{- $always := eq (toString $sec.userNamespaces) "always" }}
 {{- $sudo := and $sec.sudo true }}

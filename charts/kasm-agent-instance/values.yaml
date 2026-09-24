@@ -684,35 +684,47 @@ imagePuller:
 # CRD's default applies, and the whole block is omitted while every field is empty. Each session pod is labelled
 # `kasm.com/run-mode` with `nonroot`, `userns-root` or `host-root`, for cluster policy to match on.
 #
+# The defaults make every image work on every cluster; each knob here only locks things down further.
+# `profile`, `userNamespaces` and `sudo` shape uid-1000 sessions and `rootMode` shapes root sessions, and the
+# two sides are independent: any `profile` pairs with any `rootMode`. Under Pod Security `restricted`
+# enforcement only `profile: restricted` sessions are admitted and every root session is refused, whatever
+# its `rootMode`; `rootMode: forbid` is the companion knob there, so root-needing images fail at launch rather
+# than at admission, but it is not required.
+#
 workspaceSecurity:
-  # workspaceSecurity.rootMode -- How a session that needs root gets it: `userns` (the default) runs it as uid
-  # 0 inside a pod user namespace (`hostUsers: false`), root in the pod and an unprivileged uid on the node.
-  # User namespaces need Kubernetes 1.33+ (on by default; GA in 1.36; OpenShift 4.20), containerd 2.0+ or
-  # CRI-O 1.25+, and a 6.3+ kernel on the session nodes, and a user-namespace pod cannot mount an NFS-backed
-  # volume (NFS or EFS persistent profiles, NFS storage mappings; the container fails to create with an idmap
-  # `mount_setattr` error), while S3-style profiles and block storage are unaffected. `host` runs it as host
-  # uid 0, the way every session ran before user namespaces: it works on any node and any volume, but a
-  # container escape is root on the node, the namespace needs the `privileged` Pod Security level, and on
-  # OpenShift the workspace SCC admits host root. `forbid` refuses root outright: an image whose run config asks
-  # for it fails to launch, and root-needing features follow `rootFeatures` as if set to `downgrade`.
+  # workspaceSecurity.rootMode -- How a session that needs root gets it. `host` (the default) runs it as host
+  # uid 0, the way every session ran before run modes: it works on any node, runtime and volume. Only images
+  # that need root run this way; uid-1000 sessions (every stock image) are unaffected. A container escape from
+  # a root session is root on the node, the namespace needs the `privileged` Pod Security level for such
+  # sessions, and on OpenShift the workspace root SCC admits host uid 0. `userns` locks root down: uid 0 inside
+  # a pod user namespace (`hostUsers: false`), root in the pod and an unprivileged uid on the node. It needs
+  # Kubernetes 1.33+ (on by default; GA in 1.36; OpenShift 4.20), containerd 2.0+ or CRI-O 1.25+, and a 6.3+
+  # kernel on the session nodes; a user-namespace pod cannot mount an NFS-backed volume (NFS or EFS persistent
+  # profiles, NFS storage mappings; the container fails to create with an idmap `mount_setattr` error), and on
+  # a runc node it cannot mount an OCI image volume (the nix images' `imageMounts`; runc idmaps bind mounts
+  # only, and the container fails with `id-mapped mounts are only supported for bind-mounts`). S3-style
+  # profiles and block storage are unaffected. `forbid` is the strictest: it refuses root outright, an image
+  # whose run config asks for it fails to launch, and root-needing features follow `rootFeatures` as if set to
+  # `downgrade`.
   rootMode: ""
   # workspaceSecurity.userNamespaces -- Which sessions get a pod user namespace: `rootOnly` (the default) gives
   # one only to root sessions under `rootMode: userns`; `always` gives every session one, uid 1000 included,
   # for the extra isolation, at the cost of every session inheriting the user-namespace limits (no NFS-backed
-  # volumes, device ownership unmapped). `always` contradicts `rootMode: host`, and the chart refuses the pair.
+  # volumes or runc image volumes, device ownership unmapped). It does not touch root sessions, which follow
+  # `rootMode`: with the default `host` they stay host root.
   userNamespaces: ""
   # workspaceSecurity.rootFeatures -- What happens when an image that would run as uid 1000 asks for something
   # only root can do (root `exec_configs` start or stop commands, or session recording): `promote` (the default)
   # runs that session in `rootMode` so the feature works; `downgrade` keeps it at uid 1000, runs the commands as
   # `kasm-user`, switches recording off and flags the KasmWorkspace; `reject` refuses the launch. `downgrade` is
-  # also the way to keep such images working on NFS-backed profiles under `rootMode: userns`.
+  # also the way to keep such images working on NFS-backed profiles or image volumes under `rootMode: userns`.
   rootFeatures: ""
   # workspaceSecurity.profile -- The capability shape of uid-1000 sessions, named after the Pod Security
   # Standards level it satisfies. `baseline` (the default) adds `SYS_CHROOT` (Chromium's sandbox and bubblewrap
   # need it, and Docker grants it by default) plus whatever the image's run config `cap_add`s, and an inline
   # seccomp profile with no backend falls back to `Unconfined`. `restricted` adds nothing but `NET_BIND_SERVICE`
   # when asked for, drops other `cap_add`s with a warning, and falls back to `RuntimeDefault`; it cannot be
-  # combined with `rootMode: host` or `sudo`.
+  # combined with `sudo`. It shapes uid-1000 sessions only: root sessions follow `rootMode`, whatever the profile.
   profile: ""
   # workspaceSecurity.sudo -- Keep privilege escalation on and add `SETUID`/`SETGID` to uid-1000 sessions, so an
   # image's baked-in sudoers entry works. Off by default: `sudo` inside a session is a path back to root in
@@ -985,8 +997,8 @@ openshift:
     # openshift.scc.enabled -- Render the workspace SecurityContextConstraints, a ClusterRole holding `use` on
     # them, and the RoleBinding that grants it to the `<name>-workspace` ServiceAccount the operator creates for
     # this agent. One SCC admits uid-1000 sessions (`MustRunAsNonRoot`); unless `workspaceSecurity.rootMode` is
-    # `forbid`, a second admits root sessions: uid 0 in a pod user namespace only (`userNamespaceLevel:
-    # RequirePodLevel`, OpenShift 4.20+) for `userns`, uid 0 on the host for `host`. With `seccomp.enabled` and the `installer` backend, also grant the built-in `privileged` SCC to the
+    # `forbid`, a second admits root sessions: uid 0 on the host for `host` (the default), uid 0 in a pod user
+    # namespace only (`userNamespaceLevel: RequirePodLevel`, OpenShift 4.20+) for `userns`. With `seccomp.enabled` and the `installer` backend, also grant the built-in `privileged` SCC to the
     # `<name>-seccomp-installer` ServiceAccount (root with a hostPath mount of the kubelet's seccomp directory,
     # `spc_t`). Requires cluster-admin at install time, as any SCC or ClusterRole does. The agent Deployment,
     # the session proxy, the image puller and the standby placeholders set no UID and stay under

@@ -31,14 +31,39 @@ tests:
       - hasDocuments:
           count: 0
 
-  - it: fails when profile restricted is paired with rootMode host
+  - it: passes profile restricted alone, with root sessions on the default host mode
+    set:
+      workspaceSecurity:
+        profile: restricted
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: passes profile restricted with an explicit rootMode host
     set:
       workspaceSecurity:
         profile: restricted
         rootMode: host
     asserts:
-      - failedTemplate:
-          errorPattern: "agent.workspaceSecurity.profile is restricted but agent.workspaceSecurity.rootMode is host"
+      - hasDocuments:
+          count: 0
+
+  - it: passes userNamespaces always alone, with root sessions on the default host mode
+    set:
+      workspaceSecurity:
+        userNamespaces: always
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: passes userNamespaces always with an explicit rootMode host
+    set:
+      workspaceSecurity:
+        userNamespaces: always
+        rootMode: host
+    asserts:
+      - hasDocuments:
+          count: 0
 
   - it: fails when sudo is paired with profile restricted
     set:
@@ -48,15 +73,6 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "agent.workspaceSecurity.sudo is on but agent.workspaceSecurity.profile is restricted"
-
-  - it: fails when userNamespaces always is paired with rootMode host
-    set:
-      workspaceSecurity:
-        userNamespaces: always
-        rootMode: host
-    asserts:
-      - failedTemplate:
-          errorPattern: "agent.workspaceSecurity.userNamespaces is always but agent.workspaceSecurity.rootMode is host"
 
   - it: fails on a rootMode the CRD does not know
     set:
