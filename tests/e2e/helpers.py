@@ -1087,6 +1087,44 @@ def curl_from_pod(
     return int(status_code_text.strip()), body
 
 
+def curl_from_host(
+    url: str,
+    *,
+    host_header: Optional[str] = None,
+    insecure: bool = False,
+    timeout_seconds: int = 30,
+) -> tuple[int, str]:
+    """Curl from the pytest container itself rather than from a pod inside the
+    cluster. The pytest container runs with `--network host` (see the Makefile's
+    pytest-docker target), so this reaches a cloud-provider-kind LoadBalancer's
+    address directly on the docker `kind` network - the actual external envoy
+    proxy container - without transiting any node's kube-proxy rules, which is
+    what a curl from inside the cluster cannot rule out (see F14 note 5)."""
+    curl_args = [
+        "curl",
+        "-sS",
+        "-L",
+        "--max-time",
+        str(timeout_seconds),
+        "-o",
+        "-",
+        "-w",
+        "\n%{http_code}",
+    ]
+    if insecure:
+        curl_args.append("-k")
+    if host_header:
+        curl_args.extend(["-H", f"Host: {host_header}"])
+    curl_args.append(url)
+
+    result = run_command(curl_args, timeout_seconds=timeout_seconds + 10)
+    if not result.stdout:
+        raise AssertionError("curl returned empty output")
+
+    body, status_code_text = result.stdout.rsplit("\n", 1)
+    return int(status_code_text.strip()), body
+
+
 def assert_login_page(body: str) -> None:
     # Intentionally tolerant: Kasm versions/themes vary.
     # We want to know: did we reach an HTML login page with a password field?
@@ -1206,6 +1244,35 @@ def wait_for_statefulsets_rolled_out(namespace: str, *, timeout_seconds: int = 1
     raise AssertionError(f"Timed out waiting for statefulsets to roll out in namespace {namespace}")
 
 
+def wait_for_service_lb_address(
+    namespace: str,
+    service_name: str,
+    *,
+    timeout_seconds: int = 300,
+    progress: bool = True,
+    progress_seconds: int = 30,
+) -> str:
+    deadline = time.time() + timeout_seconds
+    next_log = 0.0
+
+    while time.time() < deadline:
+        result = kubectl(["get", "svc", service_name, "-o", "json"], namespace=namespace)
+        svc_obj = json.loads(result.stdout)
+        lb_status = svc_obj.get("status", {}).get("loadBalancer", {}).get("ingress", [])
+        if lb_status:
+            entry = lb_status[0]
+            address = entry.get("ip") or entry.get("hostname")
+            if address:
+                return address
+
+        if progress and time.time() >= next_log:
+            LOGGER.info("[service] waiting for LoadBalancer address %s/%s", namespace, service_name)
+            next_log = time.time() + progress_seconds
+        time.sleep(5)
+
+    raise AssertionError(f"Timed out waiting for LoadBalancer address for {namespace}/{service_name}")
+
+
 def wait_for_ingress_address(
     namespace: str,
     ingress_name: str,
@@ -1240,6 +1307,42 @@ def wait_for_ingress_address(
         time.sleep(5)
 
     raise AssertionError(f"Timed out waiting for ingress address for {namespace}/{ingress_name}")
+
+
+def wait_for_gateway_programmed(
+    namespace: str,
+    gateway_name: str,
+    *,
+    timeout_seconds: int = 300,
+    progress: bool = True,
+    progress_seconds: int = 30,
+) -> str:
+    """Wait for a Gateway API Gateway to reach Programmed=True and return its address."""
+    deadline = time.time() + timeout_seconds
+    next_log = 0.0
+    last_status: Optional[str] = None
+
+    while time.time() < deadline:
+        result = kubectl(["get", "gateway", gateway_name, "-o", "json"], namespace=namespace)
+        gw_obj = json.loads(result.stdout)
+        status = gw_obj.get("status", {})
+        conditions = {c["type"]: c["status"] for c in status.get("conditions", [])}
+        addresses = status.get("addresses", [])
+        if conditions.get("Programmed") == "True" and addresses:
+            return addresses[0]["value"]
+        last_status = str(conditions)
+
+        if progress and time.time() >= next_log:
+            LOGGER.info(
+                "[gateway] waiting for Programmed=True %s/%s (conditions=%s)",
+                namespace,
+                gateway_name,
+                last_status or "none",
+            )
+            next_log = time.time() + progress_seconds
+        time.sleep(5)
+
+    raise AssertionError(f"Timed out waiting for Gateway {namespace}/{gateway_name} to become Programmed")
 
 
 def wait_for_rollouts_complete(namespace: str, *, timeout_seconds: int = 1200) -> None:

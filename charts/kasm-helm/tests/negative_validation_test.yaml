@@ -4,6 +4,8 @@ templates:
   - templates/proxy-service-external.yaml
   - templates/route.yaml
   - templates/rdp-gateway-deployment.yaml
+  - templates/validation.yaml
+  - templates/upstream-auth-ingress.yaml
 
 tests:
   - it: ingress + route both enabled fails the route template with a clear message
@@ -50,3 +52,442 @@ tests:
     asserts:
       - failedTemplate:
           errorMessage: "directRdpService.rdpAccessURL must be set if directRdpService.enabled is true."
+
+  - it: two proxy exposure methods fails, naming both
+    template: templates/validation.yaml
+    set:
+      proxyService:
+        type: ClusterIP
+      ingress:
+        enabled: true
+      httpRoute:
+        enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "Only one proxy exposure method may be enabled, but ingress.enabled and httpRoute.enabled are set. The Ingress, the OpenShift Route, the Gateway API HTTPRoute and the Gateway API TLSRoute all publish the same Kasm proxy Service, so enabling more than one gives the same hostname two owners."
+
+  - it: httpRoute with no parentRefs fails rather than rendering an unattached route
+    template: templates/validation.yaml
+    set:
+      proxyService:
+        type: ClusterIP
+      httpRoute:
+        enabled: true
+        parentRefs: []
+    asserts:
+      - failedTemplate:
+          errorMessage: "httpRoute.enabled is set but httpRoute.parentRefs is empty - the route would attach to no Gateway, and the proxy would stay unreachable from outside the cluster."
+
+  - it: tlsRoute with no parentRefs fails
+    template: templates/validation.yaml
+    set:
+      proxyService:
+        type: ClusterIP
+      tlsRoute:
+        enabled: true
+        parentRefs: []
+    asserts:
+      - failedTemplate:
+          errorMessage: "tlsRoute.enabled is set but tlsRoute.parentRefs is empty - the route would attach to no Gateway, and the proxy would stay unreachable from outside the cluster."
+
+  - it: two upstream auth publishers fails with a clear message
+    template: templates/validation.yaml
+    set:
+      proxyService:
+        type: ClusterIP
+      upstreamAuth:
+        hostname: mgmt.example.com
+        service:
+          enabled: true
+        ingress:
+          enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "Only one upstream auth exposure method may be enabled, but upstreamAuth.service.enabled and upstreamAuth.ingress.enabled are set. The Service, the Ingress, the OpenShift Route, the Gateway API HTTPRoute and the Gateway API TLSRoute all publish the same upstream auth endpoint, so enabling more than one gives the same hostname two owners."
+
+  - it: upstream auth httpRoute without parentRefs or zones fails
+    template: templates/validation.yaml
+    set:
+      proxyService:
+        type: ClusterIP
+      upstreamAuth:
+        hostname: mgmt.example.com
+        httpRoute:
+          enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "upstreamAuth.httpRoute.enabled is set but neither upstreamAuth.httpRoute.parentRefs nor upstreamAuth.httpRoute.zones is populated - the routes would attach to no Gateway, and the upstream auth endpoint would stay unreachable from outside the cluster."
+
+  - it: upstream auth publisher without any hostname source fails
+    template: templates/upstream-auth-ingress.yaml
+    set:
+      proxyService:
+        type: ClusterIP
+      upstreamAuth:
+        ingress:
+          enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "kasmZones[default]: 'upstream_auth_address' (or 'upstreamAuth.hostname' for the primary zone) must be set to generate an upstream-auth ingress/route hostname for this zone"
+
+  - it: upstream auth address carrying a port fails on a host-bearing publisher
+    template: templates/upstream-auth-ingress.yaml
+    set:
+      proxyService:
+        type: ClusterIP
+      upstreamAuth:
+        hostname: mgmt.example.com:8443
+        ingress:
+          enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: 'kasmZones[default]: upstream_auth_address "mgmt.example.com:8443" carries a port, but ingress/route/gateway host fields cannot. Use a bare hostname here; a non-443 listener port belongs only in the preseed value agents are given.'
+
+  - it: pinned upstream auth nodePort with two zones fails
+    template: templates/validation.yaml
+    set:
+      proxyService:
+        type: ClusterIP
+      ingress:
+        enabled: true
+      kasmZones:
+        - name: zonea
+          proxy_hostname: zonea.kasm.example.com
+          primary: true
+        - name: zoneb
+          proxy_hostname: zoneb.kasm.example.com
+      upstreamAuth:
+        service:
+          enabled: true
+          type: NodePort
+          nodePort: "30443"
+    asserts:
+      - failedTemplate:
+          errorMessage: "upstreamAuth.service.nodePort is pinned but 2 zones deploy in this cluster, and every zone's upstream auth Service would claim the same node port. Remove the pin, or deploy a single zone per cluster."
+
+  - it: two zones resolving to the same upstream auth address fails
+    template: templates/validation.yaml
+    set:
+      proxyService:
+        type: ClusterIP
+      ingress:
+        enabled: true
+      kasmZones:
+        - name: zonea
+          proxy_hostname: zonea.kasm.example.com
+          primary: true
+          upstream_auth_address: same.example.com
+        - name: zoneb
+          proxy_hostname: zoneb.kasm.example.com
+          upstream_auth_address: same.example.com
+      upstreamAuth:
+        service:
+          enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: 'kasmZones[zonea] and kasmZones[zoneb] both resolve their upstream auth address to "same.example.com". Every deployed zone needs its own address, since each routes to its own proxy Service.'
+
+  - it: httpRoute with LoadBalancer proxyService fails
+    template: templates/validation.yaml
+    set:
+      proxyService:
+        type: LoadBalancer
+      httpRoute:
+        enabled: true
+        parentRefs:
+          - name: kasm-gateway
+    asserts:
+      - failedTemplate:
+          errorMessage: "The proxyService.type must not be LoadBalancer when the proxy is published through the Gateway API - the Gateway owns the external address. Set proxyService.type=ClusterIP, or disable httpRoute.enabled / tlsRoute.enabled."
+
+  - it: tlsRoute with LoadBalancer proxyService fails
+    template: templates/validation.yaml
+    set:
+      proxyService:
+        type: LoadBalancer
+      tlsRoute:
+        enabled: true
+        parentRefs:
+          - name: kasm-gateway
+    asserts:
+      - failedTemplate:
+          errorMessage: "The proxyService.type must not be LoadBalancer when the proxy is published through the Gateway API - the Gateway owns the external address. Set proxyService.type=ClusterIP, or disable httpRoute.enabled / tlsRoute.enabled."
+
+  - it: tcpRoute enabled with no parentRefs or zones fails
+    template: templates/validation.yaml
+    set:
+      proxyService:
+        type: ClusterIP
+      tcpRoute:
+        enabled: true
+        parentRefs: []
+        zones: []
+    asserts:
+      - failedTemplate:
+          errorMessage: "tcpRoute.enabled is set but neither tcpRoute.parentRefs nor tcpRoute.zones is populated - the route would attach to no Gateway."
+
+  - it: tcpRoute enabled with directRdpService also enabled fails
+    template: templates/validation.yaml
+    set:
+      proxyService:
+        type: ClusterIP
+      tcpRoute:
+        enabled: true
+        parentRefs:
+          - name: kasm-gateway
+      directRdpService:
+        enabled: true
+        rdpAccessURL: rdp.example.com
+    asserts:
+      - failedTemplate:
+          errorMessage: "tcpRoute.enabled and directRdpService.enabled both publish the RDP Gateway externally. Set directRdpService.enabled=false: the RDP Gateway Service stays ClusterIP and the Gateway fronts it through the TCPRoute."
+
+  - it: multi-zone tcpRoute missing a zone's entry fails
+    template: templates/validation.yaml
+    set:
+      proxyService:
+        type: ClusterIP
+      ingress:
+        enabled: true
+      kasmZones:
+        - name: zonea
+          proxy_hostname: zonea.kasm.example.com
+          primary: true
+          region_name: primary-region
+        - name: zoneb
+          proxy_hostname: zoneb.kasm.example.com
+          region_name: primary-region
+      tcpRoute:
+        enabled: true
+        zones:
+          - name: zonea
+            parentRefs:
+              - name: kasm-gateway
+                sectionName: rdp-zonea
+    asserts:
+      - failedTemplate:
+          errorMessage: "tcpRoute.zones has no entry for zone(s) zoneb. A TCPRoute matches on neither hostname nor SNI, so the zones cannot share one Gateway listener: give every zone its own entry, using parentRefs[].sectionName to select that zone's listener."
+
+  - it: tcpRoute enabled without components.rdpGateway.enabled fails
+    template: templates/validation.yaml
+    set:
+      proxyService:
+        type: ClusterIP
+      components:
+        rdpGateway:
+          enabled: false
+      tcpRoute:
+        enabled: true
+        parentRefs:
+          - name: kasm-gateway
+    asserts:
+      - failedTemplate:
+          errorMessage: "tcpRoute.enabled is set but components.rdpGateway.enabled is false - the TCPRoute would have no RDP Gateway Service to route to. Set components.rdpGateway.enabled=true, or disable tcpRoute.enabled."
+
+  - it: tcpRoute.zones entry naming an unknown zone fails
+    template: templates/validation.yaml
+    set:
+      proxyService:
+        type: ClusterIP
+      components:
+        rdpGateway:
+          enabled: true
+      tcpRoute:
+        enabled: true
+        zones:
+          - name: typoed-zone
+            parentRefs:
+              - name: kasm-gateway
+    asserts:
+      - failedTemplate:
+          errorMessage: 'tcpRoute.zones has an entry for zone "typoed-zone", but no deployed zone has that name. Check kasmZones for the correct name, or remove this entry.'
+
+  - it: tcpRoute.zones entry without a name fails schema validation
+    template: templates/validation.yaml
+    set:
+      proxyService:
+        type: ClusterIP
+      components:
+        rdpGateway:
+          enabled: true
+      tcpRoute:
+        enabled: true
+        zones:
+          - parentRefs:
+              - name: kasm-gateway
+    asserts:
+      - failedTemplate:
+          errorMessage: "values don't meet the specifications of the schema(s) in the following chart(s):\nkasm-helm:\n- at '/tcpRoute/zones/0': missing property 'name'\n"
+
+  - it: tcpRoute.zones with a duplicate zone name fails
+    template: templates/validation.yaml
+    set:
+      proxyService:
+        type: ClusterIP
+      components:
+        rdpGateway:
+          enabled: true
+      tcpRoute:
+        enabled: true
+        zones:
+          - name: default
+            parentRefs:
+              - name: kasm-gateway
+                sectionName: a
+          - name: default
+            parentRefs:
+              - name: kasm-gateway
+                sectionName: b
+    asserts:
+      - failedTemplate:
+          errorMessage: 'tcpRoute.zones has more than one entry for zone "default" - each zone may appear once.'
+
+  - it: tcpRoute.zones entry with empty parentRefs fails
+    template: templates/validation.yaml
+    set:
+      proxyService:
+        type: ClusterIP
+      components:
+        rdpGateway:
+          enabled: true
+      tcpRoute:
+        enabled: true
+        zones:
+          - name: default
+            parentRefs: []
+    asserts:
+      - failedTemplate:
+          errorMessage: "tcpRoute resolves to empty parentRefs for zone(s) default - neither a per-zone override nor tcpRoute.parentRefs is populated, so the TCPRoute would attach to no Gateway."
+
+  - it: upstream auth httpRoute.zones entry naming an unknown zone fails
+    template: templates/validation.yaml
+    set:
+      proxyService:
+        type: ClusterIP
+      ingress:
+        enabled: true
+      upstreamAuth:
+        hostname: mgmt.example.com
+        httpRoute:
+          enabled: true
+          zones:
+            - name: typoed-zone
+              parentRefs:
+                - name: kasm-gateway
+    asserts:
+      - failedTemplate:
+          errorMessage: 'upstreamAuth.httpRoute.zones has an entry for zone "typoed-zone", but no deployed zone has that name. Check kasmZones for the correct name, or remove this entry.'
+
+  - it: upstream auth tlsRoute.zones with a duplicate zone name fails
+    template: templates/validation.yaml
+    set:
+      proxyService:
+        type: ClusterIP
+      ingress:
+        enabled: true
+      upstreamAuth:
+        hostname: mgmt.example.com
+        tlsRoute:
+          enabled: true
+          zones:
+            - name: default
+              parentRefs:
+                - name: kasm-gateway
+                  sectionName: a
+            - name: default
+              parentRefs:
+                - name: kasm-gateway
+                  sectionName: b
+    asserts:
+      - failedTemplate:
+          errorMessage: 'upstreamAuth.tlsRoute.zones has more than one entry for zone "default" - each zone may appear once.'
+
+  - it: upstream auth httpRoute zone with no override and no global parentRefs fails, even when another zone is covered
+    template: templates/validation.yaml
+    set:
+      proxyService:
+        type: ClusterIP
+      ingress:
+        enabled: true
+      kasmZones:
+        - name: zonea
+          proxy_hostname: zonea.kasm.example.com
+          primary: true
+        - name: zoneb
+          proxy_hostname: zoneb.kasm.example.com
+      upstreamAuth:
+        httpRoute:
+          enabled: true
+          zones:
+            - name: zonea
+              parentRefs:
+                - name: kasm-gateway
+                  sectionName: zonea
+    asserts:
+      - failedTemplate:
+          errorMessage: "upstreamAuth.httpRoute resolves to empty parentRefs for zone(s) zoneb - neither a per-zone override nor upstreamAuth.httpRoute.parentRefs is populated, so the route would attach to no Gateway."
+
+  - it: upstreamAuth.service.nodePort set while type is LoadBalancer fails
+    template: templates/validation.yaml
+    set:
+      proxyService:
+        type: ClusterIP
+      ingress:
+        enabled: true
+      upstreamAuth:
+        service:
+          enabled: true
+          type: LoadBalancer
+          nodePort: "30443"
+    asserts:
+      - failedTemplate:
+          errorMessage: 'upstreamAuth.service.nodePort is set but upstreamAuth.service.type is "LoadBalancer", not NodePort. Either set upstreamAuth.service.type=NodePort or clear the nodePort pin.'
+
+  - it: upstreamAuth.service.type outside the LoadBalancer/NodePort enum fails schema validation
+    template: templates/validation.yaml
+    set:
+      upstreamAuth:
+        service:
+          enabled: true
+          type: ClusterIP
+    asserts:
+      - failedTemplate:
+          errorMessage: "values don't meet the specifications of the schema(s) in the following chart(s):\nkasm-helm:\n- at '/upstreamAuth/service/type': value must be one of 'LoadBalancer', 'NodePort'\n"
+
+  - it: a misspelled backendProtocol fails schema validation
+    template: templates/upstream-auth-ingress.yaml
+    set:
+      upstreamAuth:
+        hostname: mgmt.example.com
+        ingress:
+          enabled: true
+          backendProtocol: htttp
+    asserts:
+      - failedTemplate:
+          errorMessage: "values don't meet the specifications of the schema(s) in the following chart(s):\nkasm-helm:\n- at '/upstreamAuth/ingress/backendProtocol': value must be one of 'http', 'https'\n"
+
+  - it: a misspelled upstreamAuth.route.backendProtocol fails schema validation
+    template: templates/upstream-auth-route.yaml
+    set:
+      upstreamAuth:
+        hostname: mgmt.example.com
+        route:
+          enabled: true
+          backendProtocol: htttp
+    asserts:
+      - failedTemplate:
+          errorMessage: "values don't meet the specifications of the schema(s) in the following chart(s):\nkasm-helm:\n- at '/upstreamAuth/route/backendProtocol': value must be one of 'http', 'https'\n"
+
+  - it: a misspelled upstreamAuth.httpRoute.backendProtocol fails schema validation
+    template: templates/upstream-auth-httproute.yaml
+    set:
+      upstreamAuth:
+        hostname: mgmt.example.com
+        httpRoute:
+          enabled: true
+          backendProtocol: htttp
+          parentRefs:
+            - name: internal-gateway
+    asserts:
+      - failedTemplate:
+          errorMessage: "values don't meet the specifications of the schema(s) in the following chart(s):\nkasm-helm:\n- at '/upstreamAuth/httpRoute/backendProtocol': value must be one of 'http', 'https'\n"

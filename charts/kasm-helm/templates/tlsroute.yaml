@@ -1,0 +1,38 @@
+{{/*
+  Gateway API TLSRoute publishing the Kasm proxy by SNI passthrough, when
+  tlsRoute.enabled. The Gateway forwards the connection untouched and the proxy
+  terminates TLS itself on its HTTPS port - the Gateway API equivalent of the
+  OpenShift Route's `passthrough` termination, and the option to reach for when
+  TLS must not terminate on shared cluster infrastructure.
+
+  The Gateway needs a listener with `protocol: TLS` and `tls.mode: Passthrough`
+  whose allowedRoutes admit this namespace; a terminating HTTPS listener will
+  not serve a TLSRoute.
+
+  TLSRoute has been standard-channel `v1` since Gateway API 1.5. Older,
+  experimental-channel bundles serve it as `v1alpha2` - set tlsRoute.apiVersion
+  for those.
+
+  publicAddr is deliberately the only SNI hostname, routed to the primary zone's
+  proxy Service. Zone proxy_hostnames belong to a different backend, usually
+  behind a different Gateway or load balancer entirely, so this chart publishes
+  none of them.
+*/}}
+{{- if .Values.tlsRoute.enabled }}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $primaryZone := (include "kasm.primaryZone" . | fromYaml) -}}
+{{- $api := .Values.tlsRoute.apiVersion | default "gateway.networking.k8s.io/v1" -}}
+apiVersion: {{ $api }}
+kind: TLSRoute
+metadata:
+  {{- include "kasm.metadata" (dict "context" . "component" "proxy" "resource" "tlsRoute" "include" "all") | indent 2 }}
+spec:
+  parentRefs:
+    {{- toYaml .Values.tlsRoute.parentRefs | nindent 4 }}
+  hostnames:
+    - {{ .Values.publicAddr | quote }}
+  rules:
+    - backendRefs:
+        - name: {{ printf "%s-%s" $constants.proxy.svc (include "kasm.zoneName" $primaryZone.name) }}
+          port: {{ $constants.proxy.https }}
+{{- end }}

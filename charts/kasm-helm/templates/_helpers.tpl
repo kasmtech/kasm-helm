@@ -147,6 +147,45 @@ rdpHttpsGateway:
 {{- end -}}
 
 {{/*
+  Resolve a zone's upstream auth (management) address. Prefers the zone's own
+  upstream_auth_address; the primary zone falls back to upstreamAuth.hostname.
+  Returns an empty string when neither is set - the database preseed then keeps
+  its $request_host$ default.
+  Args: (list <root context> <zone dict>).
+*/}}
+{{- define "kasm.zoneUpstreamAuthAddress" -}}
+{{- $root := index . 0 -}}
+{{- $zone := index . 1 -}}
+{{- if $zone.upstream_auth_address -}}
+  {{- $zone.upstream_auth_address -}}
+{{- else if $root.Values.upstreamAuth.hostname -}}
+  {{- $primaryZone := (include "kasm.primaryZone" $root | fromYaml) -}}
+  {{- if eq $zone.name $primaryZone.name -}}
+    {{- $root.Values.upstreamAuth.hostname -}}
+  {{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+  Resolve a zone's upstream auth address for host-bearing resources (the
+  upstream-auth Ingress, Route, HTTPRoute and TLSRoute), which cannot render a
+  valid entry with an empty string and whose host fields cannot carry a port.
+  Fails with a descriptive error in either case.
+  Args: (list <root context> <zone dict>).
+*/}}
+{{- define "kasm.zoneUpstreamAuthAddressRequired" -}}
+{{- $zone := index . 1 -}}
+{{- $address := include "kasm.zoneUpstreamAuthAddress" . -}}
+{{- if not $address -}}
+  {{- fail (printf "kasmZones[%s]: 'upstream_auth_address' (or 'upstreamAuth.hostname' for the primary zone) must be set to generate an upstream-auth ingress/route hostname for this zone" (default "unnamed zone" $zone.name)) -}}
+{{- end -}}
+{{- if contains ":" $address -}}
+  {{- fail (printf "kasmZones[%s]: upstream_auth_address %q carries a port, but ingress/route/gateway host fields cannot. Use a bare hostname here; a non-443 listener port belongs only in the preseed value agents are given." (default "unnamed zone" $zone.name) $address) -}}
+{{- end -}}
+{{- $address -}}
+{{- end -}}
+
+{{/*
   Return user-configured Kasm zones from kasmZones only (no kasmConfig.zones fallback).
   Normalizes each zone's `name` field, falling back to the deprecated `zone_name` alias
   when `name` is not set, so following the schema's zone_name guidance does not produce
@@ -292,6 +331,7 @@ Where:
   .zone      = (optional) zone name for Kasm zone-scoped resources
   .include   = (optional) if set to "la", includes only labels and annotations; otherwise emits all
   .name      = (optional) overrides name generation
+  .extraAnnotations = (optional) caller-supplied annotations dict, merged in ahead of everything else
 */}}
 {{- define "kasm.metadata" -}}
 {{- $ctx := .context -}}
@@ -391,6 +431,54 @@ Where:
   {{- end -}}
 {{- end -}}
 
+{{- if eq $resource "httpRoute" -}}
+  {{- with $ctx.Values.httpRoute.labels -}}
+    {{- $labels = merge $labels . -}}
+  {{- end -}}
+{{- end -}}
+
+{{- if eq $resource "tlsRoute" -}}
+  {{- with $ctx.Values.tlsRoute.labels -}}
+    {{- $labels = merge $labels . -}}
+  {{- end -}}
+{{- end -}}
+
+{{- if and (eq $component "rdpGateway") (eq $resource "tcpRoute") -}}
+  {{- with $ctx.Values.tcpRoute.labels -}}
+    {{- $labels = merge $labels . -}}
+  {{- end -}}
+{{- end -}}
+
+{{- if and (eq $component "upstream-auth") (eq $resource "service") -}}
+  {{- with $ctx.Values.upstreamAuth.service.labels -}}
+    {{- $labels = merge $labels . -}}
+  {{- end -}}
+{{- end -}}
+
+{{- if and (eq $component "upstream-auth") (eq $resource "upstreamAuth-ingress") -}}
+  {{- with $ctx.Values.upstreamAuth.ingress.labels -}}
+    {{- $labels = merge $labels . -}}
+  {{- end -}}
+{{- end -}}
+
+{{- if and (eq $component "upstream-auth") (eq $resource "upstreamAuth-route") -}}
+  {{- with $ctx.Values.upstreamAuth.route.labels -}}
+    {{- $labels = merge $labels . -}}
+  {{- end -}}
+{{- end -}}
+
+{{- if and (eq $component "upstream-auth") (eq $resource "upstreamAuth-httpRoute") -}}
+  {{- with $ctx.Values.upstreamAuth.httpRoute.labels -}}
+    {{- $labels = merge $labels . -}}
+  {{- end -}}
+{{- end -}}
+
+{{- if and (eq $component "upstream-auth") (eq $resource "upstreamAuth-tlsRoute") -}}
+  {{- with $ctx.Values.upstreamAuth.tlsRoute.labels -}}
+    {{- $labels = merge $labels . -}}
+  {{- end -}}
+{{- end -}}
+
 {{- $labels = merge $labels (dict
   "kasm.com/version" $ctx.Chart.AppVersion
   "app.kubernetes.io/name" $labelName
@@ -405,6 +493,10 @@ Where:
 
 {{/* Annotations */}}
 {{- $annotations := dict -}}
+
+{{- with .extraAnnotations -}}
+  {{- $annotations = merge $annotations . -}}
+{{- end -}}
 
 {{- with $ctx.Values.annotations -}}
   {{- $annotations = merge $annotations . -}}
@@ -442,6 +534,54 @@ Where:
 
 {{- if eq $resource "route" -}}
   {{- with $ctx.Values.route.annotations -}}
+    {{- $annotations = merge $annotations . -}}
+  {{- end -}}
+{{- end -}}
+
+{{- if eq $resource "httpRoute" -}}
+  {{- with $ctx.Values.httpRoute.annotations -}}
+    {{- $annotations = merge $annotations . -}}
+  {{- end -}}
+{{- end -}}
+
+{{- if eq $resource "tlsRoute" -}}
+  {{- with $ctx.Values.tlsRoute.annotations -}}
+    {{- $annotations = merge $annotations . -}}
+  {{- end -}}
+{{- end -}}
+
+{{- if and (eq $component "rdpGateway") (eq $resource "tcpRoute") -}}
+  {{- with $ctx.Values.tcpRoute.annotations -}}
+    {{- $annotations = merge $annotations . -}}
+  {{- end -}}
+{{- end -}}
+
+{{- if and (eq $component "upstream-auth") (eq $resource "service") -}}
+  {{- with $ctx.Values.upstreamAuth.service.annotations -}}
+    {{- $annotations = merge $annotations . -}}
+  {{- end -}}
+{{- end -}}
+
+{{- if and (eq $component "upstream-auth") (eq $resource "upstreamAuth-ingress") -}}
+  {{- with $ctx.Values.upstreamAuth.ingress.annotations -}}
+    {{- $annotations = merge $annotations . -}}
+  {{- end -}}
+{{- end -}}
+
+{{- if and (eq $component "upstream-auth") (eq $resource "upstreamAuth-route") -}}
+  {{- with $ctx.Values.upstreamAuth.route.annotations -}}
+    {{- $annotations = merge $annotations . -}}
+  {{- end -}}
+{{- end -}}
+
+{{- if and (eq $component "upstream-auth") (eq $resource "upstreamAuth-httpRoute") -}}
+  {{- with $ctx.Values.upstreamAuth.httpRoute.annotations -}}
+    {{- $annotations = merge $annotations . -}}
+  {{- end -}}
+{{- end -}}
+
+{{- if and (eq $component "upstream-auth") (eq $resource "upstreamAuth-tlsRoute") -}}
+  {{- with $ctx.Values.upstreamAuth.tlsRoute.annotations -}}
     {{- $annotations = merge $annotations . -}}
   {{- end -}}
 {{- end -}}
@@ -527,6 +667,45 @@ app.kubernetes.io/name: {{ $labelName }}
 app.kubernetes.io/component: {{ (kebabcase $component) }}
 app.kubernetes.io/instance: {{ $ctx.Release.Name }}
 {{- end }}
+{{- end -}}
+
+{{/*
+Resolves the effective serviceAccount (name/create/annotations) for a component,
+merging the component-level override over the global `serviceAccount` block.
+Usage:
+  {{- $sa := fromYaml (include "kasm.serviceAccount" (dict "context" . "component" "api")) -}}
+Where:
+  .context   = root context (.)
+  .component = component name (must have a `serviceAccount` block in values, e.g. "api", "manager")
+Returns a dict with keys: name, create, annotations
+*/}}
+{{- define "kasm.serviceAccount" -}}
+{{- $ctx := .context -}}
+{{- $component := .component -}}
+{{- $global := $ctx.Values.serviceAccount | default dict -}}
+{{- $override := dict -}}
+{{- with (get $ctx.Values.components $component) -}}
+  {{- with .serviceAccount -}}
+    {{- $override = . -}}
+  {{- end -}}
+{{- end -}}
+
+{{- $name := $override.name | default $global.name | default "" -}}
+
+{{- $create := $global.create | default false -}}
+{{- if hasKey $override "create" -}}
+  {{- $create = $override.create -}}
+{{- end -}}
+
+{{- $annotations := dict -}}
+{{- with $global.annotations -}}
+  {{- $annotations = merge $annotations . -}}
+{{- end -}}
+{{- with $override.annotations -}}
+  {{- $annotations = merge (deepCopy .) $annotations -}}
+{{- end -}}
+
+{{- dict "name" $name "create" $create "annotations" $annotations | toYaml -}}
 {{- end -}}
 
 {{/*

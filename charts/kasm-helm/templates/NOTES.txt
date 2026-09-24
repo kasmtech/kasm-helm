@@ -35,3 +35,21 @@ kubectl get secret --namespace {{ .Release.Namespace }} {{ .Release.Name }}-secr
 Retrieve Kasm Service Registration Token:
 kubectl get secret --namespace {{ .Release.Namespace }} {{ .Release.Name }}-secrets -o jsonpath="{.data.service-token}" | base64 -d; echo
 
+{{- if .Values.upstreamAuth.service.enabled }}
+
+The upstream auth (management) endpoint is published by a {{ .Values.upstreamAuth.service.type }} Service per zone.
+{{- if eq .Values.upstreamAuth.service.type "LoadBalancer" }}
+Read each zone's assigned address once the load balancer provisions it:
+{{- range $zone := (include "kasm.zones" . | fromYamlArray) }}
+kubectl get svc --namespace {{ $.Release.Namespace }} {{ include "kasm.name" (list $ "upstream-auth" "" $zone.name) }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}{.status.loadBalancer.ingress[0].hostname}'; echo
+{{- end }}
+{{- else }}
+Read each zone's node port (agents reach it as <node address>:<port>):
+{{- range $zone := (include "kasm.zones" . | fromYamlArray) }}
+kubectl get svc --namespace {{ $.Release.Namespace }} {{ include "kasm.name" (list $ "upstream-auth" "" $zone.name) }} -o jsonpath='{.spec.ports[0].nodePort}'; echo
+{{- end }}
+{{- end }}
+Set each zone's Upstream Auth Address to the matching DNS name (kasmZones[].upstream_auth_address,
+upstreamAuth.hostname for the primary zone, or the Kasm admin UI on an initialized database).
+{{- end }}
+

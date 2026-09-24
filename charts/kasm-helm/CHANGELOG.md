@@ -2,6 +2,23 @@
 
 All notable changes to the kasm-helm chart are documented here.
 
+## [1.1190.7] - 2026-09-22
+
+### Added
+
+- Adds `httpRoute`, `tlsRoute` and `tcpRoute` Gateway API publishers for the front-door Kasm proxy and RDP Gateway, and an `upstreamAuth` section publishing the out-of-band management endpoint (`/api/`, `/manager_api/`) via a Service, Ingress, OpenShift Route, HTTPRoute or TLSRoute, one per zone.
+- Adds a global `serviceAccount` value with per-component overrides for `components.api` and `components.manager`, letting operators reference an existing ServiceAccount by name (e.g. EKS Pod Identity) or have the chart create one with custom annotations (e.g. IRSA's `eks.amazonaws.com/role-arn`). `extraAnnotations.serviceAccount` / `extraLabels.serviceAccount` can also target the rendered ServiceAccount, and `serviceAccount.annotations` values are now schema-validated as strings.
+
+### Changed
+
+- Rewrote the DB preseed guide (`docs/preseed.md`) into a full `kasmConfig` reference: every section (groups, users, images, autoscale, zones, SSO connectors, server pools, storage, DNS/VM provider configs, and more) now documents each field's type, default, and whether it is required, alongside how name-based cross-references and ID/token resolution work and how to supply credentials inline or from existing Secrets. The Default API Users permissions caveat in `docs/default-api-users.md` now renders as a proper warning callout. <!-- hash:b123b471b27ca3a0ca942a72dafc7d654364dac4 -->
+
+### Fixed
+
+- Tightened validation for the `httpRoute`/`tlsRoute`/`tcpRoute` and `upstreamAuth` publishers added above: `upstreamAuth.service.type` and every `backendProtocol` are now schema-enforced enums; `tcpRoute.enabled` now requires `components.rdpGateway.enabled`; and `tcpRoute`/`upstreamAuth.httpRoute`/`upstreamAuth.tlsRoute` now resolve each zone's effective `parentRefs` (per-zone override, else the global fallback) and fail at render time if any deployed zone would still attach to no Gateway, or if `.zones` names an unknown or duplicate zone. The DB preseed's `upstream_auth_address` now also resolves through the same per-zone/`upstreamAuth.hostname` fallback as the Gateway API publishers, instead of only reading a zone's own field.
+- DB preseed autoscale configs now render `connection_info` and `hooks` as JSON objects (`{}` when empty) instead of quoted strings (`"{}"`, or `"map[...]"` for non-empty maps), which left preseeded `Server` autoscale configs unreadable and uneditable in the Kasm UI/API. <!-- hash:06adf14a2137e7bc058caa2ec3d6621f0d45c24b -->
+- DB preseed `server_pools[].type`/`server_pool_type` now normalizes case-insensitively to the two values Kasm actually accepts (`Docker Agent`, `Server Pool`) and defaults to `Docker Agent` when omitted, instead of defaulting to and passing through the unrecognized value `Docker`. Any other value now fails the render with an error naming the offending pool. <!-- hash:6a2247fa313ded8cd490744a812bc609524fb28d -->
+
 ## [1.1190.6] - 2026-07-28
 
 ### Fixed

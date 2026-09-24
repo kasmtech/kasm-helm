@@ -1,0 +1,32 @@
+{{/*
+  Gateway API HTTPRoute publishing the Kasm proxy, when httpRoute.enabled.
+
+  publicAddr is deliberately the only hostname, routed to the primary zone's
+  proxy Service. Zone proxy_hostnames belong to a different backend, usually
+  behind a different Gateway or load balancer entirely, so this chart publishes
+  none of them.
+
+  TLS is deliberately absent. Unlike an Ingress, a Gateway API route carries no
+  certificate: the Gateway's listener does. The Secret this chart mints
+  (certificate.secretName, or the cert-manager Certificate) has to be referenced
+  from that listener's certificateRefs, and needs a ReferenceGrant when the
+  Gateway lives in another namespace.
+*/}}
+{{- if .Values.httpRoute.enabled }}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $primaryZone := (include "kasm.primaryZone" . | fromYaml) -}}
+{{- $backendPort := ternary $constants.proxy.https $constants.proxy.http (eq .Values.httpRoute.backendProtocol "https") -}}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  {{- include "kasm.metadata" (dict "context" . "component" "proxy" "resource" "httpRoute" "include" "all") | indent 2 }}
+spec:
+  parentRefs:
+    {{- toYaml .Values.httpRoute.parentRefs | nindent 4 }}
+  hostnames:
+    - {{ .Values.publicAddr | quote }}
+  rules:
+    - backendRefs:
+        - name: {{ printf "%s-%s" $constants.proxy.svc (include "kasm.zoneName" $primaryZone.name) }}
+          port: {{ $backendPort }}
+{{- end }}

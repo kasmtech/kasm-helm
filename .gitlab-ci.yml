@@ -9,19 +9,21 @@ stages:
   - deploy
   - validate
   - docs_check
-  # E2E scenarios are split across three sequential stages instead of
-  # one 9-way parallel matrix.  Running 9 kind clusters + DinD daemons
+  # E2E scenarios are split across sequential stages instead of one
+  # large parallel matrix.  Running many kind clusters + DinD daemons
   # concurrently on the shared ``oci-fixed-amd`` runner pool created
   # CPU contention severe enough to starve CoreDNS, which manifested
   # as silent ``startup.sh`` failures (EAI_AGAIN at DB init time) and
-  # false-positive test failures.  Three groups of three reduces the
-  # peak concurrent load by ~3× while keeping wall-clock time
-  # reasonable.  Heavy/known-flaky tests (the ``upgrade-*`` pair and
-  # ``externaldb``) are spread one per group rather than piled in one,
-  # so no single stage is the bottleneck.
+  # false-positive test failures.  Small groups (four targets or fewer)
+  # reduce the peak concurrent load while keeping wall-clock time
+  # reasonable.
+  # Heavy/known-flaky tests (the ``upgrade-*`` pair and ``externaldb``)
+  # are spread one per group rather than piled in one, so no single
+  # stage is the bottleneck.
   - e2e_group_a
   - e2e_group_b
   - e2e_group_c
+  - e2e_group_d
 
 # Prevent duplicate pipelines for push events to branches that also have open MRs
 workflow:
@@ -308,7 +310,10 @@ e2e_group_b:
           - e2e-preseed
 
 # Group C: one external-DB (externaldb) + one PSS-restricted
-# variant (backup-pss) + one light (pss).
+# variant (backup-pss) + one light (pss) + upstream-sa (serviceAccount
+# dedupe + upstreamAuth service LoadBalancer/ingress, via
+# cloud-provider-kind — see .e2e_kind_base's docker:dind service, which
+# gives it the docker socket the cloud-provider-kind controller needs).
 e2e_group_c:
   extends: .e2e_kind_base
   stage: e2e_group_c
@@ -318,3 +323,17 @@ e2e_group_c:
           - e2e-pss
           - e2e-backup-pss
           - e2e-externaldb
+          - e2e-upstream-sa
+
+# Group D: upstream-preseed only.  Verifies upstreamAuth.hostname falls
+# back for the primary zone while a zone-level upstream_auth_address
+# override is preserved (kasm.zoneUpstreamAuthAddress) — kept in its own
+# group rather than folded into an existing one to avoid growing any
+# single stage's peak load past the four-per-group budget above.
+e2e_group_d:
+  extends: .e2e_kind_base
+  stage: e2e_group_d
+  parallel:
+    matrix:
+      - E2E_TARGET:
+          - e2e-upstream-preseed
