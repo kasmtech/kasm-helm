@@ -28,17 +28,22 @@ spec:
     - jsonPath: .status.conditions[?(@.type=="Ready")].status
       name: Ready
       type: string
-    - jsonPath: .status.daemonSet.number
+    - jsonPath: .status.holders.ready
       name: Nodes
       type: string
+    - jsonPath: .status.summary.imagesSkipped
+      name: Skipped
+      type: integer
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: KasmImagePuller pre-pulls workspace images onto nodes via an
-          idle DaemonSet.
+        description: |-
+          KasmImagePuller pre-pulls workspace images onto nodes, one image at a time
+          per node within the node's storage budget, and pins them with an idle
+          holder pod per node.
         properties:
           apiVersion:
             description: |-
@@ -59,20 +64,23 @@ spec:
             type: object
           spec:
             description: |-
-              KasmImagePullerSpec pre-stages OCI images onto nodes to remove cold-start pull
-              latency. The controller runs a DaemonSet whose pod holds one idle container
-              per image, forcing the kubelet to pull and retain each image on every
-              targeted node. The idle process is a static binary the operator supplies
-              through a shared volume, so an image needs no "sleep" or shell of its own. A change to the image set replaces that pod on every
-              node, so the controller applies one only once no puller pod is still
-              pulling; until then the change waits (Progressing=True, reason
-              RolloutDeferred) and later changes join it in the same rollout.
+              KasmImagePullerSpec pre-stages OCI images onto nodes to remove cold-start
+              pull latency. The controller runs two kinds of pod per targeted node: a
+              holder pod with one idle container per image already present on that
+              node, which keeps the images referenced and out of the kubelet's image
+              garbage collection, and at most one pull pod at a time that fetches the
+              next image in priority order once the node's storage budget fits it. The
+              idle process is a static binary the operator supplies through a shared
+              volume, so an image needs no "sleep" or shell of its own. A change to the
+              image set takes effect on the next reconcile: a removed image leaves the
+              holder at once, an added one joins the pull queue.
             properties:
               affinity:
                 description: |-
                   Affinity further restricts/prefers which nodes pre-pull images (label
                   requirements beyond NodeSelector's exact match, e.g. NotIn/Exists).
-                  Passed through to the DaemonSet's pod template as is.
+                  Only the required terms take part in targeting; the whole affinity is
+                  passed through to the pods.
                 properties:
                   preferredDuringSchedulingIgnoredDuringExecution:
                     description: |-
@@ -276,9 +284,10 @@ spec:
               imagePullPolicy:
                 default: IfNotPresent
                 description: |-
-                  ImagePullPolicy for the staged images. The agent sets this to Always when
-                  RefreshIntervalSeconds is non-zero, so a scheduled roll actually re-fetches
-                  a mutable tag rather than reusing the node's cached copy.
+                  ImagePullPolicy for the pull pods. The agent sets this to Always when
+                  RefreshIntervalSeconds is non-zero, so a scheduled refresh actually
+                  re-fetches a mutable tag rather than reusing the node's cached copy.
+                  Holder pods always use IfNotPresent.
                 enum:
                 - Always
                 - IfNotPresent
@@ -286,7 +295,7 @@ spec:
                 type: string
               imagePullSecrets:
                 description: |-
-                  ImagePullSecrets are pull secrets applied to the DaemonSet pod for all
+                  ImagePullSecrets are pull secrets applied to every pull pod for all
                   images (in addition to any per-image secrets).
                 items:
                   description: |-
@@ -308,8 +317,7 @@ spec:
               images:
                 description: |-
                   Images is the catalog to stage (written by the agent from the manager's
-                  heartbeat image list). Order is irrelevant: the controller stages them
-                  sorted by reference, so reordering never rolls the DaemonSet.
+                  heartbeat image list). Order is the pull order among equal priorities.
                 items:
                   description: PulledImage is one image to stage on every targeted
                     node.
@@ -320,9 +328,9 @@ spec:
                       type: string
                     imagePullSecrets:
                       description: |-
-                        ImagePullSecrets are pull secrets for this specific image. They are merged
-                        into the DaemonSet pod's imagePullSecrets (the kubelet selects the matching
-                        secret per image), so per-image credentials work within one pod.
+                        ImagePullSecrets are pull secrets for this specific image. They are
+                        added to the pod that pulls it, and used to read its size from the
+                        registry before any node tries.
                       items:
                         description: |-
                           LocalObjectReference contains enough information to let you locate the
@@ -340,6 +348,17 @@ spec:
                         type: object
                         x-kubernetes-map-type: atomic
                       type: array
+                    priority:
+                      description: |-
+                        Priority orders the pull: on every node the controller pulls the
+                        highest priority first, and among equal priorities the spec order.
+                        The agent sets it from the number of workspaces running the image, so
+                        a node joining the cluster stages what sessions are using now before
+                        the rest of the catalog; an explicit priority on an Agent's
+                        extraImages sits wherever the admin puts it. 0 (the default) is the
+                        lowest.
+                      format: int32
+                      type: integer
                     registry:
                       description: |-
                         Registry is an optional registry hostname override (informational; the
@@ -370,10 +389,12 @@ spec:
                 default: 0
                 description: |-
                   RefreshIntervalSeconds re-pulls the staged images on this cadence so a
-                  mutable tag stays current on the nodes. 0 (the default) never re-pulls; the
-                  puller then only fetches an image when it first enters spec.images. When
-                  set, the controller rolls the DaemonSet once per interval (and the agent
-                  sets ImagePullPolicy to Always so the roll re-fetches).
+                  mutable tag stays current on the nodes. 0 (the default) never re-pulls;
+                  the puller then only fetches an image when it first enters spec.images.
+                  When set, every image is pulled again once per interval, subject to
+                  the storage budget (the new digest needs room beside the old one until
+                  the holder moves over), and a holder whose image changed digest is
+                  replaced.
                 format: int32
                 minimum: 0
                 type: integer
@@ -438,10 +459,60 @@ spec:
                       More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                     type: object
                 type: object
+              storage:
+                description: |-
+                  Storage sizes the per-node disk budget. Nil means the defaults
+                  documented on ImagePullerStorage.
+                properties:
+                  evictionPercent:
+                    description: |-
+                      EvictionPercent is the kubelet's imagefs.available hard eviction
+                      threshold, as a percentage of capacity; the budget keeps this much
+                      free on top of the reserve so a pull never drives the node into
+                      DiskPressure. Default 15, the kubelet's own default.
+                    format: int32
+                    maximum: 90
+                    minimum: 0
+                    type: integer
+                  maxConcurrentPulls:
+                    default: 1
+                    description: |-
+                      MaxConcurrentPulls is how many pull pods may run on one node at a
+                      time. The kubelet serializes pulls by default, so more than 1 only
+                      helps on nodes whose kubelet config raises maxParallelImagePulls.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  reservedBytes:
+                    description: |-
+                      ReservedBytes is the headroom kept free on every node for workspace
+                      pods' writable layers and logs. Takes precedence over ReservedPercent.
+                    format: int64
+                    type: integer
+                  reservedPercent:
+                    description: |-
+                      ReservedPercent is the reserve as a percentage of the node's
+                      ephemeral-storage capacity. Default 20 when neither is set.
+                    format: int32
+                    maximum: 90
+                    minimum: 0
+                    type: integer
+                  unpackFactor:
+                    description: |-
+                      UnpackFactor estimates an image's unpacked size on the node from its
+                      compressed layer sizes in the registry, as a decimal string ("2.5").
+                      Used until some node holds the image and reports its real size.
+                      Default "2.5", conservative for gzip layers; zstd:chunked layers
+                      unpack closer to "1.5".
+                    pattern: ^[0-9]+(\.[0-9]+)?$
+                    type: string
+                type: object
               tolerations:
                 description: |-
-                  Tolerations are applied to the DaemonSet pod in addition to the
-                  tolerations Kubernetes adds automatically for DaemonSet pods.
+                  Tolerations are applied to the holder and pull pods. Holder pods also
+                  tolerate the node-condition taints a DaemonSet pod would (so images
+                  stay pinned through node pressure); pull pods do not, so a pressured
+                  node is never pulled onto.
                 items:
                   description: |-
                     The pod this Toleration is attached to tolerates any taint that matches
@@ -543,21 +614,18 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
-              daemonSet:
-                description: DaemonSetRef summarizes the managed DaemonSet.
+              holders:
+                description: 'HolderSummary counts the holder pods: one per targeted
+                  node.'
                 properties:
                   desired:
                     description: Desired is the number of nodes that should be running
-                      the DaemonSet pod.
+                      a holder pod.
                     format: int32
                     type: integer
-                  name:
-                    type: string
-                  namespace:
-                    type: string
-                  number:
-                    description: Number is the number of nodes currently running the
-                      DaemonSet pod.
+                  ready:
+                    description: Ready is the number of nodes whose holder pod is
+                      Running.
                     format: int32
                     type: integer
                 type: object
@@ -571,14 +639,15 @@ spec:
                 items:
                   description: |-
                     NodePullBackoff tracks a node the controller has excluded from pre-pulling
-                    because its DaemonSet pod there kept failing for a node-exhaustion reason
-                    (eviction, OOM). The node is excluded from the DaemonSet's pod template
-                    (a hostname NotIn node affinity) for as long as the entry exists without
-                    RecoveredAt: while its window runs, and after it lapses until the node's
-                    conditions confirm it healthy. A node that recovered from a disk-pressure
-                    eviction keeps its entry, with RecoveredAt set, as memory only: it is
-                    scheduled again, but its DiskEvictions carry over, so a node that fills up
-                    on every attempt is caught and Suspended rather than retried forever.
+                    because its puller pods there kept failing for a node-exhaustion reason
+                    (eviction, OOM, or a pull that ran the disk out of space). The node gets
+                    no pull pod, and its holder is left as is, for as long as the entry
+                    exists without RecoveredAt: while its window runs, and after it lapses
+                    until the node's conditions confirm it healthy. A node that recovered
+                    from a disk-pressure failure keeps its entry, with RecoveredAt set, as
+                    memory only: it is pulled onto again, but its DiskEvictions carry over,
+                    so a node that fills up on every attempt is caught and Suspended rather
+                    than retried forever.
                   properties:
                     backoffUntil:
                       description: |-
@@ -589,9 +658,9 @@ spec:
                       type: string
                     diskEvictions:
                       description: |-
-                        DiskEvictions counts the puller pods this node has rejected or evicted
-                        for disk pressure since the staged image set (ImageSetHash) last
-                        changed. Unlike FailureCount it survives the node's recovery: the
+                        DiskEvictions counts the puller pods this node has rejected, evicted
+                        or failed for lack of disk since the staged image set (ImageSetHash)
+                        last changed. Unlike FailureCount it survives the node's recovery: the
                         node clears DiskPressure once the aborted pull's layers are gone, is
                         scheduled again, and fills up again on the next attempt.
                       format: int32
@@ -649,15 +718,150 @@ spec:
                   - node
                   type: object
                 type: array
+              nodes:
+                description: Nodes is the per-node staging state for every targeted
+                  node.
+                items:
+                  description: |-
+                    NodeStagingStatus is one targeted node's view: its budget, what it holds,
+                    what it is pulling, and what it cannot fit.
+                  properties:
+                    budgetBytes:
+                      description: |-
+                        BudgetBytes is what the controller will still pull into: capacity less
+                        the eviction threshold, the reserve and current usage, plus what the
+                        kubelet can reclaim. Negative means the node is over its reserve.
+                      format: int64
+                      type: integer
+                    capacityBytes:
+                      description: CapacityBytes is the node's ephemeral-storage capacity.
+                      format: int64
+                      type: integer
+                    holderReady:
+                      description: HolderReady is whether the node's holder pod is
+                        Running.
+                      type: boolean
+                    node:
+                      type: string
+                    pulling:
+                      description: Pulling is the image the node's pull pod is fetching,
+                        if any.
+                      items:
+                        type: string
+                      type: array
+                    skipped:
+                      description: Skipped are the images this node is not pulling
+                        for lack of budget.
+                      items:
+                        description: SkippedImage is an image a node is not pulling,
+                          and why.
+                        properties:
+                          image:
+                            type: string
+                          message:
+                            type: string
+                          reason:
+                            description: Reason is InsufficientStorage, SizeUnknown
+                              or ImageListTruncated.
+                            type: string
+                          shortfallBytes:
+                            description: |-
+                              ShortfallBytes is how much the image exceeds the budget by, for
+                              InsufficientStorage.
+                            format: int64
+                            type: integer
+                        required:
+                        - image
+                        - reason
+                        type: object
+                      type: array
+                    staged:
+                      description: |-
+                        Staged are the images the controller has pulled onto this node and
+                        the holder pod pins.
+                      items:
+                        description: StagedImage records an image the controller pulled
+                          onto a node.
+                        properties:
+                          at:
+                            description: At is when the pull completed.
+                            format: date-time
+                            type: string
+                          digest:
+                            description: Digest is the image ID the kubelet reported
+                              for the pull.
+                            type: string
+                          image:
+                            type: string
+                          refreshBucket:
+                            description: |-
+                              RefreshBucket is the scheduled-refresh bucket the image was last
+                              pulled in; empty with no refresh interval.
+                            type: string
+                          sizeBytes:
+                            description: SizeBytes is the unpacked size the node reports,
+                              once it does.
+                            format: int64
+                            type: integer
+                        required:
+                        - image
+                        type: object
+                      type: array
+                    yieldingTo:
+                      description: |-
+                        YieldingTo is the workspace pod the controller is waiting on before
+                        starting the next pull, so a session's own image pull is not queued
+                        behind a pre-pull on the node's serialized kubelet.
+                      type: string
+                  required:
+                  - node
+                  type: object
+                type: array
               observedGeneration:
                 format: int64
                 type: integer
+              pullFailures:
+                description: PullFailures are the pulls waiting out a back-off.
+                items:
+                  description: |-
+                    PullFailure records a pull that failed, and when it will be retried. Node
+                    is empty for a failure the registry answered (bad credentials, a missing
+                    manifest), which no node can get past.
+                  properties:
+                    count:
+                      description: Count is how many consecutive attempts have failed
+                        this way.
+                      format: int32
+                      type: integer
+                    image:
+                      type: string
+                    message:
+                      type: string
+                    node:
+                      type: string
+                    reason:
+                      description: Reason is Registry, Disk, Transient or Holder.
+                      type: string
+                    retryAfter:
+                      description: RetryAfter is when the next attempt may start.
+                      format: date-time
+                      type: string
+                  required:
+                  - image
+                  - reason
+                  - retryAfter
+                  type: object
+                type: array
               pulledImages:
                 items:
                   description: |-
                     PulledImageStatus is per-image availability aggregated across nodes. This is
                     what the agent surfaces as docker_images in its heartbeat.
                   properties:
+                    message:
+                      description: Message is the last registry or pull error for
+                        the image, if any.
+                      type: string
                     name:
                       type: string
                     nodesAvailable:
@@ -672,7 +876,18 @@ spec:
                       items:
                         type: string
                       type: array
+                    sizeBytes:
+                      description: |-
+                        SizeBytes is the image's best known unpacked size: the runtime's
+                        figure from a node that holds it, else the registry estimate.
+                      format: int64
+                      type: integer
                     status:
+                      description: |-
+                        Status is "pulled" once any targeted node holds the image, "failed"
+                        when the registry refused it (bad credentials, missing manifest) so
+                        no node can get it, and "unknown" otherwise (not pulled yet, or
+                        skipped everywhere for lack of space).
                       enum:
                       - pulled
                       - failed
@@ -696,12 +911,10 @@ spec:
                   imagesCount:
                     format: int32
                     type: integer
-                  imagesPending:
+                  imagesSkipped:
                     description: |-
-                      ImagesPending counts images in spec.images that are not in the
-                      DaemonSet's pod template yet because a rollout is still in flight: the
-                      controller waits for every puller pod to finish pulling before it
-                      replaces them, and images added in the meantime go out together.
+                      ImagesSkipped counts images that at least one targeted node has
+                      skipped for lack of storage budget (or an unknown size).
                     format: int32
                     type: integer
                 type: object

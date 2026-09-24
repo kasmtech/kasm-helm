@@ -2,9 +2,10 @@
   The operator's Secret access in this namespace.
 
   The kasm-agent-operator chart's ClusterRole grants no access to Secrets at all. The operator needs
-  exactly one thing here: to read, create and update the per-workspace storage-mapping Secret by name
-  (it never lists, watches or deletes Secrets; owner references delete them). This Role grants that,
-  and the RoleBinding points it at the operator's ServiceAccount, which may live in another namespace.
+  Secret access here to read, create and update the per-workspace storage-mapping Secret and the image
+  puller's per-image pull-credential Secrets by name (it never lists, watches or deletes Secrets; owner
+  references delete them). This Role grants that, and the RoleBinding points it at the operator's
+  ServiceAccount, which may live in another namespace.
 
   Always rendered: an Agent in a namespace without this Role fails every storage mapping with
   Forbidden. Helm applies Role and RoleBinding before the Agent custom resource, so the grant exists
@@ -31,6 +32,7 @@ rules:
     verbs:
       - create
       - get
+      - patch
       - update
 ---
 apiVersion: rbac.authorization.k8s.io/v1

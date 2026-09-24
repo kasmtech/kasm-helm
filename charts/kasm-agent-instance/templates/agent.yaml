@@ -267,6 +267,25 @@ spec:
     resources:
       {{- toYaml . | nindent 6 }}
     {{- end }}
+    {{- $ipStorage := .Values.imagePuller.storage }}
+    {{- if or $ipStorage.reservedBytes $ipStorage.reservedPercent $ipStorage.evictionPercent $ipStorage.unpackFactor $ipStorage.maxConcurrentPulls }}
+    storage:
+      {{- with $ipStorage.reservedBytes }}
+      reservedBytes: {{ . }}
+      {{- end }}
+      {{- with $ipStorage.reservedPercent }}
+      reservedPercent: {{ . }}
+      {{- end }}
+      {{- with $ipStorage.evictionPercent }}
+      evictionPercent: {{ . }}
+      {{- end }}
+      {{- with $ipStorage.unpackFactor }}
+      unpackFactor: {{ . | quote }}
+      {{- end }}
+      {{- with $ipStorage.maxConcurrentPulls }}
+      maxConcurrentPulls: {{ . }}
+      {{- end }}
+    {{- end }}
   {{- /* spec.seccomp is rendered only when enabled. The CRD requires the installer
          block (with a non-empty image) for backend "installer", and takes no block
          for backend "spo" - so render the installer sub-block only for installer. */}}

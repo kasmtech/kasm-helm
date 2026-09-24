@@ -635,6 +635,8 @@ tests:
           path: spec.imagePuller.extraImages
       - isNull:
           path: spec.imagePuller.resources
+      - isNull:
+          path: spec.imagePuller.storage
 
   - it: wires the image puller controls (disable, refresh, pre-seed, resources)
     set:
@@ -667,6 +669,32 @@ tests:
       - equal:
           path: spec.imagePuller.resources.requests.memory
           value: 32Mi
+
+  - it: sets the puller storage budget and per-image pull priority when configured
+    set:
+      imagePuller:
+        storage:
+          reservedPercent: 25
+          unpackFactor: "1.5"
+          maxConcurrentPulls: 2
+        extraImages:
+          - image: registry.example.com/team/custom:1.0
+            priority: 10
+    asserts:
+      - equal:
+          path: spec.imagePuller.storage.reservedPercent
+          value: 25
+      - equal:
+          path: spec.imagePuller.storage.unpackFactor
+          value: "1.5"
+      - equal:
+          path: spec.imagePuller.storage.maxConcurrentPulls
+          value: 2
+      - isNull:
+          path: spec.imagePuller.storage.reservedBytes
+      - equal:
+          path: spec.imagePuller.extraImages[0].priority
+          value: 10
 
   - it: renders no seccomp block by default
     asserts:

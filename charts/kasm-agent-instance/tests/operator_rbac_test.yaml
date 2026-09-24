@@ -4,7 +4,7 @@ templates:
   - templates/rbac/operator-role.yaml
 
 tests:
-  - it: always stamps a Role granting the operator secrets get, create and update in this namespace
+  - it: always stamps a Role granting the operator secrets get, create, patch and update in this namespace
     asserts:
       - hasDocuments:
           count: 2
@@ -30,6 +30,7 @@ tests:
               verbs:
                 - create
                 - get
+                - patch
                 - update
       - documentIndex: 0
         lengthEqual:

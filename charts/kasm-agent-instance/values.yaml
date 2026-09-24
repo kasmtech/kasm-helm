@@ -635,17 +635,44 @@ imagePuller:
   # keep it comfortably longer than a pull takes — 3600 (hourly) is a sensible start.
   refreshIntervalSeconds: 0
   # imagePuller.extraImages -- Images to stage in addition to the manager's advertised catalog, to pre-seed a
-  # custom workspace image the manager has not listed yet. A list of `{image, registry, imagePullSecrets}`
-  # objects: `image` is the full reference and is authoritative for the pull; `registry` is informational;
-  # `imagePullSecrets` is an optional per-image list of `{name: <secret>}` references.
+  # custom workspace image the manager has not listed yet. A list of `{image, registry, imagePullSecrets,
+  # priority}` objects: `image` is the full reference and is authoritative for the pull; `registry` is
+  # informational; `imagePullSecrets` is an optional per-image list of `{name: <secret>}` references; `priority`
+  # (integer, default 0 = lowest) orders the pull on each node — higher pulls first, so pre-seeding a catalog
+  # image with a high priority pulls it ahead of the rest. Whether they all staged is reported on the Agent's
+  # `ExtraImagesStaged` condition.
   # Example:
   #   extraImages:
   #     - image: registry.example.com/team/custom-workspace:1.0
   #       registry: https://registry.example.com
+  #       priority: 10
   #       imagePullSecrets:
   #         - name: example-registry
   extraImages: []
-  # imagePuller.resources -- Compute resources for the puller DaemonSet's idle containers (kept tiny — they only
+  # imagePuller.storage -- Per-node disk budget the puller pulls into. It never pulls an image it cannot fit: on
+  # each node the budget is the ephemeral-storage capacity minus the kubelet eviction threshold, minus the
+  # reserve kept for workspaces, minus what images and pods already use. Empty leaves the operator's defaults in
+  # charge (omitted from the Agent while every field is empty).
+  storage:
+    # imagePuller.storage.reservedBytes -- Headroom kept free on every node for workspace pods' writable layers
+    # and logs, in bytes. Takes precedence over `reservedPercent`. Empty uses `reservedPercent`.
+    reservedBytes: ""
+    # imagePuller.storage.reservedPercent -- The reserve as a percentage of the node's ephemeral-storage
+    # capacity (0-90). Default 20 when neither this nor `reservedBytes` is set.
+    reservedPercent: ""
+    # imagePuller.storage.evictionPercent -- The kubelet's `imagefs.available` hard-eviction threshold as a
+    # percentage of capacity (0-90); the budget keeps this much free on top of the reserve so a pull never
+    # drives the node into DiskPressure. Default 15 (the kubelet's own default).
+    evictionPercent: ""
+    # imagePuller.storage.unpackFactor -- Estimates an image's unpacked on-disk size from its compressed layer
+    # sizes, as a decimal string (`"2.5"`). Used until a node holds the image and reports its real size. Default
+    # `"2.5"` (conservative for gzip; zstd:chunked layers unpack closer to `"1.5"`).
+    unpackFactor: ""
+    # imagePuller.storage.maxConcurrentPulls -- How many pull pods may run on one node at a time (minimum 1,
+    # default 1). More than 1 only helps if the node's kubelet raises `maxParallelImagePulls` (it serializes
+    # pulls by default).
+    maxConcurrentPulls: ""
+  # imagePuller.resources -- Compute resources for the puller's idle holder containers (kept tiny — they only
   # idle to hold the image resident). Omitted when empty.
   resources: {}
 

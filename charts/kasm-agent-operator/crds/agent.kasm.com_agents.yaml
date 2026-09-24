@@ -392,7 +392,11 @@ spec:
                     description: |-
                       ExtraImages are images to stage in addition to the manager's advertised
                       catalog, e.g. to pre-seed a custom workspace image the manager has not
-                      listed yet. They are merged with the catalog into the one puller.
+                      listed yet. They are merged with the catalog into the one puller. An
+                      extra image's priority is honoured as written, and copied onto the
+                      catalog entry when the same image is in both, so pre-seeding a catalog
+                      image is a way to pull it first. Whether they were staged is reported
+                      on the Agent's ExtraImagesStaged condition.
                     items:
                       description: PulledImage is one image to stage on every targeted
                         node.
@@ -403,9 +407,9 @@ spec:
                           type: string
                         imagePullSecrets:
                           description: |-
-                            ImagePullSecrets are pull secrets for this specific image. They are merged
-                            into the DaemonSet pod's imagePullSecrets (the kubelet selects the matching
-                            secret per image), so per-image credentials work within one pod.
+                            ImagePullSecrets are pull secrets for this specific image. They are
+                            added to the pod that pulls it, and used to read its size from the
+                            registry before any node tries.
                           items:
                             description: |-
                               LocalObjectReference contains enough information to let you locate the
@@ -423,6 +427,17 @@ spec:
                             type: object
                             x-kubernetes-map-type: atomic
                           type: array
+                        priority:
+                          description: |-
+                            Priority orders the pull: on every node the controller pulls the
+                            highest priority first, and among equal priorities the spec order.
+                            The agent sets it from the number of workspaces running the image, so
+                            a node joining the cluster stages what sessions are using now before
+                            the rest of the catalog; an explicit priority on an Agent's
+                            extraImages sits wherever the admin puts it. 0 (the default) is the
+                            lowest.
+                          format: int32
+                          type: integer
                         registry:
                           description: |-
                             Registry is an optional registry hostname override (informational; the
@@ -504,6 +519,56 @@ spec:
                           otherwise to an implementation-defined value. Requests cannot exceed Limits.
                           More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                         type: object
+                    type: object
+                  storage:
+                    description: |-
+                      Storage sizes the per-node disk budget the puller pulls into: the
+                      reserve kept free for workspaces, the kubelet eviction threshold, and
+                      how registry sizes are turned into on-disk estimates. Nil means the
+                      defaults documented on ImagePullerStorage.
+                    properties:
+                      evictionPercent:
+                        description: |-
+                          EvictionPercent is the kubelet's imagefs.available hard eviction
+                          threshold, as a percentage of capacity; the budget keeps this much
+                          free on top of the reserve so a pull never drives the node into
+                          DiskPressure. Default 15, the kubelet's own default.
+                        format: int32
+                        maximum: 90
+                        minimum: 0
+                        type: integer
+                      maxConcurrentPulls:
+                        default: 1
+                        description: |-
+                          MaxConcurrentPulls is how many pull pods may run on one node at a
+                          time. The kubelet serializes pulls by default, so more than 1 only
+                          helps on nodes whose kubelet config raises maxParallelImagePulls.
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      reservedBytes:
+                        description: |-
+                          ReservedBytes is the headroom kept free on every node for workspace
+                          pods' writable layers and logs. Takes precedence over ReservedPercent.
+                        format: int64
+                        type: integer
+                      reservedPercent:
+                        description: |-
+                          ReservedPercent is the reserve as a percentage of the node's
+                          ephemeral-storage capacity. Default 20 when neither is set.
+                        format: int32
+                        maximum: 90
+                        minimum: 0
+                        type: integer
+                      unpackFactor:
+                        description: |-
+                          UnpackFactor estimates an image's unpacked size on the node from its
+                          compressed layer sizes in the registry, as a decimal string ("2.5").
+                          Used until some node holds the image and reports its real size.
+                          Default "2.5", conservative for gzip layers; zstd:chunked layers
+                          unpack closer to "1.5".
+                        pattern: ^[0-9]+(\.[0-9]+)?$
+                        type: string
                     type: object
                 type: object
               logLevel:
