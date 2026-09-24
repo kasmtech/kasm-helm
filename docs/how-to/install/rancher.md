@@ -140,7 +140,7 @@ kubectl get pods -n kasm -o jsonpath='{range .items[*].spec.containers[*]}{.imag
 
 ```
 registry.internal.example.com/kasmweb/api:<tag>
-registry.internal.example.com/kasmweb/kasm-agent-operator:<tag>
+registry.internal.example.com/kasmweb/agent-operator:<tag>
 ...
 ```
 

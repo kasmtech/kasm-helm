@@ -92,7 +92,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: docker.io/kasmweb/kasm-agent-operator:develop
+          value: docker.io/kasmweb/agent-operator:develop
 
   - it: joins registry, repository, and tag into the image reference
     set:
@@ -113,7 +113,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: kasmweb/kasm-agent-operator:1.2.3
+          value: kasmweb/agent-operator:1.2.3
 
   - it: honors image.pullPolicy
     set:

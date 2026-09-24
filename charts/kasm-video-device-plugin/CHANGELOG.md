@@ -6,6 +6,7 @@ All notable changes to the kasm-video-device-plugin chart are documented here.
 
 ### Changed
 
+- The default `image.repository` is `kasmweb/video-device-plugin` (was `kasmweb/kasm-video-device-plugin`); the monorepo apps dropped their `kasm-` prefix, and the image names follow the app names.
 - `appVersion` is `develop` rather than `latest`, so the device plugin image defaults to `kasmweb/kasm-video-device-plugin:develop` like every other chart in this family — it was the only one resolving to a floating `latest`, which also disagreed with the tag CI publishes. `image.tag` still overrides it to pin a specific build.
 - README no longer names a source path in another repository; the first section links the docs index. The HTML values-table template moved to the shared `_templates.gotmpl`.
 

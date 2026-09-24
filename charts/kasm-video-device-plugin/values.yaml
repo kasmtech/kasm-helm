@@ -19,7 +19,7 @@ global:
     systemDefaultRegistry: ""
 
 # Configure the device plugin image. This chart deploys Kasm's own video-device-plugin (built from
-# apps/kasm-video-device-plugin in kasm-monorepo), which implements the kubelet Device Plugin API and
+# apps/video-device-plugin in kasm-monorepo), which implements the kubelet Device Plugin API and
 # advertises /dev/<devicePrefix>* host device files as one extended resource.
 #
 image:
@@ -29,7 +29,7 @@ image:
   registry: docker.io
   # image.repository -- Repository of the device plugin image within `image.registry`.
   #
-  repository: kasmweb/kasm-video-device-plugin
+  repository: kasmweb/video-device-plugin
   # image.tag -- Tag of the device plugin image. Leave empty to use the chart's `appVersion`.
   #
   tag: ""

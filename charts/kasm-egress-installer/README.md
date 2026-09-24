@@ -339,7 +339,7 @@ string
 			<td>
 				<div style="max-width: 520px;">
 <pre lang="json">
-kasmweb/kasm-egress-daemon
+kasmweb/egress-daemon
 </pre>
 </div>
 			</td>

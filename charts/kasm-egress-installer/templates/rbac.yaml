@@ -2,7 +2,7 @@
   Minimal, read-only RBAC. The daemon makes single-object GET calls (no watches, no lists) against
   the Kubernetes API, and only ever for a session's own pod: to resolve optional annotation-based
   egress config, and to look up KASM_API_HOST/PORT from a sibling container's env - see
-  fetchPodObject and fetchPodAnnotation in apps/kasm-egress-daemon. It never watches or lists
+  fetchPodObject and fetchPodAnnotation in apps/egress-daemon. It never watches or lists
   anything, never reads any other kind, and never writes to the API. Cluster-scoped because the pod
   being inspected can be in any namespace (the daemon serves every node's pods, not just one
   namespace's).

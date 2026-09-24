@@ -34,7 +34,7 @@ kasm-agent:
       installer:
         image:
           registry: docker.io
-          repository: kasmweb/kasm-seccomp-installer
+          repository: kasmweb/seccomp-installer
           # tag: ""               # falls back to the chart appVersion
 ```
 

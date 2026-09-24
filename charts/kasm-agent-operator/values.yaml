@@ -41,7 +41,7 @@ image:
   registry: docker.io
   # image.repository -- The repository of the operator image, without the registry or the tag.
   #
-  repository: kasmweb/kasm-agent-operator
+  repository: kasmweb/agent-operator
   # image.tag -- The tag of the operator image. Leave empty to use the chart's `appVersion`.
   #
   tag: ""

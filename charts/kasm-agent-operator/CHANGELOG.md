@@ -31,6 +31,7 @@ All notable changes to the kasm-agent-operator chart are documented here.
 - CRDs updated from the operator (2026-09-04): `Agent` gains `spec.sessionProxy.otel.endpoint` (session-proxy sidecar OTLP endpoint override; empty disables the exporter), and `KasmWorkspace.spec.fileMappings[]` gains `binaryData` (binary file content, mirrors a ConfigMap's `binaryData`) and `writable` (copy-on-start so the session user can edit the file).
 - README lists all five CRDs it owns, adding `warmpools` and `warmpoolinstances` in `pools.kasm.ai`; the regeneration hint says `make readme-all`; the first section links the docs index. The HTML values-table template moved to the shared `_templates.gotmpl`.
 
+- The default `image.repository` is `kasmweb/agent-operator` (was `kasmweb/kasm-agent-operator`); the monorepo apps dropped their `kasm-` prefix, and the image names follow the app names.
 ### Added
 
 - `global.cattle.systemDefaultRegistry`: when set, it replaces the registry part of every image the chart renders and the per-image `registry` values are ignored, following Rancher's convention for the system default registry it injects on air-gapped clusters. Empty by default, so nothing changes outside Rancher.

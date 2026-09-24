@@ -11,7 +11,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: mirror.example.com/kasmweb/kasm-agent-operator:t
+          value: mirror.example.com/kasmweb/agent-operator:t
 
   - it: wins over an explicit image.registry
     set:
@@ -21,7 +21,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: mirror.example.com/kasmweb/kasm-agent-operator:t
+          value: mirror.example.com/kasmweb/agent-operator:t
 
   - it: leaves image.registry in charge when the global is empty
     set:
@@ -30,7 +30,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: own.example.com/kasmweb/kasm-agent-operator:t
+          value: own.example.com/kasmweb/agent-operator:t
 
   - it: renders the default registry when no global block exists at all
     set:
@@ -39,4 +39,4 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: docker.io/kasmweb/kasm-agent-operator:t
+          value: docker.io/kasmweb/agent-operator:t

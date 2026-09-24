@@ -193,7 +193,7 @@ object
 <pre lang="json">
 pullPolicy: IfNotPresent
 registry: docker.io
-repository: kasmweb/kasm-agent-operator
+repository: kasmweb/agent-operator
 tag: ""
 </pre>
 </div>
@@ -236,7 +236,7 @@ string
 			<td>
 				<div style="max-width: 520px;">
 <pre lang="json">
-kasmweb/kasm-agent-operator
+kasmweb/agent-operator
 </pre>
 </div>
 			</td>

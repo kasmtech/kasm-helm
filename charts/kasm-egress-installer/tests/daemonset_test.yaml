@@ -65,7 +65,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: docker.io/kasmweb/kasm-egress-daemon:develop
+          value: docker.io/kasmweb/egress-daemon:develop
       - equal:
           path: spec.template.spec.containers[0].imagePullPolicy
           value: IfNotPresent

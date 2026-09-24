@@ -48,7 +48,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: docker.io/kasmweb/kasm-video-device-plugin:develop
+          value: docker.io/kasmweb/video-device-plugin:develop
       - equal:
           path: spec.template.spec.containers[0].imagePullPolicy
           value: IfNotPresent

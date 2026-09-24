@@ -212,7 +212,7 @@ whole release at a mirror is one override block:
 operator:
   image:
     registry: registry.example.internal
-    repository: kasmweb/kasm-agent-operator
+    repository: kasmweb/agent-operator
 
 otelCollector:
   image:
@@ -222,7 +222,7 @@ otelCollector:
 agent:
   image:
     registry: registry.example.internal
-    repository: kasmweb/kasm-agent-api
+    repository: kasmweb/agent-api
   sessionProxy:
     image:
       registry: registry.example.internal
@@ -230,12 +230,12 @@ agent:
       tag: "1.25.3"
     sidecarImage:
       registry: registry.example.internal
-      repository: kasmweb/kasm-nginx-sidecar
+      repository: kasmweb/nginx-sidecar
 
 videoDevicePlugin:
   image:
     registry: registry.example.internal
-    repository: kasmweb/kasm-video-device-plugin
+    repository: kasmweb/video-device-plugin
 
 nodePrep:
   image:

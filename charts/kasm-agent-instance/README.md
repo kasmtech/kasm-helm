@@ -510,7 +510,7 @@ object
 				<div style="max-width: 520px;">
 <pre lang="json">
 registry: docker.io
-repository: kasmweb/kasm-agent-api
+repository: kasmweb/agent-api
 tag: ""
 </pre>
 </div>
@@ -539,7 +539,7 @@ string
 			<td>
 				<div style="max-width: 520px;">
 <pre lang="json">
-kasmweb/kasm-agent-api
+kasmweb/agent-api
 </pre>
 </div>
 			</td>
@@ -1566,7 +1566,7 @@ enabled: false
 installer:
     image:
         registry: docker.io
-        repository: kasmweb/kasm-seccomp-installer
+        repository: kasmweb/seccomp-installer
         tag: ""
     imagePullPolicy: IfNotPresent
     kubeletSeccompDir: /var/lib/kubelet/seccomp
@@ -1614,7 +1614,7 @@ object
 <pre lang="json">
 image:
     registry: docker.io
-    repository: kasmweb/kasm-seccomp-installer
+    repository: kasmweb/seccomp-installer
     tag: ""
 imagePullPolicy: IfNotPresent
 kubeletSeccompDir: /var/lib/kubelet/seccomp
@@ -1633,7 +1633,7 @@ object
 				<div style="max-width: 520px;">
 <pre lang="json">
 registry: docker.io
-repository: kasmweb/kasm-seccomp-installer
+repository: kasmweb/seccomp-installer
 tag: ""
 </pre>
 </div>
@@ -1662,7 +1662,7 @@ string
 			<td>
 				<div style="max-width: 520px;">
 <pre lang="json">
-kasmweb/kasm-seccomp-installer
+kasmweb/seccomp-installer
 </pre>
 </div>
 			</td>
@@ -1807,7 +1807,7 @@ service:
     type: ClusterIP
 sidecarImage:
     registry: docker.io
-    repository: kasmweb/kasm-nginx-sidecar
+    repository: kasmweb/nginx-sidecar
     tag: ""
 sidecarResources: {}
 tolerations: []
@@ -2682,7 +2682,7 @@ object
 				<div style="max-width: 520px;">
 <pre lang="json">
 registry: docker.io
-repository: kasmweb/kasm-nginx-sidecar
+repository: kasmweb/nginx-sidecar
 tag: ""
 </pre>
 </div>
@@ -2711,7 +2711,7 @@ string
 			<td>
 				<div style="max-width: 520px;">
 <pre lang="json">
-kasmweb/kasm-nginx-sidecar
+kasmweb/nginx-sidecar
 </pre>
 </div>
 			</td>

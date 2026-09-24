@@ -19,7 +19,7 @@ global:
     systemDefaultRegistry: ""
 
 # Configure the egress daemon image. This chart deploys Kasm's own egress daemon (built from
-# apps/kasm-egress-daemon in kasm-monorepo), which bundles and self-installs the kasm-egress-cni shim
+# apps/egress-daemon in kasm-monorepo), which bundles and self-installs the kasm-egress-cni shim
 # binary onto the host — there is no separate image or workload for the CNI shim.
 #
 image:
@@ -29,7 +29,7 @@ image:
   registry: docker.io
   # image.repository -- Repository of the egress daemon image within `image.registry`.
   #
-  repository: kasmweb/kasm-egress-daemon
+  repository: kasmweb/egress-daemon
   # image.tag -- Tag of the egress daemon image. Leave empty to use the chart's `appVersion`.
   #
   tag: ""
