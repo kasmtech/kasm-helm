@@ -1,34 +1,58 @@
 {{/*
-  The OpenShift SecurityContextConstraint for this agent's sessions, and the grants that attach it.
+  The OpenShift SecurityContextConstraints for this agent's sessions, and the grants that attach them.
 
-  Every workspace pod the operator creates runs as root (the image's own startup drops to kasm-user
-  with su), adds a fixed capability set on top of drop ALL, allows privilege escalation, pins
-  fsGroup 1000, and may carry a Localhost seccomp profile. OpenShift's default restricted-v2 SCC
-  refuses all of that, and the built-in anyuid SCC admits no capability adds, so sessions need an
-  SCC of their own. It is granted to the `<name>-workspace` ServiceAccount the operator creates for
-  the agent, the way `oc adm policy add-scc-to-user` would: a ClusterRole holding `use` on that one
-  SCC, bound by a namespaced RoleBinding. The RoleBinding may reference the account before the
-  operator has created it; the grant takes effect once it exists.
+  Every workspace pod runs as kasm-user (uid 1000) unless its image needs root, and where root comes
+  from is the Agent's workspaceSecurity.rootMode (rendered as spec.workspaceSecurity by agent.yaml;
+  the defaults here are the CRD's). Neither shape fits a built-in SCC: restricted-v2 and nonroot-v2
+  admit no capability adds beyond NET_BIND_SERVICE, a fixed fsGroup 1000 or a Localhost seccomp
+  profile, anyuid admits no capability adds, and OpenShift 4.20's user-namespace SCCs
+  (restricted-v3, nested-container) admit SETUID/SETGID at most, not the set a root session keeps.
+  So the chart ships up to two:
 
-  The SCC is cluster-scoped, so its default name carries the namespace and agent name. Its
-  restrictiveness sits above restricted-v2 in OpenShift's ordering, which is what makes admission
-  fall through to it only for pods restricted-v2 cannot admit: the agent's own Deployment, the
-  session proxy, the image puller and the standby placeholders set no UID and keep restricted-v2.
+    <name>        uid-1000 sessions, every rootMode. runAsUser MustRunAsNonRoot, drop ALL
+                  required, allowPrivilegeEscalation only with workspaceSecurity.sudo, and the
+                  profile's capabilities: SYS_CHROOT + NET_BIND_SERVICE for baseline (+ SETUID and
+                  SETGID with sudo), NET_BIND_SERVICE alone for restricted. With userNamespaces
+                  always it also requires a pod user namespace.
+    <name>-root   root sessions, unless rootMode is forbid. runAsUser RunAsAny, privilege escalation
+                  allowed, and the eight capabilities the operator adds to every root container on
+                  top of drop ALL. For rootMode userns it carries `userNamespaceLevel:
+                  RequirePodLevel` (security.openshift.io/v1, OpenShift 4.20+; checked against
+                  openshift/api's SecurityContextConstraints type, whose values are AllowHostLevel,
+                  the default, and RequirePodLevel), so uid 0 is admitted only with `hostUsers:
+                  false`: root in the pod, an unprivileged uid on the node. For rootMode host it
+                  omits the field and admits host uid 0, the pre-user-namespace session.
+
+  One SCC cannot do both jobs under rootMode userns with userNamespaces rootOnly (the default): the
+  uid-1000 sessions are ordinary pods (hostUsers unset), which RequirePodLevel refuses, while
+  dropping RequirePodLevel would admit host root. An explicit openshift.scc.workspace.capabilities
+  list replaces the derived capabilities on both.
+
+  Both are granted to the `<name>-workspace` ServiceAccount the operator creates for the agent, the
+  way `oc adm policy add-scc-to-user` would: a ClusterRole holding `use` on them, bound by a
+  namespaced RoleBinding. The RoleBinding may reference the account before the operator has created
+  it; the grant takes effect once it exists.
+
+  The SCCs are cluster-scoped, so their default name carries the namespace and agent name. Both sit
+  above restricted-v2 in OpenShift's restrictiveness ordering, which is what makes admission fall
+  through to them only for pods restricted-v2 cannot admit: the agent's own Deployment, the session
+  proxy, the image puller and the standby placeholders set no UID and keep restricted-v2. Between the
+  two, MustRunAsNonRoot ranks as more restrictive than RunAsAny, so a uid-1000 session is admitted
+  by <name> and only a root session falls through to <name>-root.
 
   With the seccomp installer backend on, its DaemonSet also runs as root with a hostPath mount under
   the kubelet's seccomp directory and an spc_t SELinux type; only the built-in privileged SCC admits
   that, so a second grant attaches it to the `<name>-seccomp-installer` ServiceAccount.
 */}}
-{{- if .Values.openshift.scc.enabled }}
-{{- $ws := .Values.openshift.scc.workspace }}
-{{- $sccName := $ws.name | default (printf "kasm-%s-%s-workspace" .Release.Namespace .Values.name) | trunc 63 | trimSuffix "-" }}
+{{- define "kasmAgentInstance.workspaceScc" -}}
+{{- $ws := .ws -}}
 apiVersion: security.openshift.io/v1
 kind: SecurityContextConstraints
 metadata:
-  name: {{ $sccName }}
+  name: {{ .name }}
   labels:
-    {{- include "kasmAgentInstance.labels" . | nindent 4 }}
-  {{- with .Values.commonAnnotations }}
+    {{- include "kasmAgentInstance.labels" .root | nindent 4 }}
+  {{- with .root.Values.commonAnnotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
   {{- end }}
@@ -37,18 +61,25 @@ allowHostIPC: false
 allowHostNetwork: false
 allowHostPID: false
 allowHostPorts: false
-allowPrivilegeEscalation: true
+allowPrivilegeEscalation: {{ .allowPrivilegeEscalation }}
 allowPrivilegedContainer: {{ $ws.allowPrivileged }}
 allowedCapabilities:
-  {{- range $ws.capabilities }}
+  {{- range .capabilities }}
   - {{ . | quote }}
   {{- end }}
 defaultAddCapabilities: []
-requiredDropCapabilities: []
+requiredDropCapabilities:
+  {{- range .requiredDropCapabilities }}
+  - {{ . | quote }}
+  {{- else }} []
+  {{- end }}
+{{- if .requirePodUserNamespace }}
+userNamespaceLevel: RequirePodLevel
+{{- end }}
 fsGroup:
   type: RunAsAny
 runAsUser:
-  type: RunAsAny
+  type: {{ .runAsUser }}
 seLinuxContext:
   type: MustRunAs
 supplementalGroups:
@@ -67,6 +98,33 @@ volumes:
   {{- end }}
 users: []
 groups: []
+{{- end -}}
+{{- if .Values.openshift.scc.enabled }}
+{{- $ws := .Values.openshift.scc.workspace }}
+{{- $sec := .Values.workspaceSecurity }}
+{{- $rootMode := $sec.rootMode | default "userns" }}
+{{- $profile := $sec.profile | default "baseline" }}
+{{- $always := eq (toString $sec.userNamespaces) "always" }}
+{{- $sudo := and $sec.sudo true }}
+{{- $sccName := $ws.name | default (printf "kasm-%s-%s-workspace" .Release.Namespace .Values.name) | trunc 63 | trimSuffix "-" }}
+{{- $rootSccName := printf "%s-root" ($sccName | trunc 58 | trimSuffix "-") }}
+{{- $nonRootCaps := list "NET_BIND_SERVICE" }}
+{{- if eq $profile "baseline" }}
+{{- $nonRootCaps = list "SYS_CHROOT" "NET_BIND_SERVICE" }}
+{{- if $sudo }}
+{{- $nonRootCaps = concat (list "SETUID" "SETGID") $nonRootCaps }}
+{{- end }}
+{{- end }}
+{{- $rootCaps := list "SETUID" "SETGID" "CHOWN" "DAC_OVERRIDE" "FOWNER" "KILL" "NET_BIND_SERVICE" "SYS_CHROOT" }}
+{{- with $ws.capabilities }}
+{{- $nonRootCaps = . }}
+{{- $rootCaps = . }}
+{{- end }}
+{{- include "kasmAgentInstance.workspaceScc" (dict "root" $ "ws" $ws "name" $sccName "runAsUser" "MustRunAsNonRoot" "allowPrivilegeEscalation" $sudo "capabilities" $nonRootCaps "requiredDropCapabilities" (list "ALL") "requirePodUserNamespace" $always) }}
+{{- if ne $rootMode "forbid" }}
+---
+{{ include "kasmAgentInstance.workspaceScc" (dict "root" $ "ws" $ws "name" $rootSccName "runAsUser" "RunAsAny" "allowPrivilegeEscalation" true "capabilities" $rootCaps "requiredDropCapabilities" (list) "requirePodUserNamespace" (eq $rootMode "userns")) }}
+{{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -77,7 +135,11 @@ metadata:
 rules:
   - apiGroups: ["security.openshift.io"]
     resources: ["securitycontextconstraints"]
-    resourceNames: [{{ $sccName | quote }}]
+    resourceNames:
+      - {{ $sccName | quote }}
+      {{- if ne $rootMode "forbid" }}
+      - {{ $rootSccName | quote }}
+      {{- end }}
     verbs: ["use"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1

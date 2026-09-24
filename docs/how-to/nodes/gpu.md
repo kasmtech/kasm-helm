@@ -1,6 +1,6 @@
 # GPU nodes (CUDA and EGL/DRI)
 
-> **Applies to:** agent · **Charts/values:** `gpuOperator.enabled`, `agent.gpu.enabled`, `gpuOperator.driver.enabled`, `gpuOperator.toolkit.enabled`, `gpuOperator.devicePlugin.enabled`, `gpuOperator.nfd.enabled`, `agent.workspacesNodeSelector`, `agent.nodeSelector`
+> **Applies to:** agent · **Charts/values:** `gpuOperator.enabled`, `agent.gpu.enabled`, `gpuOperator.driver.enabled`, `gpuOperator.toolkit.enabled`, `gpuOperator.devicePlugin.enabled`, `gpuOperator.nfd.enabled`, `agent.workspacesNodeSelector`, `agent.nodeSelector`, `agent.workspaceSecurity.supplementalGroups`
 
 > **Scope note.** The NVIDIA-side steps are pointers to NVIDIA's own procedure; follow NVIDIA's
 > current documentation for the driver and device-plugin install.
@@ -81,7 +81,28 @@ EGL/DRI graphics acceleration is a **node-image** concern: drivers pre-installed
 
 4. **For EGL/DRI**, additionally confirm the node image exposes the DRI devices and that the
    workspace image carries the `com.kasmweb.gpu_acceleration_egl=nvidia` label. The operator adds the
-   `hostPath` `CharDevice` mounts itself when GPU support is on - there is nothing else to set.
+   `hostPath` `CharDevice` mounts itself when GPU support is on.
+
+   Sessions run as uid 1000, and `/dev/dri/renderD128` is usually mode `0660`, group `render`
+   (`card0`: group `video`). A uid-1000 session opens it only as a member of that group, by the
+   node's numeric gid: add it Agent-wide, or through the image's run config `group_add`.
+
+   ```console
+   # on a GPU node
+   stat -c '%n %G %g' /dev/dri/renderD128 /dev/dri/card0
+   ```
+
+   ```yaml
+   agent:
+     workspaceSecurity:
+       supplementalGroups: [109, 44]   # the render and video gids stat printed
+   ```
+
+   The gids have to agree across the GPU nodes. A root session in a user namespace (the default
+   for an image that needs root, `workspaceSecurity.rootMode: userns`) may not get device access at
+   all: the device keeps its host owner and group, which are unmapped inside the namespace, and
+   whether the NVIDIA device plugin's devices work in user-namespace pods is still open. Run GPU
+   images at uid 1000, or use `rootMode: host` for a root GPU image.
 
 5. **Airgapped?** Do **not** mirror the GPU Operator from `make images-agent`; it pulls a much larger
    operand set at runtime. Follow NVIDIA's air-gapped procedure and pass its values through with the
@@ -151,6 +172,8 @@ Installing `kasm-agent` directly? Drop the `kasm-agent:` key and start at `gpuOp
 | Duplicate NFD, node labels flapping | NFD already ran in the cluster | `gpuOperator.nfd.enabled=false` |
 | Sessions land on non-GPU nodes | No node targeting | `agent.workspacesNodeSelector` (and tolerate the GPU taint) |
 | EGL session falls back to software rendering | `/dev/dri` missing on the node image, or the workspace image lacks the EGL label | Prepare the node image; use a workspace image with `com.kasmweb.gpu_acceleration_egl=nvidia` |
+| `/dev/dri/renderD128` is present in the session but `Permission denied` to `kasm-user` | The session runs as uid 1000 without the device's `render`/`video` group | `agent.workspaceSecurity.supplementalGroups` with the node's gids, or `group_add` in the image's run config (step 4) |
+| A root GPU image sees the devices but cannot open them, or its pod fails to start | It runs as root in a pod user namespace, where the host device ownership is unmapped | Run it at uid 1000 with the groups above, or `agent.workspaceSecurity.rootMode: host` |
 | Airgapped install of `gpuOperator` fails pulling operands | The operand set is not in `dist/kasm-agent-images.txt` | Follow NVIDIA's air-gapped procedure, values passed through as `gpuOperator.*` |
 
 ## Decisions
@@ -163,4 +186,5 @@ Installing `kasm-agent` directly? Drop the `kasm-agent:` key and start at `gpuOp
 - [ ] `kubectl get nodes` shows non-empty `nvidia.com/gpu` allocatable
 - [ ] `nvidia-smi` succeeds in a pod requesting `nvidia.com/gpu: 1`
 - [ ] EGL only: `/dev/dri/card0` and `/dev/dri/renderD128` present on the node image
+- [ ] EGL only: the node's `render`/`video` gids in `agent.workspaceSecurity.supplementalGroups` (or the images' `group_add`)
 - [ ] A Kasm GPU workspace launches and shows the GPU

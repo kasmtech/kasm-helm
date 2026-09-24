@@ -201,7 +201,17 @@ attached.
 | **Secure Boot nodes** | 🔧 | MOK signing keys enrolled in each node's UEFI, and the key pair in a Secret · [how-to](../how-to/nodes/secure-boot.md) | `nodePrep.secureBoot.existingMokSecret`<br>or<br>`nodePrep.modules.v4l2loopback.kmm.sign.enabled=true` |
 | **WireGuard on kernels older than 5.6** | 🔧 | Kernel headers, `/lib/modules` and `/usr/src` on the node, and a `privileged` namespace · [how-to](../how-to/nodes/webcam-kernel-modules.md) | `nodePrep.enabled=true`<br>`nodePrep.modules.wireguard.enabled=true` |
 | **Workspace seccomp profiles** | 🔧 | Two backends: `installer` (default) needs a `privileged` namespace and hostPath nodes; `spo` needs the [Security Profiles Operator](https://github.com/kubernetes-sigs/security-profiles-operator) pre-installed (no hostPath) · [how-to](../how-to/nodes/seccomp-profiles.md) | `agent.seccomp.enabled=true`<br>`agent.seccomp.backend` (`installer`\|`spo`)<br>`agent.seccomp.installer.image.*`, `agent.seccomp.installer.kubeletSeccompDir` (k3s/microk8s) |
+| **Session run modes (uid 1000, root images)** | ⚠️ | Nothing for uid-1000 sessions (every stock image). For images that need root under the default `rootMode: userns`: Kubernetes 1.33+ (OpenShift 4.20+), containerd 2.0 or CRI-O 1.25, a 6.3+ kernel on the session nodes, and no NFS-backed volume on those sessions · [explanation](../explanation/security-posture.md#session-run-identity) | Nothing (defaults)<br>`agent.workspaceSecurity.rootMode` (`userns`\|`host`\|`forbid`)<br>`agent.workspaceSecurity.rootFeatures`, `profile`, `sudo`, `userNamespaces`<br>`agent.workspaceSecurity.supplementalGroups` (device gids) |
 | **Multi-tenancy / namespace isolation** | ⚠️ | NetworkPolicy enforcement, Pod Security Standards, ResourceQuota and LimitRange · [how-to](../how-to/networking/network-policies.md) | `networkPolicies.enabled=true`, one agent release per tenant |
+
+**Session run modes.** Sessions run as `kasm-user` (uid 1000) with privilege escalation off and
+every capability dropped but the profile's, and each pod is labelled `kasm.com/run-mode`. An image
+that needs root (a `user: root` run config, root `exec_configs`, session recording) runs as root in
+a pod user namespace by default (`userns-root`); `rootMode: host` gives it host root as before, and
+`forbid` refuses it. The limits are the user namespace's: no NFS-backed profile on a root session
+([storage](../how-to/storage/rwx-profiles.md#nfs-profiles-and-root-sessions)), and devices it may
+not be able to open ([GPU](../how-to/nodes/gpu.md)). uid-1000 sessions that need `/dev/dri` or a
+webcam get the node's gid through `agent.workspaceSecurity.supplementalGroups`.
 
 **Anything that touches a node needs a privileged namespace.** Webcam, WireGuard, Secure Boot and
 egress gateways all run privileged pods:

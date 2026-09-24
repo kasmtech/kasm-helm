@@ -1,6 +1,6 @@
 # Kernel modules and webcam passthrough
 
-> **Applies to:** agent · **Charts/values:** `nodePrep.modules.v4l2loopback.enabled`, `nodePrep.modules.v4l2loopback.method`, `nodePrep.image.registry`, `nodePrep.image.repository`, `nodePrep.image.tag`, `nodePrep.modules.v4l2loopback.videoDevices`, `nodePrep.modules.v4l2loopback.kmm.image.registry`, `nodePrep.modules.v4l2loopback.kmm.imageRepoSecret`, `nodePrep.modules.v4l2loopback.kmm.build.enabled`, `nodePrep.modules.wireguard.enabled`, `videoDevicePlugin.enabled`
+> **Applies to:** agent · **Charts/values:** `nodePrep.modules.v4l2loopback.enabled`, `nodePrep.modules.v4l2loopback.method`, `nodePrep.image.registry`, `nodePrep.image.repository`, `nodePrep.image.tag`, `nodePrep.modules.v4l2loopback.videoDevices`, `nodePrep.modules.v4l2loopback.kmm.image.registry`, `nodePrep.modules.v4l2loopback.kmm.imageRepoSecret`, `nodePrep.modules.v4l2loopback.kmm.build.enabled`, `nodePrep.modules.wireguard.enabled`, `videoDevicePlugin.enabled`, `agent.workspaceSecurity.supplementalGroups`
 
 ## Why this is needed
 
@@ -10,6 +10,15 @@ Webcam passthrough is two halves and needs both:
 2. **The resource.** Kubernetes schedules on resources, not device files. `kasm-video-device-plugin` advertises each `/dev/video*` as one unit of `kasm.com/video`, and kubelet assigns exactly one per pod. Without it the module is loaded and nothing can ask for it.
 
 Enable one without the other and the feature fails quietly.
+
+The session has to be able to open the device it is given, too. Sessions run as `kasm-user`
+(uid 1000), and udev makes `/dev/video*` `root:video 0660` on the node. node-prep widens the mode to
+`nodePrep.modules.v4l2loopback.deviceMode` (`0666` by default), which covers it; if you keep the
+node's `0660` (or load the module with KMM, which leaves udev's mode), add the node's `video` gid
+to the sessions instead, with `agent.workspaceSecurity.supplementalGroups` or the image's run config
+`group_add`. A session that runs as root in a pod user namespace (the default for an image that
+needs root) may not reach the device at all, because its host owner and group are unmapped inside
+the namespace; keep webcam images at uid 1000, or use `agent.workspaceSecurity.rootMode: host`.
 
 `modules.wireguard` is the same machinery for a different module, and matters **only on kernels older than 5.6** - WireGuard has been in-tree since. The reconcile script detects `wg_` symbols in `/proc/kallsyms` and exits early, so leaving it enabled across a mixed fleet is safe.
 
@@ -242,7 +251,7 @@ Under [kasm-platform](../../../charts/kasm-platform/README.md) the same block ne
 | Pod log: `modprobe v4l2loopback failed: the kernel rejected the module's signature (... Key was rejected by service)` | UEFI Secure Boot is on and the freshly built module is unsigned | [Secure Boot](secure-boot.md); on Ubuntu 24.04+ the kernel's own signed `v4l2loopback` is loaded instead when `preferShippedModule` is on, so check that videodev is installed (next row) rather than signing |
 | Pod log: `has its V4L2 core (videodev) as a separate module that is not installed on the node` | The kernel supports V4L2 but the package carrying `videodev.ko` is absent; cloud images often omit it | On Debian/Ubuntu the script installs `linux-modules-extra-<release>` itself from the builder image (`installVideodevPackage`); elsewhere install the package the message names on the node |
 | Session never starts; agent log or the pod's `FailedScheduling` event: `Insufficient kasm.com/video` | The webcam is on for the image, so the pod requests `kasm.com/video`, and no node advertises it: `videoDevicePlugin` is off, its DaemonSet is not on the node, or `/dev/video*` does not exist there yet | Enable `videoDevicePlugin` next to `nodePrep` and pin both to the same nodes; or turn the webcam off on the image |
-| Browser: "unable to connect to the webcam stream", the proxies log 502 on `.../webcam/stream`, and the session container's log says `Could not access /dev/videoN due to missing permissions` | The pod received the node's device node as udev made it (`root:video 0660`), and the image's webcam server runs as `kasm-user`, whose `video` gid is the image's, not the node's | `nodePrep.modules.v4l2loopback.deviceMode` (default `0666`) is applied by node-prep on every pass; a session started before the mode changed keeps the old node until it is relaunched. Under KMM, set the mode with a udev rule on the node |
+| Browser: "unable to connect to the webcam stream", the proxies log 502 on `.../webcam/stream`, and the session container's log says `Could not access /dev/videoN due to missing permissions` | The pod received the node's device node as udev made it (`root:video 0660`), and the image's webcam server runs as `kasm-user`, whose `video` gid is the image's, not the node's | `nodePrep.modules.v4l2loopback.deviceMode` (default `0666`) is applied by node-prep on every pass; a session started before the mode changed keeps the old node until it is relaunched. Under KMM, set the mode with a udev rule on the node, or add the node's `video` gid with `agent.workspaceSecurity.supplementalGroups`. A root session in a user namespace (`kubectl get pod -L kasm.com/run-mode` shows `userns-root`) may be refused even so: run the image at uid 1000, or `agent.workspaceSecurity.rootMode: host` |
 | Build is OOMKilled and retried every `reconcileIntervalSeconds` without finishing | `nodePrep.resources.limits.memory` too low to hold headers + sources + gcc | Raise it above the `1Gi` default |
 
 ## Decisions

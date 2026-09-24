@@ -696,6 +696,85 @@ tests:
           path: spec.imagePuller.extraImages[0].priority
           value: 10
 
+  - it: renders no workspaceSecurity block by default, leaving the CRD defaults in charge
+    asserts:
+      - isNull:
+          path: spec.workspaceSecurity
+
+  - it: renders every workspaceSecurity field that is set
+    set:
+      workspaceSecurity:
+        rootMode: forbid
+        userNamespaces: always
+        rootFeatures: downgrade
+        profile: baseline
+        sudo: true
+        supplementalGroups: [44, 109]
+        fsGroupChangePolicy: Always
+    asserts:
+      - equal:
+          path: spec.workspaceSecurity
+          value:
+            rootMode: forbid
+            userNamespaces: always
+            rootFeatures: downgrade
+            profile: baseline
+            sudo: true
+            supplementalGroups: [44, 109]
+            fsGroupChangePolicy: Always
+
+  - it: renders only the one workspaceSecurity field that is set
+    set:
+      workspaceSecurity:
+        rootMode: host
+    asserts:
+      - equal:
+          path: spec.workspaceSecurity
+          value:
+            rootMode: host
+
+  - it: renders the restricted profile on its own
+    set:
+      workspaceSecurity:
+        profile: restricted
+    asserts:
+      - equal:
+          path: spec.workspaceSecurity
+          value:
+            profile: restricted
+
+  - it: renders sudo only when on, since false is the CRD default
+    set:
+      workspaceSecurity:
+        sudo: true
+    asserts:
+      - equal:
+          path: spec.workspaceSecurity
+          value:
+            sudo: true
+
+  - it: renders supplementalGroups alone as a list of integers
+    set:
+      workspaceSecurity:
+        supplementalGroups: [44]
+    asserts:
+      - equal:
+          path: spec.workspaceSecurity
+          value:
+            supplementalGroups: [44]
+
+  - it: renders rootFeatures and fsGroupChangePolicy on their own
+    set:
+      workspaceSecurity:
+        rootFeatures: reject
+        fsGroupChangePolicy: OnRootMismatch
+    asserts:
+      - equal:
+          path: spec.workspaceSecurity
+          value:
+            rootFeatures: reject
+            fsGroupChangePolicy: OnRootMismatch
+
   - it: renders no seccomp block by default
     asserts:
       - isNull:

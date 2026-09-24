@@ -34,6 +34,54 @@ The control plane runs as ordinary workloads on any node and creates no cluster-
 all: no CRDs, no ClusterRoles. `kasm-helm.applySecurity` and `kasm-helm.isOpenshift` control the
 security contexts it renders.
 
+## Session run identity
+
+Sessions run as `kasm-user`, uid and gid 1000, the user every stock Kasm image is built for:
+`runAsNonRoot`, `allowPrivilegeEscalation: false`, every capability dropped, and back only what the
+profile adds (`SYS_CHROOT` for the browser sandbox under the default `baseline`, nothing but
+`NET_BIND_SERVICE` under `restricted`). That is the Docker agent's user too; what the Docker agent
+has and a pod does not is `docker exec -u root`, so the images and features that relied on it
+(a `user: root` run config, root `exec_configs`, session recording) now need a root session of
+their own. `agent.workspaceSecurity.rootMode` says where that comes from:
+
+- `userns` (the default) runs the container as uid 0 inside a Linux user namespace
+  (`hostUsers: false`). Root in the pod maps to an unprivileged, per-pod uid range on the node, so a
+  container escape lands as nobody in particular. It needs Kubernetes 1.33 or newer (user
+  namespaces on by default; GA in 1.36), containerd 2.0 or CRI-O 1.25, a 6.3+ kernel on the session
+  nodes, and no NFS-backed volume on the pod: the NFS client cannot idmap-mount, and the container
+  fails to create ([Storage](../how-to/storage/README.md)). Device passthrough into it is limited,
+  since device ownership is not remapped ([GPU workspaces](../how-to/nodes/gpu.md)).
+- `host` runs it as host uid 0, the way every session ran before. It works everywhere, and a
+  container escape is root on the node.
+- `forbid` refuses root: such an image fails to launch.
+
+`rootFeatures` decides what an otherwise uid-1000 image gets when it asks for root through its
+commands or recording: promoted to `rootMode`, kept at uid 1000 with the feature downgraded, or
+refused. `userNamespaces: always` puts uid-1000 sessions in a user namespace as well, and `sudo`
+turns privilege escalation back on for images whose sudoers entry has to work. Every session pod is
+labelled `kasm.com/run-mode` (`nonroot`, `userns-root`, `host-root`), so Kyverno exceptions and
+dashboards can tell the three apart without reading the security context.
+
+The Pod Security Standard a session pod satisfies follows from its run mode:
+
+| Run mode | Pod shape | Highest level it satisfies |
+| -------- | --------- | -------------------------- |
+| `nonroot`, `profile: restricted` | uid 1000, no escalation, `NET_BIND_SERVICE` at most, `RuntimeDefault` or `Localhost` seccomp | `restricted` |
+| `nonroot`, `profile: baseline` (default) | as above plus `SYS_CHROOT` and the image's own `cap_add`s | `baseline`, since `restricted` admits no add but `NET_BIND_SERVICE`; `sudo` (escalation, `SETUID`/`SETGID`) also stays at `baseline` |
+| `userns-root` | uid 0 in a user namespace, escalation allowed, the eight root capabilities | `baseline`. `restricted` stays out of reach even behind the alpha `UserNamespacesPodSecurityStandards` API-server gate, which relaxes only the non-root checks for user-namespace pods, not the capability or escalation ones |
+| `host-root` | host uid 0, escalation allowed, the eight root capabilities | `baseline` on paper, since no Pod Security control looks at the uid; treat it as needing a `privileged` namespace, because that is what it amounts to on escape |
+
+Whatever the mode, an image with an inline seccomp profile and no `seccomp` backend falls back to
+`Unconfined` under the `baseline` profile, which no Pod Security level admits; turn the backend on
+([Workspace seccomp profiles](../how-to/nodes/seccomp-profiles.md)).
+
+On OpenShift the built-in SCCs do not fit even the uid-1000 shape: `nonroot-v2` admits
+`MustRunAsNonRoot` pods but no capability add beyond `NET_BIND_SERVICE` and no `Localhost` seccomp,
+so it would carry only `restricted`-profile sessions from images with no inline profile; and
+`restricted-v3`/`nested-container` (OpenShift 4.20's user-namespace SCCs) admit `SETUID`/`SETGID`
+at most. The agent chart therefore ships its own SCCs, one per run shape
+([Admit the agent on OpenShift](../how-to/nodes/openshift.md#root-sessions-the-three-root-modes)).
+
 ## RBAC
 
 The operator is a cluster singleton. It owns the five cluster-scoped CRDs and fixed-name
@@ -88,6 +136,7 @@ the Helm release history.
 | Decision | What it costs | Procedure |
 | -------- | ------------- | --------- |
 | `privileged` PSS scope | The label covers everything in the namespace, the control plane included in a shared one | [Privileged workloads and cluster policy](../how-to/nodes/privileged-workloads.md) |
+| Root sessions (`agent.workspaceSecurity.rootMode`) | `userns` needs Kubernetes 1.33+, containerd 2.0 / CRI-O 1.25, a 6.3+ kernel, and no NFS-backed volume on a root session; `host` makes a container escape root on the node | [Session run identity](#session-run-identity) |
 | Host namespaces for the egress installer | `hostPID` and `hostNetwork` on a privileged container; its shim fails **every** pod sandbox on a node while no daemon runs | [Egress installer: node prerequisites](../how-to/networking/egress.md) |
 | Operator RBAC | Re-applied on every `helm upgrade` | [Architecture, cluster singletons](architecture.md#cluster-singletons) |
 | NetworkPolicy enforcement | Inert without an enforcing CNI; the manager allow needs the post-DNAT port behind a hostPort ingress | [NetworkPolicy enforcement](../how-to/networking/network-policies.md) |

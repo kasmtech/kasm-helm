@@ -2738,6 +2738,92 @@ spec:
                   own labels are layered on top, taking precedence on conflicting keys.
                   Distinct from AgentLabels, which target the agent's own workloads.
                 type: object
+              workspaceSecurity:
+                description: |-
+                  WorkspaceSecurity is how this agent's session containers run: uid 1000
+                  by default, and what an image that needs root gets (a pod user
+                  namespace, host root, or nothing). See WorkspaceSecuritySpec; unset
+                  means every default.
+                properties:
+                  fsGroupChangePolicy:
+                    default: OnRootMismatch
+                    description: |-
+                      FSGroupChangePolicy is applied to every session pod's volumes.
+                      OnRootMismatch (the default) skips the recursive ownership pass when the
+                      volume root already belongs to fsGroup 1000; Always redoes it every
+                      mount.
+                    enum:
+                    - OnRootMismatch
+                    - Always
+                    type: string
+                  profile:
+                    default: baseline
+                    description: |-
+                      Profile is the capability shape of uid-1000 sessions: baseline (the
+                      default; SYS_CHROOT plus the image's own cap_add) or restricted (nothing
+                      beyond NET_BIND_SERVICE).
+                    enum:
+                    - baseline
+                    - restricted
+                    type: string
+                  rootFeatures:
+                    default: promote
+                    description: |-
+                      RootFeatures is what happens when a uid-1000 image asks for root-only
+                      features (root exec_configs, session recording): run the session as
+                      root (promote, the default), keep it at uid 1000 and flag it
+                      (downgrade), or refuse the launch (reject).
+                    enum:
+                    - promote
+                    - downgrade
+                    - reject
+                    type: string
+                  rootMode:
+                    default: userns
+                    description: |-
+                      RootMode is how a session that needs root gets it: uid 0 in a pod user
+                      namespace (userns, the default), host uid 0 (host), or not at all
+                      (forbid).
+                    enum:
+                    - userns
+                    - host
+                    - forbid
+                    type: string
+                  sudo:
+                    default: false
+                    description: |-
+                      Sudo keeps allowPrivilegeEscalation on and adds SETUID/SETGID to
+                      uid-1000 sessions so an image's baked-in sudoers entry works. Off by
+                      default; incompatible with profile restricted.
+                    type: boolean
+                  supplementalGroups:
+                    description: |-
+                      SupplementalGroups are added to every session pod, on top of the
+                      image's run_config group_add: the node's render or video gid so a
+                      uid-1000 session can open /dev/dri or a webcam device.
+                    items:
+                      format: int64
+                      type: integer
+                    type: array
+                  userNamespaces:
+                    default: rootOnly
+                    description: |-
+                      UserNamespaces is which sessions get a pod user namespace: only the ones
+                      running as root (rootOnly, the default) or every session (always).
+                    enum:
+                    - rootOnly
+                    - always
+                    type: string
+                type: object
+                x-kubernetes-validations:
+                - message: profile "restricted" cannot run root sessions as host root;
+                    use rootMode userns or forbid
+                  rule: '!(has(self.profile) && self.profile == ''restricted'' &&
+                    has(self.rootMode) && self.rootMode == ''host'')'
+                - message: sudo needs privilege escalation, which profile "restricted"
+                    forbids
+                  rule: '!(has(self.sudo) && self.sudo && has(self.profile) && self.profile
+                    == ''restricted'')'
               workspacesAutoscaling:
                 description: |-
                   WorkspacesAutoscaling tells the agent that a node autoscaler (Cluster

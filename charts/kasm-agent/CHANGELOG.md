@@ -6,6 +6,7 @@ All notable changes to the kasm-agent chart are documented here.
 
 ### Changed
 
+- The `agent` subchart gains `agent.workspaceSecurity.*`, the Agent's session run-mode policy (uid 1000 by default; root images in a pod user namespace, as host root, or refused), and `agent.openshift.scc.*` now renders the sessions' SecurityContextConstraints per `agent.workspaceSecurity.rootMode`. Values comments name both.
 - Values comments point at the OpenShift switches the subcharts gained: `agent.openshift.scc.enabled` (the sessions' SecurityContextConstraint and its grant), `nodePrep.openshift.scc.enabled` and `videoDevicePlugin.openshift.scc.enabled` (the `privileged` SCC for each DaemonSet's own ServiceAccount). A new `tests/values-agent/openshift.yaml` scenario renders the agent's SCC objects and a passthrough Route.
 - NOTES warn when v4l2loopback node preparation is on but `videoDevicePlugin` is off: webcam-enabled images request `kasm.com/video`, which nothing then advertises, and the launch fails with `Insufficient kasm.com/video`.
 - The operator's ClusterRole no longer grants Secret access; the `agent` subchart always stamps a namespaced Role for it instead. In the two-namespace layout (`operator.enabled=false`) set `agent.operatorRBAC.serviceAccount.namespace` to the operator's namespace; NOTES warns when it is left empty.

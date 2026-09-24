@@ -102,10 +102,11 @@ otelCollector:
 #
 # See the `kasm-agent-instance` chart for its values (`name`, `image.*`, `manager.*`,
 # `publicHostname`, `publicPort`, `zone`, `sessionProxy.*`, `otel.*`, `gpu.enabled`,
-# `storageMappings.*`, `imagePuller.*`, `httpRoute.*`, `env`, ...).
+# `storageMappings.*`, `imagePuller.*`, `workspaceSecurity.*`, `httpRoute.*`, `env`, ...).
 #
-# On OpenShift, `agent.openshift.scc.enabled` ships the SecurityContextConstraint the sessions need and
-# grants it to the workspace ServiceAccount the operator creates; see the `kasm-agent-instance` chart.
+# On OpenShift, `agent.openshift.scc.enabled` ships the SecurityContextConstraints the sessions need
+# (shaped by `agent.workspaceSecurity.rootMode`) and grants them to the workspace ServiceAccount the
+# operator creates; see the `kasm-agent-instance` chart.
 #
 agent:
   # agent.enabled -- Install the Kasm agent instance with this release. Disable it to install only

@@ -17,6 +17,11 @@ agent:
   seccomp:
     enabled: true
     backend: installer
+  # Root sessions in a pod user namespace (OpenShift 4.20+): renders spec.workspaceSecurity on the
+  # Agent and the -root SCC with userNamespaceLevel: RequirePodLevel.
+  workspaceSecurity:
+    rootMode: userns
+    supplementalGroups: [44]
   openshift:
     scc:
       enabled: true

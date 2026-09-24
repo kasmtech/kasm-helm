@@ -824,6 +824,15 @@ spec:
                         type: integer
                     type: object
                 type: object
+              hostUsers:
+                description: |-
+                  HostUsers is the pod's hostUsers: false puts the pod in its own Linux
+                  user namespace, so a container running as uid 0 (securityContext.runAsUser
+                  0) is root inside the pod and an unprivileged uid on the node. Unset or
+                  true means the host's user namespace. Nodes need Kubernetes 1.33+, a
+                  6.3+ kernel and containerd 2.0 / CRI-O 1.25; no NFS-backed volume can be
+                  mounted into such a pod.
+                type: boolean
               image:
                 type: string
               imageMounts:
@@ -2816,6 +2825,12 @@ spec:
                       format: int32
                       type: integer
                     user:
+                      description: |-
+                        User is who runs the command: "root" goes into the root start script,
+                        anything else (default kasm-user) into the user one. "root" is honoured
+                        only when the container itself runs as uid 0; in a uid-1000 container
+                        the command runs as kasm-user and the workspace's RootFeaturesHonored
+                        condition says so.
                       type: string
                   required:
                   - cmd
@@ -2993,6 +3008,12 @@ spec:
                       format: int32
                       type: integer
                     user:
+                      description: |-
+                        User is who runs the command: "root" goes into the root start script,
+                        anything else (default kasm-user) into the user one. "root" is honoured
+                        only when the container itself runs as uid 0; in a uid-1000 container
+                        the command runs as kasm-user and the workspace's RootFeaturesHonored
+                        condition says so.
                       type: string
                   required:
                   - cmd

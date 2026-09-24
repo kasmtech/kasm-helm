@@ -303,6 +303,38 @@ spec:
       {{- end }}
     {{- end }}
   {{- end }}
+  {{- /* spec.workspaceSecurity: each field is omitted while empty so the CRD's default applies, and
+         the block is omitted whole while every field is. sudo renders only when on (false is the
+         default). The CRD's own CEL rules (restricted with host root, sudo with restricted) are
+         repeated in _validation.tpl so a bad pair fails at render time rather than at apply. */}}
+  {{- $wsec := .Values.workspaceSecurity }}
+  {{- if or $wsec.rootMode $wsec.userNamespaces $wsec.rootFeatures $wsec.profile $wsec.sudo $wsec.supplementalGroups $wsec.fsGroupChangePolicy }}
+  workspaceSecurity:
+    {{- with $wsec.rootMode }}
+    rootMode: {{ . }}
+    {{- end }}
+    {{- with $wsec.userNamespaces }}
+    userNamespaces: {{ . }}
+    {{- end }}
+    {{- with $wsec.rootFeatures }}
+    rootFeatures: {{ . }}
+    {{- end }}
+    {{- with $wsec.profile }}
+    profile: {{ . }}
+    {{- end }}
+    {{- if $wsec.sudo }}
+    sudo: true
+    {{- end }}
+    {{- with $wsec.supplementalGroups }}
+    supplementalGroups:
+      {{- range . }}
+      - {{ int64 . }}
+      {{- end }}
+    {{- end }}
+    {{- with $wsec.fsGroupChangePolicy }}
+    fsGroupChangePolicy: {{ . }}
+    {{- end }}
+  {{- end }}
   {{- with .Values.imagePullSecrets }}
   imagePullSecrets:
     {{- toYaml . | nindent 4 }}

@@ -1,0 +1,75 @@
+suite: workspaceSecurity validation
+
+templates:
+  - templates/validation.yaml
+
+tests:
+  - it: renders nothing and passes with the defaults
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: passes with every valid non-default value together
+    set:
+      workspaceSecurity:
+        rootMode: userns
+        userNamespaces: always
+        rootFeatures: reject
+        profile: restricted
+        fsGroupChangePolicy: Always
+        supplementalGroups: [44]
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: passes sudo with the baseline profile and rootMode host
+    set:
+      workspaceSecurity:
+        sudo: true
+        rootMode: host
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: fails when profile restricted is paired with rootMode host
+    set:
+      workspaceSecurity:
+        profile: restricted
+        rootMode: host
+    asserts:
+      - failedTemplate:
+          errorPattern: "agent.workspaceSecurity.profile is restricted but agent.workspaceSecurity.rootMode is host"
+
+  - it: fails when sudo is paired with profile restricted
+    set:
+      workspaceSecurity:
+        profile: restricted
+        sudo: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "agent.workspaceSecurity.sudo is on but agent.workspaceSecurity.profile is restricted"
+
+  - it: fails when userNamespaces always is paired with rootMode host
+    set:
+      workspaceSecurity:
+        userNamespaces: always
+        rootMode: host
+    asserts:
+      - failedTemplate:
+          errorPattern: "agent.workspaceSecurity.userNamespaces is always but agent.workspaceSecurity.rootMode is host"
+
+  - it: fails on a rootMode the CRD does not know
+    set:
+      workspaceSecurity:
+        rootMode: root
+    asserts:
+      - failedTemplate:
+          errorPattern: 'agent.workspaceSecurity.rootMode is "root"; it must be one of userns, host, forbid'
+
+  - it: fails on a profile the CRD does not know
+    set:
+      workspaceSecurity:
+        profile: privileged
+    asserts:
+      - failedTemplate:
+          errorPattern: 'agent.workspaceSecurity.profile is "privileged"; it must be one of baseline, restricted'

@@ -6,3 +6,4 @@
   without being bolted onto a resource that only renders under some values.
 */}}
 {{- include "kasmAgentInstance.validateExposure" . -}}
+{{- include "kasmAgentInstance.validateWorkspaceSecurity" . -}}

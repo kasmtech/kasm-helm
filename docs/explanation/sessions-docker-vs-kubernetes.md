@@ -30,3 +30,17 @@ Measured on a live session by comparing `kasms.docker_environment` (what the man
 against the running pod's environment. What this does not rule out is a Docker agent adding
 variables of its own beyond the manager's set - that would need a `docker inspect` on a
 Docker-agent session to confirm.
+
+## Who the session runs as
+
+| | Docker agent | Kubernetes |
+| --- | --- | --- |
+| Session user | `kasm-user`, uid 1000, the image's own `USER` | `kasm-user`, uid 1000: `runAsNonRoot`, no privilege escalation, `drop: ALL` plus the profile's capabilities (`agent.workspaceSecurity.profile`) |
+| Root when an image asks for it (`user: root` run config) | the container runs as root on the host | uid 0 inside a pod user namespace by default (`rootMode: userns`), host root with `rootMode: host`, refused with `forbid`; the pod's `kasm.com/run-mode` label says which |
+| Root `exec_configs` (start and stop commands with `user: root`) | `docker exec -u root` into the running uid-1000 container | no equivalent exec as another user: the session is promoted to a root run mode (`rootFeatures: promote`, the default), kept at uid 1000 with the commands run as `kasm-user` (`downgrade`), or refused (`reject`) |
+| Session recording | the recorder switches to its own user inside the container | needs root the same way, so it follows `rootFeatures` too |
+| `sudo` inside the session | works if the image's sudoers allows it | only with `agent.workspaceSecurity.sudo` (escalation and `SETUID`/`SETGID` back on) |
+| Device groups (`/dev/dri`, `/dev/video*`) | `group_add` in the run config | the run config's `group_add`, plus `agent.workspaceSecurity.supplementalGroups` Agent-wide |
+
+The reasons and the Pod Security level each mode reaches are in
+[Security posture](security-posture.md#session-run-identity).

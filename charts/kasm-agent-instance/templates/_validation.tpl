@@ -1,5 +1,7 @@
 {{/*
   Cross-value validation for the ways this chart publishes the session proxy.
+  (workspaceSecurity has its own helper, kasmAgentInstance.validateWorkspaceSecurity,
+  at the end of this file.)
 
   Held here rather than in the templates it constrains because the rule is n-way:
   the operator-created session-proxy Service can be published five ways (an
@@ -45,5 +47,35 @@
 */}}
 {{- if and (eq (toString $v.sessionProxy.service.type) "NodePort") (not $v.sessionProxy.service.httpsNodePort) (not $v.publicPort) (not (and (include "kasmAgentInstance.inClusterControlPlane" .) (not $v.publicHostname))) -}}
   {{- fail "agent.sessionProxy.service.type is NodePort but neither agent.sessionProxy.service.httpsNodePort nor agent.publicPort is set. The control plane reaches the session proxy at https://<publicHostname>:<publicPort>/ and a randomly allocated node port is never 443, so every launch would fail with 'No Agent slots available'. Pin agent.sessionProxy.service.httpsNodePort (publicPort then follows it), or set agent.publicPort to the port something in front of the proxy forwards to it." -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+  Cross-value validation for workspaceSecurity, rendered as the Agent's spec.workspaceSecurity.
+
+  The first two pair rules repeat the Agent CRD's CEL rules, so a bad pair fails at render time
+  rather than halfway through an apply. The third has no CEL counterpart - the operator would
+  simply not give a host-root session a user namespace - but asking for both is a contradiction,
+  and the SCC template cannot honour it either. The enum checks mirror the CRD's, and keep
+  openshift-scc.yaml, which branches on rootMode and profile, from rendering a policy for a value
+  the Agent would be rejected over.
+*/}}
+{{- define "kasmAgentInstance.validateWorkspaceSecurity" -}}
+{{- $w := .Values.workspaceSecurity -}}
+{{- $enums := dict "rootMode" (list "userns" "host" "forbid") "userNamespaces" (list "rootOnly" "always") "rootFeatures" (list "promote" "downgrade" "reject") "profile" (list "baseline" "restricted") "fsGroupChangePolicy" (list "OnRootMismatch" "Always") -}}
+{{- range $key := list "rootMode" "userNamespaces" "rootFeatures" "profile" "fsGroupChangePolicy" -}}
+{{- $value := toString (index $w $key | default "") -}}
+{{- if and $value (not (has $value (index $enums $key))) -}}
+  {{- fail (printf "agent.workspaceSecurity.%s is %q; it must be one of %s, or empty for the default." $key $value (join ", " (index $enums $key))) -}}
+{{- end -}}
+{{- end -}}
+{{- if and (eq (toString $w.profile) "restricted") (eq (toString $w.rootMode) "host") -}}
+  {{- fail "agent.workspaceSecurity.profile is restricted but agent.workspaceSecurity.rootMode is host - profile \"restricted\" cannot run root sessions as host root. Use rootMode userns or forbid, or profile baseline." -}}
+{{- end -}}
+{{- if and $w.sudo (eq (toString $w.profile) "restricted") -}}
+  {{- fail "agent.workspaceSecurity.sudo is on but agent.workspaceSecurity.profile is restricted - sudo needs privilege escalation, which profile \"restricted\" forbids. Turn sudo off or use profile baseline." -}}
+{{- end -}}
+{{- if and (eq (toString $w.userNamespaces) "always") (eq (toString $w.rootMode) "host") -}}
+  {{- fail "agent.workspaceSecurity.userNamespaces is always but agent.workspaceSecurity.rootMode is host - a session cannot run in a pod user namespace and as host root at once. Use rootMode userns (or forbid) with userNamespaces always, or userNamespaces rootOnly with rootMode host." -}}
 {{- end -}}
 {{- end -}}
