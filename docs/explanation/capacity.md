@@ -16,7 +16,8 @@ manager - not from any chart value.
 | **CPU** | A **request only** under `cpu_allocation_method` *Shares* or *Inherit* - burstable, no ceiling. A request *and* an equal limit under *Quotas*. | `requests.cpu: 2` on a develop control plane; `cpu: 1` for a 1-core image on 1.19 |
 | **Memory** | Always request **=** limit, from `memory_bytes` - a hard reservation, and a hard OOM ceiling. | `2768Mi` on develop; `1536Mi` for a 1.5Gi image on 1.19 |
 | **`/dev/shm`** | A **memory-backed** `emptyDir` the operator mounts per session, `2Gi` by default (`KasmWorkspace.spec.shmSize`). Counts against the pod's memory limit **and** node RAM - it is not disk, and it is not additive to the limit. | `2Gi` |
-| **Recording buffer** | Only when recording is on: `KasmWorkspace.spec.recordingBufferSize`, default `3Gi`, on the pod's **ephemeral storage**. The operator seeds the container's ephemeral-storage request/limit to cover it (observed: a `1Gi` buffer produced a `2Gi` ephemeral floor). | `3Gi` |
+| **Recording buffer** | Only when recording is on: `KasmWorkspace.spec.recordingBufferSize`, default `3Gi`, on the pod's **ephemeral storage**. The operator seeds the container's ephemeral-storage request at buffer + `1Gi` and its limit at buffer + `4Gi` (the `/tmp` cap) + `1Gi`: `4Gi` / `8Gi` for the default buffer. | `3Gi` |
+| **`/tmp`** | Node **disk** (ephemeral storage), capped at `4Gi` with nothing requested - the session's scratch space and its browser disk cache. Exceeding the cap gets the pod evicted. Not memory: files there never count against the session's memory limit. | about `400Mi` idle on stock Kasm images (services that unpack themselves at start) |
 | **Image layers** | Node disk in the container runtime's image store, shared between every session on that node using the same image. | measure - see [Measure, do not guess](#measure-do-not-guess) |
 
 > **The `/dev/shm` trap.** The 2Gi shm lives *inside* the pod's memory limit. A 2768Mi workspace
@@ -289,7 +290,7 @@ autoscaler.
 
 - [ ] Per-session cost written down from **your** images' `cores` / `memory_bytes`, not from the defaults above.
 - [ ] `shmSize` checked against each image's memory limit - the shm is inside the limit.
-- [ ] Recording decided; if on, the Kasm licence confirmed to cover it, and the `recordingBufferSize` and the resulting ephemeral-storage floor budgeted.
+- [ ] Recording decided; if on, the Kasm licence confirmed to cover it, and the `recordingBufferSize` and the resulting ephemeral-storage request (buffer + `1Gi`) and limit (buffer + `5Gi`) budgeted.
 - [ ] Fixed per-node overhead measured on a real node, not assumed.
 - [ ] The binding ceiling identified (CPU requests / memory / `maxPods` / disk) and the arithmetic recorded.
 - [ ] `maxPods` checked against the planned session density.
