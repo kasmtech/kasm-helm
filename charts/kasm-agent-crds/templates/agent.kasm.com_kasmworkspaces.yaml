@@ -3632,6 +3632,17 @@ spec:
                   EvictionCount resets to 0 once the pod is Ready again.
                 format: int32
                 type: integer
+              imagesPulledTime:
+                description: |-
+                  ImagesPulledTime is when the operator saw the workspace pod stop
+                  pulling: the reconcile after one whose Ready reason was PullingImage
+                  found the pod's images on its node (or its containers past creation).
+                  The pending deadline counts from here rather than from creation, so a
+                  pod that spent minutes pulling a large image still gets its full
+                  allowance to become ready. Rewritten each time a pull ends; unset when
+                  the pod never had to pull.
+                format: date-time
+                type: string
               lastEvictedNode:
                 type: string
               lastEvictionReason:
