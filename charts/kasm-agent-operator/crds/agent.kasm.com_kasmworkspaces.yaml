@@ -38,7 +38,7 @@ spec:
         description: |-
           KasmWorkspace is the Schema for the kasmworkspaces API. The Kasm agent creates
           these on the manager's behalf; the controller reconciles each into a workspace
-          Deployment + Service (and supporting storage/config/network objects).
+          Pod it manages itself (and supporting storage/config/network objects).
         properties:
           apiVersion:
             description: |-
@@ -3328,16 +3328,8 @@ spec:
                     type: object
                 type: object
               service:
-                description: WorkspaceService configures the workspace Service.
+                description: Service declares the workspace's ports (see WorkspaceService).
                 properties:
-                  annotations:
-                    additionalProperties:
-                      type: string
-                    type: object
-                  labels:
-                    additionalProperties:
-                      type: string
-                    type: object
                   ports:
                     items:
                       description: ServicePort contains information on service's port.
@@ -3409,14 +3401,6 @@ spec:
                       - port
                       type: object
                     type: array
-                  type:
-                    description: Service Type string describes ingress methods for
-                      a service
-                    enum:
-                    - ClusterIP
-                    - NodePort
-                    - LoadBalancer
-                    type: string
                 type: object
               serviceAccountName:
                 description: |-
@@ -3432,6 +3416,16 @@ spec:
                 default: 300
                 format: int32
                 type: integer
+              stopped:
+                description: |-
+                  Stopped takes the workspace's pod away while keeping everything else
+                  the session has (its CR, ConfigMaps, PVCs, the session proxy's route).
+                  The controller deletes the pod - gracefully, so the stop hooks run -
+                  and creates a new one when this goes back to false. It is how the
+                  agent carries out the manager's stop_container and pause_container
+                  (true) and resume_container (false). A stopped workspace reports phase
+                  Failed with Ready reason Stopped. Defaults to false.
+                type: boolean
               storageMappings:
                 items:
                   description: |-
@@ -3630,9 +3624,10 @@ spec:
                 description: |-
                   EvictionCount, LastEvictionReason/Node, and BackoffUntil track
                   node-exhaustion pod failures (eviction, OOM). While Now is before
-                  BackoffUntil, the controller excludes LastEvictedNode from the
-                  workspace pod's node affinity so the Deployment's automatic pod
-                  replacement lands elsewhere instead of thrashing on the same node.
+                  BackoffUntil, the controller excludes LastEvictedNode from the node
+                  affinity of any pod it creates for the workspace, and replaces a pod
+                  still running there, so the replacement lands elsewhere instead of
+                  thrashing on the same node.
                   EvictionCount resets to 0 once the pod is Ready again.
                 format: int32
                 type: integer

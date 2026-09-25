@@ -598,7 +598,20 @@ tests:
               - patch
               - update
               - watch
+      - contains:
+          path: rules
+          content:
+            apiGroups:
+              - ""
+            resources:
+              - pods
+            verbs:
+              - create
+              - delete
+              - get
+              - list
+              - watch
       - lengthEqual:
           path: rules
-          count: 15
+          count: 16
 

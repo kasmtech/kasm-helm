@@ -41,12 +41,9 @@ rules:
   - apiGroups: [""]
     resources: ["nodes"]
     verbs: ["get", "list", "watch"]
-  # Deployments — agent reads workspace Deployment status and scales replicas.
-  - apiGroups: ["apps"]
-    resources: ["deployments"]
-    verbs: ["get", "list", "watch", "update", "patch"]
   # KasmWorkspace CRs — the agent API creates/deletes workspace CRs; the
-  # workspaces controller in this operator reconciles them to Pods.
+  # workspaces controller in this operator runs each as a Pod of its own; stop
+  # and resume set spec.stopped.
   - apiGroups: ["agent.kasm.com"]
     resources: ["kasmworkspaces", "kasmworkspaces/status"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]

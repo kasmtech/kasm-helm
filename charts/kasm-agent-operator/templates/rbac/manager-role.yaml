@@ -23,7 +23,6 @@ rules:
   resources:
   - configmaps
   - persistentvolumeclaims
-  - pods
   - serviceaccounts
   - services
   verbs:
@@ -33,6 +32,16 @@ rules:
   - list
   - patch
   - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - create
+  - delete
+  - get
+  - list
   - watch
 # Read-only: checked when a per-node eviction/OOM backoff window closes, before re-including the
 # node in a workspace/image-puller pod's affinity, so a replacement pod isn't scheduled back onto a

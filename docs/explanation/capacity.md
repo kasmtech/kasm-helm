@@ -380,14 +380,17 @@ burst takes to work through.
 
 ### What each session costs the cluster
 
-Beyond its pod, each session is a `KasmWorkspace`, a Deployment and its ReplicaSet, a Service with its own
-**ClusterIP** and EndpointSlice, and four ConfigMaps - about nine API objects. Two consequences:
+Each session is a `KasmWorkspace`, the Pod the operator runs for it (no Deployment or ReplicaSet in
+between), its NetworkPolicy and four ConfigMaps - about seven API objects. There is no per-session
+Service: the session proxy routes to the pod's own IP, so sessions use no ClusterIPs and add nothing to
+kube-proxy's rules. What that leaves:
 
-- **The Service CIDR caps concurrent sessions.** One ClusterIP each, next to every other Service in the
-  cluster. A `/24` service range (some small or test distributions) stops sessions at about 250; a `/16`
-  holds 65,000.
-- **The API server and etcd carry them.** Managed control planes scale themselves; a self-managed one
-  should expect roughly 1GB more API server memory per few thousand sessions.
+- **The API server and etcd carry the objects.** Managed control planes scale themselves; a self-managed
+  one should expect roughly 1GB more API server memory per few thousand sessions.
+- **Launch bursts go through the scheduler.** Every launch is a pod to place, and kube-scheduler's own API
+  client is limited to a few dozen requests a second by default, so a self-managed control plane expecting
+  bursts of more than about 25 launches a second should raise its `--kube-api-qps`/`--kube-api-burst`.
+  kube-controller-manager is no longer in a launch's path.
 
 The agent's heartbeat to the manager lists every session, about **170KB per 1,000 sessions**, sent every
 `heartbeatIntervalSeconds` (default 5).
