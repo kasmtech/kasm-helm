@@ -250,11 +250,11 @@ tests:
           path: spec.template.spec.containers[0].resources
           value:
             limits:
-              cpu: 100m
-              memory: 256Mi
+              cpu: "1"
+              memory: 512Mi
             requests:
               cpu: 100m
-              memory: 256Mi
+              memory: 128Mi
 
   - it: honors overridden resources
     set:

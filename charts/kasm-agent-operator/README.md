@@ -113,7 +113,7 @@ alongside this subchart; set `otel.endpoint` to point at a collector of your own
 	</thead>
 	<tbody>
 		<tr>
-			<td id="affinity"><a href="./values.yaml#L164">affinity</a></td>
+			<td id="affinity"><a href="./values.yaml#L163">affinity</a></td>
 			<td>
 object
 </td>
@@ -299,7 +299,7 @@ string
 			<td>Override the chart name used to build resource names and the `app.kubernetes.io/name` label. Leave empty to use the chart name, `kasm-agent-operator`.  This only affects chart-generated names (the operator Deployment). The RBAC objects this chart ships keep the fixed names the operator and the kustomize deployment use (`manager-role`, `kasm-agent`, and so on) and are not affected by this value. </td>
 		</tr>
 		<tr>
-			<td id="nodeSelector"><a href="./values.yaml#L156">nodeSelector</a></td>
+			<td id="nodeSelector"><a href="./values.yaml#L155">nodeSelector</a></td>
 			<td>
 object
 </td>
@@ -356,7 +356,7 @@ string
 			<td>The OTLP HTTP endpoint the operator exports to. Leave empty to point at the collector deployed alongside this chart by the `kasm-agent` umbrella chart, `http://<release>-kasm-otel-collector:4318`. </td>
 		</tr>
 		<tr>
-			<td id="podAnnotations"><a href="./values.yaml#L147">podAnnotations</a></td>
+			<td id="podAnnotations"><a href="./values.yaml#L146">podAnnotations</a></td>
 			<td>
 object
 </td>
@@ -370,7 +370,7 @@ object
 			<td>Additional annotations to add to the operator Pod. The chart's own `kubectl.kubernetes.io/default-container` annotation always wins and cannot be overridden here. </td>
 		</tr>
 		<tr>
-			<td id="podLabels"><a href="./values.yaml#L152">podLabels</a></td>
+			<td id="podLabels"><a href="./values.yaml#L151">podLabels</a></td>
 			<td>
 object
 </td>
@@ -426,7 +426,7 @@ int
 			<td>The number of controller-manager replicas to run. The operator uses leader election (see `leaderElect`), so only one replica reconciles at a time; additional replicas are warm standbys. </td>
 		</tr>
 		<tr>
-			<td id="resources"><a href="./values.yaml#L118">resources</a></td>
+			<td id="resources"><a href="./values.yaml#L120">resources</a></td>
 			<td>
 object
 </td>
@@ -434,29 +434,29 @@ object
 				<div style="max-width: 520px;">
 <pre lang="json">
 limits:
-    cpu: 100m
-    memory: 256Mi
+    cpu: "1"
+    memory: 512Mi
 requests:
     cpu: 100m
-    memory: 256Mi
+    memory: 128Mi
 </pre>
 </div>
 			</td>
-			<td>CPU and memory requests and limits for the controller-manager container. Both requests and limits must set `cpu` and `memory`; the repository's Kyverno policies reject a container that leaves any of the four unset. </td>
+			<td>CPU and memory requests and limits for the controller-manager container. Both requests and limits must set `cpu` and `memory`; the repository's Kyverno policies reject a container that leaves any of the four unset. The requests are small, so the operator fits a small cluster; the limits leave it room to grow to about 1,000 concurrent sessions. Past about 100 sessions raise the requests - see "Sizing the agent stack" in docs/explanation/capacity.md. </td>
 		</tr>
 		<tr>
-			<td id="resources--limits--cpu"><a href="./values.yaml#L125">resources.limits.cpu</a></td>
+			<td id="resources--limits--cpu"><a href="./values.yaml#L126">resources.limits.cpu</a></td>
 			<td>
 string
 </td>
 			<td>
 				<div style="max-width: 520px;">
 <pre lang="json">
-100m
+"1"
 </pre>
 </div>
 			</td>
-			<td>The CPU limit for the controller-manager container. The default is carried over from the operator's own kustomize manifests, where 100m has been enough for a controller that spends most of its time watching. Raise it if reconcile latency climbs on a cluster with many `Agent` or `KasmWorkspace` objects; a throttled controller does not fail, it just falls behind. </td>
+			<td>The CPU limit for the controller-manager container. The operator is idle between launches but reconciles hard during a burst of them, up to a full core. A throttled controller does not fail, it falls behind: launches slow down and can outlast the agent's wait. </td>
 		</tr>
 		<tr>
 			<td id="resources--limits--memory"><a href="./values.yaml#L131">resources.limits.memory</a></td>
@@ -466,14 +466,14 @@ string
 			<td>
 				<div style="max-width: 520px;">
 <pre lang="json">
-256Mi
+512Mi
 </pre>
 </div>
 			</td>
-			<td>The memory limit for the controller-manager container, also carried over from the operator's kustomize manifests. The controller's informer caches hold every object it watches, so this is the value to raise on a large cluster rather than letting the manager be OOMKilled part way through a reconcile. </td>
+			<td>The memory limit for the controller-manager container. The informer caches hold every object the operator watches, about nine per session, so memory grows with the session count. Beyond 1,000 sessions allow about 75Mi more per further 1,000. </td>
 		</tr>
 		<tr>
-			<td id="resources--requests--cpu"><a href="./values.yaml#L137">resources.requests.cpu</a></td>
+			<td id="resources--requests--cpu"><a href="./values.yaml#L136">resources.requests.cpu</a></td>
 			<td>
 string
 </td>
@@ -484,21 +484,21 @@ string
 </pre>
 </div>
 			</td>
-			<td>The CPU request for the controller-manager container. It deliberately matches `resources.limits.cpu`, which puts the operator Pod in the Guaranteed QoS class so the scheduler reserves the capacity and the kubelet does not pick it first under node pressure. </td>
+			<td>The CPU request for the controller-manager container. It covers the idle operator; the limit above is what a launch burst borrows. </td>
 		</tr>
 		<tr>
-			<td id="resources--requests--memory"><a href="./values.yaml#L142">resources.requests.memory</a></td>
+			<td id="resources--requests--memory"><a href="./values.yaml#L141">resources.requests.memory</a></td>
 			<td>
 string
 </td>
 			<td>
 				<div style="max-width: 520px;">
 <pre lang="json">
-256Mi
+128Mi
 </pre>
 </div>
 			</td>
-			<td>The memory request for the controller-manager container. It matches `resources.limits.memory` for the same Guaranteed QoS reason, so keep the two in step if you raise either. </td>
+			<td>The memory request for the controller-manager container. It covers a cluster of about 100 sessions. An operator using more than it requested is a candidate for eviction under node memory pressure, so on a larger cluster raise it, up to `resources.limits.memory`. </td>
 		</tr>
 		<tr>
 			<td id="serviceAccount"><a href="./values.yaml#L65">serviceAccount</a></td>
@@ -559,7 +559,7 @@ controller-manager
 			<td>The name of the ServiceAccount. The default matches the name used by the operator's kustomize deployment, so an existing cluster keeps the same identity. </td>
 		</tr>
 		<tr>
-			<td id="tolerations"><a href="./values.yaml#L160">tolerations</a></td>
+			<td id="tolerations"><a href="./values.yaml#L159">tolerations</a></td>
 			<td>
 list
 </td>

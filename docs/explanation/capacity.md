@@ -29,9 +29,10 @@ manager - not from any chart value.
 
 | Component | Scope | Requests (chart defaults) |
 | --------- | ----- | ------------------------- |
-| `kasm-agent-operator` | one pod per **cluster** | `100m` / `256Mi`, request = limit (Guaranteed) |
+| `kasm-agent-operator` | one pod per **cluster** | `100m` / `128Mi` (limits `1` / `512Mi`) - see [Sizing the agent stack](#sizing-the-agent-stack) |
 | `kasm-otel-collector` | one pod per **release** | `50m` / `128Mi` (limits `250m` / `512Mi`) |
-| Agent + session proxy | one of each per **Agent CR** (`agent.sessionProxy.replicas` scales the proxy) | operator defaults - `agent.resources` is empty and the proxy has no chart value; measure |
+| Agent | one pod per **Agent CR** | `50m` / `128Mi` (limits `1` / `512Mi`) |
+| Session proxy | per **Agent CR**, `agent.sessionProxy.replicas` or autoscaled | per pod: nginx `50m` / `32Mi` (memory limit `512Mi`), sidecar `25m` / `64Mi` (limits `500m` / `256Mi`) |
 | `kasm-node-prep` | DaemonSet, **per node** | `100m` / `256Mi` (limits `1000m` / `1Gi` for a module build) |
 | `kasm-video-device-plugin` | DaemonSet, **per node** | `10m` / `32Mi` (limits `50m` / `64Mi`) |
 | `kasm-egress-installer` | DaemonSet, **per node** | `50m` / `64Mi` (limits `500m` / `256Mi`) |
@@ -302,6 +303,97 @@ autoscaler.
 
 ---
 
+## Sizing the agent stack
+
+The operator, the agent and the session proxy grow with the number of **concurrent sessions**, not with
+nodes. The chart's defaults are sized to **install on a small cluster**: small requests, so the stack fits
+next to everything else, and limits with room to grow, so nothing is throttled or OOM-killed on the way to
+about 1,000 sessions. Past about 100 sessions, raise the requests so the scheduler - and a node autoscaler -
+reserve what the stack actually uses; a pod using more than it requested is also the first the kubelet
+evicts under memory pressure.
+
+| Component | Chart default (small clusters, up to ~100 sessions) | Up to 1,000 sessions |
+| --------- | --------------------------------------------------- | -------------------- |
+| **Operator** (`operator.resources`) | requests `100m` / `128Mi`, limits `1` / `512Mi` | requests `250m` / `256Mi`, limits `1` / `512Mi` |
+| **Agent** (`agent.resources`) | requests `50m` / `128Mi`, limits `1` / `512Mi` | requests `100m` / `256Mi`, limits `1` / `512Mi` |
+| **Proxy pods** | `sessionProxy.replicas: 1` (`2` if a drain must not interrupt sessions) | `sessionProxy.autoscaling`: `sessionsPerReplica: 400`, `minReplicas: 2`, `maxReplicas: 4` |
+| **nginx** (`sessionProxy.resources`) | requests `50m` / `32Mi`, memory limit `512Mi` | requests `500m` / `128Mi`, memory limit `512Mi` |
+| **Sidecar** (`sessionProxy.sidecarResources`) | requests `25m` / `64Mi`, limits `500m` / `256Mi` | requests `50m` / `64Mi`, limits `500m` / `256Mi` |
+| **nginx workers** (`sessionProxy.nginx`) | defaults | defaults |
+
+The chart's defaults request 225m CPU and 352Mi in all (one proxy pod). For 1,000 sessions:
+
+```yaml
+operator:
+  resources:
+    requests: {cpu: 250m, memory: 256Mi}
+    limits: {cpu: "1", memory: 512Mi}
+agent:
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {cpu: "1", memory: 512Mi}
+  sessionProxy:
+    autoscaling:
+      enabled: true
+      sessionsPerReplica: 400
+      minReplicas: 2
+      maxReplicas: 4
+    resources:
+      requests: {cpu: 500m, memory: 128Mi}
+      limits: {memory: 512Mi}
+    sidecarResources:
+      requests: {cpu: 50m, memory: 64Mi}
+      limits: {cpu: 500m, memory: 256Mi}
+```
+
+Why each is sized the way it is:
+
+- **Operator.** Idle between launches, busy during them: a burst of launches can take a full core, and a
+  CPU-starved operator does not fail, it falls behind, so launches slow until some outlast the agent's
+  wait. Its memory is its informer caches, about nine objects per session. On a large cluster set the
+  memory request equal to the limit, so it is never an eviction candidate.
+- **Agent.** Memory follows the session count; CPU peaks with launch bursts and heartbeats.
+- **Proxy pods.** One is enough for a small install; two means a node drain or a rollout never leaves no
+  proxy at all. Each pod's
+  [connection capacity](#scaling-the-session-proxy) is far above 400 sessions; 400 a pod keeps the stream
+  bandwidth per pod, and the sessions a pod takes down with it, moderate.
+- **nginx.** CPU follows stream bandwidth - allow about **0.15 CPU and 25Mi per 100 active streams** of
+  around 1.3 Mbps. No CPU limit: a CPU limit also sets nginx's `worker_processes`, and with it the
+  connection capacity (below).
+- **Sidecar.** Every proxy pod's sidecar holds the whole route table (a route per service per session), so
+  its memory grows with the session count. It applies each session's start or end on its own, so launches
+  cost it little CPU; a periodic full resync is the most it does at once.
+
+### Beyond 1,000 sessions
+
+Scale from the 1,000-session column, per further 1,000 concurrent sessions (requests and limits alike):
+
+| Component | Add |
+| --------- | --- |
+| Operator memory | about `75Mi` (request and limit) |
+| Agent memory limit | about `40Mi` |
+| Sidecar memory limit | about `15Mi` per proxy pod |
+| Proxy pods | `maxReplicas` to `ceil(sessions / 400)` plus one |
+
+CPU limits of one core for the operator and the agent remain enough; what grows is how long a large launch
+burst takes to work through.
+
+### What each session costs the cluster
+
+Beyond its pod, each session is a `KasmWorkspace`, a Deployment and its ReplicaSet, a Service with its own
+**ClusterIP** and EndpointSlice, and four ConfigMaps - about nine API objects. Two consequences:
+
+- **The Service CIDR caps concurrent sessions.** One ClusterIP each, next to every other Service in the
+  cluster. A `/24` service range (some small or test distributions) stops sessions at about 250; a `/16`
+  holds 65,000.
+- **The API server and etcd carry them.** Managed control planes scale themselves; a self-managed one
+  should expect roughly 1GB more API server memory per few thousand sessions.
+
+The agent's heartbeat to the manager lists every session, about **170KB per 1,000 sessions**, sent every
+`heartbeatIntervalSeconds` (default 5).
+
+---
+
 ## Scaling the session proxy
 
 The session proxy is not the workspace tier: it is the nginx pod every session's streams pass through on
@@ -320,9 +412,19 @@ Two things make it unlike an ordinary Deployment:
 **One pod's capacity.** `sessionProxy.nginx` sets `workerProcesses` and `workerConnections`. A proxied
 connection uses two of a worker's connections (client and upstream), and a session holds one per service
 in its port map (vnc, audio, uploads, ...), so a pod carries about
-`workerProcesses × workerConnections / (2 × services-per-session)` sessions. Set `sessionProxy.resources`
-requests to match, so the scheduler and a node autoscaler account for the pod instead of packing it onto
-a node they later remove.
+`workerProcesses × workerConnections / (2 × services-per-session)` sessions. With the defaults (6 workers ×
+1024) that is about 3,000 proxied connections; past that nginx refuses **every** new request - new streams
+and plain HTTP alike - while the streams it already holds carry on. Size `sessionsPerReplica` well inside it.
+
+Two things tie capacity to resources:
+
+- **A CPU limit cuts connections.** Left empty, `workerProcesses` follows the container's CPU limit,
+  rounded up, so a `1` CPU limit leaves a single worker - about 500 proxied connections. Leave the proxy
+  without a CPU limit (the chart default), or set `workerProcesses`/`workerConnections` explicitly when you
+  add one.
+- **CPU follows bandwidth, not sessions.** Relaying costs about 0.15 CPU per 100 active streams of around
+  1.3 Mbps; set the `sessionProxy.resources` CPU request from `sessionsPerReplica` on that basis, so the
+  scheduler and a node autoscaler account for the pod instead of packing it onto a node they later remove.
 
 **Operator-driven autoscaling.** `sessionProxy.autoscaling` has the operator set the replica count from
 the live session count — `ceil(sessions / sessionsPerReplica)`, clamped to `minReplicas`..`maxReplicas`.
@@ -334,16 +436,16 @@ on, `sessionProxy.replicas` is ignored, and `status.sessionProxy` reports `repli
 sessionProxy:
   autoscaling:
     enabled: true
-    sessionsPerReplica: 25      # from the nginx capacity above
+    sessionsPerReplica: 400     # well inside the nginx capacity above
     minReplicas: 2
-    maxReplicas: 20
+    maxReplicas: 4              # ceil(peak sessions / 400) + 1
     scaleDownStabilizationSeconds: 1800
-  nginx:
-    workerConnections: 2048
   resources:
     requests:
-      cpu: 250m
-      memory: 256Mi
+      cpu: 500m                 # ~0.15 CPU per 100 active streams
+      memory: 128Mi
+    limits:
+      memory: 512Mi             # no CPU limit: it would also cut workerProcesses
 ```
 
 **External autoscaling (KEDA or HPA).** `sessionProxy.externallyScaled: true` leaves the replica count to
@@ -368,7 +470,7 @@ spec:
     - type: kubernetes-workload
       metadata:
         podSelector: app.kubernetes.io/component=workspace # count running session pods
-        value: "25"                                        # one proxy pod per 25 sessions
+        value: "400"                                       # one proxy pod per 400 sessions
   advanced:
     horizontalPodAutoscalerConfig:
       behavior:

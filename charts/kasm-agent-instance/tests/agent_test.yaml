@@ -204,10 +204,6 @@ tests:
       - isNull:
           path: spec.sessionProxy.nginx
       - isNull:
-          path: spec.sessionProxy.resources
-      - isNull:
-          path: spec.sessionProxy.sidecarResources
-      - isNull:
           path: spec.sessionProxy.nodeSelector
       - isNull:
           path: spec.sessionProxy.tolerations
@@ -850,8 +846,40 @@ tests:
           path: spec.nodeSelector
       - isNull:
           path: spec.workspacesNodeSelector
+
+  # ---------- sizing defaults (small requests, limits for ~1,000 sessions; see docs/explanation/capacity.md) ----------
+  - it: sizes the agent, the session proxy and its sidecar by default
+    asserts:
+      - equal:
+          path: spec.resources
+          value:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {cpu: "1", memory: 512Mi}
+      - equal:
+          path: spec.sessionProxy.resources
+          value:
+            requests: {cpu: 50m, memory: 32Mi}
+            limits: {memory: 512Mi}
+      - equal:
+          path: spec.sessionProxy.sidecarResources
+          value:
+            requests: {cpu: 25m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+      - notExists:
+          path: spec.sessionProxy.resources.limits.cpu
+
+  - it: omits the sizing defaults when they are nulled
+    set:
+      resources: null
+      sessionProxy.resources: null
+      sessionProxy.sidecarResources: null
+    asserts:
       - isNull:
           path: spec.resources
+      - isNull:
+          path: spec.sessionProxy.resources
+      - isNull:
+          path: spec.sessionProxy.sidecarResources
 
   - it: renders the optional fields once they are set
     set:

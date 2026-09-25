@@ -113,33 +113,32 @@ extraEnv: []
 
 # resources -- CPU and memory requests and limits for the controller-manager container. Both requests
 # and limits must set `cpu` and `memory`; the repository's Kyverno policies reject a container that
-# leaves any of the four unset.
+# leaves any of the four unset. The requests are small, so the operator fits a small cluster; the limits
+# leave it room to grow to about 1,000 concurrent sessions. Past about 100 sessions raise the requests - see
+# "Sizing the agent stack" in docs/explanation/capacity.md.
 #
 resources:
   limits:
-    # resources.limits.cpu -- The CPU limit for the controller-manager container. The default is carried
-    # over from the operator's own kustomize manifests, where 100m has been enough for a controller that
-    # spends most of its time watching. Raise it if reconcile latency climbs on a cluster with many
-    # `Agent` or `KasmWorkspace` objects; a throttled controller does not fail, it just falls behind.
+    # resources.limits.cpu -- The CPU limit for the controller-manager container. The operator is idle
+    # between launches but reconciles hard during a burst of them, up to a full core. A throttled
+    # controller does not fail, it falls behind: launches slow down and can outlast the agent's wait.
     #
-    cpu: 100m
-    # resources.limits.memory -- The memory limit for the controller-manager container, also carried over
-    # from the operator's kustomize manifests. The controller's informer caches hold every object it
-    # watches, so this is the value to raise on a large cluster rather than letting the manager be
-    # OOMKilled part way through a reconcile.
+    cpu: "1"
+    # resources.limits.memory -- The memory limit for the controller-manager container. The informer
+    # caches hold every object the operator watches, about nine per session, so memory grows with the
+    # session count. Beyond 1,000 sessions allow about 75Mi more per further 1,000.
     #
-    memory: 256Mi
+    memory: 512Mi
   requests:
-    # resources.requests.cpu -- The CPU request for the controller-manager container. It deliberately
-    # matches `resources.limits.cpu`, which puts the operator Pod in the Guaranteed QoS class so the
-    # scheduler reserves the capacity and the kubelet does not pick it first under node pressure.
+    # resources.requests.cpu -- The CPU request for the controller-manager container. It covers the idle
+    # operator; the limit above is what a launch burst borrows.
     #
     cpu: 100m
-    # resources.requests.memory -- The memory request for the controller-manager container. It matches
-    # `resources.limits.memory` for the same Guaranteed QoS reason, so keep the two in step if you raise
-    # either.
+    # resources.requests.memory -- The memory request for the controller-manager container. It covers a
+    # cluster of about 100 sessions. An operator using more than it requested is a candidate for eviction
+    # under node memory pressure, so on a larger cluster raise it, up to `resources.limits.memory`.
     #
-    memory: 256Mi
+    memory: 128Mi
 
 # podAnnotations -- Additional annotations to add to the operator Pod. The chart's own
 # `kubectl.kubernetes.io/default-container` annotation always wins and cannot be overridden here.

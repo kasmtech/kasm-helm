@@ -171,23 +171,44 @@ sessionProxy:
   # sessionProxy.nginx -- nginx worker sizing for one proxy pod, and so its connection capacity. A proxied
   # connection uses two of a worker's connections (client and upstream), and a session holds one per service
   # in its port map (vnc, audio, uploads, ...), so a pod carries roughly
-  # `workerProcesses * workerConnections / (2 * services-per-session)` sessions. Omitted from the Agent
-  # resource while both values are empty, leaving the operator's defaults in charge.
+  # `workerProcesses * workerConnections / (2 * services-per-session)` sessions. With the defaults (6 x 1024)
+  # that is about 3,000 proxied connections; past it nginx refuses every new request, streams and HTTP alike.
+  # Omitted from the Agent resource while both values are empty, leaving the operator's defaults in charge.
   nginx:
     # sessionProxy.nginx.workerProcesses -- nginx `worker_processes`. Empty follows the container's CPU limit
-    # when one is set (rounded up), otherwise 6.
+    # when one is set (rounded up), otherwise 6. So a CPU limit on the proxy also cuts its connection
+    # capacity: a 1-CPU limit leaves one worker and about 500 proxied connections. Set this (or
+    # `workerConnections`) whenever you set a CPU limit in `sessionProxy.resources`.
     workerProcesses: ""
     # sessionProxy.nginx.workerConnections -- nginx `worker_connections`, per worker; the worker's
     # file-descriptor limit is raised to match. Empty leaves the operator's default of 1024.
     workerConnections: ""
   # sessionProxy.resources -- Resource requests/limits for the nginx container, as a Kubernetes
-  # `ResourceRequirements` map (`requests:`/`limits:`). Set requests: without them the proxy counts for nothing
-  # in the scheduler's or a node autoscaler's arithmetic and can be packed onto a node that is then scaled
-  # away, taking its sessions with it. Omitted from the Agent resource when empty.
-  resources: {}
+  # `ResourceRequirements` map (`requests:`/`limits:`). Requests keep the proxy in the scheduler's and a node
+  # autoscaler's arithmetic, so it is not packed onto a node that is then scaled away, taking its sessions
+  # with it. nginx's CPU follows stream bandwidth: allow about 0.15 CPU and 25Mi per 100 active streams of
+  # around 1.3 Mbps. The default request is small, to fit a small cluster; raise it with the sessions a pod
+  # carries (`sessionsPerReplica`). There is deliberately no CPU limit, which would also cut `workerProcesses`
+  # (above). Omitted from the Agent resource
+  # when null (`resources: null`; an empty map keeps these defaults, since Helm merges it with them).
+  resources:
+    requests:
+      cpu: 50m
+      memory: 32Mi
+    limits:
+      memory: 512Mi
   # sessionProxy.sidecarResources -- Resource requests/limits for the kasm-nginx-sidecar container, same shape
-  # as `sessionProxy.resources`. Omitted from the Agent resource when empty.
-  sidecarResources: {}
+  # as `sessionProxy.resources`. Every replica's sidecar holds the whole route table (4 routes a session), so
+  # its memory grows with the agent's session count: under 64Mi to 1,000 sessions, about 130Mi at 10,000. It
+  # updates the table one session at a time, so launches cost it little CPU; the CPU limit covers its periodic
+  # full resync. Omitted from the Agent resource when null.
+  sidecarResources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
   # sessionProxy.nodeSelector -- Node selector for the proxy pods. Empty has them follow the agent's own
   # `nodeSelector`. Set it to keep the proxy off a node pool an autoscaler shrinks, since a proxy pod taken
   # away takes every stream it carries. Omitted from the Agent resource when empty.
@@ -589,10 +610,19 @@ serverID: ""
 #
 apiServerURL: ""
 
-# resources -- Compute resources for the agent container, passed through to `spec.resources` verbatim. Omitted
-# from the Agent resource when empty, in which case the operator applies its own defaults.
+# resources -- Compute resources for the agent container, passed through to `spec.resources` verbatim. The
+# requests are small, to fit a small cluster; the limits leave room for about 1,000 concurrent sessions. The
+# agent's memory grows with the session count (about 128Mi at 1,000, 400Mi at 10,000), and it can use most of
+# a core while a launch burst is on. Omitted from the
+# Agent resource when null (`resources: null`), which leaves the agent with no requests or limits at all.
 #
-resources: {}
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi
 
 # otel -- OpenTelemetry export settings, rendered as environment variables on the Agent.
 #
