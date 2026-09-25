@@ -432,11 +432,13 @@ spec:
                           description: |-
                             Priority orders the pull: on every node the controller pulls the
                             highest priority first, and among equal priorities the spec order.
-                            The agent sets it from the number of workspaces running the image, so
-                            a node joining the cluster stages what sessions are using now before
-                            the rest of the catalog; an explicit priority on an Agent's
-                            extraImages sits wherever the admin puts it. 0 (the default) is the
-                            lowest.
+                            The agent sets it to the image's rank by the number of workspaces
+                            running it - n for the most used of the n images in use, down to 1,
+                            and 0 for an image nothing uses - so a node joining the cluster stages
+                            what sessions are using now before the rest of the catalog. A rank,
+                            unlike the count, only changes when the order does. An explicit
+                            priority on an Agent's extraImages sits wherever the admin puts it.
+                            0 (the default) is the lowest.
                           format: int32
                           type: integer
                         registry:
@@ -3065,6 +3067,13 @@ spec:
                       or under way. ExternallyScaled, it is Replicas.
                     format: int32
                     type: integer
+                  lastScaleDownTime:
+                    description: |-
+                      LastScaleDownTime is when the autoscaler last removed a replica. The
+                      next goes no sooner than a minute after it, however often the Agent is
+                      reconciled, so that each removed replica has had its turn to drain.
+                    format: date-time
+                    type: string
                   replicas:
                     description: Replicas is the count the proxy Deployment is set
                       to.
