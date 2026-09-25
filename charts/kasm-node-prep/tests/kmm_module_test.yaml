@@ -59,7 +59,7 @@ tests:
       - equal:
           path: spec.moduleLoader.container.modprobe.parameters
           value:
-            - devices=4
+            - devices=20
             - exclusive_caps=1
       - equal:
           path: spec.moduleLoader.container.kernelMappings[0].regexp

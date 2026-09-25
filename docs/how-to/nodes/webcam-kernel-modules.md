@@ -84,7 +84,7 @@ default `rootMode: host`.
      --namespace kasm-agent \
      --set nodePrep.enabled=true \
      --set nodePrep.modules.v4l2loopback.enabled=true \
-     --set nodePrep.modules.v4l2loopback.videoDevices=4 \
+     --set nodePrep.modules.v4l2loopback.videoDevices=20 \
      --set videoDevicePlugin.enabled=true
    ```
 
@@ -167,7 +167,7 @@ The result is identical in both modes.
    lsmod | grep v4l2loopback
    ```
 
-   Expected: `/dev/video0 /dev/video1 /dev/video2 /dev/video3` for the default `videoDevices: 4`.
+   Expected: `/dev/video0` .. `/dev/video19` for the default `videoDevices: 20`.
 
 2. The extended resource is allocatable - the number must equal `videoDevices`:
 
@@ -213,7 +213,7 @@ nodePrep:
   modules:
     v4l2loopback:
       enabled: true
-      videoDevices: 4
+      videoDevices: 20
       # method: kmm            # delegate to the KMM operator instead of compiling on nodes
       # kmm:
       #   image:

@@ -17,7 +17,7 @@ tests:
           path: data["ensure-modules.sh"]
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'V4L2_DEVICES=''4'''
+          pattern: 'V4L2_DEVICES=''20'''
       - matchRegex:
           path: data["ensure-modules.sh"]
           pattern: 'V4L2_EXCLUSIVE_CAPS=''1'''

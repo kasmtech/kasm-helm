@@ -77,9 +77,10 @@ modules:
     method: build
     # modules.v4l2loopback.videoDevices -- Number of virtual video devices to create per node
     # (`devices=` module parameter). This is the upper bound on concurrent webcam-enabled sessions on that
-    # node, so size it against the node's workspace capacity.
+    # node, so keep it at or above the node's workspace capacity. A node that already has the module loaded
+    # keeps the count it was loaded with until it reboots or is replaced.
     #
-    videoDevices: 4
+    videoDevices: 20
     # modules.v4l2loopback.exclusiveCaps -- Announce the video capture capability only once a producer has
     # opened the device (`exclusive_caps=1`). Required by Chrome/Chromium based applications inside the
     # workspace, which ignore loopback devices that advertise capture with no stream attached.
