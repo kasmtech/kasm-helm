@@ -8,6 +8,8 @@
 {{- $operatorEnabled := dig "enabled" false $operator -}}
 {{- $otelEnabled := dig "enabled" false $otelCollector -}}
 {{- $videoEnabled := dig "enabled" false (.Values.videoDevicePlugin | default dict) -}}
+{{- $driEnabled := dig "enabled" false (.Values.driDevicePlugin | default dict) -}}
+{{- $driResource := dig "workspaceSecurity" "driResource" "" $agent -}}
 {{- $csiRcloneEnabled := dig "enabled" false (.Values.csiRclone | default dict) -}}
 {{- $gpuOperatorEnabled := dig "enabled" false (.Values.gpuOperator | default dict) -}}
 {{- $nfsEnabled := dig "enabled" false (index .Values "nfs-server-provisioner" | default dict) -}}
@@ -34,6 +36,7 @@ Installed with this release:
 {{ end }}{{ if $agentEnabled }}  * agent               the Agent resource and its session proxy
 {{ end }}{{ if $nodePrepEnabled }}  * nodePrep            the privileged node preparation DaemonSet (kernel modules)
 {{ end }}{{ if $videoEnabled }}  * videoDevicePlugin   the video device plugin DaemonSet
+{{ end }}{{ if $driEnabled }}  * driDevicePlugin     the DRI (GPU render node) device plugin DaemonSet
 {{ end }}{{ if $csiRcloneEnabled }}  * csiRclone           the Veloxpack rclone CSI driver (rclone.csi.veloxpack.io)
 {{ end }}{{ if $gpuOperatorEnabled }}  * gpuOperator         the NVIDIA GPU Operator
 {{ end }}{{ if $nfsEnabled }}  * nfs-server-provisioner  the in-cluster NFS server provisioner (ReadWriteMany StorageClass)
@@ -124,6 +127,15 @@ WARNING: agent.storageMappings.enabled is true but csiRclone.enabled is false.
   else, workspace pods with a storage mapping will stay Pending with an unbound PVC. Either set
   csiRclone.enabled=true, or install the driver separately. Nodes also need the FUSE kernel module
   for rclone mounts to work.
+
+{{ end }}
+{{- if and $driEnabled $agentEnabled (ne $driResource (dig "resourceName" "kasm.com/dri" (.Values.driDevicePlugin | default dict))) }}
+WARNING: driDevicePlugin.enabled is true but agent.workspaceSecurity.driResource does not name its resource.
+
+  The plugin advertises GPU render nodes as {{ dig "resourceName" "kasm.com/dri" .Values.driDevicePlugin }}, but the agent only requests
+  that resource when agent.workspaceSecurity.driResource names it. Until then, images that ask for
+  /dev/dri get hostPath mounts that an unprivileged session cannot open, and render in software. Set
+  agent.workspaceSecurity.driResource={{ dig "resourceName" "kasm.com/dri" .Values.driDevicePlugin }}.
 
 {{ end }}
 {{- if and $videoEnabled (not (and $nodePrepEnabled $v4l2)) }}

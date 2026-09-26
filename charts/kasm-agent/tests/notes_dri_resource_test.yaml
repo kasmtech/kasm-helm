@@ -1,0 +1,36 @@
+suite: NOTES warn about kasm.com/dri
+
+templates:
+  - templates/NOTES.txt
+
+set:
+  agent.manager.hostname: kasm.example.com
+  agent.manager.token: t0k3n
+  agent.publicHostname: sessions.example.com
+
+tests:
+  - it: warns when the DRI plugin is on but the agent does not request its resource
+    set:
+      driDevicePlugin.enabled: true
+    asserts:
+      - matchRegexRaw:
+          pattern: 'driDevicePlugin.enabled is true but agent.workspaceSecurity.driResource does not name its resource'
+      - matchRegexRaw:
+          pattern: 'agent.workspaceSecurity.driResource=kasm.com/dri'
+
+  - it: says nothing when the agent requests the plugin's resource
+    set:
+      driDevicePlugin.enabled: true
+      agent.workspaceSecurity.driResource: kasm.com/dri
+    asserts:
+      - notMatchRegexRaw:
+          pattern: 'driResource does not name'
+      - matchRegexRaw:
+          pattern: 'driDevicePlugin +the DRI'
+
+  - it: says nothing with the plugin off, whatever driResource is
+    set:
+      agent.workspaceSecurity.driResource: contoso.com/gpu
+    asserts:
+      - notMatchRegexRaw:
+          pattern: 'driResource does not name'

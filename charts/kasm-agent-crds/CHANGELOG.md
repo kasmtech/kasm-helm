@@ -9,6 +9,7 @@ All notable changes to the kasm-agent-crds chart are documented here.
 - `Chart.yaml`'s description listed three of the five CRDs; it names the `pools.kasm.ai` pair too.
 
 ### Changed
+- CRDs synced from the operator: `Agent.spec.workspaceSecurity.driResource` names the extended resource a DRI device plugin advertises GPU render nodes as; when set, an image's `/dev/dri` devices request one of it instead of a hostPath mount.
 - CRDs synced from the operator: `Agent.spec.workspaceSecurity.deviceAllowlist` lists which host devices an image's run config `devices` may pass through to its session pod (default: the DRI card and render nodes; `["none"]` passes none).
 - CRDs synced from the operator (image pulls don't fail a workspace): `KasmWorkspace.status.imagesPulledTime` records when a pod's images reached its node; the operator's 70s readiness deadline counts from then instead of from creation, and a pull in progress (Ready reason `PullingImage`) is bounded by 15 minutes instead. Status only.
 - CRDs synced from the operator (sessions as pods): `KasmWorkspace.spec.stopped` - stop and pause set it and the operator deletes the session's pod; resume clears it - and `spec.service` keeps only `ports`, there being no per-session Service any more.

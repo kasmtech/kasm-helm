@@ -178,6 +178,47 @@ videoDevicePlugin:
   #
   nameOverride: kasm-video-device-plugin
 
+# driDevicePlugin -- The DRI device plugin: `kasm-video-device-plugin` a second time (alias `driDevicePlugin`),
+# advertising each node's GPU render nodes (`/dev/dri/renderD*`) as `kasm.com/dri`. Kubernetes lets an
+# unprivileged container open only the devices a device plugin handed it, so this is what gives an ordinary
+# session hardware-accelerated rendering (EGL/VirtualGL through Mesa). A session allocated one gets the render
+# node, its card node and `DRINODE`. Set `agent.workspaceSecurity.driResource: kasm.com/dri` as well, or the
+# agent never requests it; the session still needs the node's `render` gid (`agent.workspaceSecurity.
+# supplementalGroups`) to open the device. Any other subchart value is passed through. See
+# docs/how-to/nodes/gpu.md.
+#
+driDevicePlugin:
+  # driDevicePlugin.enabled -- Install the DRI device plugin DaemonSet with this release.
+  #
+  enabled: false
+  # driDevicePlugin.nameOverride -- Pins the subchart's resource names, as for `videoDevicePlugin`, and keeps
+  # them apart from the webcam plugin's.
+  #
+  nameOverride: kasm-dri-device-plugin
+  # driDevicePlugin.deviceKind -- Switches the plugin to GPU render nodes. Leave as `dri`.
+  #
+  deviceKind: dri
+  # driDevicePlugin.devicePrefix -- Render nodes under `/dev/dri`. Leave as `renderD`.
+  #
+  devicePrefix: renderD
+  # driDevicePlugin.resourceName -- The resource sessions request; `agent.workspaceSecurity.driResource` must
+  # name the same one.
+  #
+  resourceName: kasm.com/dri
+  # driDevicePlugin.allocateEnvVar -- Set to the allocated render node; Kasm images read `DRINODE`.
+  #
+  allocateEnvVar: DRINODE
+  # driDevicePlugin.deviceShares -- Sessions per GPU. Every session on a GPU shares its video memory and time,
+  # so size this to the GPU's memory over what a session needs.
+  #
+  deviceShares: 8
+  # driDevicePlugin.driDrivers -- Kernel drivers whose GPUs to advertise. The default is the GPUs Mesa drives
+  # (Intel, AMD). An NVIDIA GPU needs NVIDIA's own userspace libraries in the container, which Mesa images
+  # lack, so it is left to the `nvidia.com/gpu` path (`gpuOperator`, `agent.gpu.enabled`). Empty advertises
+  # every render node.
+  #
+  driDrivers: i915,xe,amdgpu
+
 # egressInstaller -- The Kasm egress installer (`kasm-egress-installer` subchart, alias
 # `egressInstaller`). A privileged DaemonSet that chains a CNI shim into every node's CNI conflist
 # and, on request, brings up an OpenVPN/WireGuard/Ziti tunnel inside a session's network namespace.

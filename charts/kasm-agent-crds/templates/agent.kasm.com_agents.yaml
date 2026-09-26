@@ -2760,6 +2760,20 @@ spec:
                       pattern: ^(/.*|none)$
                       type: string
                     type: array
+                  driResource:
+                    description: |-
+                      DRIResource is the extended resource a DRI device plugin advertises GPU
+                      render nodes as (e.g. kasm.com/dri, from video-device-plugin with
+                      DEVICE_KIND=dri). When set, a launch whose run_config devices name an
+                      allowed /dev/dri node requests one of it instead of mounting those
+                      nodes by hostPath, and the plugin maps the render node, its card node
+                      and DRINODE into the container. Unset keeps the hostPath mounts, which
+                      only a privileged session can open: the container runtime admits a
+                      device into a container's device cgroup only when it was privileged or
+                      a device plugin handed it over.
+                    maxLength: 317
+                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/[A-Za-z0-9]([-A-Za-z0-9_.]*[A-Za-z0-9])?$
+                    type: string
                   fsGroupChangePolicy:
                     default: OnRootMismatch
                     description: |-

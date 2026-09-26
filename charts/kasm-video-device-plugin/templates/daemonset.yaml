@@ -55,6 +55,21 @@ spec:
             # Env var the plugin injects into a container allocated exactly one device.
             - name: DEVICE_ENV_VAR
               value: {{ .Values.allocateEnvVar | quote }}
+            {{- with .Values.deviceKind }}
+            # "dri": advertise GPU render nodes under /dev/dri rather than /dev entries.
+            - name: DEVICE_KIND
+              value: {{ . | quote }}
+            {{- end }}
+            {{- if ne (int .Values.deviceShares) 1 }}
+            # How many containers may be allocated each device.
+            - name: DEVICE_SHARES
+              value: {{ .Values.deviceShares | quote }}
+            {{- end }}
+            {{- with .Values.driDrivers }}
+            # Kernel drivers whose render nodes to advertise.
+            - name: DRI_DRIVERS
+              value: {{ . | quote }}
+            {{- end }}
           # The plugin has to stat and open the node's device files to enumerate and hand them out, which
           # an unprivileged container cannot do.
           securityContext:

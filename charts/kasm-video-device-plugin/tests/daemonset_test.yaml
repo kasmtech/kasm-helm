@@ -44,6 +44,33 @@ tests:
             - name: DEVICE_ENV_VAR
               value: CONTOSO_WEBCAM_DEVICE
 
+  - it: renders the dri kind with shares and a driver filter
+    set:
+      deviceKind: dri
+      devicePrefix: renderD
+      resourceName: kasm.com/dri
+      allocateEnvVar: DRINODE
+      deviceShares: 8
+      driDrivers: i915,xe,amdgpu
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env
+          value:
+            - name: DEVICE_PREFIX
+              value: renderD
+            - name: MAX_DEVICES
+              value: "128"
+            - name: RESOURCE_NAME
+              value: kasm.com/dri
+            - name: DEVICE_ENV_VAR
+              value: DRINODE
+            - name: DEVICE_KIND
+              value: dri
+            - name: DEVICE_SHARES
+              value: "8"
+            - name: DRI_DRIVERS
+              value: i915,xe,amdgpu
+
   - it: uses the Kasm-built image by default
     asserts:
       - equal:

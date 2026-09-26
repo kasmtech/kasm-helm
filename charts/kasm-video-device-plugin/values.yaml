@@ -65,6 +65,28 @@ resourceName: kasm.com/video
 #
 allocateEnvVar: KASM_VIDEO_DEVICE
 
+# deviceKind -- What the plugin advertises. Empty (the default) is the webcam plugin described above. `dri`
+# advertises the node's GPU render nodes (`/dev/dri/renderD*`) instead: a session allocated one gets the
+# render node and its matching card node, with `allocateEnvVar` set to the render node. Kubernetes only
+# lets an unprivileged container open a device a device plugin handed it, so this is how a session gets
+# hardware-accelerated rendering without running privileged. A `dri` instance also needs `devicePrefix:
+# renderD`, its own `resourceName` (e.g. `kasm.com/dri`) and `allocateEnvVar: DRINODE`; the `kasm-agent`
+# umbrella's `driDevicePlugin` sets all of them.
+#
+deviceKind: ""
+
+# deviceShares -- How many sessions may share each device: the plugin advertises every device this many
+# times. `1` (the default) gives each session a device of its own, as webcams need. A GPU render node can be
+# shared; with more than one share the plugin places each session on the device with the most shares free.
+#
+deviceShares: 1
+
+# driDrivers -- `dri` only: comma-separated kernel drivers whose render nodes to advertise (e.g.
+# `i915,xe,amdgpu`), matched against the node's `/sys/class/drm/renderD*/device/driver`. Empty advertises
+# every render node.
+#
+driDrivers: ""
+
 # nodeSelector -- Node labels that select which nodes run the device plugin. Set this to the same selector
 # used by the `kasm-node-prep` chart so `kasm.com/video` is only advertised on nodes where the v4l2loopback
 # module is actually loaded; otherwise the scheduler can place a webcam session on a node with no devices.

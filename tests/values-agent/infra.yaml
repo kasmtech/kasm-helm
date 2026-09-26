@@ -30,6 +30,9 @@ nodePrep:
 videoDevicePlugin:
   enabled: true
 
+driDevicePlugin:
+  enabled: true
+
 egressInstaller:
   enabled: true
 

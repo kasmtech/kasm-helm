@@ -14,6 +14,9 @@ dependencies:
 - name: kasm-video-device-plugin
   repository: file://../kasm-video-device-plugin
   version: 1.1200.0-develop
+- name: kasm-video-device-plugin
+  repository: file://../kasm-video-device-plugin
+  version: 1.1200.0-develop
 - name: kasm-egress-installer
   repository: file://../kasm-egress-installer
   version: 1.1200.0-develop
@@ -26,5 +29,5 @@ dependencies:
 - name: nfs-server-provisioner
   repository: https://kubernetes-sigs.github.io/nfs-ganesha-server-and-external-provisioner/
   version: 1.8.0
-digest: sha256:a4f64495ecf355b30b6812ee8065185d3f424419d38a631c3319f6e8d231ab67
-generated: "2026-09-16T15:57:56.240337-05:00"
+digest: sha256:f810f34609e697fde2fe465c0ec0bcfb607cfe187ae4b3c0513dc826c6112777
+generated: "2026-09-25T19:30:23.221688-05:00"

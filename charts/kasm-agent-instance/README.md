@@ -253,7 +253,7 @@ string
 			<td>Fully override the generated name prefix for the satellite objects. When set, those names are derived from this instead of from the release name and the chart name. </td>
 		</tr>
 		<tr>
-			<td id="gatewayRoute"><a href="./values.yaml#L988">gatewayRoute</a></td>
+			<td id="gatewayRoute"><a href="./values.yaml#L995">gatewayRoute</a></td>
 			<td>
 object
 </td>
@@ -272,7 +272,7 @@ parentRef:
 			<td>Optionally have the OPERATOR create the Gateway API TLSRoute, rather than rendering one from this chart. Same end result as `tlsRoute` - SNI-based TLS passthrough to the session proxy's own certificate - but the operator owns the route: it creates it, reconciles it, and keeps it aligned with the session-proxy Service it also owns, so the two cannot drift apart. `tlsRoute` is the chart-managed equivalent, for operator builds that predate this field or when the route has to live in the Helm release (owned by it, torn down with it, patched by other release tooling) rather than under the operator's ownership. Prefer this one whenever the operator supports it. The whole block is omitted from the Agent resource when disabled. </td>
 		</tr>
 		<tr>
-			<td id="gatewayRoute--enabled"><a href="./values.yaml#L995">gatewayRoute.enabled</a></td>
+			<td id="gatewayRoute--enabled"><a href="./values.yaml#L1002">gatewayRoute.enabled</a></td>
 			<td>
 bool
 </td>
@@ -286,7 +286,7 @@ false
 			<td>Have the operator create the TLSRoute. Same cluster-side prerequisites as `tlsRoute`: the TLSRoute CRD (standard channel since Gateway API 1.5), and a Gateway with a `protocol: TLS` / `tls.mode: Passthrough` listener whose `allowedRoutes` admits this namespace. `httpRoute`, `ingress`, `route`, `tlsRoute` and `gatewayRoute` are alternatives - enable at most one of the five, since all of them point at the same session-proxy Service. Between the two passthrough options, prefer `gatewayRoute` when the operator supports it and fall back to `tlsRoute` when it does not.</td>
 		</tr>
 		<tr>
-			<td id="gatewayRoute--hostnames"><a href="./values.yaml#L1019">gatewayRoute.hostnames</a></td>
+			<td id="gatewayRoute--hostnames"><a href="./values.yaml#L1026">gatewayRoute.hostnames</a></td>
 			<td>
 list
 </td>
@@ -300,7 +300,7 @@ list
 			<td>SNI hostnames the route matches. Unlike `tlsRoute.hostnames`, which this chart defaults, these are defaulted by the *operator* to `[publicHostname]`, so leaving this empty is the normal case - it is omitted from the Agent resource and the operator fills it in. The session proxy's own certificate (`sessionProxy.certSecretName`) still has to cover whatever names end up in force, since the connection reaches it undecrypted. Example:   hostnames:     - agent.example.com     - alt.example.com</td>
 		</tr>
 		<tr>
-			<td id="gatewayRoute--parentRef"><a href="./values.yaml#L998">gatewayRoute.parentRef</a></td>
+			<td id="gatewayRoute--parentRef"><a href="./values.yaml#L1005">gatewayRoute.parentRef</a></td>
 			<td>
 object
 </td>
@@ -316,7 +316,7 @@ sectionName: ""
 			<td>The single Gateway the operator attaches the TLSRoute to. Note the shape differs from `tlsRoute.parentRefs`: the CRD takes one reference, not a list.</td>
 		</tr>
 		<tr>
-			<td id="gatewayRoute--parentRef--name"><a href="./values.yaml#L1001">gatewayRoute.parentRef.name</a></td>
+			<td id="gatewayRoute--parentRef--name"><a href="./values.yaml#L1008">gatewayRoute.parentRef.name</a></td>
 			<td>
 string
 </td>
@@ -330,7 +330,7 @@ string
 			<td>REQUIRED when `gatewayRoute.enabled` is true. Name of the Gateway resource. Templating fails when it is empty, since the CRD rejects the resource without it.</td>
 		</tr>
 		<tr>
-			<td id="gatewayRoute--parentRef--namespace"><a href="./values.yaml#L1004">gatewayRoute.parentRef.namespace</a></td>
+			<td id="gatewayRoute--parentRef--namespace"><a href="./values.yaml#L1011">gatewayRoute.parentRef.namespace</a></td>
 			<td>
 string
 </td>
@@ -344,7 +344,7 @@ string
 			<td>Namespace of the Gateway. Omitted from the Agent resource when empty, which lets the operator default it to the Agent's own namespace.</td>
 		</tr>
 		<tr>
-			<td id="gatewayRoute--parentRef--sectionName"><a href="./values.yaml#L1009">gatewayRoute.parentRef.sectionName</a></td>
+			<td id="gatewayRoute--parentRef--sectionName"><a href="./values.yaml#L1016">gatewayRoute.parentRef.sectionName</a></td>
 			<td>
 string
 </td>
@@ -429,7 +429,7 @@ int
 			<td>How often the agent heartbeats the manager. </td>
 		</tr>
 		<tr>
-			<td id="httpRoute"><a href="./values.yaml#L822">httpRoute</a></td>
+			<td id="httpRoute"><a href="./values.yaml#L829">httpRoute</a></td>
 			<td>
 object
 </td>
@@ -446,7 +446,7 @@ parentRefs: []
 			<td>Optionally expose the operator-created session-proxy Service through a Gateway API Gateway. </td>
 		</tr>
 		<tr>
-			<td id="httpRoute--backendPort"><a href="./values.yaml#L840">httpRoute.backendPort</a></td>
+			<td id="httpRoute--backendPort"><a href="./values.yaml#L847">httpRoute.backendPort</a></td>
 			<td>
 int
 </td>
@@ -460,7 +460,7 @@ int
 			<td>Port on the session-proxy Service to forward to. The default, 4445, is the proxy's plain-HTTP listener; TLS for the public hostname is expected to terminate at the Gateway. Use 4444 to forward to the proxy's own HTTPS listener instead.</td>
 		</tr>
 		<tr>
-			<td id="httpRoute--enabled"><a href="./values.yaml#L826">httpRoute.enabled</a></td>
+			<td id="httpRoute--enabled"><a href="./values.yaml#L833">httpRoute.enabled</a></td>
 			<td>
 bool
 </td>
@@ -474,7 +474,7 @@ false
 			<td>Render the HTTPRoute. Requires the Gateway API CRDs and a Gateway in the cluster. `httpRoute`, `ingress`, `route`, `tlsRoute` and `gatewayRoute` are alternatives - enable at most one of the five, since all of them point at the same operator-created session-proxy Service.</td>
 		</tr>
 		<tr>
-			<td id="httpRoute--hostnames"><a href="./values.yaml#L836">httpRoute.hostnames</a></td>
+			<td id="httpRoute--hostnames"><a href="./values.yaml#L843">httpRoute.hostnames</a></td>
 			<td>
 list
 </td>
@@ -488,7 +488,7 @@ list
 			<td>Hostnames the route matches. Defaults to a single-entry list holding `publicHostname` when empty.</td>
 		</tr>
 		<tr>
-			<td id="httpRoute--parentRefs"><a href="./values.yaml#L833">httpRoute.parentRefs</a></td>
+			<td id="httpRoute--parentRefs"><a href="./values.yaml#L840">httpRoute.parentRefs</a></td>
 			<td>
 list
 </td>
@@ -783,7 +783,7 @@ null
 			<td>Derive the control-plane connection from a `kasm-helm` release installed under the **same release name and namespace** - which is what the `kasm-platform` umbrella does.  When true, three values that otherwise have no default and fail the render are derived instead:  * `manager.hostname` becomes `<release>-proxy-default.<namespace>.svc.cluster.local` * the manager token is read from the `<release>-secrets` Secret the control plane generates,   under its `manager-token` key * `publicHostname` becomes `<name>-session-proxy.<namespace>.svc.cluster.local`  Anything you set explicitly still wins. Unset (null, the default), the `kasm-platform` umbrella's `global.kasm.inClusterControlPlane` decides, and without that it is off. That fallback exists because Rancher's install form can submit an untouched toggle as null, which deletes an umbrella's per-subchart override; an explicit `false` here still wins over the global. The derived `manager.hostname` assumes the default zone; set it yourself when `kasm-helm.kasmZones` names something else.  The derived `publicHostname` is an in-cluster address, so it only works while the control plane relays session traffic (`proxy_connections: true`, Kasm's default). Publishing sessions directly to browsers needs a real external hostname here - see the networking documentation. </td>
 		</tr>
 		<tr>
-			<td id="ingress"><a href="./values.yaml#L845">ingress</a></td>
+			<td id="ingress"><a href="./values.yaml#L852">ingress</a></td>
 			<td>
 object
 </td>
@@ -802,7 +802,7 @@ tls: []
 			<td>Optionally expose the operator-created session-proxy Service through a classic `networking.k8s.io/v1` Ingress, for clusters without the Gateway API. </td>
 		</tr>
 		<tr>
-			<td id="ingress--annotations"><a href="./values.yaml#L861">ingress.annotations</a></td>
+			<td id="ingress--annotations"><a href="./values.yaml#L868">ingress.annotations</a></td>
 			<td>
 object
 </td>
@@ -816,7 +816,7 @@ object
 			<td>Annotations for the Ingress, merged over `commonAnnotations`. This is where the controller-specific websocket and timeout settings go - without them sessions are cut off at the controller's default read timeout (60s on ingress-nginx). Example (ingress-nginx):   annotations:     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"</td>
 		</tr>
 		<tr>
-			<td id="ingress--backendPort"><a href="./values.yaml#L880">ingress.backendPort</a></td>
+			<td id="ingress--backendPort"><a href="./values.yaml#L887">ingress.backendPort</a></td>
 			<td>
 int
 </td>
@@ -830,7 +830,7 @@ int
 			<td>Port on the session-proxy Service to forward to. The default, 4445, is the proxy's plain-HTTP listener; TLS for the public hostname is expected to terminate at the Ingress. Use 4444 to forward to the proxy's own HTTPS listener instead, which on most controllers also needs a backend-protocol annotation (`nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"` on ingress-nginx).</td>
 		</tr>
 		<tr>
-			<td id="ingress--className"><a href="./values.yaml#L853">ingress.className</a></td>
+			<td id="ingress--className"><a href="./values.yaml#L860">ingress.className</a></td>
 			<td>
 string
 </td>
@@ -844,7 +844,7 @@ string
 			<td>`ingressClassName` of the controller that should serve this Ingress. Omitted from the resource when empty, which leaves the cluster's default IngressClass to claim it.</td>
 		</tr>
 		<tr>
-			<td id="ingress--enabled"><a href="./values.yaml#L850">ingress.enabled</a></td>
+			<td id="ingress--enabled"><a href="./values.yaml#L857">ingress.enabled</a></td>
 			<td>
 bool
 </td>
@@ -858,7 +858,7 @@ false
 			<td>Render the Ingress. `httpRoute`, `ingress`, `route`, `tlsRoute` and `gatewayRoute` are alternatives - enable at most one of the five, since all point at the same operator-created session-proxy Service. Kasm sessions are long-lived VNC websockets, so whichever controller backs this ingress class must allow websocket upgrades and use read and send timeouts of at least 3600s; see `ingress.annotations` below.</td>
 		</tr>
 		<tr>
-			<td id="ingress--hosts"><a href="./values.yaml#L867">ingress.hosts</a></td>
+			<td id="ingress--hosts"><a href="./values.yaml#L874">ingress.hosts</a></td>
 			<td>
 list
 </td>
@@ -872,7 +872,7 @@ list
 			<td>Hostnames the Ingress serves, as a list of strings. Each gets one `/` `Prefix` rule to the session-proxy Service. Defaults to a single-entry list holding `publicHostname` when empty. Example:   hosts:     - agent.example.com</td>
 		</tr>
 		<tr>
-			<td id="ingress--tls"><a href="./values.yaml#L875">ingress.tls</a></td>
+			<td id="ingress--tls"><a href="./values.yaml#L882">ingress.tls</a></td>
 			<td>
 list
 </td>
@@ -1060,7 +1060,7 @@ object
 			<td>Node selector pinning the agent and session-proxy pods. Omitted from the Agent resource entirely when empty. </td>
 		</tr>
 		<tr>
-			<td id="openshift"><a href="./values.yaml#L1033">openshift</a></td>
+			<td id="openshift"><a href="./values.yaml#L1040">openshift</a></td>
 			<td>
 object
 </td>
@@ -1093,7 +1093,7 @@ scc:
 			<td>OpenShift-only objects. Leave every switch here off on any other distribution: the kinds involved exist only on OpenShift and the release would fail to install.  Sessions are ordinary pods, and on OpenShift ordinary pods are admitted by the `restricted-v2` SecurityContextConstraint, which refuses what a Kasm workspace needs even at uid 1000: a fixed uid and `fsGroup: 1000` outside the namespace's range, a capability or two on top of `drop: ALL` (`SYS_CHROOT` for the browser sandbox), and possibly a `Localhost` seccomp profile. A session that needs root adds uid 0 (in a pod user namespace or on the host, per `workspaceSecurity.rootMode`), a wider capability set and privilege escalation. The operator runs each session under a ServiceAccount of its own, `<name>-workspace`, so SCCs that admit exactly that can be granted to sessions alone and to nothing else in the namespace. This block ships those SCCs and the grant, shaped by `workspaceSecurity`. </td>
 		</tr>
 		<tr>
-			<td id="openshift--scc--enabled"><a href="./values.yaml#L1045">openshift.scc.enabled</a></td>
+			<td id="openshift--scc--enabled"><a href="./values.yaml#L1052">openshift.scc.enabled</a></td>
 			<td>
 bool
 </td>
@@ -1107,7 +1107,7 @@ false
 			<td>Render the workspace SecurityContextConstraints, a ClusterRole holding `use` on them, and the RoleBinding that grants it to the `<name>-workspace` ServiceAccount the operator creates for this agent. One SCC admits uid-1000 sessions (`MustRunAsNonRoot`); unless `workspaceSecurity.rootMode` is `forbid`, a second admits root sessions: uid 0 on the host for `host` (the default), uid 0 in a pod user namespace only (`userNamespaceLevel: RequirePodLevel`, OpenShift 4.20+) for `userns`. With `seccomp.enabled` and the `installer` backend, also grant the built-in `privileged` SCC to the `<name>-seccomp-installer` ServiceAccount (root with a hostPath mount of the kubelet's seccomp directory, `spc_t`). Requires cluster-admin at install time, as any SCC or ClusterRole does. The agent Deployment, the session proxy, the image puller and the standby placeholders set no UID and stay under `restricted-v2`. </td>
 		</tr>
 		<tr>
-			<td id="openshift--scc--workspace--allowHostPath"><a href="./values.yaml#L1073">openshift.scc.workspace.allowHostPath</a></td>
+			<td id="openshift--scc--workspace--allowHostPath"><a href="./values.yaml#L1080">openshift.scc.workspace.allowHostPath</a></td>
 			<td>
 bool
 </td>
@@ -1121,7 +1121,7 @@ false
 			<td>Admit hostPath volumes. The operator renders a workspace's `devices` (`/dev/dri`, `/dev/video*` passed through by path) and its Docker-style `volumeMappings` (host bind mounts from the manager's volume mappings) as hostPath volumes; without this they are refused. Webcam sessions through `videoDevicePlugin` use a device-plugin resource instead and need no hostPath. </td>
 		</tr>
 		<tr>
-			<td id="openshift--scc--workspace--allowPrivileged"><a href="./values.yaml#L1067">openshift.scc.workspace.allowPrivileged</a></td>
+			<td id="openshift--scc--workspace--allowPrivileged"><a href="./values.yaml#L1074">openshift.scc.workspace.allowPrivileged</a></td>
 			<td>
 bool
 </td>
@@ -1135,7 +1135,7 @@ false
 			<td>Admit sessions whose image run config asks for `privileged: true`. Off by default: no stock Kasm image needs it. </td>
 		</tr>
 		<tr>
-			<td id="openshift--scc--workspace--capabilities"><a href="./values.yaml#L1063">openshift.scc.workspace.capabilities</a></td>
+			<td id="openshift--scc--workspace--capabilities"><a href="./values.yaml#L1070">openshift.scc.workspace.capabilities</a></td>
 			<td>
 list
 </td>
@@ -1149,7 +1149,7 @@ list
 			<td>Capabilities the SCCs let a session add. Leave empty (the default) to derive them from `workspaceSecurity`: the uid-1000 SCC admits `SYS_CHROOT` and `NET_BIND_SERVICE` under profile `baseline` (plus `SETUID`/`SETGID` with `sudo`) and only `NET_BIND_SERVICE` under `restricted`; the root SCC (`rootMode` `userns` or `host`) admits the set the operator adds to every root container on top of `drop: ALL` (`SETUID`, `SETGID`, `CHOWN`, `DAC_OVERRIDE`, `FOWNER`, `KILL`, `NET_BIND_SERVICE`, `SYS_CHROOT`). A non-empty list replaces the derived set on every SCC the chart renders; set one when an image `cap_add`s more (the manager passes the image's run config through), or the pod is refused. Example:   capabilities: [SETUID, SETGID, CHOWN, DAC_OVERRIDE, FOWNER, KILL, NET_BIND_SERVICE, SYS_CHROOT, SYS_ADMIN] </td>
 		</tr>
 		<tr>
-			<td id="openshift--scc--workspace--name"><a href="./values.yaml#L1052">openshift.scc.workspace.name</a></td>
+			<td id="openshift--scc--workspace--name"><a href="./values.yaml#L1059">openshift.scc.workspace.name</a></td>
 			<td>
 string
 </td>
@@ -1163,7 +1163,7 @@ string
 			<td>Name of the cluster-scoped uid-1000 SecurityContextConstraint and of the ClusterRole that grants the SCCs. The root SCC, rendered unless `workspaceSecurity.rootMode` is `forbid`, takes the same name with a `-root` suffix. Leave empty to derive one unique to this agent and namespace (`kasm-<namespace>-<name>-workspace`). </td>
 		</tr>
 		<tr>
-			<td id="openshift--scc--workspace--seccompProfiles"><a href="./values.yaml#L1094">openshift.scc.workspace.seccompProfiles</a></td>
+			<td id="openshift--scc--workspace--seccompProfiles"><a href="./values.yaml#L1101">openshift.scc.workspace.seccompProfiles</a></td>
 			<td>
 list
 </td>
@@ -1179,7 +1179,7 @@ list
 			<td>seccomp profiles the SCC admits. `runtime/default` is what the operator sets when an image carries no profile; `localhost/*` is the `Localhost` profile the agent sets for an image that ships an inline profile (`seccomp.enabled`, either backend); `unconfined` is the fallback for such an image when `seccomp.enabled` is off. </td>
 		</tr>
 		<tr>
-			<td id="openshift--scc--workspace--volumes"><a href="./values.yaml#L1080">openshift.scc.workspace.volumes</a></td>
+			<td id="openshift--scc--workspace--volumes"><a href="./values.yaml#L1087">openshift.scc.workspace.volumes</a></td>
 			<td>
 list
 </td>
@@ -1376,7 +1376,7 @@ requests:
 			<td>Compute resources for the agent container, passed through to `spec.resources` verbatim. The requests are small, to fit a small cluster; the limits leave room for about 1,000 concurrent sessions. The agent's memory grows with the session count (about 128Mi at 1,000, 400Mi at 10,000), and it can use most of a core while a launch burst is on. Omitted from the Agent resource when null (`resources: null`), which leaves the agent with no requests or limits at all. </td>
 		</tr>
 		<tr>
-			<td id="route"><a href="./values.yaml#L885">route</a></td>
+			<td id="route"><a href="./values.yaml#L892">route</a></td>
 			<td>
 object
 </td>
@@ -1400,7 +1400,7 @@ tls:
 			<td>Optionally expose the operator-created session-proxy Service through an OpenShift Route, the native option on OpenShift clusters. </td>
 		</tr>
 		<tr>
-			<td id="route--annotations"><a href="./values.yaml#L901">route.annotations</a></td>
+			<td id="route--annotations"><a href="./values.yaml#L908">route.annotations</a></td>
 			<td>
 object
 </td>
@@ -1414,7 +1414,7 @@ object
 			<td>Annotations for the Route, merged over `commonAnnotations`. The router timeout belongs here: without it OpenShift closes idle session websockets after 30 seconds. Example:   annotations:     haproxy.router.openshift.io/timeout: "3600s"</td>
 		</tr>
 		<tr>
-			<td id="route--backendPort"><a href="./values.yaml#L905">route.backendPort</a></td>
+			<td id="route--backendPort"><a href="./values.yaml#L912">route.backendPort</a></td>
 			<td>
 string
 </td>
@@ -1428,7 +1428,7 @@ string
 			<td>Port on the session-proxy Service to route to. Leave empty to pick it from `route.tls.termination`: 4444, the proxy's own HTTPS listener, for `passthrough` and `reencrypt`; 4445, its plain-HTTP listener, for `edge`. Set it only to override that pairing.</td>
 		</tr>
 		<tr>
-			<td id="route--enabled"><a href="./values.yaml#L891">route.enabled</a></td>
+			<td id="route--enabled"><a href="./values.yaml#L898">route.enabled</a></td>
 			<td>
 bool
 </td>
@@ -1442,7 +1442,7 @@ false
 			<td>Render the Route. Requires OpenShift (the `route.openshift.io` API). `httpRoute`, `ingress`, `route`, `tlsRoute` and `gatewayRoute` are alternatives - enable at most one of the five, since all of them point at the same operator-created session-proxy Service. Kasm sessions are long-lived VNC websockets and the OpenShift router's default connection timeout is 30s, so a timeout annotation is effectively mandatory; see `route.annotations` below.</td>
 		</tr>
 		<tr>
-			<td id="route--host"><a href="./values.yaml#L895">route.host</a></td>
+			<td id="route--host"><a href="./values.yaml#L902">route.host</a></td>
 			<td>
 string
 </td>
@@ -1456,7 +1456,7 @@ string
 			<td>Hostname the Route serves. Defaults to `publicHostname` when empty. Under the default passthrough termination this hostname is matched against the session proxy's own certificate, so that certificate has to cover it.</td>
 		</tr>
 		<tr>
-			<td id="route--tls"><a href="./values.yaml#L907">route.tls</a></td>
+			<td id="route--tls"><a href="./values.yaml#L914">route.tls</a></td>
 			<td>
 object
 </td>
@@ -1475,7 +1475,7 @@ termination: passthrough
 			<td>TLS settings for the Route.</td>
 		</tr>
 		<tr>
-			<td id="route--tls--caCertificate"><a href="./values.yaml#L933">route.tls.caCertificate</a></td>
+			<td id="route--tls--caCertificate"><a href="./values.yaml#L940">route.tls.caCertificate</a></td>
 			<td>
 string
 </td>
@@ -1489,7 +1489,7 @@ string
 			<td>PEM CA certificate that signed `certificate`. Omitted when empty.</td>
 		</tr>
 		<tr>
-			<td id="route--tls--certificate"><a href="./values.yaml#L931">route.tls.certificate</a></td>
+			<td id="route--tls--certificate"><a href="./values.yaml#L938">route.tls.certificate</a></td>
 			<td>
 string
 </td>
@@ -1503,7 +1503,7 @@ string
 			<td>PEM certificate the router serves, for `edge` and `reencrypt`. Omitted when empty.</td>
 		</tr>
 		<tr>
-			<td id="route--tls--destinationCACertificate"><a href="./values.yaml#L936">route.tls.destinationCACertificate</a></td>
+			<td id="route--tls--destinationCACertificate"><a href="./values.yaml#L943">route.tls.destinationCACertificate</a></td>
 			<td>
 string
 </td>
@@ -1517,7 +1517,7 @@ string
 			<td>PEM CA certificate the router uses to validate the session proxy's certificate on a `reencrypt` Route. Omitted when empty.</td>
 		</tr>
 		<tr>
-			<td id="route--tls--insecureEdgeTerminationPolicy"><a href="./values.yaml#L924">route.tls.insecureEdgeTerminationPolicy</a></td>
+			<td id="route--tls--insecureEdgeTerminationPolicy"><a href="./values.yaml#L931">route.tls.insecureEdgeTerminationPolicy</a></td>
 			<td>
 string
 </td>
@@ -1531,7 +1531,7 @@ string
 			<td>What the Route does with plain-HTTP requests - `Redirect`, `Allow`, or `None`. Omitted from the Route when empty. `Redirect` is the usual choice for `edge`; `passthrough` supports only `Redirect` and `None`.</td>
 		</tr>
 		<tr>
-			<td id="route--tls--key"><a href="./values.yaml#L928">route.tls.key</a></td>
+			<td id="route--tls--key"><a href="./values.yaml#L935">route.tls.key</a></td>
 			<td>
 string
 </td>
@@ -1545,7 +1545,7 @@ string
 			<td>PEM private key the router serves, for `edge` and `reencrypt`. Omitted when empty. This lands in the Helm release history in plaintext - prefer letting the router use its own certificate, or passthrough with a cert-manager-issued proxy certificate.</td>
 		</tr>
 		<tr>
-			<td id="route--tls--termination"><a href="./values.yaml#L920">route.tls.termination</a></td>
+			<td id="route--tls--termination"><a href="./values.yaml#L927">route.tls.termination</a></td>
 			<td>
 string
 </td>
@@ -1559,7 +1559,7 @@ passthrough
 			<td>Where TLS terminates - `passthrough`, `edge` or `reencrypt`. The default, `passthrough`, gives end-to-end TLS: the router forwards the connection untouched and browsers see the session proxy's own certificate from `sessionProxy.certSecretName`. Use `edge` to terminate at the router instead, in which case supply `key`/`certificate` below or let the router serve its default certificate. Example (terminate TLS at the OpenShift router instead of at the session proxy):   route:     enabled: true     annotations:       haproxy.router.openshift.io/timeout: "3600s"     tls:       termination: edge       insecureEdgeTerminationPolicy: Redirect</td>
 		</tr>
 		<tr>
-			<td id="seccomp"><a href="./values.yaml#L787">seccomp</a></td>
+			<td id="seccomp"><a href="./values.yaml#L794">seccomp</a></td>
 			<td>
 object
 </td>
@@ -1582,7 +1582,7 @@ installer:
 			<td>Let a workspace run under its image's inline seccomp profile (`security_opt: seccomp=<json>`, as the Nix bubblewrap images carry) instead of `Unconfined`. Kubernetes can only reference a profile already on the node's disk, so the agent content-hashes each inline profile and a backend gets it onto the nodes. Off by default (`seccomp.enabled`); with it off an inline profile falls back to `Unconfined`. </td>
 		</tr>
 		<tr>
-			<td id="seccomp--backend"><a href="./values.yaml#L799">seccomp.backend</a></td>
+			<td id="seccomp--backend"><a href="./values.yaml#L806">seccomp.backend</a></td>
 			<td>
 string
 </td>
@@ -1596,7 +1596,7 @@ installer
 			<td>How profiles reach the nodes, one of `installer` or `spo`. `installer` (default) deploys the bundled `kasm-seccomp-installer` DaemonSet (configured under `seccomp.installer`); it runs as root with a hostPath mount into the kubelet seccomp directory, so the agent namespace must admit the `privileged` Pod Security level and the nodes must allow hostPath (rules out e.g. GKE Autopilot), and it follows `workspacesNodeSelector`/`workspacesTolerations`. `spo` instead has the agent create cluster-scoped `SeccompProfile` resources for the external [Security Profiles Operator](https://github.com/kubernetes-sigs/security-profiles-operator) (1.0+) to install — no hostPath or privileged namespace, but SPO must already be running in the cluster (this chart does not install it) or the Agent reports Degraded. The `seccomp.installer` block is ignored for `spo`.</td>
 		</tr>
 		<tr>
-			<td id="seccomp--enabled"><a href="./values.yaml#L789">seccomp.enabled</a></td>
+			<td id="seccomp--enabled"><a href="./values.yaml#L796">seccomp.enabled</a></td>
 			<td>
 bool
 </td>
@@ -1610,7 +1610,7 @@ false
 			<td>Turn on seccomp-profile installation (renders `spec.seccomp` on the Agent).</td>
 		</tr>
 		<tr>
-			<td id="seccomp--installer"><a href="./values.yaml#L801">seccomp.installer</a></td>
+			<td id="seccomp--installer"><a href="./values.yaml#L808">seccomp.installer</a></td>
 			<td>
 object
 </td>
@@ -1630,7 +1630,7 @@ resources: {}
 			<td>Configures the `installer` backend (ignored when `backend` is `spo`).</td>
 		</tr>
 		<tr>
-			<td id="seccomp--installer--image"><a href="./values.yaml#L803">seccomp.installer.image</a></td>
+			<td id="seccomp--installer--image"><a href="./values.yaml#L810">seccomp.installer.image</a></td>
 			<td>
 object
 </td>
@@ -1646,7 +1646,7 @@ tag: ""
 			<td>The kasm-seccomp-installer image.</td>
 		</tr>
 		<tr>
-			<td id="seccomp--installer--image--registry"><a href="./values.yaml#L805">seccomp.installer.image.registry</a></td>
+			<td id="seccomp--installer--image--registry"><a href="./values.yaml#L812">seccomp.installer.image.registry</a></td>
 			<td>
 string
 </td>
@@ -1660,7 +1660,7 @@ docker.io
 			<td>Registry that hosts the installer image.</td>
 		</tr>
 		<tr>
-			<td id="seccomp--installer--image--repository"><a href="./values.yaml#L807">seccomp.installer.image.repository</a></td>
+			<td id="seccomp--installer--image--repository"><a href="./values.yaml#L814">seccomp.installer.image.repository</a></td>
 			<td>
 string
 </td>
@@ -1674,7 +1674,7 @@ kasmweb/seccomp-installer
 			<td>Repository of the installer image, without the registry or tag.</td>
 		</tr>
 		<tr>
-			<td id="seccomp--installer--image--tag"><a href="./values.yaml#L809">seccomp.installer.image.tag</a></td>
+			<td id="seccomp--installer--image--tag"><a href="./values.yaml#L816">seccomp.installer.image.tag</a></td>
 			<td>
 string
 </td>
@@ -1688,7 +1688,7 @@ string
 			<td>Tag of the installer image. Leave empty to fall back to the chart's `appVersion`.</td>
 		</tr>
 		<tr>
-			<td id="seccomp--installer--imagePullPolicy"><a href="./values.yaml#L811">seccomp.installer.imagePullPolicy</a></td>
+			<td id="seccomp--installer--imagePullPolicy"><a href="./values.yaml#L818">seccomp.installer.imagePullPolicy</a></td>
 			<td>
 string
 </td>
@@ -1702,7 +1702,7 @@ IfNotPresent
 			<td>Pull policy for the installer image.</td>
 		</tr>
 		<tr>
-			<td id="seccomp--installer--kubeletSeccompDir"><a href="./values.yaml#L816">seccomp.installer.kubeletSeccompDir</a></td>
+			<td id="seccomp--installer--kubeletSeccompDir"><a href="./values.yaml#L823">seccomp.installer.kubeletSeccompDir</a></td>
 			<td>
 string
 </td>
@@ -1716,7 +1716,7 @@ string
 			<td>The kubelet's seccomp root on the node, which the installer writes profiles under (and mounts by hostPath). The default suits a stock kubelet; override it where the kubelet root is relocated — k3s (`/var/lib/rancher/k3s/agent/kubelet/seccomp`), microk8s (`/var/snap/microk8s/common/var/lib/kubelet/seccomp`).</td>
 		</tr>
 		<tr>
-			<td id="seccomp--installer--resources"><a href="./values.yaml#L818">seccomp.installer.resources</a></td>
+			<td id="seccomp--installer--resources"><a href="./values.yaml#L825">seccomp.installer.resources</a></td>
 			<td>
 object
 </td>
@@ -2842,7 +2842,7 @@ string
 			<td>Scopes the derived StorageClass and Secret names. Defaults to the Agent resource name when empty.</td>
 		</tr>
 		<tr>
-			<td id="tlsRoute"><a href="./values.yaml#L942">tlsRoute</a></td>
+			<td id="tlsRoute"><a href="./values.yaml#L949">tlsRoute</a></td>
 			<td>
 object
 </td>
@@ -2860,7 +2860,7 @@ parentRefs: []
 			<td>Optionally expose the operator-created session-proxy Service through a Gateway API TLSRoute: SNI-based TLS passthrough, giving end-to-end TLS to the session proxy's own certificate the way an OpenShift `passthrough` Route does, but on any cluster with the Gateway API rather than only on OpenShift. </td>
 		</tr>
 		<tr>
-			<td id="tlsRoute--apiVersion"><a href="./values.yaml#L977">tlsRoute.apiVersion</a></td>
+			<td id="tlsRoute--apiVersion"><a href="./values.yaml#L984">tlsRoute.apiVersion</a></td>
 			<td>
 string
 </td>
@@ -2874,7 +2874,7 @@ string
 			<td>API version to render the TLSRoute with. Empty (the default) picks `gateway.networking.k8s.io/v1` when the cluster serves it (Gateway API 1.5+ standard channel), falls back to `gateway.networking.k8s.io/v1alpha2` when only the older experimental-channel CRD is served, and uses `v1` when rendering without a cluster (`helm template`). Set it to override that choice, for example when rendering offline for a cluster that still serves only `v1alpha2`.</td>
 		</tr>
 		<tr>
-			<td id="tlsRoute--backendPort"><a href="./values.yaml#L971">tlsRoute.backendPort</a></td>
+			<td id="tlsRoute--backendPort"><a href="./values.yaml#L978">tlsRoute.backendPort</a></td>
 			<td>
 int
 </td>
@@ -2888,7 +2888,7 @@ int
 			<td>Port on the session-proxy Service to forward to. The default, 4444, is the proxy's own HTTPS listener - the only port that makes sense under passthrough, since nothing terminates TLS before the connection gets there.</td>
 		</tr>
 		<tr>
-			<td id="tlsRoute--enabled"><a href="./values.yaml#L953">tlsRoute.enabled</a></td>
+			<td id="tlsRoute--enabled"><a href="./values.yaml#L960">tlsRoute.enabled</a></td>
 			<td>
 bool
 </td>
@@ -2902,7 +2902,7 @@ false
 			<td>Render the TLSRoute from this chart. Requires the TLSRoute CRD - standard channel as `v1` since Gateway API 1.5 (Kubernetes 1.31+); older experimental-channel installs serve only `v1alpha2`, which the chart falls back to (see `tlsRoute.apiVersion`) - and a Gateway that has a listener with `protocol: TLS` and `tls.mode: Passthrough` whose `allowedRoutes` admits this namespace. `httpRoute`, `ingress`, `route`, `tlsRoute` and `gatewayRoute` are alternatives - enable at most one of the five, since all of them point at the same operator-created session-proxy Service. `gatewayRoute` below produces the same passthrough route but has the operator create and reconcile it; prefer that when the operator supports it, and reach for this chart-managed one otherwise. Nothing decrypts the connection on the way, so the Gateway sets no timeouts and applies no HTTP rules: Kasm's long-lived session websockets are bounded only by the layer-4 idle timeout of the Gateway's data plane and of anything in front of it.</td>
 		</tr>
 		<tr>
-			<td id="tlsRoute--hostnames"><a href="./values.yaml#L967">tlsRoute.hostnames</a></td>
+			<td id="tlsRoute--hostnames"><a href="./values.yaml#L974">tlsRoute.hostnames</a></td>
 			<td>
 list
 </td>
@@ -2916,7 +2916,7 @@ list
 			<td>SNI hostnames the route matches. Defaults to a single-entry list holding `publicHostname` when empty. Because the connection is passed through untouched, the browser validates the session proxy's own certificate (`sessionProxy.certSecretName`) against these names, so that certificate has to cover them - enable `sessionProxy.certificate` or provision the Secret out of band.</td>
 		</tr>
 		<tr>
-			<td id="tlsRoute--parentRefs"><a href="./values.yaml#L962">tlsRoute.parentRefs</a></td>
+			<td id="tlsRoute--parentRefs"><a href="./values.yaml#L969">tlsRoute.parentRefs</a></td>
 			<td>
 list
 </td>
@@ -2966,6 +2966,7 @@ object
 				<div style="max-width: 520px;">
 <pre lang="json">
 deviceAllowlist: []
+driResource: ""
 fsGroupChangePolicy: ""
 profile: ""
 rootFeatures: ""
@@ -2991,6 +2992,20 @@ list
 </div>
 			</td>
 			<td>Which host devices an image's run config `devices` may pass through to its session pod, as path globs (`*` does not cross a `/`) matched against the host path. A device that matches none is dropped from the launch with a warning. Empty leaves the default, the DRI card and render nodes (`/dev/dri/card*`, `/dev/dri/renderD*`) that hardware-accelerated rendering needs; `["none"]` passes no device through. Omitted when empty. Example:   deviceAllowlist: ["/dev/dri/renderD*"]</td>
+		</tr>
+		<tr>
+			<td id="workspaceSecurity--driResource"><a href="./values.yaml#L787">workspaceSecurity.driResource</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+""
+</pre>
+</div>
+			</td>
+			<td>The extended resource a DRI device plugin advertises GPU render nodes as, e.g. `kasm.com/dri` from the `kasm-agent` umbrella's `driDevicePlugin`. When set, a launch whose run config `devices` name an allowed `/dev/dri` node requests one of this resource instead, and the plugin hands the session the render node, its card node and `DRINODE`. Leave it empty with no DRI device plugin: the devices are then mounted by hostPath, which Kubernetes lets only a privileged container open, so an ordinary session sees `/dev/dri` but renders in software. Omitted when empty.</td>
 		</tr>
 		<tr>
 			<td id="workspaceSecurity--fsGroupChangePolicy"><a href="./values.yaml#L772">workspaceSecurity.fsGroupChangePolicy</a></td>

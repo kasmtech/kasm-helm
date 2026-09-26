@@ -61,6 +61,13 @@ dependencies:
     repository: file://../kasm-video-device-plugin
     alias: videoDevicePlugin
     condition: videoDevicePlugin.enabled
+  # The same device plugin a second time, advertising GPU render nodes (/dev/dri/renderD*) as
+  # kasm.com/dri so unprivileged sessions can use them for hardware-accelerated rendering.
+  - name: kasm-video-device-plugin
+    version: 1.1200.0-develop
+    repository: file://../kasm-video-device-plugin
+    alias: driDevicePlugin
+    condition: driDevicePlugin.enabled
   # Optional privileged CNI shim + tunnel daemon providing per-session OpenVPN/WireGuard/Ziti
   # egress routing.
   - name: kasm-egress-installer
