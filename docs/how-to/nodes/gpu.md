@@ -49,6 +49,19 @@ second, the manager never hears of the GPUs, and a pre-1.19 image's `/dev/dri` d
 * **NVIDIA on containerd 2.x:** the operator's toolkit writes a `version = 4` containerd drop-in.
   containerd refuses to start when its root `/etc/containerd/config.toml` is an older version (see
   Troubleshooting); migrate the root config first on nodes that still carry a `version = 2` file.
+* **NVIDIA on k3s:** point the operator's toolkit at k3s's containerd. On RKE2 the config is
+  `/var/lib/rancher/rke2/agent/etc/containerd/config.toml` and the socket the same as k3s's.
+
+  ```yaml
+  gpuOperator:
+    toolkit:
+      env:
+        - name: CONTAINERD_CONFIG
+          value: /var/lib/rancher/k3s/agent/etc/containerd/config.toml
+        - name: CONTAINERD_SOCKET
+          value: /run/k3s/containerd/containerd.sock
+  ```
+
 * **Intel and AMD:** the kernel driver (`i915`, `xe` or `amdgpu`) loaded on the node, so that
   `/dev/dri/renderD*` exists. No chart installs it; every mainstream node image has it for
   integrated and discrete GPUs alike.
@@ -59,7 +72,7 @@ Distro / cloud variants:
 
 | Platform | Notes |
 | -------- | ----- |
-| k3s / RKE2 | Works, but the operator must find the containerd config; follow NVIDIA's k3s notes. |
+| k3s / RKE2 | Point the toolkit at the distribution's own containerd (below): by default it configures and restarts `/run/containerd`, which on k3s is not the cluster's runtime - and on a node that also runs Docker is Docker's. k3s restarts once and picks up the NVIDIA runtime by itself. |
 | kubeadm / vanilla | The reference path. Operator-managed driver is fine. |
 | EKS | GPU AMIs ship drivers and the toolkit - `gpuOperator.driver.enabled=false`. |
 | AKS | The AKS GPU image ships drivers - `gpuOperator.driver.enabled=false`; or use a plain image with the operator driver. |
@@ -156,13 +169,20 @@ Distro / cloud variants:
 
    These keep working: with `driResource` set, the agent turns any allowed `/dev/dri` entry into one
    `kasm.com/dri`, and the plugin picks the node and sets `DRINODE`, so the path in the run config
-   does not have to match. They do not get the groups added: put the node's gids in
-   `agent.workspaceSecurity.supplementalGroups` or the run config's `group_add` (`stat -c '%n %G %g'
-   /dev/dri/*` on a GPU node prints them; they have to agree across the GPU nodes). Which host
-   devices a run config may pass through at all is `agent.workspaceSecurity.deviceAllowlist`
-   (default: the DRI card and render nodes; `["none"]` passes none).
+   does not have to match; the render and card groups are added as for step 4. Which host devices
+   a run config may pass through at all is `agent.workspaceSecurity.deviceAllowlist` (default: the
+   DRI card and render nodes; `["none"]` passes none).
 
-6. **Airgapped?** Do **not** mirror the GPU Operator from `make images-agent`; it pulls a much larger
+6. **Root and user-namespaced sessions.** An image that runs as root gets the same devices; the
+   startup script keeps the GPU groups when it drops to `kasm-user`. A session in a pod user
+   namespace (`workspaceSecurity.rootMode: userns`, or `userNamespaces: always`) sees the node's DRI
+   device nodes owned by an unmapped user and cannot open them, so the agent never gives it DRI3,
+   VA-API or EGL: it moves on down the image's preferences to what does work there - Vulkan, NVENC
+   and CUDA on an NVIDIA GPU, whose device files are open to all - and fails the launch at once
+   when nothing is left and software is not allowed. A pre-1.19 image's `/dev/dri` device in such a
+   session fails the launch with a message saying so.
+
+7. **Airgapped?** Do **not** mirror the GPU Operator from `make images-agent`; it pulls a much larger
    operand set at runtime. Follow NVIDIA's air-gapped procedure and pass its values through with the
    `gpuOperator.` prefix - see [Registries and airgap](../registries-and-airgap.md). The DRI device
    plugin is the same image as the video device plugin and is in the image list.
@@ -178,6 +198,11 @@ several on one GPU.
 one GPU on a node, the plugin puts each new session on the GPU with the most shares free. Every
 session on a GPU shares its memory and its time, so size the shares to the GPU's memory over what a
 session needs.
+
+When every share is taken, a GPU launch fails at once with the scheduler's reason
+(`Insufficient kasm.com/dri`) rather than waiting, and the agent stops offering the manager the
+images that need that GPU until a share frees up. The manager does not count graphics or video
+GPUs itself, so a burst of launches can reach a full GPU before the agent's next report.
 
 ### NVIDIA (time-slicing)
 
@@ -213,8 +238,9 @@ gpuOperator:
   twice as much; this makes such a request fail rather than silently get one GPU's worth.
 * To use different replica counts per node pool, add more entries under `data` and label each node
   with `nvidia.com/device-plugin.config=<entry>`.
-* Changing the sharing config of a running cluster takes effect once the device plugin and GPU
-  Feature Discovery pods restart:
+* Changing an existing sharing config (replicas, or time-slicing to MPS) takes effect once the
+  device plugin and GPU Feature Discovery pods restart; enabling one for the first time needs no
+  restart:
 
   ```console
   kubectl -n <gpu-operator-namespace> delete pod -l app=nvidia-device-plugin-daemonset
@@ -232,6 +258,10 @@ apply to CUDA work only: rendering and video encoding use the GPU outside MPS, s
 sessions it behaves like time-slicing. The MPS device plugin also mounts a `/dev/shm` shared by
 every MPS client on the GPU; Kasm sessions always mount their own `/dev/shm` over it, which keeps
 their shared memory private without affecting MPS.
+
+KasmVNC encodes its stream with VA-API only, so on an Intel or AMD GPU with `VAAPI` chosen it
+finds a hardware H.264 encoder on the session's render node. On an NVIDIA GPU, `NVENC` gives
+applications in the session the hardware encoder; KasmVNC's own stream is encoded on the CPU.
 
 On GeForce cards NVIDIA's driver limits how many video encode (NVENC) sessions run at once per
 system; sessions beyond the limit encode on the CPU. Datacenter and workstation GPUs have no such
@@ -305,16 +335,17 @@ Installing `kasm-agent` directly? Drop the `kasm-agent:` key and start at `gpuOp
 | Nodes advertise `nvidia.com/gpu` but Kasm sessions never request it | `agent.gpu.enabled` left `false`, or the image has no GPU count | Set it - both values are required - and give the image a GPU count |
 | GPU session stays `Pending` with `Insufficient nvidia.com/gpu` or `Insufficient kasm.com/dri` | The device plugin is not installed, has not rolled out on that node, or every share is taken | Check the plugin pods; raise the replicas or `deviceShares`, or add GPU nodes |
 | `/dev/dri/renderD128` is in the session but opening it fails with `Operation not permitted` | It was mounted by `hostPath`, which only a privileged container can open | `driDevicePlugin.enabled` plus `agent.workspaceSecurity.driResource` (Intel, AMD), or `nvidia.com/gpu` (NVIDIA) |
-| The render node opens with `Permission denied` for `kasm-user` | A pre-1.19 image (run config `devices`) without the device's `render`/`video` group | `agent.workspaceSecurity.supplementalGroups` with the node's gids, or `group_add` in the image's run config (step 5) |
+| The render node opens with `Permission denied` for `kasm-user` | The DRI device plugin has not published the node's devices (no `kasm.com/dri-devices` annotation on the Node), so the agent does not know their groups | Check the plugin pod's log and its permission to patch Nodes; `agent.workspaceSecurity.supplementalGroups` adds gids by hand |
 | An Intel or AMD session renders in software though the node has the GPU | `agent.workspaceSecurity.driResource` unset (the release notes warn), or the image's graphics preference is `MESA` | Set `driResource`; set the image's graphics acceleration (step 4) |
 | The manager never places a GPU image on the agent | No node offers a listed method: no GPU resource advertised, the method's `kasm.com/dri.<method>` label missing, or every GPU excluded | `kubectl get nodes --show-labels`; check the plugin pods and the agent's GPU exclusions in Kasm |
 | `kasm.com/dri` is 0 on a node with an NVIDIA GPU only | NVIDIA GPUs are left to `nvidia.com/gpu` by default | Use the NVIDIA path; `driDevicePlugin.driDrivers` lists the drivers advertised |
 | containerd fails to start after the GPU Operator installs, `drop-in config version 4 higher than root config version 2` | The toolkit's containerd drop-in is newer than the node's root config | On the node: `containerd config migrate > /tmp/config.toml`, review it, replace `/etc/containerd/config.toml`, restart containerd |
-| A new time-slicing or MPS config does not show in allocatable | The device plugin and GPU Feature Discovery read the config at start | Restart both (see [time-slicing](#nvidia-time-slicing)) |
+| A changed time-slicing or MPS config does not show in allocatable | The device plugin and GPU Feature Discovery read the config at start | Restart both (see [time-slicing](#nvidia-time-slicing)) |
+| On k3s, NVIDIA operand pods fail with `unable to get OCI runtime for sandbox`, or the host's own containerd restarted | The toolkit configured `/run/containerd`, not k3s's containerd | Set the toolkit's `CONTAINERD_CONFIG` and `CONTAINERD_SOCKET` to k3s's (see Before you start) |
 | Driver pods `CrashLoopBackOff` on a cloud GPU image | `gpuOperator.driver.enabled=true` on a node that already has a host driver | Set `gpuOperator.driver.enabled=false` |
 | Duplicate NFD, node labels flapping | NFD already ran in the cluster | `gpuOperator.nfd.enabled=false` |
 | Sessions land on non-GPU nodes | No node targeting | `agent.workspacesNodeSelector` (and tolerate the GPU taint) |
-| A root GPU image sees the devices but cannot open them, or its pod fails to start | It runs as root in a pod user namespace (`rootMode: userns`), where the host device ownership is unmapped | Run it at uid 1000 with the groups above, or `agent.workspaceSecurity.rootMode: host` (the default) |
+| A GPU image in a user-namespaced session gets software rendering, or fails with `Image required GPU` | DRI devices cannot be opened in a pod user namespace (`rootMode: userns`, `userNamespaces: always`), so DRI3, VA-API and EGL are out there (step 6) | Prefer Vulkan/NVENC on NVIDIA for such images, run them at uid 1000, or `agent.workspaceSecurity.rootMode: host` (the default) |
 | Airgapped install of `gpuOperator` fails pulling operands | The operand set is not in `dist/kasm-agent-images.txt` | Follow NVIDIA's air-gapped procedure, values passed through as `gpuOperator.*` |
 
 ## Decisions
@@ -324,8 +355,8 @@ Installing `kasm-agent` directly? Drop the `kasm-agent:` key and start at `gpuOp
 - [ ] NVIDIA: driver strategy decided - operator-managed vs pre-installed (`gpuOperator.driver.enabled`)
 - [ ] NVIDIA: `gpuOperator.enabled=true` in exactly one release per cluster (or skipped if a device plugin already exists)
 - [ ] NVIDIA on containerd 2.x: root containerd config at the current version
+- [ ] NVIDIA on k3s/RKE2: toolkit pointed at the distribution's containerd
 - [ ] `agent.workspacesNodeSelector` targets the GPU nodes
-- [ ] Pre-1.19 images only: the node's `render`/`video` gids in `agent.workspaceSecurity.supplementalGroups` (or the images' `group_add`)
 - [ ] Sharing decided: sessions per GPU (`replicas` or `deviceShares`) sized to the GPU's memory
 - [ ] `kubectl get nodes` shows non-empty allocatable for the chosen resource
 - [ ] Workspace images set graphics acceleration and video encoding preferences (and a GPU count for CUDA)
