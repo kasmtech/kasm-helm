@@ -62,6 +62,10 @@ second, the manager never hears of the GPUs, and a pre-1.19 image's `/dev/dri` d
           value: /run/k3s/containerd/containerd.sock
   ```
 
+  Leave the toolkit's containerd drop-in where it is (a `99-nvidia.toml` in the host's
+  `/etc/containerd/conf.d`, which k3s does not read): its `version = 4` drop-in in k3s's own
+  `config-v3.toml.d` stops k3s's containerd from starting.
+
 * **Intel and AMD:** the kernel driver (`i915`, `xe` or `amdgpu`) loaded on the node, so that
   `/dev/dri/renderD*` exists. No chart installs it; every mainstream node image has it for
   integrated and discrete GPUs alike.
@@ -342,6 +346,7 @@ Installing `kasm-agent` directly? Drop the `kasm-agent:` key and start at `gpuOp
 | containerd fails to start after the GPU Operator installs, `drop-in config version 4 higher than root config version 2` | The toolkit's containerd drop-in is newer than the node's root config | On the node: `containerd config migrate > /tmp/config.toml`, review it, replace `/etc/containerd/config.toml`, restart containerd |
 | A changed time-slicing or MPS config does not show in allocatable | The device plugin and GPU Feature Discovery read the config at start | Restart both (see [time-slicing](#nvidia-time-slicing)) |
 | On k3s, NVIDIA operand pods fail with `unable to get OCI runtime for sandbox`, or the host's own containerd restarted | The toolkit configured `/run/containerd`, not k3s's containerd | Set the toolkit's `CONTAINERD_CONFIG` and `CONTAINERD_SOCKET` to k3s's (see Before you start) |
+| k3s does not come back up, its containerd log says `drop-in config version 4 higher than root config version 3` | An NVIDIA drop-in in `/var/lib/rancher/k3s/agent/etc/containerd/config-v3.toml.d` | Remove it, restart k3s, and leave the toolkit's drop-in path at its default |
 | Driver pods `CrashLoopBackOff` on a cloud GPU image | `gpuOperator.driver.enabled=true` on a node that already has a host driver | Set `gpuOperator.driver.enabled=false` |
 | Duplicate NFD, node labels flapping | NFD already ran in the cluster | `gpuOperator.nfd.enabled=false` |
 | Sessions land on non-GPU nodes | No node targeting | `agent.workspacesNodeSelector` (and tolerate the GPU taint) |
