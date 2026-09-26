@@ -1,6 +1,6 @@
 # GPU nodes (CUDA and EGL/DRI)
 
-> **Applies to:** agent · **Charts/values:** `gpuOperator.enabled`, `agent.gpu.enabled`, `gpuOperator.driver.enabled`, `gpuOperator.toolkit.enabled`, `gpuOperator.devicePlugin.enabled`, `gpuOperator.nfd.enabled`, `agent.workspacesNodeSelector`, `agent.nodeSelector`, `agent.workspaceSecurity.supplementalGroups`
+> **Applies to:** agent · **Charts/values:** `gpuOperator.enabled`, `agent.gpu.enabled`, `gpuOperator.driver.enabled`, `gpuOperator.toolkit.enabled`, `gpuOperator.devicePlugin.enabled`, `gpuOperator.nfd.enabled`, `gpuOperator.devicePlugin.config`, `agent.workspacesNodeSelector`, `agent.nodeSelector`, `agent.workspaceSecurity.supplementalGroups`
 
 > **Scope note.** The NVIDIA-side steps are pointers to NVIDIA's own procedure; follow NVIDIA's
 > current documentation for the driver and device-plugin install.
@@ -110,6 +110,57 @@ EGL/DRI graphics acceleration is a **node-image** concern: drivers pre-installed
    `gpuOperator.` prefix - see
    [Registries and airgap](../registries-and-airgap.md).
 
+## Sharing a GPU between sessions (time-slicing)
+
+By default each `nvidia.com/gpu` is one physical GPU, and a session that asks for one holds it
+alone. NVIDIA's device plugin can instead advertise each GPU as several time-sliced replicas, so
+that many sessions share it. Nothing on the Kasm side changes: the agent requests `nvidia.com/gpu`
+as before and counts the replicas when it reports capacity.
+
+```yaml
+gpuOperator:
+  devicePlugin:
+    config:
+      create: true
+      name: time-slicing-config
+      default: any              # the entry below applies to every GPU node
+      data:
+        any: |-
+          version: v1
+          flags:
+            migStrategy: none
+          sharing:
+            timeSlicing:
+              renameByDefault: false          # keep the resource name nvidia.com/gpu
+              failRequestsGreaterThanOne: true
+              resources:
+                - name: nvidia.com/gpu
+                  replicas: 8                 # sessions per physical GPU
+```
+
+* Keep `renameByDefault: false`. With `true` the resource becomes `nvidia.com/gpu.shared`, which
+  the agent never requests, so GPU sessions never schedule.
+* Keep `failRequestsGreaterThanOne: true`. Two replicas of a time-sliced GPU are the same GPU, not
+  twice as much; this makes such a request fail rather than silently get one GPU's worth.
+* To use different replica counts per node pool, add more entries under `data` and label each node
+  with `nvidia.com/device-plugin.config=<entry>`.
+
+Time-slicing isolates nothing: every session on a GPU shares its video memory and its compute
+time, so one heavy session slows its neighbours and one that exhausts video memory can crash them.
+Size `replicas` so that the GPU's memory divided by the replicas covers a session (24GB across 8
+sessions leaves 3GB each). NVIDIA's MPS (`sharing.mps` in the same config) enforces a memory cap per
+client, but it targets CUDA work; desktop rendering normally uses time-slicing.
+
+Verify with:
+
+```console
+kubectl get node <gpu-node> -o jsonpath='{.status.allocatable.nvidia\.com/gpu}{"\n"}'
+kubectl get node <gpu-node> -L nvidia.com/gpu.replicas
+```
+
+Expected indicator: allocatable is the replica count times the node's GPUs (`8` for one GPU), and
+the label shows the replica count.
+
 ## Verify
 
 ```console
@@ -184,6 +235,7 @@ Installing `kasm-agent` directly? Drop the `kasm-agent:` key and start at `gpuOp
 - [ ] `gpuOperator.enabled=true` in exactly one release per cluster (or skipped if a device plugin already exists)
 - [ ] `agent.gpu.enabled=true`
 - [ ] `agent.workspacesNodeSelector` targets the GPU nodes
+- [ ] Sharing decided: one session per GPU, or time-slicing replicas sized to the GPU's memory
 - [ ] `kubectl get nodes` shows non-empty `nvidia.com/gpu` allocatable
 - [ ] `nvidia-smi` succeeds in a pod requesting `nvidia.com/gpu: 1`
 - [ ] EGL only: `/dev/dri/card0` and `/dev/dri/renderD128` present on the node image
