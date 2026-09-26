@@ -141,6 +141,14 @@ RUN git clone --depth 1 {{ include "kasmNodePrep.shq" $v4l2.sourceRepo }} v4l2lo
 #
 # A gcc-toolset matching the kernel's compiler (see the RUN above) goes first on PATH, where kbuild
 # looks up gcc, ld and objcopy.
+#
+# MAX_DEVICES: v4l2loopback silently caps the devices= parameter at this compile-time constant, 8
+# by default, so it is raised to modules.v4l2loopback.videoDevices.
+#
+# RHEL 10's 6.12 kernel carries the 6.18 change that gave v4l2_fh_add/v4l2_fh_del a struct file
+# argument, while v4l2loopback picks the API by LINUX_VERSION_CODE alone and so fails to compile
+# against it. When the kernel's own header declares the two-argument form, the source's 6.18+
+# branch is taken instead.
 RUN set -eu; \
     kernel_dir="/lib/modules/${KERNEL_FULL_VERSION}/build"; \
     [ -d "${kernel_dir}" ] || kernel_dir="/usr/src/kernels/${KERNEL_FULL_VERSION}"; \
@@ -148,11 +156,15 @@ RUN set -eu; \
       echo "kasm-node-prep: no kernel build tree for ${KERNEL_FULL_VERSION} at /lib/modules/${KERNEL_FULL_VERSION}/build or /usr/src/kernels/${KERNEL_FULL_VERSION}; the headers package installed above did not provide one." >&2; \
       exit 1; \
     fi; \
+    if grep -q 'void v4l2_fh_add(struct v4l2_fh \*fh, struct file \*filp);' "${kernel_dir}/include/media/v4l2-fh.h" 2>/dev/null; then \
+      sed -i 's/^#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 18, 0)$/#if 0/' /usr/src/v4l2loopback/v4l2loopback.c; \
+    fi; \
     want="$(sed -nE 's/^CONFIG_CC_VERSION_TEXT="[^ ]*gcc \([^)]*\) ([0-9]+)\..*/\1/p' "${kernel_dir}/.config" 2>/dev/null || true)"; \
     if [ -n "${want}" ] && [ -x "/opt/rh/gcc-toolset-${want}/root/usr/bin/gcc" ]; then \
       export PATH="/opt/rh/gcc-toolset-${want}/root/usr/bin:${PATH}"; \
     fi; \
-    make -C /usr/src/v4l2loopback KERNELRELEASE="${KERNEL_FULL_VERSION}" KERNEL_DIR="${kernel_dir}" v4l2loopback.ko
+    make -C /usr/src/v4l2loopback KERNELRELEASE="${KERNEL_FULL_VERSION}" KERNEL_DIR="${kernel_dir}" \
+      KCPPFLAGS="-DMAX_DEVICES={{ max 8 (int $v4l2.videoDevices) }}" v4l2loopback.ko
 
 FROM {{ $builder }}
 
@@ -187,7 +199,17 @@ RUN set -eu; \
 
 RUN mkdir -p /opt/lib/modules/${KERNEL_FULL_VERSION}/extra
 COPY --from=builder /usr/src/v4l2loopback/v4l2loopback.ko /opt/lib/modules/${KERNEL_FULL_VERSION}/extra/
-RUN depmod -b /opt "${KERNEL_FULL_VERSION}"
+# v4l2loopback needs the in-tree videodev (and, through it, mc) loaded first, but the KMM worker
+# runs modprobe against this image's tree alone (-d), so it can only load what this modules.dep
+# names. When the builder image carries the target kernel's own module tree -- OpenShift's Driver
+# Toolkit does -- link it in as host/ so depmod records those dependencies. The worker pod mounts
+# the node's /lib/modules at the same path, so on the node the link resolves to the node's own
+# modules. Without that tree the image still builds, and loading succeeds only on a node where
+# videodev is already loaded.
+RUN if [ -d "/lib/modules/${KERNEL_FULL_VERSION}/kernel" ]; then \
+      ln -s "/lib/modules/${KERNEL_FULL_VERSION}" "/opt/lib/modules/${KERNEL_FULL_VERSION}/host"; \
+    fi; \
+    depmod -b /opt "${KERNEL_FULL_VERSION}"
 {{- end -}}
 {{- if and (include "kasmNodePrep.v4l2loopbackKmm" .) .Values.modules.v4l2loopback.kmm.build.enabled }}
 ---

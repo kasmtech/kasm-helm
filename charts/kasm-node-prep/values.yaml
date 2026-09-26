@@ -78,9 +78,13 @@ modules:
     # modules.v4l2loopback.videoDevices -- Number of virtual video devices to create per node
     # (`devices=` module parameter). This is the upper bound on concurrent webcam-enabled sessions on that
     # node, so keep it at or above the node's workspace capacity. A node that already has the module loaded
-    # keeps the count it was loaded with until it reboots or is replaced.
+    # keeps the count it was loaded with until it reboots or is replaced. v4l2loopback caps this at a
+    # compile-time maximum, 8 unless raised: the modules this chart (or KMM) builds are compiled with the
+    # maximum raised to this value, but a distribution-shipped module (`preferShippedModule`, Ubuntu 24.04
+    # and later) stays capped at 8 and is still preferred. To go above 8 there, set `preferShippedModule:
+    # false` as well.
     #
-    videoDevices: 20
+    videoDevices: 8
     # modules.v4l2loopback.exclusiveCaps -- Announce the video capture capability only once a producer has
     # opened the device (`exclusive_caps=1`). Required by Chrome/Chromium based applications inside the
     # workspace, which ignore loopback devices that advertise capture with no stream attached.
@@ -186,6 +190,19 @@ modules:
       # that needs no credentials.
       #
       imageRepoSecret: ""
+      # Configure how KMM, its kaniko build and its worker pods reach the kmod image's registry
+      # (`spec.moduleLoader.container.registryTLS` on the `Module`). Needed for a registry whose certificate
+      # the build pod cannot verify, such as OpenShift's internal registry
+      # (`image-registry.openshift-image-registry.svc:5000`), signed by the cluster's service CA.
+      #
+      registryTLS:
+        # modules.v4l2loopback.kmm.registryTLS.insecure -- Reach the registry over plain HTTP.
+        #
+        insecure: false
+        # modules.v4l2loopback.kmm.registryTLS.insecureSkipTLSVerify -- Accept any certificate the
+        # registry presents.
+        #
+        insecureSkipTLSVerify: false
       # Configure in-cluster image builds. KMM builds the kmod image with kaniko, from the Dockerfile
       # ConfigMap this chart renders, once per kernel it sees in the fleet.
       #
@@ -199,6 +216,19 @@ modules:
         # mirrored, one `<registry>/<repository>:<kernel release>` tag per kernel in the fleet.
         #
         enabled: true
+        # Configure how the kaniko build pulls the builder image (`image.*`) it starts `FROM`
+        # (`kernelMappings[].build.baseImageRegistryTLS` on the `Module`). Set these when the builder image
+        # lives in a registry the build pod cannot verify, such as OpenShift's internal registry.
+        #
+        baseImageRegistryTLS:
+          # modules.v4l2loopback.kmm.build.baseImageRegistryTLS.insecure -- Pull the builder image over
+          # plain HTTP.
+          #
+          insecure: false
+          # modules.v4l2loopback.kmm.build.baseImageRegistryTLS.insecureSkipTLSVerify -- Accept any
+          # certificate the builder image's registry presents.
+          #
+          insecureSkipTLSVerify: false
       # Configure Secure Boot signing of the built module. KMM signs inside the cluster, after the build
       # and before the image is pushed, so the node never sees an unsigned `.ko`. The public key still has
       # to be enrolled in each node's UEFI MOK database out of band, exactly as for `secureBoot` above.

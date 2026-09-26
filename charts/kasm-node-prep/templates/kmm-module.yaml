@@ -26,7 +26,20 @@ metadata:
     {{- include "kasmNodePrep.labels" . | nindent 4 }}
 spec:
   moduleLoader:
+    # KMM's worker pods, which modprobe the module on each node, run under this account (the
+    # namespace's `default` otherwise); on OpenShift it holds the SCC they need
+    # (openshift.scc.enabled). The kaniko build pods do not: KMM v2.7 always runs them as the
+    # namespace's `default` account.
+    serviceAccountName: {{ include "kasmNodePrep.serviceAccountName" . }}
     container:
+      {{- with $kmm.registryTLS }}
+      {{- if or .insecure .insecureSkipTLSVerify }}
+      # How KMM, its build and its worker pods reach the kmod image's registry.
+      registryTLS:
+        insecure: {{ .insecure }}
+        insecureSkipTLSVerify: {{ .insecureSkipTLSVerify }}
+      {{- end }}
+      {{- end }}
       # The same module parameters the reconcile script would pass to modprobe, so switching
       # method between "build" and "kmm" changes who loads v4l2loopback, not how it behaves.
       modprobe:
@@ -48,6 +61,14 @@ spec:
           build:
             dockerfileConfigMap:
               name: {{ include "kasmNodePrep.kmmDockerfileConfigMapName" . }}
+            {{- with $kmm.build.baseImageRegistryTLS }}
+            {{- if or .insecure .insecureSkipTLSVerify }}
+            # How kaniko pulls the builder image the Dockerfile starts FROM.
+            baseImageRegistryTLS:
+              insecure: {{ .insecure }}
+              insecureSkipTLSVerify: {{ .insecureSkipTLSVerify }}
+            {{- end }}
+            {{- end }}
           {{- end }}
           {{- if $kmm.sign.enabled }}
           # Secure Boot: KMM signs the built module in-cluster, between the build and the push,

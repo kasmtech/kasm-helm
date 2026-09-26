@@ -8,9 +8,10 @@
   the cluster's built-in `privileged` SCC (or the one named in openshift.scc.name), the same way
   `oc adm policy add-scc-to-user` does: a ClusterRole holding `use` on that one SCC, bound by a
   namespaced RoleBinding. Off by default: the objects are OpenShift API kinds and would fail on any
-  other cluster. Like the ServiceAccount, it only renders when there is a DaemonSet to admit.
+  other cluster. Like the ServiceAccount, it renders when there is a DaemonSet to admit or KMM's
+  build and loader pods, which run as root with hostPath mounts under the same account.
 */}}
-{{- if and .Values.openshift.scc.enabled (include "kasmNodePrep.daemonSetNeeded" .) }}
+{{- if and .Values.openshift.scc.enabled (or (include "kasmNodePrep.daemonSetNeeded" .) (include "kasmNodePrep.v4l2loopbackKmm" .)) }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:

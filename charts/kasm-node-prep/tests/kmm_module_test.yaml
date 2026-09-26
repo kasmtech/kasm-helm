@@ -59,7 +59,7 @@ tests:
       - equal:
           path: spec.moduleLoader.container.modprobe.parameters
           value:
-            - devices=20
+            - devices=8
             - exclusive_caps=1
       - equal:
           path: spec.moduleLoader.container.kernelMappings[0].regexp
@@ -434,7 +434,7 @@ tests:
           pattern: 'yum install -y "gcc-toolset-\$\{want\}"'
       - matchRegex:
           path: data.dockerfile
-          pattern: '(?s)export PATH="/opt/rh/gcc-toolset-\$\{want\}/root/usr/bin:\$\{PATH\}"; \\\n\s+fi; \\\n\s+make -C /usr/src/v4l2loopback KERNELRELEASE="\$\{KERNEL_FULL_VERSION\}" KERNEL_DIR="\$\{kernel_dir\}" v4l2loopback\.ko'
+          pattern: '(?s)export PATH="/opt/rh/gcc-toolset-\$\{want\}/root/usr/bin:\$\{PATH\}"; \\\n\s+fi; \\\n\s+make -C /usr/src/v4l2loopback KERNELRELEASE="\$\{KERNEL_FULL_VERSION\}" KERNEL_DIR="\$\{kernel_dir\}" \\\n\s+KCPPFLAGS="-DMAX_DEVICES=8" v4l2loopback\.ko'
 
   # v4l2loopback's Makefile defaults KERNEL_DIR to /lib/modules/<release>/build, a symlink the Debian
   # headers package creates but the RPM -devel packages do not (kernel-core owns it there), so the
@@ -457,7 +457,7 @@ tests:
       # and needs libc headers a minimal builder image may not carry.
       - matchRegex:
           path: data.dockerfile
-          pattern: 'make -C /usr/src/v4l2loopback KERNELRELEASE="\$\{KERNEL_FULL_VERSION\}" KERNEL_DIR="\$\{kernel_dir\}" v4l2loopback\.ko'
+          pattern: '(?s)make -C /usr/src/v4l2loopback KERNELRELEASE="\$\{KERNEL_FULL_VERSION\}" KERNEL_DIR="\$\{kernel_dir\}" \\\n\s+KCPPFLAGS="-DMAX_DEVICES=8" v4l2loopback\.ko'
       # Neither candidate present: a message naming both, not make's "No such file or directory".
       - matchRegex:
           path: data.dockerfile
@@ -762,3 +762,65 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: 'combined length of 62 characters, and KMM.s admission webhook refuses more than 41'
+
+  - it: runs KMM's worker pods under the chart's ServiceAccount
+    set:
+      modules.v4l2loopback.enabled: true
+      modules.v4l2loopback.method: kmm
+      modules.v4l2loopback.kmm.image.registry: registry.example.test
+      modules.v4l2loopback.kmm.image.repository: kmods/v4l2loopback
+    asserts:
+      - template: templates/kmm-module.yaml
+        equal:
+          path: spec.moduleLoader.serviceAccountName
+          value: RELEASE-NAME-kasm-node-prep
+
+  - it: leaves registry TLS to KMM's defaults unless asked
+    template: templates/kmm-module.yaml
+    set:
+      modules.v4l2loopback.method: kmm
+      modules.v4l2loopback.kmm.image.registry: registry.example.test
+      modules.v4l2loopback.kmm.image.repository: kmods/v4l2loopback
+    asserts:
+      - notExists:
+          path: spec.moduleLoader.container.registryTLS
+      - notExists:
+          path: spec.moduleLoader.container.kernelMappings[0].build.baseImageRegistryTLS
+
+  # OpenShift's internal registry is signed by the cluster's service CA, which the kaniko build
+  # pod does not trust.
+  - it: passes registry TLS settings for the kmod image and the builder image
+    template: templates/kmm-module.yaml
+    set:
+      modules.v4l2loopback.method: kmm
+      modules.v4l2loopback.kmm.image.registry: image-registry.openshift-image-registry.svc:5000
+      modules.v4l2loopback.kmm.image.repository: kasm/v4l2loopback-kmod
+      modules.v4l2loopback.kmm.registryTLS.insecureSkipTLSVerify: true
+      modules.v4l2loopback.kmm.build.baseImageRegistryTLS.insecureSkipTLSVerify: true
+    asserts:
+      - equal:
+          path: spec.moduleLoader.container.registryTLS
+          value:
+            insecure: false
+            insecureSkipTLSVerify: true
+      - equal:
+          path: spec.moduleLoader.container.kernelMappings[0].build.baseImageRegistryTLS
+          value:
+            insecure: false
+            insecureSkipTLSVerify: true
+
+  # RHEL 10's 6.12 kernel carries the 6.18 two-argument v4l2_fh_add; v4l2loopback's version gate
+  # alone would pick the one-argument form.
+  - it: builds against kernels that backport the two-argument v4l2_fh_add
+    template: templates/kmm-dockerfile-configmap.yaml
+    set:
+      modules.v4l2loopback.method: kmm
+      modules.v4l2loopback.kmm.image.registry: registry.example.test
+      modules.v4l2loopback.kmm.image.repository: kmods/v4l2loopback
+    asserts:
+      - matchRegex:
+          path: data.dockerfile
+          pattern: "grep -q 'void v4l2_fh_add\\(struct v4l2_fh \\\\\\*fh, struct file \\\\\\*filp\\);' \"\\$\\{kernel_dir\\}/include/media/v4l2-fh.h\""
+      - matchRegex:
+          path: data.dockerfile
+          pattern: "sed -i 's/\\^#if LINUX_VERSION_CODE < KERNEL_VERSION\\(6, 18, 0\\)\\$/#if 0/' /usr/src/v4l2loopback/v4l2loopback.c"

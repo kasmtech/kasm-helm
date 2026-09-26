@@ -17,7 +17,7 @@ tests:
           path: data["ensure-modules.sh"]
       - matchRegex:
           path: data["ensure-modules.sh"]
-          pattern: 'V4L2_DEVICES=''20'''
+          pattern: 'V4L2_DEVICES=''8'''
       - matchRegex:
           path: data["ensure-modules.sh"]
           pattern: 'V4L2_EXCLUSIVE_CAPS=''1'''
@@ -1166,3 +1166,32 @@ tests:
           path: data["ensure-modules.sh"]
           pattern: "V4L2_DEVICE_MODE=''"
 
+
+  # v4l2loopback caps devices= at its compile-time MAX_DEVICES, 8 unless raised.
+  - it: compiles v4l2loopback with room for every requested device
+    set:
+      modules.v4l2loopback.videoDevices: 32
+    asserts:
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'V4L2_DEVICES=''32'''
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'make -C "\$src" KERNEL_DIR="\$KERNEL_BUILD" KCPPFLAGS="-DMAX_DEVICES=\$\(\( V4L2_DEVICES > 8 \? V4L2_DEVICES : 8 \)\)"'
+
+  # Ubuntu 24.04's in-tree module is a distribution build, capped at 8 devices; it is still kept.
+  - it: keeps a shipped v4l2loopback that creates fewer devices than asked for, and says so
+    asserts:
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: '(?s)count=\$\(find /sys/devices/virtual/video4linux -maxdepth 1 -name ''video\*'' 2>/dev/null \| wc -l\)\n  if \[ "\$count" -lt "\$V4L2_DEVICES" \]; then\n    log "[^"]*preferShippedModule=false[^"]*"\n  fi\n  return 0'
+      - notMatchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: 'rmmod v4l2loopback'
+
+  # RHEL 10's 6.12 kernel carries the 6.18 two-argument v4l2_fh_add.
+  - it: takes v4l2loopback's 6.18 branch when the kernel header declares the two-argument v4l2_fh_add
+    asserts:
+      - matchRegex:
+          path: data["ensure-modules.sh"]
+          pattern: '(?s)if grep -q ''void v4l2_fh_add\(struct v4l2_fh \\\*fh, struct file \\\*filp\);'' "\$\{KERNEL_BUILD\}/include/media/v4l2-fh.h" 2>/dev/null; then\n    sed -i ''s/\^#if LINUX_VERSION_CODE < KERNEL_VERSION\(6, 18, 0\)\$/#if 0/'' "\$\{src\}/v4l2loopback.c"'

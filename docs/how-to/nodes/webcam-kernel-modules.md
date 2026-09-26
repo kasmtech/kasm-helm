@@ -84,7 +84,7 @@ default `rootMode: host`.
      --namespace kasm-agent \
      --set nodePrep.enabled=true \
      --set nodePrep.modules.v4l2loopback.enabled=true \
-     --set nodePrep.modules.v4l2loopback.videoDevices=20 \
+     --set nodePrep.modules.v4l2loopback.videoDevices=8 \
      --set videoDevicePlugin.enabled=true
    ```
 
@@ -167,7 +167,7 @@ The result is identical in both modes.
    lsmod | grep v4l2loopback
    ```
 
-   Expected: `/dev/video0` .. `/dev/video19` for the default `videoDevices: 20`.
+   Expected: `/dev/video0` .. `/dev/video7` for the default `videoDevices: 8`. v4l2loopback caps the count at a compile-time maximum, 8 unless raised: the modules the chart (and KMM) builds have it raised to `videoDevices`, but the module a kernel ships (Ubuntu 24.04 and later, loaded by default through `preferShippedModule`) stays at 8. To run more than 8 webcam sessions on such a node, set `videoDevices` above 8 *and* `preferShippedModule: false`.
 
 2. The extended resource is allocatable - the number must equal `videoDevices`:
 
@@ -213,7 +213,7 @@ nodePrep:
   modules:
     v4l2loopback:
       enabled: true
-      videoDevices: 20
+      videoDevices: 8
       # method: kmm            # delegate to the KMM operator instead of compiling on nodes
       # kmm:
       #   image:

@@ -587,9 +587,19 @@ ensure_v4l2loopback() {
     return 1
   fi
 
+  # RHEL 10's 6.12 kernel carries the 6.18 change that gave v4l2_fh_add/v4l2_fh_del a struct file
+  # argument. v4l2loopback picks the API by LINUX_VERSION_CODE alone, so below 6.18 it wraps them
+  # back into the one-argument form and the compile fails. Trust the kernel's own header instead:
+  # when it declares the two-argument form, take the source's 6.18+ branch.
+  if grep -q 'void v4l2_fh_add(struct v4l2_fh \*fh, struct file \*filp);' "${KERNEL_BUILD}/include/media/v4l2-fh.h" 2>/dev/null; then
+    sed -i 's/^#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 18, 0)$/#if 0/' "${src}/v4l2loopback.c"
+  fi
+
   # KERNEL_DIR is the v4l2loopback Makefile's name for the kernel tree; passing it keeps the build
   # off the /lib/modules/<release>/build default, which the RPM families may not have.
-  if ! make -C "$src" KERNEL_DIR="$KERNEL_BUILD"; then
+  #
+  # MAX_DEVICES: v4l2loopback silently caps devices= at this compile-time constant, 8 by default.
+  if ! make -C "$src" KERNEL_DIR="$KERNEL_BUILD" KCPPFLAGS="-DMAX_DEVICES=$(( V4L2_DEVICES > 8 ? V4L2_DEVICES : 8 ))"; then
     err "Failed to build v4l2loopback against kernel ${KERNEL_RELEASE}. Skipping this pass."
     return 1
   fi
@@ -722,7 +732,7 @@ ensure_videodev() {
 # insmod loads no dependencies, so videodev is loaded before this is called. Returns 1 when the
 # kernel ships none or the shipped one refuses to load; the caller then builds from source.
 load_shipped_v4l2loopback() {
-  local ko out
+  local ko out count
 
   ko=$(find "/lib/modules/${KERNEL_RELEASE}/kernel" -name 'v4l2loopback.ko*' 2>/dev/null | head -n 1)
   if [ -z "$ko" ]; then
@@ -730,11 +740,19 @@ load_shipped_v4l2loopback() {
   fi
 
   log "Kernel ${KERNEL_RELEASE} ships its own v4l2loopback (${ko}); loading it instead of building one"
-  if out=$(insmod "$ko" "devices=${V4L2_DEVICES}" "exclusive_caps=${V4L2_EXCLUSIVE_CAPS}" 2>&1); then
-    return 0
+  if ! out=$(insmod "$ko" "devices=${V4L2_DEVICES}" "exclusive_caps=${V4L2_EXCLUSIVE_CAPS}" 2>&1); then
+    log "The shipped v4l2loopback did not load (${out:-no error output}); building from source instead"
+    return 1
   fi
-  log "The shipped v4l2loopback did not load (${out:-no error output}); building from source instead"
-  return 1
+
+  # v4l2loopback silently caps devices= at its compile-time MAX_DEVICES, 8 in a distribution build
+  # (Ubuntu 24.04 among them). The shipped module is still the one kept; say so, since the node
+  # then advertises fewer kasm.com/video devices than videoDevices asks for.
+  count=$(find /sys/devices/virtual/video4linux -maxdepth 1 -name 'video*' 2>/dev/null | wc -l)
+  if [ "$count" -lt "$V4L2_DEVICES" ]; then
+    log "The shipped v4l2loopback created ${count} of the ${V4L2_DEVICES} devices asked for (its compile-time maximum). Set modules.v4l2loopback.preferShippedModule=false to build one with room for them all."
+  fi
+  return 0
 }
 {{- end }}
 {{- end }}
