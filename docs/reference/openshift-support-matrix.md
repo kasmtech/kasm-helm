@@ -38,9 +38,8 @@ every release shown.
 
 ## Components and their SCCs
 
-Every pod the agent family runs, the account it runs as, and the SCC that admits it. "Chart" means
-the grant is rendered by the switch in the last column; nothing here needs `oc adm policy` by hand
-except the KMM build account.
+Every pod the agent family runs, the account it runs as, and the SCC that admits it. Every grant is
+rendered by the switch in the last column; nothing here needs `oc adm policy` by hand.
 
 | Pod | ServiceAccount | SCC | Granted by |
 | --- | -------------- | --- | ---------- |
@@ -55,18 +54,12 @@ except the KMM build account.
 | Video device plugin | its own | `privileged` | `videoDevicePlugin.openshift.scc.enabled` |
 | Node prep DaemonSet (`tuning.*`, `method: build`) | `<release>-kasm-node-prep` | `privileged` | `nodePrep.openshift.scc.enabled` |
 | KMM worker pods (load the module) | `<release>-kasm-node-prep` | `privileged` | `nodePrep.openshift.scc.enabled` |
-| KMM build pods (kaniko, in-cluster builds only) | the namespace's `default` | `hostmount-anyuid` | **By hand**: KMM gives build pods no account of their own and mounts the node's `/lib/modules` into them |
+| KMM build pods (kaniko, in-cluster builds only) | the namespace's `default` | `hostmount-anyuid` | `nodePrep.openshift.scc.enabled` (`nodePrep.openshift.scc.kmmBuildName`). KMM gives build pods no account of their own and mounts the node's `/lib/modules` into them; `hostmount-anyuid` has no priority, so the namespace's other `default` pods stay under `restricted-v2` |
 | Egress installer | its own | - | ❌ Not supported (below) |
 
 The workspace SCCs list `runtime/default`, `*` and `unconfined` as their seccomp profiles. `*` is how
 an SCC admits `Localhost` profiles: OpenShift matches `localhost/<path>` entries literally and has no
 `localhost/*` wildcard, and every inline profile the seccomp backends install has a path of its own.
-
-Granting the KMM build account, in the namespace the agent release installs `nodePrep` into:
-
-```console
-oc adm policy add-scc-to-user hostmount-anyuid -z default -n <namespace>
-```
 
 ## Features
 
@@ -78,7 +71,7 @@ oc adm policy add-scc-to-user hostmount-anyuid -z default -n <namespace>
 | `profile: restricted` sessions | ✅ | Same | Drops `SYS_CHROOT`; only `NET_BIND_SERVICE` survives an image's `cap_add` |
 | Inline seccomp profiles, SPO backend | ✅ | The Security Profiles Operator from OperatorHub | See [Operators from OperatorHub](#operators-from-operatorhub) for the SELinux setting on RHEL 10-based nodes |
 | Inline seccomp profiles, installer backend | ✅ | `agent.openshift.scc.enabled=true` grants the installer `privileged` | Runs a root DaemonSet with a hostPath mount |
-| Webcam passthrough | ⚠️ | KMM (`nodePrep.modules.v4l2loopback.method=kmm`), `videoDevicePlugin.openshift.scc.enabled=true`, the build-account grant above | Nodes carry no compiler or headers, so the chart's own `build` method cannot run. The builder image must carry the node kernel's `kernel-devel` and module tree: see [Operators from OperatorHub](#operators-from-operatorhub) |
+| Webcam passthrough | ⚠️ | KMM (`nodePrep.modules.v4l2loopback.method=kmm`), `nodePrep.openshift.scc.enabled=true`, `videoDevicePlugin.openshift.scc.enabled=true` | Nodes carry no compiler or headers, so the chart's own `build` method cannot run. The builder image must carry the node kernel's `kernel-devel` and module tree: see [Operators from OperatorHub](#operators-from-operatorhub) |
 | GPU, NVIDIA (CUDA, NVENC, Vulkan) | ✅ | The certified NVIDIA GPU Operator from OperatorHub, not the `gpuOperator` subchart; `agent.gpu.enabled=true` | Works in every run mode, `userns-root` included |
 | GPU, DRI (VA-API, EGL on `/dev/dri`) | ⚠️ | `driDevicePlugin.enabled=true`, `driDevicePlugin.openshift.scc.enabled=true` | Not in `userns-root` sessions: the device nodes are unmapped there. The agent does not offer DRI to such a session |
 | Device passthrough by host path (`/dev/...` in a run config), Docker-style volume mappings | ⚠️ | `agent.openshift.scc.workspace.allowHostPath=true` | Widens the workspace SCCs for every session |

@@ -9,7 +9,13 @@
   `oc adm policy add-scc-to-user` does: a ClusterRole holding `use` on that one SCC, bound by a
   namespaced RoleBinding. Off by default: the objects are OpenShift API kinds and would fail on any
   other cluster. Like the ServiceAccount, it renders when there is a DaemonSet to admit or KMM's
-  build and loader pods, which run as root with hostPath mounts under the same account.
+  worker pods, which load the module as root with hostPath mounts under the same account.
+
+  KMM's in-cluster build pods are the exception: KMM v2.7 always runs them as the namespace's
+  `default` account, and mounts the node's /lib/modules into them, which `restricted-v2` refuses. So
+  with in-cluster builds on, `default` is granted openshift.scc.kmmBuildName (`hostmount-anyuid`)
+  as well. That SCC carries no priority, so any other pod of `default` that `restricted-v2` admits
+  is still admitted by `restricted-v2`.
 */}}
 {{- if and .Values.openshift.scc.enabled (or (include "kasmNodePrep.daemonSetNeeded" .) (include "kasmNodePrep.v4l2loopbackKmm" .)) }}
 apiVersion: rbac.authorization.k8s.io/v1
@@ -38,5 +44,35 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: {{ include "kasmNodePrep.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}
+{{- if and .Values.openshift.scc.enabled (include "kasmNodePrep.v4l2loopbackKmm" .) .Values.modules.v4l2loopback.kmm.build.enabled }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "kasmNodePrep.fullname" . }}-kmm-build-scc
+  labels:
+    {{- include "kasmNodePrep.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["security.openshift.io"]
+    resources: ["securitycontextconstraints"]
+    resourceNames: [{{ .Values.openshift.scc.kmmBuildName | quote }}]
+    verbs: ["use"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "kasmNodePrep.fullname" . }}-kmm-build-scc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kasmNodePrep.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "kasmNodePrep.fullname" . }}-kmm-build-scc
+subjects:
+  - kind: ServiceAccount
+    name: default
     namespace: {{ .Release.Namespace }}
 {{- end }}

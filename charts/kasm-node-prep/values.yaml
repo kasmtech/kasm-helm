@@ -460,3 +460,9 @@ openshift:
     # that admits `privileged: true` with hostPath mounts of `/dev`, `/lib/modules` and `/usr/src`.
     #
     name: privileged
+    # openshift.scc.kmmBuildName -- The SecurityContextConstraint granted, with `openshift.scc.enabled`, to the release
+    # namespace's `default` ServiceAccount when `modules.v4l2loopback.method` is `kmm` and in-cluster builds are on.
+    # KMM runs its kaniko build pods as that account and mounts the node's `/lib/modules` into them; the built-in
+    # `hostmount-anyuid` is the narrowest SCC that admits them.
+    #
+    kmmBuildName: hostmount-anyuid

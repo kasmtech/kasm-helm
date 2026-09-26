@@ -1067,6 +1067,7 @@ object
 <pre lang="json">
 scc:
     enabled: false
+    kmmBuildName: hostmount-anyuid
     name: privileged
 </pre>
 </div>
@@ -1086,6 +1087,20 @@ false
 </div>
 			</td>
 			<td>Grant the DaemonSet's ServiceAccount the right to use the SecurityContextConstraint named by `openshift.scc.name`, through a ClusterRole holding `use` on that one SCC and a RoleBinding in the release namespace. OpenShift's default `restricted-v2` SCC rejects this privileged, hostPath-mounting DaemonSet regardless of the namespace's Pod Security labels; this is the grant that admits it. Requires cluster-admin at install time, as any ClusterRole does. </td>
+		</tr>
+		<tr>
+			<td id="openshift--scc--kmmBuildName"><a href="./values.yaml#L468">openshift.scc.kmmBuildName</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+hostmount-anyuid
+</pre>
+</div>
+			</td>
+			<td>The SecurityContextConstraint granted, with `openshift.scc.enabled`, to the release namespace's `default` ServiceAccount when `modules.v4l2loopback.method` is `kmm` and in-cluster builds are on. KMM runs its kaniko build pods as that account and mounts the node's `/lib/modules` into them; the built-in `hostmount-anyuid` is the narrowest SCC that admits them. </td>
 		</tr>
 		<tr>
 			<td id="openshift--scc--name"><a href="./values.yaml#L462">openshift.scc.name</a></td>
