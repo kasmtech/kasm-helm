@@ -87,6 +87,13 @@ deviceShares: 1
 #
 driDrivers: ""
 
+# driCapabilities -- `dri` only: what the plugin tells the agent (and through it the Kasm manager) each render
+# node can do, as a comma-separated list of `dri3`, `egl`, `vaapi` and `vulkan`, or `none`. Empty (the default)
+# decides by kernel driver: Intel (`i915`, `xe`) and AMD (`amdgpu`) GPUs do all four, `radeon` all but Vulkan,
+# `nouveau` DRI3 and EGL. Set it when a GPU lacks one of them, e.g. an Intel GPU without a video encoder.
+#
+driCapabilities: ""
+
 # nodeSelector -- Node labels that select which nodes run the device plugin. Set this to the same selector
 # used by the `kasm-node-prep` chart so `kasm.com/video` is only advertised on nodes where the v4l2loopback
 # module is actually loaded; otherwise the scheduler can place a webcam session on a node with no devices.

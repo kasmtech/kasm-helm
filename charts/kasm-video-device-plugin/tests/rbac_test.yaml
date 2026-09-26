@@ -1,0 +1,34 @@
+suite: dri plugin node RBAC
+
+templates:
+  - templates/rbac.yaml
+
+tests:
+  - it: grants nothing to the webcam plugin
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: lets a dri plugin get and patch Nodes
+    set:
+      deviceKind: dri
+    asserts:
+      - hasDocuments:
+          count: 2
+      - documentIndex: 0
+        isKind:
+          of: ClusterRole
+      - documentIndex: 0
+        equal:
+          path: rules
+          value:
+            - apiGroups: [""]
+              resources: ["nodes"]
+              verbs: ["get", "patch"]
+      - documentIndex: 1
+        equal:
+          path: subjects[0]
+          value:
+            kind: ServiceAccount
+            name: RELEASE-NAME-kasm-video-device-plugin
+            namespace: NAMESPACE

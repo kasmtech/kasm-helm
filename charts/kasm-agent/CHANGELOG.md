@@ -6,6 +6,7 @@ All notable changes to the kasm-agent chart are documented here.
 
 ### Changed
 
+- `driDevicePlugin` publishes each node's GPU capabilities, so with `agent.workspaceSecurity.driResource` set the agent reports Intel and AMD GPUs to the Kasm manager and serves images' 1.19 graphics acceleration and video encoding preferences; the render group is added to such sessions automatically.
 - The README's image examples use the renamed agent images (`kasmweb/agent-api`, `kasmweb/agent-operator` and the rest, without the `kasm-` prefix), matching the subcharts' new defaults.
 - The `agent` subchart gains `agent.workspaceSecurity.*`, the Agent's session run-mode policy (uid 1000 by default; root images as host root by default, in a pod user namespace with `rootMode: userns`, or refused with `forbid`), and `agent.openshift.scc.*` now renders the sessions' SecurityContextConstraints per `agent.workspaceSecurity.rootMode`. Values comments name both.
 - Values comments point at the OpenShift switches the subcharts gained: `agent.openshift.scc.enabled` (the sessions' SecurityContextConstraint and its grant), `nodePrep.openshift.scc.enabled` and `videoDevicePlugin.openshift.scc.enabled` (the `privileged` SCC for each DaemonSet's own ServiceAccount). A new `tests/values-agent/openshift.yaml` scenario renders the agent's SCC objects and a passthrough Route.

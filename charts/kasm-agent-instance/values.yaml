@@ -779,9 +779,10 @@ workspaceSecurity:
   #   deviceAllowlist: ["/dev/dri/renderD*"]
   deviceAllowlist: []
   # workspaceSecurity.driResource -- The extended resource a DRI device plugin advertises GPU render nodes as,
-  # e.g. `kasm.com/dri` from the `kasm-agent` umbrella's `driDevicePlugin`. When set, a launch whose run config
-  # `devices` name an allowed `/dev/dri` node requests one of this resource instead, and the plugin hands the
-  # session the render node, its card node and `DRINODE`. Leave it empty with no DRI device plugin: the
+  # e.g. `kasm.com/dri` from the `kasm-agent` umbrella's `driDevicePlugin`. When set, the agent reports the GPUs
+  # the plugin publishes to the Kasm manager, and a launch whose graphics or video preference needs one (or whose
+  # run config `devices` name an allowed `/dev/dri` node) requests one of this resource, with the GPU's groups;
+  # the plugin hands the session the render node, its card node and `DRINODE`. Leave it empty with no DRI device plugin: the
   # devices are then mounted by hostPath, which Kubernetes lets only a privileged container open, so an
   # ordinary session sees `/dev/dri` but renders in software. Omitted when empty.
   driResource: ""

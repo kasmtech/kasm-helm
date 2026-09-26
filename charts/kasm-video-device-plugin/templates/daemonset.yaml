@@ -23,6 +23,10 @@ spec:
         {{- end }}
     spec:
       serviceAccountName: {{ include "kasmVideoDevicePlugin.serviceAccountName" . }}
+      {{- if eq .Values.deviceKind "dri" }}
+      # A dri plugin writes its GPUs onto its Node (see rbac.yaml); the webcam plugin needs no API access.
+      automountServiceAccountToken: true
+      {{- end }}
       {{- with .Values.priorityClassName }}
       priorityClassName: {{ . }}
       {{- end }}
@@ -64,6 +68,18 @@ spec:
             # How many containers may be allocated each device.
             - name: DEVICE_SHARES
               value: {{ .Values.deviceShares | quote }}
+            {{- end }}
+            {{- if eq .Values.deviceKind "dri" }}
+            # The Node the plugin publishes its GPUs on.
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            {{- end }}
+            {{- with .Values.driCapabilities }}
+            # What every advertised render node is reported to support, instead of deciding by driver.
+            - name: DRI_CAPABILITIES
+              value: {{ . | quote }}
             {{- end }}
             {{- with .Values.driDrivers }}
             # Kernel drivers whose render nodes to advertise.

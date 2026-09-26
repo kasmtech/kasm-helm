@@ -1,6 +1,6 @@
 # GPU nodes (CUDA, EGL and DRI)
 
-> **Applies to:** agent · **Charts/values:** `gpuOperator.enabled`, `agent.gpu.enabled`, `gpuOperator.driver.enabled`, `gpuOperator.toolkit.enabled`, `gpuOperator.devicePlugin.enabled`, `gpuOperator.nfd.enabled`, `gpuOperator.devicePlugin.config`, `driDevicePlugin.*`, `agent.workspaceSecurity.driResource`, `agent.workspaceSecurity.deviceAllowlist`, `agent.workspaceSecurity.supplementalGroups`, `agent.workspacesNodeSelector`, `agent.nodeSelector`
+> **Applies to:** agent · **Charts/values:** `gpuOperator.enabled`, `agent.gpu.enabled`, `gpuOperator.driver.enabled`, `gpuOperator.toolkit.enabled`, `gpuOperator.devicePlugin.enabled`, `gpuOperator.nfd.enabled`, `gpuOperator.devicePlugin.config`, `driDevicePlugin.*`, `driDevicePlugin.driCapabilities`, `agent.workspaceSecurity.driResource`, `agent.workspaceSecurity.deviceAllowlist`, `agent.workspaceSecurity.supplementalGroups`, `agent.workspacesNodeSelector`, `agent.nodeSelector`
 
 > **Scope note.** The NVIDIA-side steps are pointers to NVIDIA's own procedure; follow NVIDIA's
 > current documentation for the driver and device-plugin install.
@@ -21,16 +21,18 @@ goes through a device plugin, and there are two, one per kind of GPU:
 **NVIDIA** needs two values, always. `gpuOperator.enabled=true` installs the NVIDIA GPU Operator so
 nodes advertise `nvidia.com/gpu`; `agent.gpu.enabled=true` sets `KASM_GPU_OPERATOR_ENABLED` on the
 agent, which is what makes it put `nvidia.com/gpu: N` into the pod of a workspace whose image asks
-for GPUs. Enable only the operator and you have GPUs nobody requests. Enable only the agent flag and
+for GPUs, and report the GPUs to the Kasm manager at all. Enable only the operator and you have GPUs
+nobody requests. Enable only the agent flag and
 you request a resource no node advertises, so sessions stay `Pending`. EGL on NVIDIA needs nothing
 further: the NVIDIA runtime adds the GPU's DRI nodes itself.
 
 **Intel and AMD** also need two values. `driDevicePlugin.enabled=true` installs the DRI device
 plugin, which advertises each Intel or AMD GPU's render node as `kasm.com/dri`, shared by up to
-`driDevicePlugin.deviceShares` sessions; `agent.workspaceSecurity.driResource=kasm.com/dri` makes
-the agent request it for any image whose run config passes a `/dev/dri` device through. Without the
-second, the agent falls back to a `hostPath` mount the session cannot open, and it renders in
-software.
+`driDevicePlugin.deviceShares` sessions, and labels each node with what its GPUs can do;
+`agent.workspaceSecurity.driResource=kasm.com/dri` makes the agent report those GPUs to the Kasm
+manager and request one for any image whose graphics or video preference needs it. Without the
+second, the manager never hears of the GPUs, and a pre-1.19 image's `/dev/dri` device falls back to a
+`hostPath` mount the session cannot open.
 
 ## Before you start
 
@@ -101,7 +103,6 @@ Distro / cloud variants:
    agent:
      workspaceSecurity:
        driResource: kasm.com/dri
-       supplementalGroups: [990, 44]   # the node's render and video gids - step 4
      workspacesNodeSelector:
        kasm-gpu: "true"
    ```
@@ -117,39 +118,49 @@ Distro / cloud variants:
      -n kasm-agent -f values.yaml --timeout 20m
    ```
 
-4. **Give sessions the node's render group.** Sessions run as uid 1000, and the device plugin hands
-   a device over with its node permissions: `/dev/dri/renderD*` is usually mode `0660`, group
-   `render`, and `card*` group `video`. A uid-1000 session opens them only as a member of those
-   groups, by the node's numeric gids - which differ between distributions (Ubuntu's `render` is
-   often 990 or 109, `video` 44).
+4. **Choose each GPU image's methods in Kasm.** In the image's settings, set the **graphics acceleration**
+   preference (`DRI3`, `EGL`, `VULKAN`, or `MESA` for software) and the **video encoding** preference
+   (`VAAPI`, `NVENC`, or `SW`), in order of preference, and a **GPU count** for CUDA work. The agent
+   reports every GPU in the cluster to the manager with what it can do, the manager only places the
+   image on an agent offering a listed method, and the agent then requests the matching device:
 
-   ```console
-   # on a GPU node
-   stat -c '%n %G %g' /dev/dri/renderD* /dev/dri/card*
+   | Method | Needs | The session gets |
+   | ------ | ----- | ---------------- |
+   | `DRI3` | an Intel or AMD GPU (`kasm.com/dri`) | KasmVNC's own hardware 3D on the render node |
+   | `EGL` | an NVIDIA GPU or an Intel/AMD one | its desktop started under VirtualGL on the GPU |
+   | `VULKAN` | an NVIDIA GPU or an Intel/AMD one | its desktop's OpenGL through Zink on Vulkan |
+   | `VAAPI` | an Intel or AMD GPU | hardware video encoding on the render node |
+   | `NVENC` | an NVIDIA GPU | hardware video encoding on the NVIDIA GPU |
+
+   A method is tried only on nodes whose GPU can do it (the DRI plugin labels each node
+   `kasm.com/dri.<method>`), and one device covering both the graphics and the video method is
+   preferred. When nothing in the list is available and it has no `MESA`/`SW`, the launch fails with
+   `Image required GPU, failed to obtain gpu on host`. GPUs an admin excludes on the agent in Kasm
+   (graphics, video or CUDA) are honoured per node: a node is avoided once all of its GPUs are
+   excluded for that role.
+
+   The agent adds the GPU's `render` and `video` groups to the session itself, from the gids the DRI
+   plugin reads on each node, so uid-1000 sessions can open the devices.
+
+   The DRI plugin decides what an Intel or AMD GPU can do by its kernel driver (`i915`, `xe`,
+   `amdgpu`: all four methods). If a GPU lacks one - an Intel GPU without a video encoder, say - set
+   `driDevicePlugin.driCapabilities` (e.g. `dri3,egl,vulkan`).
+
+5. **Images configured the pre-1.19 way** pass a render node through in the run config and set
+   `HW3D`:
+
+   ```json
+   { "devices": ["/dev/dri/renderD128:/dev/dri/renderD128:rwm"],
+     "environment": { "HW3D": "true" } }
    ```
 
-   Put the gids `stat` printed in `agent.workspaceSecurity.supplementalGroups`, or in the image's
-   run config `group_add`. The gids have to agree across the GPU nodes.
-
-5. **Point the workspace images at the GPU.** In Kasm, set the image's resources and run config:
-   * NVIDIA: the image's **GPU count** (`gpu_count`) is the number of `nvidia.com/gpu` it gets;
-     one is normal. Set `HW3D=true` in its run config environment for hardware-accelerated
-     rendering.
-   * Intel or AMD: pass a render node through in the run config, as on a Docker agent, and set
-     `HW3D=true`:
-
-     ```json
-     { "devices": ["/dev/dri/renderD128:/dev/dri/renderD128:rwm"],
-       "environment": { "HW3D": "true" } }
-     ```
-
-     With `driResource` set, the agent turns any allowed `/dev/dri` entry into one `kasm.com/dri`,
-     and the plugin picks the node: the session gets whichever render node it allocated and
-     `DRINODE` set to it, so the path in the run config does not have to match the node. Which host
-     devices a run config may pass through at all is `agent.workspaceSecurity.deviceAllowlist`
-     (default: the DRI card and render nodes; `["none"]` passes none).
-
-   Without `DRINODE`, a session uses the first render node it can see.
+   These keep working: with `driResource` set, the agent turns any allowed `/dev/dri` entry into one
+   `kasm.com/dri`, and the plugin picks the node and sets `DRINODE`, so the path in the run config
+   does not have to match. They do not get the groups added: put the node's gids in
+   `agent.workspaceSecurity.supplementalGroups` or the run config's `group_add` (`stat -c '%n %G %g'
+   /dev/dri/*` on a GPU node prints them; they have to agree across the GPU nodes). Which host
+   devices a run config may pass through at all is `agent.workspaceSecurity.deviceAllowlist`
+   (default: the DRI card and render nodes; `["none"]` passes none).
 
 6. **Airgapped?** Do **not** mirror the GPU Operator from `make images-agent`; it pulls a much larger
    operand set at runtime. Follow NVIDIA's air-gapped procedure and pass its values through with the
@@ -281,7 +292,6 @@ kasm-agent:
       enabled: true
     workspaceSecurity:
       driResource: kasm.com/dri
-      supplementalGroups: [990, 44]
     workspacesNodeSelector:
       kasm-gpu: "true"
 ```
@@ -295,8 +305,9 @@ Installing `kasm-agent` directly? Drop the `kasm-agent:` key and start at `gpuOp
 | Nodes advertise `nvidia.com/gpu` but Kasm sessions never request it | `agent.gpu.enabled` left `false`, or the image has no GPU count | Set it - both values are required - and give the image a GPU count |
 | GPU session stays `Pending` with `Insufficient nvidia.com/gpu` or `Insufficient kasm.com/dri` | The device plugin is not installed, has not rolled out on that node, or every share is taken | Check the plugin pods; raise the replicas or `deviceShares`, or add GPU nodes |
 | `/dev/dri/renderD128` is in the session but opening it fails with `Operation not permitted` | It was mounted by `hostPath`, which only a privileged container can open | `driDevicePlugin.enabled` plus `agent.workspaceSecurity.driResource` (Intel, AMD), or `nvidia.com/gpu` (NVIDIA) |
-| The render node opens with `Permission denied` for `kasm-user` | The session runs as uid 1000 without the device's `render`/`video` group | `agent.workspaceSecurity.supplementalGroups` with the node's gids, or `group_add` in the image's run config (step 4) |
-| An Intel or AMD session renders in software though the node has the GPU | `agent.workspaceSecurity.driResource` unset (the release notes warn), the run config passes no `/dev/dri` device, or `HW3D` is not set | Set `driResource`; add the device and `HW3D` to the run config (step 5) |
+| The render node opens with `Permission denied` for `kasm-user` | A pre-1.19 image (run config `devices`) without the device's `render`/`video` group | `agent.workspaceSecurity.supplementalGroups` with the node's gids, or `group_add` in the image's run config (step 5) |
+| An Intel or AMD session renders in software though the node has the GPU | `agent.workspaceSecurity.driResource` unset (the release notes warn), or the image's graphics preference is `MESA` | Set `driResource`; set the image's graphics acceleration (step 4) |
+| The manager never places a GPU image on the agent | No node offers a listed method: no GPU resource advertised, the method's `kasm.com/dri.<method>` label missing, or every GPU excluded | `kubectl get nodes --show-labels`; check the plugin pods and the agent's GPU exclusions in Kasm |
 | `kasm.com/dri` is 0 on a node with an NVIDIA GPU only | NVIDIA GPUs are left to `nvidia.com/gpu` by default | Use the NVIDIA path; `driDevicePlugin.driDrivers` lists the drivers advertised |
 | containerd fails to start after the GPU Operator installs, `drop-in config version 4 higher than root config version 2` | The toolkit's containerd drop-in is newer than the node's root config | On the node: `containerd config migrate > /tmp/config.toml`, review it, replace `/etc/containerd/config.toml`, restart containerd |
 | A new time-slicing or MPS config does not show in allocatable | The device plugin and GPU Feature Discovery read the config at start | Restart both (see [time-slicing](#nvidia-time-slicing)) |
@@ -314,8 +325,8 @@ Installing `kasm-agent` directly? Drop the `kasm-agent:` key and start at `gpuOp
 - [ ] NVIDIA: `gpuOperator.enabled=true` in exactly one release per cluster (or skipped if a device plugin already exists)
 - [ ] NVIDIA on containerd 2.x: root containerd config at the current version
 - [ ] `agent.workspacesNodeSelector` targets the GPU nodes
-- [ ] The node's `render`/`video` gids in `agent.workspaceSecurity.supplementalGroups` (or the images' `group_add`)
+- [ ] Pre-1.19 images only: the node's `render`/`video` gids in `agent.workspaceSecurity.supplementalGroups` (or the images' `group_add`)
 - [ ] Sharing decided: sessions per GPU (`replicas` or `deviceShares`) sized to the GPU's memory
 - [ ] `kubectl get nodes` shows non-empty allocatable for the chosen resource
-- [ ] Workspace images carry a GPU count (NVIDIA) or a `/dev/dri` device (Intel, AMD), and `HW3D`
+- [ ] Workspace images set graphics acceleration and video encoding preferences (and a GPU count for CUDA)
 - [ ] A Kasm GPU workspace launches and renders on the GPU

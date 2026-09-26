@@ -25,6 +25,11 @@ tests:
             - name: DEVICE_ENV_VAR
               value: KASM_VIDEO_DEVICE
 
+  - it: mounts no API token for the webcam plugin
+    asserts:
+      - notExists:
+          path: spec.template.spec.automountServiceAccountToken
+
   - it: renders a custom device prefix, cap, resource name and allocate env var
     set:
       devicePrefix: cam
@@ -68,8 +73,15 @@ tests:
               value: dri
             - name: DEVICE_SHARES
               value: "8"
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
             - name: DRI_DRIVERS
               value: i915,xe,amdgpu
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: true
 
   - it: uses the Kasm-built image by default
     asserts:

@@ -182,9 +182,9 @@ videoDevicePlugin:
 # advertising each node's GPU render nodes (`/dev/dri/renderD*`) as `kasm.com/dri`. Kubernetes lets an
 # unprivileged container open only the devices a device plugin handed it, so this is what gives an ordinary
 # session hardware-accelerated rendering (EGL/VirtualGL through Mesa). A session allocated one gets the render
-# node, its card node and `DRINODE`. Set `agent.workspaceSecurity.driResource: kasm.com/dri` as well, or the
-# agent never requests it; the session still needs the node's `render` gid (`agent.workspaceSecurity.
-# supplementalGroups`) to open the device. Any other subchart value is passed through. See
+# node, its card node and `DRINODE`. The plugin also labels its node with what its GPUs can do, for the agent to
+# report them to the Kasm manager. Set `agent.workspaceSecurity.driResource: kasm.com/dri` as well, or the agent
+# never reports or requests them. Any other subchart value (e.g. `driCapabilities`) is passed through. See
 # docs/how-to/nodes/gpu.md.
 #
 driDevicePlugin:

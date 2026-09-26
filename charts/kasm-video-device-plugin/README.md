@@ -161,6 +161,20 @@ int
 			<td>How many sessions may share each device: the plugin advertises every device this many times. `1` (the default) gives each session a device of its own, as webcams need. A GPU render node can be shared; with more than one share the plugin places each session on the device with the most shares free. </td>
 		</tr>
 		<tr>
+			<td id="driCapabilities"><a href="./values.yaml#L95">driCapabilities</a></td>
+			<td>
+string
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+""
+</pre>
+</div>
+			</td>
+			<td>`dri` only: what the plugin tells the agent (and through it the Kasm manager) each render node can do, as a comma-separated list of `dri3`, `egl`, `vaapi` and `vulkan`, or `none`. Empty (the default) decides by kernel driver: Intel (`i915`, `xe`) and AMD (`amdgpu`) GPUs do all four, `radeon` all but Vulkan, `nouveau` DRI3 and EGL. Set it when a GPU lacks one of them, e.g. an Intel GPU without a video encoder. </td>
+		</tr>
+		<tr>
 			<td id="driDrivers"><a href="./values.yaml#L88">driDrivers</a></td>
 			<td>
 string
@@ -316,7 +330,7 @@ string
 			<td>Override the chart name used when building resource names and the `app.kubernetes.io/name` label. Leave empty to use the chart name (`kasm-video-device-plugin`). </td>
 		</tr>
 		<tr>
-			<td id="nodeSelector"><a href="./values.yaml#L94">nodeSelector</a></td>
+			<td id="nodeSelector"><a href="./values.yaml#L101">nodeSelector</a></td>
 			<td>
 object
 </td>
@@ -330,7 +344,7 @@ object
 			<td>Node labels that select which nodes run the device plugin. Set this to the same selector used by the `kasm-node-prep` chart so `kasm.com/video` is only advertised on nodes where the v4l2loopback module is actually loaded; otherwise the scheduler can place a webcam session on a node with no devices. </td>
 		</tr>
 		<tr>
-			<td id="openshift"><a href="./values.yaml#L168">openshift</a></td>
+			<td id="openshift"><a href="./values.yaml#L175">openshift</a></td>
 			<td>
 object
 </td>
@@ -346,7 +360,7 @@ scc:
 			<td>OpenShift-only objects. Leave every switch here off on any other distribution: the kinds involved exist only on OpenShift and the release would fail to install. </td>
 		</tr>
 		<tr>
-			<td id="openshift--scc--enabled"><a href="./values.yaml#L176">openshift.scc.enabled</a></td>
+			<td id="openshift--scc--enabled"><a href="./values.yaml#L183">openshift.scc.enabled</a></td>
 			<td>
 bool
 </td>
@@ -360,7 +374,7 @@ false
 			<td>Grant the DaemonSet's ServiceAccount the right to use the SecurityContextConstraint named by `openshift.scc.name`, through a ClusterRole holding `use` on that one SCC and a RoleBinding in the release namespace. OpenShift's default `restricted-v2` SCC rejects this privileged, hostPath-mounting DaemonSet regardless of the namespace's Pod Security labels; this is the grant that admits it. Requires cluster-admin at install time, as any ClusterRole does. </td>
 		</tr>
 		<tr>
-			<td id="openshift--scc--name"><a href="./values.yaml#L180">openshift.scc.name</a></td>
+			<td id="openshift--scc--name"><a href="./values.yaml#L187">openshift.scc.name</a></td>
 			<td>
 string
 </td>
@@ -374,7 +388,7 @@ privileged
 			<td>The SecurityContextConstraint to grant. The built-in `privileged` SCC is the only one that admits `privileged: true` with hostPath mounts of `/dev` and the kubelet's device-plugin directory. </td>
 		</tr>
 		<tr>
-			<td id="podAnnotations"><a href="./values.yaml#L141">podAnnotations</a></td>
+			<td id="podAnnotations"><a href="./values.yaml#L148">podAnnotations</a></td>
 			<td>
 object
 </td>
@@ -388,7 +402,7 @@ object
 			<td>Extra annotations to add to the DaemonSet pods. </td>
 		</tr>
 		<tr>
-			<td id="podLabels"><a href="./values.yaml#L145">podLabels</a></td>
+			<td id="podLabels"><a href="./values.yaml#L152">podLabels</a></td>
 			<td>
 object
 </td>
@@ -402,7 +416,7 @@ object
 			<td>Extra labels to add to the DaemonSet pods, merged with the chart's standard selector labels. </td>
 		</tr>
 		<tr>
-			<td id="priorityClassName"><a href="./values.yaml#L137">priorityClassName</a></td>
+			<td id="priorityClassName"><a href="./values.yaml#L144">priorityClassName</a></td>
 			<td>
 string
 </td>
@@ -430,7 +444,7 @@ kasm.com/video
 			<td>Kubernetes extended resource name the plugin registers under with kubelet. Must match the resource key in workspace pod limits — this is the resource the Kasm agent requests when `KASM_SVC_WEBCAM=1`. </td>
 		</tr>
 		<tr>
-			<td id="resources"><a href="./values.yaml#L109">resources</a></td>
+			<td id="resources"><a href="./values.yaml#L116">resources</a></td>
 			<td>
 object
 </td>
@@ -449,7 +463,7 @@ requests:
 			<td>CPU and memory requests and limits for the device plugin container. The plugin only watches device paths and answers kubelet, so it stays small. Both requests and limits are always set. </td>
 		</tr>
 		<tr>
-			<td id="resources--limits--cpu"><a href="./values.yaml#L126">resources.limits.cpu</a></td>
+			<td id="resources--limits--cpu"><a href="./values.yaml#L133">resources.limits.cpu</a></td>
 			<td>
 string
 </td>
@@ -463,7 +477,7 @@ string
 			<td>CPU limit for the device plugin container. Headroom over the request for the periodic `/dev` re-scan and for the burst of Allocate calls when several webcam sessions start at once; the plugin is near-idle the rest of the time, so there is little reason to raise this. </td>
 		</tr>
 		<tr>
-			<td id="resources--limits--memory"><a href="./values.yaml#L131">resources.limits.memory</a></td>
+			<td id="resources--limits--memory"><a href="./values.yaml#L138">resources.limits.memory</a></td>
 			<td>
 string
 </td>
@@ -477,7 +491,7 @@ string
 			<td>Memory limit for the device plugin container. Comfortably above what the plugin actually uses — it is here to bound a runaway and to satisfy the repository's Kyverno policies, which reject a container with no memory limit, not because the plugin is expected to approach it. </td>
 		</tr>
 		<tr>
-			<td id="resources--requests--cpu"><a href="./values.yaml#L115">resources.requests.cpu</a></td>
+			<td id="resources--requests--cpu"><a href="./values.yaml#L122">resources.requests.cpu</a></td>
 			<td>
 string
 </td>
@@ -491,7 +505,7 @@ string
 			<td>CPU request for the device plugin container. All the plugin does is re-scan `/dev` every 10 seconds and answer kubelet's gRPC calls, so there is no per-session work and the request is effectively an idle reservation. </td>
 		</tr>
 		<tr>
-			<td id="resources--requests--memory"><a href="./values.yaml#L120">resources.requests.memory</a></td>
+			<td id="resources--requests--memory"><a href="./values.yaml#L127">resources.requests.memory</a></td>
 			<td>
 string
 </td>
@@ -505,7 +519,7 @@ string
 			<td>Memory request for the device plugin container. It holds only the list of matching device files (at most `maxDevices` entries) and its gRPC server, so this stays flat no matter how many webcam sessions are running on the node. </td>
 		</tr>
 		<tr>
-			<td id="serviceAccount"><a href="./values.yaml#L152">serviceAccount</a></td>
+			<td id="serviceAccount"><a href="./values.yaml#L159">serviceAccount</a></td>
 			<td>
 object
 </td>
@@ -521,7 +535,7 @@ name: ""
 			<td>The ServiceAccount the DaemonSet pods run under. The chart creates one by default so that cluster policy - an OpenShift SecurityContextConstraint, a Kyverno `PolicyException` - can be granted to this DaemonSet alone instead of to every pod that uses the namespace's `default` account. The account holds no RBAC and mounts no token; the plugin talks to the kubelet over its socket, not to the API server. </td>
 		</tr>
 		<tr>
-			<td id="serviceAccount--annotations"><a href="./values.yaml#L163">serviceAccount.annotations</a></td>
+			<td id="serviceAccount--annotations"><a href="./values.yaml#L170">serviceAccount.annotations</a></td>
 			<td>
 object
 </td>
@@ -535,7 +549,7 @@ object
 			<td>Annotations to add to the created ServiceAccount. </td>
 		</tr>
 		<tr>
-			<td id="serviceAccount--create"><a href="./values.yaml#L156">serviceAccount.create</a></td>
+			<td id="serviceAccount--create"><a href="./values.yaml#L163">serviceAccount.create</a></td>
 			<td>
 bool
 </td>
@@ -549,7 +563,7 @@ true
 			<td>Create the ServiceAccount. Set to `false` to run under an existing one named by `serviceAccount.name`, or under the namespace `default` account when that is empty. </td>
 		</tr>
 		<tr>
-			<td id="serviceAccount--name"><a href="./values.yaml#L160">serviceAccount.name</a></td>
+			<td id="serviceAccount--name"><a href="./values.yaml#L167">serviceAccount.name</a></td>
 			<td>
 string
 </td>
@@ -563,7 +577,7 @@ string
 			<td>Name of the ServiceAccount to create or to use. Leave empty to derive it from the release name (`<release>-kasm-video-device-plugin`). </td>
 		</tr>
 		<tr>
-			<td id="tolerations"><a href="./values.yaml#L99">tolerations</a></td>
+			<td id="tolerations"><a href="./values.yaml#L106">tolerations</a></td>
 			<td>
 list
 </td>
@@ -577,7 +591,7 @@ list
 			<td>Tolerations for the DaemonSet pods, so nodes carrying taints (for example dedicated workspace nodes) still advertise their video devices. </td>
 		</tr>
 		<tr>
-			<td id="updateStrategy"><a href="./values.yaml#L104">updateStrategy</a></td>
+			<td id="updateStrategy"><a href="./values.yaml#L111">updateStrategy</a></td>
 			<td>
 string
 </td>
