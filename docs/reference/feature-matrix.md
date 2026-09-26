@@ -126,7 +126,7 @@ files live on the session's own disk and go when the session does.
 control plane is published and its proxy reaches the session proxy in-cluster; on direct-connect
 the session proxy is published too, on its own hostname. Every listed front works there, because
 the session proxy serves its own sessions locally and never loops back through the public
-address; `agent.route` is the OpenShift path, unexercised on OpenShift itself; `agent.httpRoute`
+address; `agent.route` is the OpenShift path; `agent.httpRoute`
 also needs `agent.httpRoute.parentRefs`. On a `LoadBalancer`, `agent.sessionProxy.service.httpsPort=443`
 maps the Service's 443 onto the session proxy's 4444 listener, so `agent.publicPort` and the zone's
 port stay at 443; on a `NodePort` set `agent.publicPort` to the node port instead. Behind

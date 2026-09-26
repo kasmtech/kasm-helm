@@ -54,6 +54,7 @@ One task per page. Each ends in a Decisions block that is the checklist.
 | [Security posture](explanation/security-posture.md) | PSS, RBAC, the privileged charts, isolation |
 | [Managed providers](explanation/managed-providers.md) | What EKS, AKS, GKE and OpenShift decide for you |
 | [Supported platforms](explanation/supported-platforms.md) | Version floors, node architecture, distributions |
+| [Session run modes](explanation/session-run-modes.md) | What root and non-root sessions can each do, and where each stops |
 | [Sessions: Docker agent vs Kubernetes](explanation/sessions-docker-vs-kubernetes.md) | What the operator adds to a session's environment |
 | [Why the CRDs are split](explanation/why-the-crds-are-split.md) | Two ways to install a CRD, and why the repo ships both |
 | [Why no hook Jobs](explanation/why-no-hook-jobs.md) | Why the charts leave some steps to you |
@@ -63,6 +64,7 @@ One task per page. Each ends in a Decisions block that is the checklist.
 | Page | Contains |
 | ---- | -------- |
 | [What works on Kubernetes](reference/feature-matrix.md) | Every Kasm feature, its status, and the how-to that installs what it needs |
+| [OpenShift support matrix](reference/openshift-support-matrix.md) | Per release and per component: what runs, under which SCC, and what does not |
 | [Ports and hostnames](reference/ports-and-hostnames.md) | Every port, Service name and hostname |
 | [Troubleshooting](reference/troubleshooting.md) | Symptom, cause, command: the one failures table |
 | [The charts](reference/charts.md) | Ten charts, one line each, linking every value reference |

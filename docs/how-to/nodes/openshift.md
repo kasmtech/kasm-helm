@@ -57,17 +57,22 @@ which idmaps bind mounts only, and device passthrough into it is limited. Stay o
 older release or when a root image needs one of those, and use `forbid` when no image in the
 catalog should run as root at all.
 
+What each run mode can and cannot do, feature by feature, is in
+[Session run modes](../../explanation/session-run-modes.md); every component's account and SCC, and
+what each OpenShift release supports, is in the
+[OpenShift support matrix](../../reference/openshift-support-matrix.md).
+
 The rest of the agent family lands in one of three places:
 
 | Feature | On OpenShift | How |
 | ------- | ------------ | --- |
 | Sessions | Supported | `agent.openshift.scc.enabled=true` |
 | Inline seccomp profiles | Supported, two modes | `agent.seccomp.backend=spo` with the Security Profiles Operator installed, or `installer` with the `privileged` SCC granted to `<agent>-seccomp-installer` (done by the same switch) |
-| Webcam passthrough | Supported, KMM mode only | `nodePrep.modules.v4l2loopback.method=kmm` (RHCOS has no headers or toolchain) plus `videoDevicePlugin.openshift.scc.enabled=true` |
+| Webcam passthrough | Supported, KMM mode only | `nodePrep.modules.v4l2loopback.method=kmm` (RHCOS has no headers or toolchain), a builder image carrying the node kernel's headers and modules (the Driver Toolkit), `nodePrep.openshift.scc.enabled=true` for KMM's worker pods, `hostmount-anyuid` for its build pods, plus `videoDevicePlugin.openshift.scc.enabled=true` |
 | Node sysctls and swap | Supported | `nodePrep.openshift.scc.enabled=true` |
 | Nix images (`imageMounts`) | OpenShift 4.22 or newer | Needs the ImageVolume feature (Kubernetes 1.35); add `image` to `agent.openshift.scc.workspace.volumes` |
 | Device passthrough by path (`/dev/dri`, `/dev/video*` in an image's run config) and host bind mounts | Supported with a wider SCC | `agent.openshift.scc.workspace.allowHostPath=true` |
-| Per-session VPN egress (`egressInstaller`) | **Not supported** | The daemon chains into `*.conflist` files under `/etc/cni/net.d`; OpenShift's CRI-O reads a single Multus `.conf` that the Cluster Network Operator owns, so there is nothing to chain into |
+| Per-session VPN egress (`egressInstaller`) | **Not supported** | The daemon chains into `*.conflist` files; OpenShift's CRI-O reads a single Multus `.conf` under `/etc/kubernetes/cni/net.d` that the Cluster Network Operator owns, so there is nothing to chain into. Installed anyway, it either fails to start or patches unused example files and reports success, and sessions get no tunnel |
 
 ## Before you start
 
@@ -81,8 +86,11 @@ The rest of the agent family lands in one of three places:
   [Security Profiles Operator](https://github.com/kubernetes-sigs/security-profiles-operator) from
   OperatorHub and runs nothing on the nodes; `installer` runs a root DaemonSet with a hostPath
   mount and needs the `privileged` SCC. [Workspace seccomp profiles](seccomp-profiles.md).
-- For webcams, the Kernel Module Management operator from OperatorHub and a registry KMM can push
-  to: [Webcam and kernel modules](webcam-kernel-modules.md).
+- For webcams, the Kernel Module Management operator from OperatorHub (Red Hat's, from
+  `redhat-operators`), a registry KMM can push to, and a builder image that carries the node
+  kernel's `kernel-devel` and module tree, which the Driver Toolkit does:
+  [Webcam and kernel modules](webcam-kernel-modules.md),
+  [OpenShift support matrix](../../reference/openshift-support-matrix.md#operators-from-operatorhub).
 - For Nix images, an OpenShift release whose Kubernetes is 1.35 or newer:
 
   ```console
@@ -138,6 +146,13 @@ The rest of the agent family lands in one of three places:
    kasm-agent:
      nodePrep:
        enabled: true
+       image:                                # the builder: the release's Driver Toolkit
+         registry: image-registry.openshift-image-registry.svc:5000
+         repository: openshift/driver-toolkit
+         tag: latest
+       openshift:
+         scc:
+           enabled: true                     # KMM's worker pods run under this account
        modules:
          v4l2loopback:
            enabled: true
@@ -146,6 +161,12 @@ The rest of the agent family lands in one of three places:
              image:
                registry: image-registry.openshift-image-registry.svc:5000
                repository: kasm-agent/v4l2loopback
+             imageRepoSecret: kmm-registry   # a token that may push to the namespace's image streams
+             registryTLS:
+               insecureSkipTLSVerify: true   # the internal registry's service-CA certificate
+             build:
+               baseImageRegistryTLS:
+                 insecureSkipTLSVerify: true
      videoDevicePlugin:
        enabled: true
        openshift:
@@ -153,8 +174,18 @@ The rest of the agent family lands in one of three places:
            enabled: true
    ```
 
-   `nodePrep.openshift.scc.enabled` is only for `tuning.sysctls` or `tuning.swap`, which run the
-   privileged DaemonSet; a KMM-only `nodePrep` renders no DaemonSet and needs no grant.
+   KMM runs its in-cluster build pods as the namespace's `default` account and mounts the node's
+   `/lib/modules` into them, which only an SCC with host mounts admits; grant it once:
+
+   ```console
+   oc adm policy add-scc-to-user hostmount-anyuid -z default -n kasm
+   ```
+
+   The builder must match the nodes' kernel exactly: the Driver Toolkit carries the headers and
+   modules of the release's own kernel, and the image KMM builds links that module tree in so the
+   worker can load `v4l2loopback`'s in-tree dependency, `videodev`. On OKD the Driver Toolkit can
+   drift from the nodes' kernel; see the
+   [support matrix](../../reference/openshift-support-matrix.md#operators-from-operatorhub).
 
 4. **Leave `egressInstaller.enabled` off.** See the table above.
 
@@ -251,7 +282,12 @@ Installing the charts directly, drop the `kasm-helm:` and `kasm-agent:` keys.
 | The same event lists `image volumes are not allowed to be used` | A Nix image's `imageMounts` | `image` in `agent.openshift.scc.workspace.volumes`, on OpenShift 4.22 or newer |
 | `<agent>-seccomp-installer` DaemonSet has `DESIRED n / CURRENT 0` | The `privileged` SCC is not granted to its account | `agent.openshift.scc.enabled=true` with `seccomp.backend=installer`, or switch to `spo` |
 | `videoDevicePlugin` or `nodePrep` DaemonSet has `DESIRED n / CURRENT 0` | Same, for the DaemonSet's own account | `videoDevicePlugin.openshift.scc.enabled=true`, `nodePrep.openshift.scc.enabled=true` |
-| `egressInstaller` pods run but report no conflist to chain, and sessions get no tunnel | OpenShift's CNI configuration is a Multus `.conf`, which the installer cannot chain into | Not supported; disable it |
+| `egressInstaller` pods stay in `CreateContainerError` with `failed to mkdir /opt/cni/bin` | The default `cniBinDir` does not exist on RHCOS | Not supported; disable it |
+| `egressInstaller` pods run and log `verified kasm-egress-cni chaining`, but sessions get no tunnel | The only conflists it can find are the unused examples under `/etc/cni/net.d`; CRI-O reads the Multus `.conf`, which the installer cannot chain into | Not supported; disable it |
+| KMM reports `pods "<name>-build-..." is forbidden: unable to validate against any security context constraint` naming `hostPath` | KMM's build pods run as the namespace's `default` account and mount `/lib/modules` | `oc adm policy add-scc-to-user hostmount-anyuid -z default -n <namespace>` |
+| KMM's build fails with `certificate signed by unknown authority` pushing to or pulling from `image-registry.openshift-image-registry.svc:5000` | The internal registry's certificate comes from the cluster's service CA | `nodePrep.modules.v4l2loopback.kmm.registryTLS.insecureSkipTLSVerify=true`, and `kmm.build.baseImageRegistryTLS.insecureSkipTLSVerify=true` for a builder image there |
+| KMM's build fails with `Unable to find a match: /usr/src/kernels/<kernel>` | The builder image's repositories no longer carry `kernel-devel` for the nodes' kernel | Build from the Driver Toolkit, whose headers match the release |
+| KMM's worker pod crash-loops with `Unknown symbol in module` | The builder image had no module tree for the kernel, so the image's `modules.dep` does not name `videodev` | Build from the Driver Toolkit |
 
 Anything else: [Troubleshooting](../../reference/troubleshooting.md).
 
@@ -261,7 +297,7 @@ Anything else: [Troubleshooting](../../reference/troubleshooting.md).
 - [ ] Root mode chosen: `agent.workspaceSecurity.rootMode` `host` (the default), `userns` (OpenShift 4.20+, no NFS profiles or runc image volumes for root images), or `forbid`.
 - [ ] `agent.openshift.scc.enabled=true`; `allowHostPath`, `allowPrivileged`, `capabilities` and `volumes` widened only for what the catalog needs.
 - [ ] Seccomp backend chosen: `spo` (SPO installed) or `installer` (`privileged` SCC granted by the same switch).
-- [ ] Webcams: `nodePrep.modules.v4l2loopback.method=kmm`, `videoDevicePlugin.openshift.scc.enabled=true`.
+- [ ] Webcams: `nodePrep.modules.v4l2loopback.method=kmm` built from the Driver Toolkit, `nodePrep.openshift.scc.enabled=true`, `hostmount-anyuid` for the namespace's `default` account, `videoDevicePlugin.openshift.scc.enabled=true`.
 - [ ] Nix images: OpenShift 4.22 or newer, `image` in the SCC's `volumes`.
 - [ ] `egressInstaller.enabled=false`.
 - [ ] Sessions verified under the workspace SCC and the agent under `restricted-v2`.

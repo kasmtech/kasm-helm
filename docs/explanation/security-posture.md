@@ -58,6 +58,8 @@ that works everywhere, and the other two lock root down:
   device ownership is not remapped ([GPU workspaces](../how-to/nodes/gpu.md)).
 - `forbid` refuses root: such an image fails to launch.
 
+The feature-by-feature consequences of each mode are in [Session run modes](session-run-modes.md).
+
 `rootFeatures` decides what an otherwise uid-1000 image gets when it asks for root through its
 commands or recording: promoted to `rootMode`, kept at uid 1000 with the feature downgraded, or
 refused. `userNamespaces: always` puts uid-1000 sessions in a user namespace as well, and `sudo`

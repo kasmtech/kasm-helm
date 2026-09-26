@@ -59,7 +59,7 @@ default `rootMode: host`.
   | openSUSE Leap / SLES | `registry.opensuse.org/opensuse/leap:15.6`, or the SLES BCI of the release | expected |
   | EKS Bottlerocket | none | no - no shell, no headers, immutable. `method: kmm` with `kmm.build.enabled: false` and per-kernel images built out of band (Bottlerocket publishes a kmod-kit); module loading policy there is Bottlerocket's own |
   | GKE Container-Optimized OS | none | no - use the Ubuntu node image for the workspace pool, or prebuilt KMM images |
-  | OpenShift RHCOS | none | no - `method: kmm`, the RHEL-native answer |
+  | OpenShift RHCOS | none | no - `method: kmm` with the Driver Toolkit as the builder image, the RHEL-native answer: [Admit the agent on OpenShift](openshift.md) |
 
 ## Steps
 
