@@ -63,7 +63,7 @@ tests:
       - documentIndex: 0
         equal:
           path: seccompProfiles
-          value: [runtime/default, localhost/*, unconfined]
+          value: [runtime/default, "*", unconfined]
       - documentIndex: 0
         notContains:
           path: volumes

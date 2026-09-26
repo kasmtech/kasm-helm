@@ -1095,11 +1095,13 @@ openshift:
         - projected
         - secret
       # openshift.scc.workspace.seccompProfiles -- seccomp profiles the SCC admits. `runtime/default` is what the
-      # operator sets when an image carries no profile; `localhost/*` is the `Localhost` profile the agent sets for an
-      # image that ships an inline profile (`seccomp.enabled`, either backend); `unconfined` is the fallback for
-      # such an image when `seccomp.enabled` is off.
+      # operator sets when an image carries no profile; `*` admits the `Localhost` profile the agent sets for an
+      # image that ships an inline profile (`seccomp.enabled`, either backend) - OpenShift matches `localhost/`
+      # entries literally, with no wildcard, and each such profile has its own content-derived name, so only `*`
+      # covers them; `unconfined` is the fallback for such an image when `seccomp.enabled` is off. Narrowing this
+      # to `[runtime/default]` refuses every image with an inline profile.
       #
       seccompProfiles:
         - runtime/default
-        - localhost/*
+        - "*"
         - unconfined

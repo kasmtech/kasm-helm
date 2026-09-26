@@ -6,6 +6,7 @@ All notable changes to the kasm-agent-instance chart are documented here.
 
 ### Fixed
 
+- The workspace SCCs admit Localhost seccomp profiles with `*` (`openshift.scc.workspace.seccompProfiles`). OpenShift matches `localhost/` entries literally, so the former `localhost/*` admitted none of them, and every image with an inline seccomp profile (`seccomp.enabled`, either backend) was refused by SCC admission.
 - `inClusterControlPlane` is nullable: unset (the new default, `null`) it follows the umbrella's `global.kasm.inClusterControlPlane`, and only without that is it off. Rancher's install form can submit an untouched toggle as `null`, which deletes an umbrella's per-subchart override and left a zero-config `kasm-platform` install failing on `agent.publicHostname is required`. An explicit `false` still wins.
 
 ### Changed

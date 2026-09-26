@@ -1076,7 +1076,7 @@ scc:
         name: ""
         seccompProfiles:
             - runtime/default
-            - localhost/*
+            - '*'
             - unconfined
         volumes:
             - configMap
@@ -1163,7 +1163,7 @@ string
 			<td>Name of the cluster-scoped uid-1000 SecurityContextConstraint and of the ClusterRole that grants the SCCs. The root SCC, rendered unless `workspaceSecurity.rootMode` is `forbid`, takes the same name with a `-root` suffix. Leave empty to derive one unique to this agent and namespace (`kasm-<namespace>-<name>-workspace`). </td>
 		</tr>
 		<tr>
-			<td id="openshift--scc--workspace--seccompProfiles"><a href="./values.yaml#L1102">openshift.scc.workspace.seccompProfiles</a></td>
+			<td id="openshift--scc--workspace--seccompProfiles"><a href="./values.yaml#L1104">openshift.scc.workspace.seccompProfiles</a></td>
 			<td>
 list
 </td>
@@ -1171,12 +1171,12 @@ list
 				<div style="max-width: 520px;">
 <pre lang="json">
 - runtime/default
-- localhost/*
+- '*'
 - unconfined
 </pre>
 </div>
 			</td>
-			<td>seccomp profiles the SCC admits. `runtime/default` is what the operator sets when an image carries no profile; `localhost/*` is the `Localhost` profile the agent sets for an image that ships an inline profile (`seccomp.enabled`, either backend); `unconfined` is the fallback for such an image when `seccomp.enabled` is off. </td>
+			<td>seccomp profiles the SCC admits. `runtime/default` is what the operator sets when an image carries no profile; `*` admits the `Localhost` profile the agent sets for an image that ships an inline profile (`seccomp.enabled`, either backend) - OpenShift matches `localhost/` entries literally, with no wildcard, and each such profile has its own content-derived name, so only `*` covers them; `unconfined` is the fallback for such an image when `seccomp.enabled` is off. Narrowing this to `[runtime/default]` refuses every image with an inline profile. </td>
 		</tr>
 		<tr>
 			<td id="openshift--scc--workspace--volumes"><a href="./values.yaml#L1088">openshift.scc.workspace.volumes</a></td>
