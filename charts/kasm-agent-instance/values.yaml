@@ -770,6 +770,14 @@ workspaceSecurity:
   # default) skips the recursive ownership pass when a volume's root already belongs to fsGroup 1000, `Always`
   # redoes it on every mount. Large persistent profiles start faster with the default.
   fsGroupChangePolicy: ""
+  # workspaceSecurity.deviceAllowlist -- Which host devices an image's run config `devices` may pass through to
+  # its session pod, as path globs (`*` does not cross a `/`) matched against the host path. A device that
+  # matches none is dropped from the launch with a warning. Empty leaves the default, the DRI card and render
+  # nodes (`/dev/dri/card*`, `/dev/dri/renderD*`) that hardware-accelerated rendering needs; `["none"]` passes
+  # no device through. Omitted when empty.
+  # Example:
+  #   deviceAllowlist: ["/dev/dri/renderD*"]
+  deviceAllowlist: []
 
 # seccomp -- Let a workspace run under its image's inline seccomp profile (`security_opt: seccomp=<json>`, as the
 # Nix bubblewrap images carry) instead of `Unconfined`. Kubernetes can only reference a profile already on the

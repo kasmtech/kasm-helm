@@ -308,7 +308,7 @@ spec:
          default). The CRD's own CEL rules (restricted with host root, sudo with restricted) are
          repeated in _validation.tpl so a bad pair fails at render time rather than at apply. */}}
   {{- $wsec := .Values.workspaceSecurity }}
-  {{- if or $wsec.rootMode $wsec.userNamespaces $wsec.rootFeatures $wsec.profile $wsec.sudo $wsec.supplementalGroups $wsec.fsGroupChangePolicy }}
+  {{- if or $wsec.rootMode $wsec.userNamespaces $wsec.rootFeatures $wsec.profile $wsec.sudo $wsec.supplementalGroups $wsec.fsGroupChangePolicy $wsec.deviceAllowlist }}
   workspaceSecurity:
     {{- with $wsec.rootMode }}
     rootMode: {{ . }}
@@ -333,6 +333,12 @@ spec:
     {{- end }}
     {{- with $wsec.fsGroupChangePolicy }}
     fsGroupChangePolicy: {{ . }}
+    {{- end }}
+    {{- with $wsec.deviceAllowlist }}
+    deviceAllowlist:
+      {{- range . }}
+      - {{ . | quote }}
+      {{- end }}
     {{- end }}
   {{- end }}
   {{- with .Values.imagePullSecrets }}

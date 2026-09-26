@@ -2747,6 +2747,18 @@ spec:
                   namespace, host root, or nothing). See WorkspaceSecuritySpec; unset
                   means every default.
                 properties:
+                  deviceAllowlist:
+                    description: |-
+                      DeviceAllowlist is which host devices an image's run_config devices may
+                      pass through to its session pod, as path globs (path.Match: * does not
+                      cross a /) matched against the cleaned host path. A device that
+                      matches none is dropped from the launch with a warning. Unset allows
+                      the DRI render and card nodes (/dev/dri/card*, /dev/dri/renderD*), the
+                      ones hardware-accelerated rendering needs; ["none"] allows nothing.
+                    items:
+                      pattern: ^(/.*|none)$
+                      type: string
+                    type: array
                   fsGroupChangePolicy:
                     default: OnRootMismatch
                     description: |-

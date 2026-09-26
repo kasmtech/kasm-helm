@@ -707,6 +707,7 @@ tests:
         sudo: true
         supplementalGroups: [44, 109]
         fsGroupChangePolicy: Always
+        deviceAllowlist: ["/dev/dri/renderD*"]
     asserts:
       - equal:
           path: spec.workspaceSecurity
@@ -718,6 +719,7 @@ tests:
             sudo: true
             supplementalGroups: [44, 109]
             fsGroupChangePolicy: Always
+            deviceAllowlist: ["/dev/dri/renderD*"]
 
   - it: renders only the one workspaceSecurity field that is set
     set:
@@ -758,6 +760,16 @@ tests:
           path: spec.workspaceSecurity
           value:
             supplementalGroups: [44]
+
+  - it: renders deviceAllowlist alone, and ["none"] as given
+    set:
+      workspaceSecurity:
+        deviceAllowlist: ["none"]
+    asserts:
+      - equal:
+          path: spec.workspaceSecurity
+          value:
+            deviceAllowlist: ["none"]
 
   - it: renders rootFeatures and fsGroupChangePolicy on their own
     set:

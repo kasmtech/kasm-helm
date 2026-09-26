@@ -5,6 +5,7 @@ All notable changes to the kasm-agent-operator chart are documented here.
 ## [Unreleased]
 
 ### Changed
+- CRDs synced from the operator: `Agent.spec.workspaceSecurity.deviceAllowlist` lists which host devices an image's run config `devices` may pass through to its session pod (default: the DRI card and render nodes; `["none"]` passes none).
 - CRDs synced from the operator (image pulls don't fail a workspace): `KasmWorkspace.status.imagesPulledTime` records when a pod's images reached its node; the operator's 70s readiness deadline counts from then instead of from creation, and a pull in progress (Ready reason `PullingImage`) is bounded by 15 minutes instead. Status only.
 - CRDs and RBAC synced from the operator (sessions as pods): the operator runs each `KasmWorkspace` as a Pod it creates and deletes itself - no Deployment, ReplicaSet or per-session Service. `KasmWorkspace.spec.stopped` (stop and pause set it; resume clears it) replaces scaling a Deployment, and `spec.service` keeps only `ports`. `manager-role` grants `pods` create/delete/get/list/watch in a rule of its own (no longer update/patch); the `kasm-agent` ClusterRole drops `apps/deployments`.
 - `kasm-nginx-sidecar` ClusterRole reads `pods` (`get`/`list`/`watch`) instead of `services`, synced from the operator: the sidecar now routes each session straight to its Ready workspace pod's IP rather than through a per-session Service, in both dynamic and static routing. Reads only.
