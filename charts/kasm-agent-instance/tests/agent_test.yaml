@@ -1199,3 +1199,16 @@ tests:
       - equal:
           path: spec.workspacesAutoscaling.standby.replicas
           value: 2
+
+  - it: renders no egress block in chain mode
+    asserts:
+      - notExists:
+          path: spec.egress
+
+  - it: points egress sessions at the Multus attachment
+    set:
+      egress.networkAttachment: kasm-egress
+    asserts:
+      - equal:
+          path: spec.egress.networkAttachment
+          value: kasm-egress

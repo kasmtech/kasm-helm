@@ -1,3 +1,4 @@
+{{- $mode := include "kasmEgressInstaller.mode" . }}
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -64,10 +65,14 @@ spec:
               value: {{ .Values.socketDir | quote }}
             - name: CNI_BIN_DIR
               value: {{ include "kasmEgressInstaller.cniBinDir" . | quote }}
+            - name: EGRESS_CNI_MODE
+              value: {{ $mode | quote }}
+            {{- if eq $mode "chain" }}
             - name: CNI_CONF_DIRS
               value: {{ join "," .Values.cniConfDirs | quote }}
             - name: CONTAINERD_CONFIG_PATHS
               value: {{ join "," .Values.containerdConfigPaths | quote }}
+            {{- end }}
             - name: OPENVPN_BINARY
               value: {{ .Values.openvpnBinary | quote }}
             {{- if .Values.excludedCIDRs }}
@@ -83,6 +88,7 @@ spec:
               mountPath: {{ .Values.socketDir }}
             - name: cni-bin
               mountPath: {{ include "kasmEgressInstaller.cniBinDir" . }}
+            {{- if eq $mode "chain" }}
             {{- range $i, $dir := .Values.cniConfDirs }}
             - name: cni-conf-{{ $i }}
               mountPath: {{ $dir }}
@@ -91,6 +97,7 @@ spec:
             - name: containerd-conf-{{ $i }}
               mountPath: {{ $dir }}
               readOnly: true
+            {{- end }}
             {{- end }}
       volumes:
         - name: socket-dir
@@ -101,6 +108,7 @@ spec:
           hostPath:
             path: {{ include "kasmEgressInstaller.cniBinDir" . }}
             type: DirectoryOrCreate
+        {{- if eq $mode "chain" }}
         {{- range $i, $dir := .Values.cniConfDirs }}
         - name: cni-conf-{{ $i }}
           hostPath:
@@ -121,4 +129,5 @@ spec:
           hostPath:
             path: {{ $dir }}
             type: DirectoryOrCreate
+        {{- end }}
         {{- end }}

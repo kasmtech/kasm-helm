@@ -48,15 +48,35 @@ imagePullSecrets: []
 #
 socketDir: /var/run/kasm-egress
 
-# distro -- Kubernetes distribution preset used to derive the CNI plugin bin dir (`cniBinDir`) when that is
-# left empty. Distributions read CNI plugin binaries from different host paths, and installing the shim to
-# the wrong one means the container runtime never invokes it — pods get no egress tunnel, with no error.
-# Recognized values: `vanilla` (/opt/cni/bin — kubeadm and most managed distros, the default) and `k3s`
-# (/var/lib/rancher/k3s/data/cni). For any other distribution (including RKE2, whose bin dir varies by
-# version) set `cniBinDir` explicitly. This preset governs only the single bin dir the shim is installed
-# into; the conflist and containerd paths scanned below already cover k3s/RKE2/vanilla as a union.
+# distro -- Kubernetes distribution preset used to derive the CNI plugin bin dir (`cniBinDir`) and the CNI
+# mode (`mode`) when those are left empty. Distributions read CNI plugin binaries from different host paths,
+# and installing the shim to the wrong one means the container runtime never invokes it — pods get no egress
+# tunnel, with no error. Recognized values: `vanilla` (/opt/cni/bin — kubeadm and most managed distros, the
+# default), `k3s` (/var/lib/rancher/k3s/data/cni) and `openshift` (/var/lib/cni/bin, where Multus finds its
+# plugins, and `mode: attachment`). For any other distribution (including RKE2, whose bin dir varies by
+# version) set `cniBinDir` explicitly. In chain mode the conflist and containerd paths scanned below already
+# cover k3s/RKE2/vanilla as a union.
 #
 distro: vanilla
+
+# mode -- How sessions reach the shim. `chain` chains kasm-egress-cni into every conflist the runtime reads
+# (`cniConfDirs`), so the runtime calls it for every pod. `attachment` touches no CNI configuration: the chart
+# renders a Multus NetworkAttachmentDefinition (`networkAttachment`) that runs the shim, and only the sessions
+# with egress are attached to it — set the agent's `agent.egress.networkAttachment` to the same name. Use
+# `attachment` where the primary CNI configuration belongs to someone else, as OpenShift's belongs to the
+# Cluster Network Operator; it needs Multus. Empty derives it from `distro`: `attachment` for `openshift`,
+# `chain` otherwise.
+#
+mode: ""
+
+# Configure the Multus NetworkAttachmentDefinition rendered in `attachment` mode, in the release namespace.
+# Sessions must run in that namespace, or reference it as `<namespace>/<name>`.
+#
+networkAttachment:
+  # networkAttachment.name -- Name of the NetworkAttachmentDefinition. The agent's
+  # `agent.egress.networkAttachment` must name it.
+  #
+  name: kasm-egress
 
 # cniBinDir -- Host path the kasm-egress-cni shim binary is installed into; must match the CNI bin dir your
 # container runtime actually reads plugins from. Leave empty to derive it from `distro` (recommended); set
@@ -166,6 +186,17 @@ priorityClassName: system-node-critical
 # podAnnotations -- Extra annotations to add to the DaemonSet pods.
 #
 podAnnotations: {}
+
+# openshift -- OpenShift-only objects. Leave off on any other distribution: the kinds involved exist only on
+# OpenShift and the release would fail to install.
+#
+openshift:
+  scc:
+    # openshift.scc.enabled -- Grant the daemon's ServiceAccount the built-in `privileged` SCC, through a
+    # ClusterRole holding `use` on it and a RoleBinding in the release namespace. The daemon is privileged, uses
+    # the host's PID and network namespaces and mounts host paths; `restricted-v2` admits none of that.
+    #
+    enabled: false
 
 # podLabels -- Extra labels to add to the DaemonSet pods, merged with the chart's standard selector labels.
 #

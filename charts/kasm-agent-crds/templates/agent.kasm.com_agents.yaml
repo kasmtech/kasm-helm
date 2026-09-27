@@ -120,6 +120,22 @@ spec:
                   APIServerURL overrides the base URL the agent uses for manager admin calls
                   (e.g. file-mapping fetch). Defaults to the manager scheme://host:port.
                 type: string
+              egress:
+                description: |-
+                  Egress is how sessions with a per-session VPN reach the node's egress
+                  daemon. Unset means the egress installer has chained kasm-egress-cni
+                  into the primary network, which needs nothing from the agent.
+                properties:
+                  networkAttachment:
+                    description: |-
+                      NetworkAttachment names the Multus NetworkAttachmentDefinition that runs
+                      kasm-egress-cni: "name" in the session namespace, or "namespace/name".
+                      Every session with egress is attached to it through the
+                      k8s.v1.cni.cncf.io/networks annotation, and sessions without egress are
+                      not. For clusters whose primary CNI configuration cannot be chained
+                      (OpenShift), where the egress installer runs in attachment mode.
+                    type: string
+                type: object
               env:
                 description: |-
                   Env are additional environment variables merged into the agent container,

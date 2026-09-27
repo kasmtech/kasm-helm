@@ -72,7 +72,7 @@ The rest of the agent family lands in one of three places:
 | Node sysctls and swap | Supported | `nodePrep.openshift.scc.enabled=true` |
 | Nix images (`imageMounts`) | OpenShift 4.22 or newer | Needs the ImageVolume feature (Kubernetes 1.35); add `image` to `agent.openshift.scc.workspace.volumes` |
 | Device passthrough by path (`/dev/dri`, `/dev/video*` in an image's run config) and host bind mounts | Supported with a wider SCC | `agent.openshift.scc.workspace.allowHostPath=true` |
-| Per-session VPN egress (`egressInstaller`) | **Not supported** | The daemon chains into `*.conflist` files; OpenShift's CRI-O reads a single Multus `.conf` under `/etc/kubernetes/cni/net.d` that the Cluster Network Operator owns, so there is nothing to chain into. Installed anyway, it either fails to start or patches unused example files and reports success, and sessions get no tunnel |
+| Per-session VPN egress (`egressInstaller`) | Supported, attachment mode | `egressInstaller.distro=openshift` (a Multus NetworkAttachmentDefinition runs the shim, since OpenShift's primary CNI configuration cannot be chained), `egressInstaller.openshift.scc.enabled=true`, and `agent.egress.networkAttachment=kasm-egress` |
 
 ## Before you start
 
@@ -184,7 +184,24 @@ The rest of the agent family lands in one of three places:
    drift from the nodes' kernel; see the
    [support matrix](../../reference/openshift-support-matrix.md#operators-from-operatorhub).
 
-4. **Leave `egressInstaller.enabled` off.** See the table above.
+4. **Per-session VPN egress, if wanted.** OpenShift's CNI configuration belongs to the Cluster
+   Network Operator, so the shim runs as a Multus additional network, and only sessions with egress
+   are attached to it.
+
+   ```yaml
+   kasm-agent:
+     agent:
+       egress:
+         networkAttachment: kasm-egress   # the installer's networkAttachment.name
+     egressInstaller:
+       enabled: true
+       distro: openshift                 # /var/lib/cni/bin and mode: attachment
+       openshift:
+         scc:
+           enabled: true
+   ```
+
+   The NetworkAttachmentDefinition lands in the release namespace, where the sessions run.
 
 5. **Install or upgrade.**
 
@@ -261,9 +278,15 @@ kasm-agent:
     openshift:
       scc:
         enabled: true
-  egressInstaller:
-    enabled: false
+  egressInstaller:                    # per-session VPN egress only
+    enabled: true
+    distro: openshift
+    openshift:
+      scc:
+        enabled: true
 ```
+
+With `egressInstaller`, also set `agent.egress.networkAttachment: kasm-egress`.
 
 Installing the charts directly, drop the `kasm-helm:` and `kasm-agent:` keys.
 
@@ -279,8 +302,10 @@ Installing the charts directly, drop the `kasm-helm:` and `kasm-agent:` keys.
 | The same event lists `image volumes are not allowed to be used` | A Nix image's `imageMounts` | `image` in `agent.openshift.scc.workspace.volumes`, on OpenShift 4.22 or newer |
 | `<agent>-seccomp-installer` DaemonSet has `DESIRED n / CURRENT 0` | The `privileged` SCC is not granted to its account | `agent.openshift.scc.enabled=true` with `seccomp.backend=installer`, or switch to `spo` |
 | `videoDevicePlugin` or `nodePrep` DaemonSet has `DESIRED n / CURRENT 0` | Same, for the DaemonSet's own account | `videoDevicePlugin.openshift.scc.enabled=true`, `nodePrep.openshift.scc.enabled=true` |
-| `egressInstaller` pods stay in `CreateContainerError` with `failed to mkdir /opt/cni/bin` | The default `cniBinDir` does not exist on RHCOS | Not supported; disable it |
-| `egressInstaller` pods run and log `verified kasm-egress-cni chaining`, but sessions get no tunnel | The only conflists it can find are the unused examples under `/etc/cni/net.d`; CRI-O reads the Multus `.conf`, which the installer cannot chain into | Not supported; disable it |
+| `egressInstaller` pods stay in `CreateContainerError` with `failed to mkdir /opt/cni/bin` | `distro` is not `openshift`, and the default `cniBinDir` does not exist on RHCOS | `egressInstaller.distro=openshift` |
+| `egressInstaller` pods run and log `verified kasm-egress-cni chaining`, but sessions get no tunnel | The installer is in chain mode; the only conflists it can find are the unused examples under `/etc/cni/net.d` | `egressInstaller.distro=openshift`, which switches to attachment mode |
+| Sessions with egress get no `wg`/`tun` interface; their pod has no `k8s.v1.cni.cncf.io/networks` annotation | `agent.egress.networkAttachment` is not set | Set it to the installer's `networkAttachment.name` |
+| An egress session's pod stays `ContainerCreating` with a Multus error naming `kasm-egress` | The NetworkAttachmentDefinition is not in the session's namespace | Install the egress installer in the agent's namespace, or set `agent.egress.networkAttachment` to `<namespace>/kasm-egress` |
 | KMM reports `pods "<name>-build-..." is forbidden: unable to validate against any security context constraint` naming `hostPath` | KMM's build pods run as the namespace's `default` account and mount `/lib/modules` | `nodePrep.openshift.scc.enabled=true`, which grants `default` `hostmount-anyuid` |
 | KMM reports `cannot set blockOwnerDeletion if an ownerReference refers to a resource you can't set finalizers on` | The upstream KMM's operator account lacks `update` on its resources' `finalizers`, which OpenShift requires | Use Red Hat's KMM, or bind the upstream operator's account to a ClusterRole with `update` on `kmm.sigs.x-k8s.io` `*/finalizers` |
 | KMM's build fails with `certificate signed by unknown authority` pushing to or pulling from `image-registry.openshift-image-registry.svc:5000` | The internal registry's certificate comes from the cluster's service CA | `nodePrep.modules.v4l2loopback.kmm.registryTLS.insecureSkipTLSVerify=true`, and `kmm.build.baseImageRegistryTLS.insecureSkipTLSVerify=true` for a builder image there |
@@ -297,5 +322,5 @@ Anything else: [Troubleshooting](../../reference/troubleshooting.md).
 - [ ] Seccomp backend chosen: `spo` (SPO installed) or `installer` (`privileged` SCC granted by the same switch).
 - [ ] Webcams: `nodePrep.modules.v4l2loopback.method=kmm` built from the Driver Toolkit, `nodePrep.openshift.scc.enabled=true`, `videoDevicePlugin.openshift.scc.enabled=true`.
 - [ ] Nix images: OpenShift 4.22 or newer, `image` in the SCC's `volumes`.
-- [ ] `egressInstaller.enabled=false`.
+- [ ] Egress: `egressInstaller.distro=openshift`, `egressInstaller.openshift.scc.enabled=true`, `agent.egress.networkAttachment=kasm-egress`; or `egressInstaller.enabled=false`.
 - [ ] Sessions verified under the workspace SCC and the agent under `restricted-v2`.

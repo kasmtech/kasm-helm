@@ -280,6 +280,12 @@ spec:
                   endpointConfig:
                     type: object
                     x-kubernetes-preserve-unknown-fields: true
+                  networkAttachment:
+                    description: |-
+                      NetworkAttachment is the Multus NetworkAttachmentDefinition the pod is
+                      attached to for egress (Agent spec.egress.networkAttachment). Empty when
+                      kasm-egress-cni is chained into the primary network.
+                    type: string
                 type: object
               command:
                 items:

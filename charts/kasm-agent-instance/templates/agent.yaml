@@ -344,6 +344,10 @@ spec:
     driResource: {{ . | quote }}
     {{- end }}
   {{- end }}
+  {{- with .Values.egress.networkAttachment }}
+  egress:
+    networkAttachment: {{ . | quote }}
+  {{- end }}
   {{- with .Values.imagePullSecrets }}
   imagePullSecrets:
     {{- toYaml . | nindent 4 }}

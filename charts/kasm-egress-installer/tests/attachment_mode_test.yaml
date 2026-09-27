@@ -1,0 +1,100 @@
+suite: egress installer attachment mode
+
+# OpenShift's primary CNI configuration belongs to the Cluster Network Operator, so the shim runs as a
+# Multus additional network there instead of being chained into it.
+templates:
+  - templates/daemonset.yaml
+  - templates/network-attachment.yaml
+  - templates/openshift-scc.yaml
+
+tests:
+  - it: chains into the primary network by default, with no attachment
+    asserts:
+      - template: templates/network-attachment.yaml
+        hasDocuments:
+          count: 0
+      - template: templates/daemonset.yaml
+        contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: EGRESS_CNI_MODE
+            value: chain
+      - template: templates/daemonset.yaml
+        contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CNI_CONF_DIRS
+          any: true
+
+  - it: runs as a Multus attachment on OpenShift, touching no CNI configuration
+    set:
+      distro: openshift
+    asserts:
+      - template: templates/daemonset.yaml
+        contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: EGRESS_CNI_MODE
+            value: attachment
+      - template: templates/daemonset.yaml
+        contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CNI_BIN_DIR
+            value: /var/lib/cni/bin
+      - template: templates/daemonset.yaml
+        notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CNI_CONF_DIRS
+          any: true
+      - template: templates/daemonset.yaml
+        lengthEqual:
+          path: spec.template.spec.volumes
+          count: 2
+      - template: templates/network-attachment.yaml
+        isKind:
+          of: NetworkAttachmentDefinition
+      - template: templates/network-attachment.yaml
+        equal:
+          path: metadata.name
+          value: kasm-egress
+      - template: templates/network-attachment.yaml
+        equal:
+          path: spec.config
+          value: '{"cniVersion":"0.4.0","name":"kasm-egress","socketPath":"/var/run/kasm-egress/daemon.sock","type":"kasm-egress-cni"}'
+
+  - it: lets mode override the distro preset
+    set:
+      distro: openshift
+      mode: chain
+    asserts:
+      - template: templates/network-attachment.yaml
+        hasDocuments:
+          count: 0
+
+  - it: refuses an unknown mode
+    set:
+      mode: multus
+    asserts:
+      - template: templates/network-attachment.yaml
+        failedTemplate:
+          errorPattern: 'mode "multus" is not one of chain, attachment'
+
+  - it: grants the privileged SCC to the daemon's account on OpenShift
+    set:
+      openshift.scc.enabled: true
+    asserts:
+      - template: templates/openshift-scc.yaml
+        hasDocuments:
+          count: 2
+      - template: templates/openshift-scc.yaml
+        documentIndex: 0
+        equal:
+          path: rules[0].resourceNames
+          value: [privileged]
+      - template: templates/openshift-scc.yaml
+        documentIndex: 1
+        equal:
+          path: subjects[0].name
+          value: RELEASE-NAME-kasm-egress-installer

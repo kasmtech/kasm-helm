@@ -23,6 +23,7 @@ All notable changes to the kasm-agent chart are documented here.
 
 ### Added
 
+- Per-session VPN egress on OpenShift: `egressInstaller.distro: openshift` runs the shim as a Multus additional network, and `agent.egress.networkAttachment` points sessions at it.
 - `driDevicePlugin`: the video device plugin a second time, advertising Intel and AMD GPU render nodes as `kasm.com/dri` (8 sessions per GPU by default, `i915,xe,amdgpu` only) so unprivileged sessions get hardware-accelerated rendering; NVIDIA GPUs stay on `nvidia.com/gpu`. Off by default. The release notes warn when it is on but `agent.workspaceSecurity.driResource` does not name its resource.
 - Rancher catalog packaging: `catalog.cattle.io/*` annotations in `Chart.yaml` (display name, release name, version gates, the `kasm-agent-crds` chart Rancher installs first), a top-level `kubeVersion`, `app-readme.md` for the chart tile and `questions.yaml` for the install form. `make rancher-check` verifies them. Every other Helm client ignores all three.
 - `global.cattle.systemDefaultRegistry`: when set, it replaces the registry part of every image the six Kasm subcharts render and the per-image `registry` values are ignored, following Rancher's convention for the system default registry it injects on air-gapped clusters. Empty by default, so nothing changes outside Rancher. The three third-party dependencies do not read it.

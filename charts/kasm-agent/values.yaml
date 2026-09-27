@@ -222,6 +222,8 @@ driDevicePlugin:
 # egressInstaller -- The Kasm egress installer (`kasm-egress-installer` subchart, alias
 # `egressInstaller`). A privileged DaemonSet that chains a CNI shim into every node's CNI conflist
 # and, on request, brings up an OpenVPN/WireGuard/Ziti tunnel inside a session's network namespace.
+# On OpenShift (`egressInstaller.distro: openshift`) it chains nothing: the shim runs as a Multus
+# NetworkAttachmentDefinition instead, and `agent.egress.networkAttachment` must name it.
 #
 # Requires hostNetwork, hostPID, and a privileged container -- see the subchart's README for why
 # each is load-bearing. This trips the `kasm-disallow-host-namespaces` Kyverno policy by design, the

@@ -787,6 +787,16 @@ workspaceSecurity:
   # ordinary session sees `/dev/dri` but renders in software. Omitted when empty.
   driResource: ""
 
+# Configure how sessions with a per-session VPN reach the node's egress daemon (`kasm-egress-installer`).
+#
+egress:
+  # egress.networkAttachment -- The Multus NetworkAttachmentDefinition that runs kasm-egress-cni, when the egress
+  # installer runs in `attachment` mode (OpenShift): `name` in the release namespace, or `namespace/name`. Every
+  # session with egress is attached to it, and no other. Set it to the installer's `networkAttachment.name`
+  # (`kasm-egress` by default). Leave empty in `chain` mode, where the shim sits in the primary network.
+  #
+  networkAttachment: ""
+
 # seccomp -- Let a workspace run under its image's inline seccomp profile (`security_opt: seccomp=<json>`, as the
 # Nix bubblewrap images carry) instead of `Unconfined`. Kubernetes can only reference a profile already on the
 # node's disk, so the agent content-hashes each inline profile and a backend gets it onto the nodes. Off by

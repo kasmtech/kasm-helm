@@ -1,0 +1,17 @@
+{{/*
+  In attachment mode kasm-egress-cni is not chained into the primary network: this Multus
+  NetworkAttachmentDefinition runs it instead, and the operator attaches only the sessions with
+  egress to it (Agent spec.egress.networkAttachment names it). Multus calls it after the primary
+  network is up, with the pod's network namespace, which is all the daemon needs: it neither
+  creates an interface nor assigns an address, and builds the tunnel over the pod's default route.
+*/}}
+{{- if eq (include "kasmEgressInstaller.mode" .) "attachment" }}
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: {{ .Values.networkAttachment.name }}
+  labels:
+    {{- include "kasmEgressInstaller.labels" . | nindent 4 }}
+spec:
+  config: {{ dict "cniVersion" "0.4.0" "name" .Values.networkAttachment.name "type" "kasm-egress-cni" "socketPath" (printf "%s/daemon.sock" .Values.socketDir) | toJson | quote }}
+{{- end }}

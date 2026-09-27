@@ -1,6 +1,6 @@
 # OpenShift support matrix
 
-> **Applies to:** agent · what runs on which OpenShift release, under which SecurityContextConstraint, and what does not run at all · **Charts/values:** `agent.openshift.scc.*`, `agent.workspaceSecurity.*`, `agent.seccomp.*`, `nodePrep.modules.v4l2loopback.kmm.*`, `videoDevicePlugin.openshift.scc.enabled`, `driDevicePlugin.openshift.scc.enabled`, `egressInstaller.enabled`
+> **Applies to:** agent · what runs on which OpenShift release, and under which SecurityContextConstraint · **Charts/values:** `agent.openshift.scc.*`, `agent.workspaceSecurity.*`, `agent.seccomp.*`, `nodePrep.modules.v4l2loopback.kmm.*`, `videoDevicePlugin.openshift.scc.enabled`, `driDevicePlugin.openshift.scc.enabled`, `egressInstaller.enabled`
 
 The how-to is [Admit the agent on OpenShift](../how-to/nodes/openshift.md); this page is the lookup
 table behind it. OKD, the community distribution, behaves the same except where a row says otherwise.
@@ -55,7 +55,7 @@ rendered by the switch in the last column; nothing here needs `oc adm policy` by
 | Node prep DaemonSet (`tuning.*`, `method: build`) | `<release>-kasm-node-prep` | `privileged` | `nodePrep.openshift.scc.enabled` |
 | KMM worker pods (load the module) | `<release>-kasm-node-prep` | `privileged` | `nodePrep.openshift.scc.enabled` |
 | KMM build pods (kaniko, in-cluster builds only) | the namespace's `default` | `hostmount-anyuid` | `nodePrep.openshift.scc.enabled` (`nodePrep.openshift.scc.kmmBuildName`). KMM gives build pods no account of their own and mounts the node's `/lib/modules` into them; `hostmount-anyuid` has no priority, so the namespace's other `default` pods stay under `restricted-v2` |
-| Egress installer | its own | - | ❌ Not supported (below) |
+| Egress installer (`distro: openshift`) | `<release>-kasm-egress-installer` | `privileged` | `egressInstaller.openshift.scc.enabled` |
 
 The workspace SCCs list `runtime/default`, `*` and `unconfined` as their seccomp profiles. `*` is how
 an SCC admits `Localhost` profiles: OpenShift matches `localhost/<path>` entries literally and has no
@@ -83,16 +83,20 @@ an SCC admits `Localhost` profiles: OpenShift matches `localhost/<path>` entries
 | Direct-connect Route to the session proxy | ✅ | `agent.route.enabled=true` | TLS passthrough; the session proxy presents its own certificate |
 | Node sysctls and swap | ✅ | `nodePrep.openshift.scc.enabled=true` | Runs the privileged node prep DaemonSet |
 | Image pre-pulling | ✅ | Nothing | Runs under `restricted-v2` |
-| Per-session VPN egress (`egressInstaller`) | ❌ | - | See below |
+| Per-session VPN egress (`egressInstaller`) | ✅ | `egressInstaller.distro=openshift`, `egressInstaller.openshift.scc.enabled=true`, `agent.egress.networkAttachment=kasm-egress` | Attachment mode, below |
 
-**Why egress does not run.** The egress installer works by chaining a CNI plugin into the runtime's
-CNI configuration. OpenShift's CRI-O reads its configuration from `/etc/kubernetes/cni/net.d`, where
-the only file is the Multus `00-multus.conf` that the Cluster Network Operator owns and rewrites, and
-its plugins from `/var/lib/cni/bin`. With the default `cniBinDir` the daemon cannot start at all
-(`/opt/cni` cannot be created on RHCOS). Pointed at OpenShift's directories, it starts and reports
-its chaining as verified, but the only conflists it finds are the unused `crio-bridge` and
-`loopback` examples under `/etc/cni/net.d`. Pods keep their normal networking; sessions simply never
-get a tunnel. Keep `egressInstaller.enabled=false`.
+**Egress in attachment mode.** Elsewhere the egress installer chains its CNI plugin into the
+runtime's CNI configuration. OpenShift's CRI-O reads its configuration from
+`/etc/kubernetes/cni/net.d`, where the only file is the Multus `00-multus.conf` that the Cluster
+Network Operator owns and rewrites, so there is nothing to chain into. `distro: openshift` switches
+the installer to attachment mode: it installs the plugin into `/var/lib/cni/bin`, where Multus looks
+for plugins, touches no CNI configuration, and renders a NetworkAttachmentDefinition that runs it.
+The operator attaches every session with egress, and only those, as a Multus additional network;
+Multus calls the plugin after OVN-Kubernetes has set up the pod's network, and the tunnel is built
+over that. The NetworkAttachmentDefinition lives in the release namespace, where the sessions run.
+Installed with any other `distro`, the installer either cannot start (`/opt/cni` cannot be created
+on RHCOS) or patches the unused example conflists under `/etc/cni/net.d` and reports success while
+sessions get no tunnel.
 
 ## Operators from OperatorHub
 

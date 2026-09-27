@@ -104,7 +104,20 @@ app.kubernetes.io/part-of: kasm-ai
 /var/lib/rancher/k3s/data/cni
 {{- else if eq .Values.distro "vanilla" -}}
 /opt/cni/bin
+{{- else if eq .Values.distro "openshift" -}}
+/var/lib/cni/bin
 {{- else -}}
-{{- fail (printf "kasm-egress-installer: distro %q has no built-in CNI bin dir. Set cniBinDir explicitly, or use distro: k3s | vanilla." (.Values.distro | toString)) -}}
+{{- fail (printf "kasm-egress-installer: distro %q has no built-in CNI bin dir. Set cniBinDir explicitly, or use distro: k3s | vanilla | openshift." (.Values.distro | toString)) -}}
 {{- end -}}
+{{- end -}}
+
+{{/*
+  The CNI mode: `mode` when set, else `attachment` for distro openshift and `chain` everywhere else.
+*/}}
+{{- define "kasmEgressInstaller.mode" -}}
+{{- $mode := .Values.mode | default (ternary "attachment" "chain" (eq .Values.distro "openshift")) -}}
+{{- if not (has $mode (list "chain" "attachment")) -}}
+{{- fail (printf "kasm-egress-installer: mode %q is not one of chain, attachment." $mode) -}}
+{{- end -}}
+{{- $mode -}}
 {{- end -}}

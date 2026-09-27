@@ -36,5 +36,6 @@ All notable changes to the kasm-agent-crds chart are documented here.
 
 ### Added
 
+- CRDs: `Agent.spec.egress.networkAttachment` and `KasmWorkspace.spec.cniEgress.networkAttachment`, the Multus attachment sessions with egress join where the CNI chain cannot be patched (OpenShift).
 - Rancher catalog packaging: `catalog.cattle.io/*` annotations in `Chart.yaml` (hidden from the catalog, installed on the umbrella charts' behalf through their `auto-install` annotation, the CRD group it provides, version gates), a top-level `kubeVersion` and `app-readme.md`. No form: the chart has no values.
 - Initial release: ships the same CustomResourceDefinitions as `charts/kasm-agent-operator/crds/` (agents, kasmworkspaces, and kasmimagepullers in the `agent.kasm.com` group) as ordinary Helm templates, so a release of this chart owns their lifecycle and `helm upgrade` applies schema changes — a hybrid alternative to the operator chart's bundled `crds/` install-time copy.

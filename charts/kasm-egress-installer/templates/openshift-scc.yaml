@@ -1,0 +1,35 @@
+{{/*
+  OpenShift admits pods through SecurityContextConstraints, and `restricted-v2` refuses this
+  privileged daemon with its host PID and network namespaces and host path mounts. This grants the
+  daemon's ServiceAccount, and nothing else, the built-in `privileged` SCC, the way
+  `oc adm policy add-scc-to-user` does.
+*/}}
+{{- if .Values.openshift.scc.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "kasmEgressInstaller.fullname" . }}-scc
+  labels:
+    {{- include "kasmEgressInstaller.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["security.openshift.io"]
+    resources: ["securitycontextconstraints"]
+    resourceNames: ["privileged"]
+    verbs: ["use"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "kasmEgressInstaller.fullname" . }}-scc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kasmEgressInstaller.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "kasmEgressInstaller.fullname" . }}-scc
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "kasmEgressInstaller.fullname" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}
