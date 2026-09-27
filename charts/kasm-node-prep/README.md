@@ -1,6 +1,6 @@
 # Kasm Node Prep
 
-![Version: 1.1200.0-develop](https://img.shields.io/badge/Version-1.1200.0--develop-informational?style=flat-square) ![AppVersion: develop](https://img.shields.io/badge/AppVersion-develop-informational?style=flat-square)
+![Version: 1.1190.8-agent.1](https://img.shields.io/badge/Version-1.1190.8--agent.1-informational?style=flat-square) ![AppVersion: develop](https://img.shields.io/badge/AppVersion-develop-informational?style=flat-square)
 
 Privileged DaemonSet that builds and loads the kernel modules Kasm Workspaces sessions depend on (v4l2loopback for webcam passthrough, WireGuard for VPN sidecars on kernels older than 5.6) on every matching node, re-applying them after node reboots.
 

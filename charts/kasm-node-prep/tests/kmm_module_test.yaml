@@ -83,7 +83,7 @@ tests:
           value: node-prep
       - equal:
           path: metadata.labels["helm.sh/chart"]
-          value: kasm-node-prep-1.1200.0-develop
+          value: kasm-node-prep-1.1190.8-agent.1
 
   - it: follows the module parameter values the same way the build method does
     template: templates/kmm-module.yaml

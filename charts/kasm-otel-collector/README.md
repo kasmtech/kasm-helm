@@ -1,6 +1,6 @@
 # Kasm OpenTelemetry Collector
 
-![Version: 1.1200.0-develop](https://img.shields.io/badge/Version-1.1200.0--develop-informational?style=flat-square) ![AppVersion: 0.156.0](https://img.shields.io/badge/AppVersion-0.156.0-informational?style=flat-square)
+![Version: 1.1190.8-agent.1](https://img.shields.io/badge/Version-1.1190.8--agent.1-informational?style=flat-square) ![AppVersion: 0.156.0](https://img.shields.io/badge/AppVersion-0.156.0-informational?style=flat-square)
 
 An OpenTelemetry Collector that receives OTLP traces, metrics, and logs from the Kasm agent components and fans them out to external observability backends. Deployed as a subchart of the kasm-agent umbrella chart under the `otelCollector` alias.
 

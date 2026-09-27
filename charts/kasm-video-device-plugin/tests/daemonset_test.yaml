@@ -236,7 +236,7 @@ tests:
           value: Helm
       - equal:
           path: metadata.labels["helm.sh/chart"]
-          value: kasm-video-device-plugin-1.1200.0-develop
+          value: kasm-video-device-plugin-1.1190.8-agent.1
       - equal:
           path: metadata.labels["app.kubernetes.io/version"]
           value: develop

@@ -24,7 +24,7 @@ keywords:
 maintainers:
   - name: Kasm Technologies, Inc.
     url: https://github.com/kasmtech/kasm-helm
-version: 1.1200.0-develop
+version: 1.1190.8-agent.1
 kubeVersion: '>= 1.26.0-0'
 appVersion: "develop"
 dependencies:
@@ -37,7 +37,7 @@ dependencies:
   # no nameOverride to undo that. The un-aliased kebab-case key is the same precedent the
   # kasm-agent umbrella sets for `nfs-server-provisioner`.
   - name: kasm-helm
-    version: 1.1200.0-develop
+    version: 1.1190.8-agent.1
     repository: file://../kasm-helm
     condition: kasm-helm.enabled
   # The Kasm Kubernetes agent umbrella: the agent operator (CRDs, cluster RBAC,
@@ -49,6 +49,6 @@ dependencies:
   # conditions stay reachable from here as `kasm-agent.operator.enabled`,
   # `kasm-agent.nodePrep.enabled`, and so on.
   - name: kasm-agent
-    version: 1.1200.0-develop
+    version: 1.1190.8-agent.1
     repository: file://../kasm-agent
     condition: kasm-agent.enabled

@@ -1,6 +1,6 @@
 # Kasm Workspaces on Kubernetes
 
-![Version: 1.1200.0-develop](https://img.shields.io/badge/Version-1.1200.0--develop-informational?style=flat-square) ![AppVersion: develop](https://img.shields.io/badge/AppVersion-develop-informational?style=flat-square) ![Type: Application](https://img.shields.io/badge/Type-application-informational?style=flat-square)
+![Version: 1.1190.8-agent.1](https://img.shields.io/badge/Version-1.1190.8--agent.1-informational?style=flat-square) ![AppVersion: develop](https://img.shields.io/badge/AppVersion-develop-informational?style=flat-square) ![Type: Application](https://img.shields.io/badge/Type-application-informational?style=flat-square)
 
 Kasm Workspaces streams desktops, browsers and applications into an ordinary web browser. A
 deployment has two halves: a **control plane** that people sign in to, and one or more **agents**

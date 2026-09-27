@@ -1,6 +1,6 @@
 # Kasm Agent Operator
 
-![Version: 1.1200.0-develop](https://img.shields.io/badge/Version-1.1200.0--develop-informational?style=flat-square) ![AppVersion: develop](https://img.shields.io/badge/AppVersion-develop-informational?style=flat-square)
+![Version: 1.1190.8-agent.1](https://img.shields.io/badge/Version-1.1190.8--agent.1-informational?style=flat-square) ![AppVersion: develop](https://img.shields.io/badge/AppVersion-develop-informational?style=flat-square)
 
 The Kasm Agent Kubernetes operator. Installs the agent.kasm.com CustomResourceDefinitions, the cluster RBAC the operator and the workloads it reconciles require, and the controller-manager Deployment that reconciles Agent, KasmWorkspace, and KasmImagePuller resources.
 

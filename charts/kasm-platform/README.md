@@ -1,6 +1,6 @@
 # kasm-platform
 
-![Version: 1.1200.0-develop](https://img.shields.io/badge/Version-1.1200.0--develop-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: develop](https://img.shields.io/badge/AppVersion-develop-informational?style=flat-square)
+![Version: 1.1190.8-agent.1](https://img.shields.io/badge/Version-1.1190.8--agent.1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: develop](https://img.shields.io/badge/AppVersion-develop-informational?style=flat-square)
 
 The complete Kasm Workspaces stack for Kubernetes: the control plane and the Kubernetes agent in one release, each independently switchable
 
@@ -56,7 +56,7 @@ Install with no values:
 
 ```console
 helm install kasm oci://registry-1.docker.io/kasmweb/kasm-platform \
-  --version 1.1200.0-develop -n kasm --create-namespace --timeout 20m
+  --version 1.1190.8-agent.1 -n kasm --create-namespace --timeout 20m
 ```
 
 The `--timeout 20m` covers database initialization and the first image pulls on a cold cluster.
@@ -220,8 +220,8 @@ Kubernetes: `>= 1.26.0-0`
 
 | Repository | Name | Version |
 |------------|------|---------|
-| file://../kasm-agent | kasm-agent | 1.1200.0-develop |
-| file://../kasm-helm | kasm-helm | 1.1200.0-develop |
+| file://../kasm-agent | kasm-agent | 1.1190.8-agent.1 |
+| file://../kasm-helm | kasm-helm | 1.1190.8-agent.1 |
 
 ## Values
 

@@ -22,7 +22,7 @@ values themselves are the same as on every other page, so the how-to for your la
   rather than failing the install.
 - Cluster-owner rights on that cluster. `kasm-agent` and `kasm-platform` install
   CustomResourceDefinitions and ClusterRoles; a project-scoped user cannot.
-- A released chart version. Rancher hides prerelease versions (`1.1200.0-develop` and the like)
+- A released chart version. Rancher hides prerelease versions (`1.1190.8-agent.1` and the like)
   unless the user's preferences turn on **Include Prerelease Versions**, so a catalog entry built
   from the development line shows nothing until that preference is set.
 - If any privileged chart will be on (`nodePrep`, `videoDevicePlugin`, `egressInstaller`, or the
