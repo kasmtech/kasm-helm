@@ -29,7 +29,7 @@ tests:
     asserts:
       - equal:
           path: spec.image
-          value: docker.io/kasmweb/agent-api:develop
+          value: docker.io/kasmweb/agent-api:1.1190.8-agent.1
 
   - it: uses an explicit agent image tag when one is set
     set:
@@ -49,7 +49,7 @@ tests:
           value: docker.io/kasmweb/nginx:1.25.3
       - equal:
           path: spec.sessionProxy.sidecarImage
-          value: docker.io/kasmweb/nginx-sidecar:develop
+          value: docker.io/kasmweb/nginx-sidecar:1.1190.8-agent.1
 
   - it: fails when the session proxy nginx tag is emptied, since it has no fallback
     set:

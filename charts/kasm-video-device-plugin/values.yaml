@@ -30,9 +30,10 @@ image:
   # image.repository -- Repository of the device plugin image within `image.registry`.
   #
   repository: kasmweb/video-device-plugin
-  # image.tag -- Tag of the device plugin image. Leave empty to use the chart's `appVersion`.
+  # image.tag -- Tag of the device plugin image. Pinned to the agent build this chart version ships;
+  # empty uses the chart's `appVersion`.
   #
-  tag: ""
+  tag: "1.1190.8-agent.1"
   # image.pullPolicy -- Image pull policy for the device plugin container.
   #
   pullPolicy: IfNotPresent

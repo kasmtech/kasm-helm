@@ -78,8 +78,9 @@ image:
   registry: docker.io
   # image.repository -- Repository of the agent image, without the registry or tag.
   repository: kasmweb/agent-api
-  # image.tag -- Tag of the agent image. Leave empty to fall back to the chart's `appVersion`.
-  tag: ""
+  # image.tag -- Tag of the agent image. Pinned to the agent build this chart version ships;
+  # empty falls back to the chart's `appVersion`.
+  tag: "1.1190.8-agent.1"
 
 # manager -- The Kasm control plane this agent registers and heartbeats with.
 #
@@ -146,9 +147,9 @@ sessionProxy:
     registry: docker.io
     # sessionProxy.sidecarImage.repository -- Repository of the sidecar image, without the registry or tag.
     repository: kasmweb/nginx-sidecar
-    # sessionProxy.sidecarImage.tag -- Tag of the sidecar image. Leave empty to fall back to the chart's
-    # `appVersion`.
-    tag: ""
+    # sessionProxy.sidecarImage.tag -- Tag of the sidecar image. Pinned to the agent build this chart
+    # version ships; empty falls back to the chart's `appVersion`.
+    tag: "1.1190.8-agent.1"
   # sessionProxy.replicas -- Replica count for the session-proxy Deployment the operator creates.
   replicas: 1
   # sessionProxy.probeTimeoutSeconds -- How long the sidecar waits for a session to become ready before giving up.
@@ -823,8 +824,9 @@ seccomp:
       registry: docker.io
       # seccomp.installer.image.repository -- Repository of the installer image, without the registry or tag.
       repository: kasmweb/seccomp-installer
-      # seccomp.installer.image.tag -- Tag of the installer image. Leave empty to fall back to the chart's `appVersion`.
-      tag: ""
+      # seccomp.installer.image.tag -- Tag of the installer image. Pinned to the agent build this chart
+      # version ships; empty falls back to the chart's `appVersion`.
+      tag: "1.1190.8-agent.1"
     # seccomp.installer.imagePullPolicy -- Pull policy for the installer image.
     imagePullPolicy: IfNotPresent
     # seccomp.installer.kubeletSeccompDir -- The kubelet's seccomp root on the node, which the installer writes

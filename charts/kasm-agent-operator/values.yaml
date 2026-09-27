@@ -42,9 +42,10 @@ image:
   # image.repository -- The repository of the operator image, without the registry or the tag.
   #
   repository: kasmweb/agent-operator
-  # image.tag -- The tag of the operator image. Leave empty to use the chart's `appVersion`.
+  # image.tag -- The tag of the operator image. Pinned to the agent build this chart version ships;
+  # empty uses the chart's `appVersion`.
   #
-  tag: ""
+  tag: "1.1190.8-agent.1"
   # image.pullPolicy -- The image pull policy for the operator container.
   #
   pullPolicy: IfNotPresent

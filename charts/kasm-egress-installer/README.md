@@ -167,7 +167,7 @@ admission before installing. A system default registry configured on the cluster
 	</thead>
 	<tbody>
 		<tr>
-			<td id="cniBinDir"><a href="./values.yaml#L85">cniBinDir</a></td>
+			<td id="cniBinDir"><a href="./values.yaml#L86">cniBinDir</a></td>
 			<td>
 string
 </td>
@@ -181,7 +181,7 @@ string
 			<td>Host path the kasm-egress-cni shim binary is installed into; must match the CNI bin dir your container runtime actually reads plugins from. Leave empty to derive it from `distro` (recommended); set it to override the preset (required when `distro` is not a recognized value). </td>
 		</tr>
 		<tr>
-			<td id="cniConfDirs"><a href="./values.yaml#L93">cniConfDirs</a></td>
+			<td id="cniConfDirs"><a href="./values.yaml#L94">cniConfDirs</a></td>
 			<td>
 list
 </td>
@@ -197,7 +197,7 @@ list
 			<td>Host paths scanned for active `.conflist` files. Every conflist found in each of these directories is patched to chain kasm-egress-cni into its plugin list (idempotently — safe to reapply, and the original file is backed up once, on first modification, to a sibling `.kasm-egress.bak`). Include every path your container runtime might read chained CNI config from; unused paths in this list are skipped silently, not treated as an error. </td>
 		</tr>
 		<tr>
-			<td id="containerdConfigDirs"><a href="./values.yaml#L119">containerdConfigDirs</a></td>
+			<td id="containerdConfigDirs"><a href="./values.yaml#L120">containerdConfigDirs</a></td>
 			<td>
 list
 </td>
@@ -213,7 +213,7 @@ list
 			<td>Host directories containing the files listed in containerdConfigPaths above, mounted read-only so the daemon can read whichever of those files exist on a given node. Only one of these two (k3s vs. RKE2) exists on any given node; DirectoryOrCreate is used so a missing one does not wedge the pod in ContainerCreating (mirrors the same k3s-vs-RKE2 handling in the kasm-node-prep chart). </td>
 		</tr>
 		<tr>
-			<td id="containerdConfigPaths"><a href="./values.yaml#L105">containerdConfigPaths</a></td>
+			<td id="containerdConfigPaths"><a href="./values.yaml#L106">containerdConfigPaths</a></td>
 			<td>
 list
 </td>
@@ -233,7 +233,7 @@ list
 			<td>Host file paths inspected for a containerd `conf_dir` setting, so the daemon can detect when containerd is already configured to read chained CNI config from a directory not listed above (and merge it in). Paths that don't exist on a given node's distro are skipped, not an error — the six defaults below cover every k3s/RKE2 config file layout across config.toml, config-v3.toml.tmpl, and config.toml.tmpl. This is a separate list from containerdConfigDirs below because the daemon reads each of these as an exact file, but volumes can only be mounted per-directory. </td>
 		</tr>
 		<tr>
-			<td id="distro"><a href="./values.yaml#L60">distro</a></td>
+			<td id="distro"><a href="./values.yaml#L61">distro</a></td>
 			<td>
 string
 </td>
@@ -247,7 +247,7 @@ vanilla
 			<td>Kubernetes distribution preset used to derive the CNI plugin bin dir (`cniBinDir`) and the CNI mode (`mode`) when those are left empty. Distributions read CNI plugin binaries from different host paths, and installing the shim to the wrong one means the container runtime never invokes it — pods get no egress tunnel, with no error. Recognized values: `vanilla` (/opt/cni/bin — kubeadm and most managed distros, the default), `k3s` (/var/lib/rancher/k3s/data/cni) and `openshift` (/var/lib/cni/bin, where Multus finds its plugins, and `mode: attachment`). For any other distribution (including RKE2, whose bin dir varies by version) set `cniBinDir` explicitly. In chain mode the conflist and containerd paths scanned below already cover k3s/RKE2/vanilla as a union. </td>
 		</tr>
 		<tr>
-			<td id="excludedCIDRs"><a href="./values.yaml#L127">excludedCIDRs</a></td>
+			<td id="excludedCIDRs"><a href="./values.yaml#L128">excludedCIDRs</a></td>
 			<td>
 list
 </td>
@@ -304,7 +304,7 @@ string
 			<td>The registry Rancher configured as the cluster's system default registry (air-gapped and mirrored clusters). When set, it replaces the registry part of every image this chart renders and `image.registry` is ignored, following Rancher's convention. Rancher sets it on install from its catalog; leave it empty everywhere else.</td>
 		</tr>
 		<tr>
-			<td id="image--pullPolicy"><a href="./values.yaml#L38">image.pullPolicy</a></td>
+			<td id="image--pullPolicy"><a href="./values.yaml#L39">image.pullPolicy</a></td>
 			<td>
 string
 </td>
@@ -346,21 +346,21 @@ kasmweb/egress-daemon
 			<td>Repository of the egress daemon image within `image.registry`. </td>
 		</tr>
 		<tr>
-			<td id="image--tag"><a href="./values.yaml#L35">image.tag</a></td>
+			<td id="image--tag"><a href="./values.yaml#L36">image.tag</a></td>
 			<td>
 string
 </td>
 			<td>
 				<div style="max-width: 520px;">
 <pre lang="json">
-""
+1.1190.8-agent.1
 </pre>
 </div>
 			</td>
-			<td>Tag of the egress daemon image. Leave empty to use the chart's `appVersion`. </td>
+			<td>Tag of the egress daemon image. Pinned to the agent build this chart version ships; empty uses the chart's `appVersion`. </td>
 		</tr>
 		<tr>
-			<td id="imagePullSecrets"><a href="./values.yaml#L43">imagePullSecrets</a></td>
+			<td id="imagePullSecrets"><a href="./values.yaml#L44">imagePullSecrets</a></td>
 			<td>
 list
 </td>
@@ -374,7 +374,7 @@ list
 			<td>Names of existing `kubernetes.io/dockerconfigjson` Secrets in the release namespace, used to pull the egress daemon image from a private registry. </td>
 		</tr>
 		<tr>
-			<td id="mode"><a href="./values.yaml#L70">mode</a></td>
+			<td id="mode"><a href="./values.yaml#L71">mode</a></td>
 			<td>
 string
 </td>
@@ -402,7 +402,7 @@ string
 			<td>Override the chart name used when building resource names and the `app.kubernetes.io/name` label. Leave empty to use the chart name (`kasm-egress-installer`). </td>
 		</tr>
 		<tr>
-			<td id="networkAttachment--name"><a href="./values.yaml#L79">networkAttachment.name</a></td>
+			<td id="networkAttachment--name"><a href="./values.yaml#L80">networkAttachment.name</a></td>
 			<td>
 string
 </td>
@@ -416,7 +416,7 @@ kasm-egress
 			<td>Name of the NetworkAttachmentDefinition. The agent's `agent.egress.networkAttachment` must name it. </td>
 		</tr>
 		<tr>
-			<td id="nodeSelector"><a href="./values.yaml#L139">nodeSelector</a></td>
+			<td id="nodeSelector"><a href="./values.yaml#L140">nodeSelector</a></td>
 			<td>
 object
 </td>
@@ -430,7 +430,7 @@ object
 			<td>Node labels that select which nodes run the egress daemon. Every pod scheduled on a selected node depends on this daemon once installed — see the security notice in this chart's README before narrowing or widening this. </td>
 		</tr>
 		<tr>
-			<td id="openshift"><a href="./values.yaml#L193">openshift</a></td>
+			<td id="openshift"><a href="./values.yaml#L194">openshift</a></td>
 			<td>
 object
 </td>
@@ -445,7 +445,7 @@ scc:
 			<td>OpenShift-only objects. Leave off on any other distribution: the kinds involved exist only on OpenShift and the release would fail to install. </td>
 		</tr>
 		<tr>
-			<td id="openshift--scc--enabled"><a href="./values.yaml#L199">openshift.scc.enabled</a></td>
+			<td id="openshift--scc--enabled"><a href="./values.yaml#L200">openshift.scc.enabled</a></td>
 			<td>
 bool
 </td>
@@ -459,7 +459,7 @@ false
 			<td>Grant the daemon's ServiceAccount the built-in `privileged` SCC, through a ClusterRole holding `use` on it and a RoleBinding in the release namespace. The daemon is privileged, uses the host's PID and network namespaces and mounts host paths; `restricted-v2` admits none of that. </td>
 		</tr>
 		<tr>
-			<td id="openvpnBinary"><a href="./values.yaml#L133">openvpnBinary</a></td>
+			<td id="openvpnBinary"><a href="./values.yaml#L134">openvpnBinary</a></td>
 			<td>
 string
 </td>
@@ -473,7 +473,7 @@ string
 			<td>Path to the openvpn binary inside the egress daemon container. The image bundles OpenVPN, WireGuard tools, iproute2, iptables, and three pinned Ziti CLI versions; this only needs to change if you build a custom image with openvpn installed somewhere else. </td>
 		</tr>
 		<tr>
-			<td id="podAnnotations"><a href="./values.yaml#L188">podAnnotations</a></td>
+			<td id="podAnnotations"><a href="./values.yaml#L189">podAnnotations</a></td>
 			<td>
 object
 </td>
@@ -487,7 +487,7 @@ object
 			<td>Extra annotations to add to the DaemonSet pods. </td>
 		</tr>
 		<tr>
-			<td id="podLabels"><a href="./values.yaml#L203">podLabels</a></td>
+			<td id="podLabels"><a href="./values.yaml#L204">podLabels</a></td>
 			<td>
 object
 </td>
@@ -501,7 +501,7 @@ object
 			<td>Extra labels to add to the DaemonSet pods, merged with the chart's standard selector labels. </td>
 		</tr>
 		<tr>
-			<td id="priorityClassName"><a href="./values.yaml#L184">priorityClassName</a></td>
+			<td id="priorityClassName"><a href="./values.yaml#L185">priorityClassName</a></td>
 			<td>
 string
 </td>
@@ -515,7 +515,7 @@ system-node-critical
 			<td>Priority class for the DaemonSet pods. If this pod is evicted, kasm-egress-cni starts failing every pod ADD on that node (see this chart's README) — set to an empty string to use the namespace default instead. </td>
 		</tr>
 		<tr>
-			<td id="resources"><a href="./values.yaml#L154">resources</a></td>
+			<td id="resources"><a href="./values.yaml#L155">resources</a></td>
 			<td>
 object
 </td>
@@ -534,7 +534,7 @@ requests:
 			<td>CPU and memory requests and limits for the egress daemon container. </td>
 		</tr>
 		<tr>
-			<td id="resources--limits--cpu"><a href="./values.yaml#L172">resources.limits.cpu</a></td>
+			<td id="resources--limits--cpu"><a href="./values.yaml#L173">resources.limits.cpu</a></td>
 			<td>
 string
 </td>
@@ -548,7 +548,7 @@ string
 			<td>CPU limit for the egress daemon container. Tunnel setup and the userspace data path (OpenVPN and Ziti both encrypt in userspace) are the expensive parts, and throttling them shows up as slow session starts and a throughput ceiling rather than as an error — raise this before suspecting the tunnel provider. </td>
 		</tr>
 		<tr>
-			<td id="resources--limits--memory"><a href="./values.yaml#L178">resources.limits.memory</a></td>
+			<td id="resources--limits--memory"><a href="./values.yaml#L179">resources.limits.memory</a></td>
 			<td>
 string
 </td>
@@ -562,7 +562,7 @@ string
 			<td>Memory limit for the egress daemon container. Consumption scales with the number of concurrent egress sessions, since each one adds another tunnel process to this cgroup, so raise it on nodes that host many egress-enabled sessions. An OOMKill here tears down every tunnel on the node at once, and the restart has the node-wide effect described in this chart's README. </td>
 		</tr>
 		<tr>
-			<td id="resources--requests--cpu"><a href="./values.yaml#L160">resources.requests.cpu</a></td>
+			<td id="resources--requests--cpu"><a href="./values.yaml#L161">resources.requests.cpu</a></td>
 			<td>
 string
 </td>
@@ -576,7 +576,7 @@ string
 			<td>CPU request for the egress daemon container. Between session setup and teardown the daemon is idle, so the request only has to cover the reconcile work and the socket server; the bursty tunnel negotiation is what `resources.limits.cpu` sizes for. </td>
 		</tr>
 		<tr>
-			<td id="resources--requests--memory"><a href="./values.yaml#L165">resources.requests.memory</a></td>
+			<td id="resources--requests--memory"><a href="./values.yaml#L166">resources.requests.memory</a></td>
 			<td>
 string
 </td>
@@ -590,7 +590,7 @@ string
 			<td>Memory request for the egress daemon container. The daemon forks one tunnel process (OpenVPN, WireGuard, or Ziti) per egress session and every one of them lives in this container's cgroup, so the floor here should cover the daemon itself plus the sessions a node routinely runs. </td>
 		</tr>
 		<tr>
-			<td id="socketDir"><a href="./values.yaml#L49">socketDir</a></td>
+			<td id="socketDir"><a href="./values.yaml#L50">socketDir</a></td>
 			<td>
 string
 </td>
@@ -604,7 +604,7 @@ string
 			<td>Host path for the egress daemon's Unix socket and per-session state. Must be a host path (not an emptyDir): the kasm-egress-cni shim it installs runs directly on the host, invoked by the container runtime outside of any pod, and has to reach this same path from outside the container. </td>
 		</tr>
 		<tr>
-			<td id="tolerations"><a href="./values.yaml#L144">tolerations</a></td>
+			<td id="tolerations"><a href="./values.yaml#L145">tolerations</a></td>
 			<td>
 list
 </td>
@@ -618,7 +618,7 @@ list
 			<td>Tolerations for the DaemonSet pods, so nodes carrying taints (for example dedicated workspace nodes) still get the egress daemon. </td>
 		</tr>
 		<tr>
-			<td id="updateStrategy"><a href="./values.yaml#L150">updateStrategy</a></td>
+			<td id="updateStrategy"><a href="./values.yaml#L151">updateStrategy</a></td>
 			<td>
 string
 </td>

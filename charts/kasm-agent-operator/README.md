@@ -113,7 +113,7 @@ alongside this subchart; set `otel.endpoint` to point at a collector of your own
 	</thead>
 	<tbody>
 		<tr>
-			<td id="affinity"><a href="./values.yaml#L163">affinity</a></td>
+			<td id="affinity"><a href="./values.yaml#L164">affinity</a></td>
 			<td>
 object
 </td>
@@ -127,7 +127,7 @@ object
 			<td>Affinity and anti-affinity rules for the operator Pod. </td>
 		</tr>
 		<tr>
-			<td id="extraEnv"><a href="./values.yaml#L112">extraEnv</a></td>
+			<td id="extraEnv"><a href="./values.yaml#L113">extraEnv</a></td>
 			<td>
 list
 </td>
@@ -194,14 +194,14 @@ object
 pullPolicy: IfNotPresent
 registry: docker.io
 repository: kasmweb/agent-operator
-tag: ""
+tag: 1.1190.8-agent.1
 </pre>
 </div>
 			</td>
 			<td>The controller-manager container image. </td>
 		</tr>
 		<tr>
-			<td id="image--pullPolicy"><a href="./values.yaml#L50">image.pullPolicy</a></td>
+			<td id="image--pullPolicy"><a href="./values.yaml#L51">image.pullPolicy</a></td>
 			<td>
 string
 </td>
@@ -243,21 +243,21 @@ kasmweb/agent-operator
 			<td>The repository of the operator image, without the registry or the tag. </td>
 		</tr>
 		<tr>
-			<td id="image--tag"><a href="./values.yaml#L47">image.tag</a></td>
+			<td id="image--tag"><a href="./values.yaml#L48">image.tag</a></td>
 			<td>
 string
 </td>
 			<td>
 				<div style="max-width: 520px;">
 <pre lang="json">
-""
+1.1190.8-agent.1
 </pre>
 </div>
 			</td>
-			<td>The tag of the operator image. Leave empty to use the chart's `appVersion`. </td>
+			<td>The tag of the operator image. Pinned to the agent build this chart version ships; empty uses the chart's `appVersion`. </td>
 		</tr>
 		<tr>
-			<td id="imagePullSecrets"><a href="./values.yaml#L60">imagePullSecrets</a></td>
+			<td id="imagePullSecrets"><a href="./values.yaml#L61">imagePullSecrets</a></td>
 			<td>
 list
 </td>
@@ -299,7 +299,7 @@ string
 			<td>Override the chart name used to build resource names and the `app.kubernetes.io/name` label. Leave empty to use the chart name, `kasm-agent-operator`.  This only affects chart-generated names (the operator Deployment). The RBAC objects this chart ships keep the fixed names the operator and the kustomize deployment use (`manager-role`, `kasm-agent`, and so on) and are not affected by this value. </td>
 		</tr>
 		<tr>
-			<td id="nodeSelector"><a href="./values.yaml#L155">nodeSelector</a></td>
+			<td id="nodeSelector"><a href="./values.yaml#L156">nodeSelector</a></td>
 			<td>
 object
 </td>
@@ -313,7 +313,7 @@ object
 			<td>Node labels the operator Pod must match to be scheduled. </td>
 		</tr>
 		<tr>
-			<td id="otel"><a href="./values.yaml#L91">otel</a></td>
+			<td id="otel"><a href="./values.yaml#L92">otel</a></td>
 			<td>
 object
 </td>
@@ -328,7 +328,7 @@ endpoint: ""
 			<td>OpenTelemetry export configuration for the operator's traces and metrics. </td>
 		</tr>
 		<tr>
-			<td id="otel--enabled"><a href="./values.yaml#L96">otel.enabled</a></td>
+			<td id="otel--enabled"><a href="./values.yaml#L97">otel.enabled</a></td>
 			<td>
 bool
 </td>
@@ -342,7 +342,7 @@ true
 			<td>Set the OTLP exporter environment variables on the controller-manager container. Disable it to leave the OTLP endpoint unset, which makes the operator's SDK fall back to its own default endpoint (localhost) and drop the exported telemetry. </td>
 		</tr>
 		<tr>
-			<td id="otel--endpoint"><a href="./values.yaml#L101">otel.endpoint</a></td>
+			<td id="otel--endpoint"><a href="./values.yaml#L102">otel.endpoint</a></td>
 			<td>
 string
 </td>
@@ -356,7 +356,7 @@ string
 			<td>The OTLP HTTP endpoint the operator exports to. Leave empty to point at the collector deployed alongside this chart by the `kasm-agent` umbrella chart, `http://<release>-kasm-otel-collector:4318`. </td>
 		</tr>
 		<tr>
-			<td id="podAnnotations"><a href="./values.yaml#L146">podAnnotations</a></td>
+			<td id="podAnnotations"><a href="./values.yaml#L147">podAnnotations</a></td>
 			<td>
 object
 </td>
@@ -370,7 +370,7 @@ object
 			<td>Additional annotations to add to the operator Pod. The chart's own `kubectl.kubernetes.io/default-container` annotation always wins and cannot be overridden here. </td>
 		</tr>
 		<tr>
-			<td id="podLabels"><a href="./values.yaml#L151">podLabels</a></td>
+			<td id="podLabels"><a href="./values.yaml#L152">podLabels</a></td>
 			<td>
 object
 </td>
@@ -384,7 +384,7 @@ object
 			<td>Additional labels to add to the operator Pod, merged with the chart's own labels. The chart's labels, including the immutable selector labels, always win and cannot be overridden here. </td>
 		</tr>
 		<tr>
-			<td id="rbac"><a href="./values.yaml#L81">rbac</a></td>
+			<td id="rbac"><a href="./values.yaml#L82">rbac</a></td>
 			<td>
 object
 </td>
@@ -398,7 +398,7 @@ aggregateRoles: true
 			<td>The cluster RBAC the operator, and the workloads it reconciles, require. </td>
 		</tr>
 		<tr>
-			<td id="rbac--aggregateRoles"><a href="./values.yaml#L87">rbac.aggregateRoles</a></td>
+			<td id="rbac--aggregateRoles"><a href="./values.yaml#L88">rbac.aggregateRoles</a></td>
 			<td>
 bool
 </td>
@@ -426,7 +426,7 @@ int
 			<td>The number of controller-manager replicas to run. The operator uses leader election (see `leaderElect`), so only one replica reconciles at a time; additional replicas are warm standbys. </td>
 		</tr>
 		<tr>
-			<td id="resources"><a href="./values.yaml#L120">resources</a></td>
+			<td id="resources"><a href="./values.yaml#L121">resources</a></td>
 			<td>
 object
 </td>
@@ -445,7 +445,7 @@ requests:
 			<td>CPU and memory requests and limits for the controller-manager container. Both requests and limits must set `cpu` and `memory`; the repository's Kyverno policies reject a container that leaves any of the four unset. The requests are small, so the operator fits a small cluster; the limits leave it room to grow to about 1,000 concurrent sessions. Past about 100 sessions raise the requests - see "Sizing the agent stack" in docs/explanation/capacity.md. </td>
 		</tr>
 		<tr>
-			<td id="resources--limits--cpu"><a href="./values.yaml#L126">resources.limits.cpu</a></td>
+			<td id="resources--limits--cpu"><a href="./values.yaml#L127">resources.limits.cpu</a></td>
 			<td>
 string
 </td>
@@ -459,7 +459,7 @@ string
 			<td>The CPU limit for the controller-manager container. The operator is idle between launches but reconciles hard during a burst of them, up to a full core. A throttled controller does not fail, it falls behind: launches slow down and can outlast the agent's wait. </td>
 		</tr>
 		<tr>
-			<td id="resources--limits--memory"><a href="./values.yaml#L131">resources.limits.memory</a></td>
+			<td id="resources--limits--memory"><a href="./values.yaml#L132">resources.limits.memory</a></td>
 			<td>
 string
 </td>
@@ -473,7 +473,7 @@ string
 			<td>The memory limit for the controller-manager container. The informer caches hold every object the operator watches, about nine per session, so memory grows with the session count. Beyond 1,000 sessions allow about 75Mi more per further 1,000. </td>
 		</tr>
 		<tr>
-			<td id="resources--requests--cpu"><a href="./values.yaml#L136">resources.requests.cpu</a></td>
+			<td id="resources--requests--cpu"><a href="./values.yaml#L137">resources.requests.cpu</a></td>
 			<td>
 string
 </td>
@@ -487,7 +487,7 @@ string
 			<td>The CPU request for the controller-manager container. It covers the idle operator; the limit above is what a launch burst borrows. </td>
 		</tr>
 		<tr>
-			<td id="resources--requests--memory"><a href="./values.yaml#L141">resources.requests.memory</a></td>
+			<td id="resources--requests--memory"><a href="./values.yaml#L142">resources.requests.memory</a></td>
 			<td>
 string
 </td>
@@ -501,7 +501,7 @@ string
 			<td>The memory request for the controller-manager container. It covers a cluster of about 100 sessions. An operator using more than it requested is a candidate for eviction under node memory pressure, so on a larger cluster raise it, up to `resources.limits.memory`. </td>
 		</tr>
 		<tr>
-			<td id="serviceAccount"><a href="./values.yaml#L65">serviceAccount</a></td>
+			<td id="serviceAccount"><a href="./values.yaml#L66">serviceAccount</a></td>
 			<td>
 object
 </td>
@@ -517,7 +517,7 @@ name: controller-manager
 			<td>The ServiceAccount the controller-manager runs as, and which the RBAC this chart ships is bound to. </td>
 		</tr>
 		<tr>
-			<td id="serviceAccount--annotations"><a href="./values.yaml#L77">serviceAccount.annotations</a></td>
+			<td id="serviceAccount--annotations"><a href="./values.yaml#L78">serviceAccount.annotations</a></td>
 			<td>
 object
 </td>
@@ -531,7 +531,7 @@ object
 			<td>Annotations to add to the ServiceAccount, for example an IAM role binding annotation on a cloud-managed cluster. </td>
 		</tr>
 		<tr>
-			<td id="serviceAccount--create"><a href="./values.yaml#L69">serviceAccount.create</a></td>
+			<td id="serviceAccount--create"><a href="./values.yaml#L70">serviceAccount.create</a></td>
 			<td>
 bool
 </td>
@@ -545,7 +545,7 @@ true
 			<td>Create the ServiceAccount. Disable it if the ServiceAccount named below is managed outside this chart; the ClusterRoleBinding and RoleBinding still reference it. </td>
 		</tr>
 		<tr>
-			<td id="serviceAccount--name"><a href="./values.yaml#L73">serviceAccount.name</a></td>
+			<td id="serviceAccount--name"><a href="./values.yaml#L74">serviceAccount.name</a></td>
 			<td>
 string
 </td>
@@ -559,7 +559,7 @@ controller-manager
 			<td>The name of the ServiceAccount. The default matches the name used by the operator's kustomize deployment, so an existing cluster keeps the same identity. </td>
 		</tr>
 		<tr>
-			<td id="tolerations"><a href="./values.yaml#L159">tolerations</a></td>
+			<td id="tolerations"><a href="./values.yaml#L160">tolerations</a></td>
 			<td>
 list
 </td>
