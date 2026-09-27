@@ -20,18 +20,18 @@ every release shown.
 
 | OpenShift | Kubernetes | uid-1000 sessions | Root sessions, `rootMode: host` (default) | Root sessions, `rootMode: userns` | Nix images (`imageMounts`) |
 | --------- | ---------- | ----------------- | ----------------------------------------- | --------------------------------- | -------------------------- |
-| 4.18 | 1.31 | ✅ | ✅ | ❌ user namespaces are tech preview; see below | ❌ no ImageVolume |
-| 4.19 | 1.32 | ✅ | ✅ | ❌ user namespaces are tech preview | ❌ no ImageVolume |
+| 4.18 | 1.31 | ✅ | ✅ | ❌ root sessions are refused; see below | ❌ no ImageVolume |
+| 4.19 | 1.32 | ✅ | ✅ | ❌ root sessions are refused; see below | ❌ no ImageVolume |
 | 4.20 | 1.33 | ✅ | ✅ | ✅ | ❌ no ImageVolume |
 | 4.21 | 1.34 | ✅ | ✅ | ✅ | ❌ no ImageVolume |
 | 4.22 | 1.35 | ✅ | ✅ | ✅ | ✅ `image` in `agent.openshift.scc.workspace.volumes` |
 | 5.0 | 1.36 | ✅ | ✅ | ✅ | ✅ `image` in `agent.openshift.scc.workspace.volumes` |
 
-- **`rootMode: userns` before 4.20.** The root SCC relies on the `userNamespaceLevel:
-  RequirePodLevel` field to admit uid 0 only inside a pod user namespace. On a release whose API
-  server does not know the field, it is dropped, and the root SCC would then admit host uid 0 under
-  a setting that promises otherwise. The chart has no version gate: use `rootMode: host` (the
-  default) or `forbid` there.
+- **`rootMode: userns` before 4.20.** The API server drops both halves of it without an error:
+  the pod's `hostUsers: false` (user namespaces are off) and the root SCC's `userNamespaceLevel`.
+  The operator catches the first: it deletes such a pod as soon as the API server has stored it,
+  and the session fails with `UserNamespacesUnsupported` instead of running as root on the node.
+  Every root session then fails, so use `rootMode: host` (the default) or `forbid` there.
 - **Nix images and user namespaces.** On 4.22 and later a Nix image that needs root runs under
   `rootMode: host`. Under `userns` it fails on nodes whose CRI-O uses runc, which idmaps bind mounts
   only; see [Session run modes](../explanation/session-run-modes.md).

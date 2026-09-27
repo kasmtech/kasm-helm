@@ -61,7 +61,10 @@ The two uid-0 modes run the same container; only the pod's user namespace differ
 - A 6.3 or newer kernel on the session nodes, for idmapped `tmpfs`.
 - Volumes on local filesystems: ext4, xfs, btrfs, tmpfs, overlayfs. Not NFS or EFS.
 
-A node that cannot do it fails the pod with an event, and nothing in the API says so beforehand. That
+A node that cannot do it fails the pod with an event, and nothing in the API says so beforehand.
+An API server that has user namespaces switched off (before 1.33, unless its feature gate is on)
+drops the pod's `hostUsers: false` without an error; the operator notices, deletes the pod before
+it can run as root on the node, and fails the session with `UserNamespacesUnsupported`. That
 is why `rootMode: userns` is a statement about the cluster, and why the default is `host`, which runs
 everywhere.
 

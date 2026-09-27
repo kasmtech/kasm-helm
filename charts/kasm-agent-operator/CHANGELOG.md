@@ -4,6 +4,10 @@ All notable changes to the kasm-agent-operator chart are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Under `rootMode: userns`, an API server with user namespaces switched off (Kubernetes before 1.33, OpenShift before 4.20) dropped the pod's `hostUsers: false` without an error, and a root session ran as root on the node while labelled `userns-root`. The operator now deletes such a pod as soon as it is stored and fails the session with `UserNamespacesUnsupported`.
+
 ### Changed
 - CRDs synced from the operator: `Agent.spec.workspaceSecurity.driResource` names the extended resource a DRI device plugin advertises GPU render nodes as; when set, an image's `/dev/dri` devices request one of it instead of a hostPath mount.
 - CRDs synced from the operator: `Agent.spec.workspaceSecurity.deviceAllowlist` lists which host devices an image's run config `devices` may pass through to its session pod (default: the DRI card and render nodes; `["none"]` passes none).
