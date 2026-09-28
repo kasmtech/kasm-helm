@@ -171,7 +171,7 @@ N replicas means N load balancers. OCI Network Load Balancers are free; AWS, Azu
 	</thead>
 	<tbody>
 		<tr>
-			<td id="affinity"><a href="./values.yaml#L970">affinity</a></td>
+			<td id="affinity"><a href="./values.yaml#L975">affinity</a></td>
 			<td>
 object
 </td>
@@ -185,7 +185,7 @@ object
 			<td>Configure node affinity settings for Kasm pods -  [Kubernetes Affinity](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/). Kasm is not guaranteed to work with Affinity settings - use caution if you must configuring these settings. The below, optional object passes in raw Affinity rules for Pods, Nodes, etc. for your environment. Make sure you use the correct values below as this Helm chart will not do any error checking for you. </td>
 		</tr>
 		<tr>
-			<td id="annotations"><a href="./values.yaml#L990">annotations</a></td>
+			<td id="annotations"><a href="./values.yaml#L995">annotations</a></td>
 			<td>
 object
 </td>
@@ -199,7 +199,7 @@ object
 			<td>Custom annotations to apply to all deployed resources </td>
 		</tr>
 		<tr>
-			<td id="applyHealthChecks"><a href="./values.yaml#L978">applyHealthChecks</a></td>
+			<td id="applyHealthChecks"><a href="./values.yaml#L983">applyHealthChecks</a></td>
 			<td>
 bool
 </td>
@@ -213,7 +213,7 @@ true
 			<td>Add Pod/Container healthchecks settings for Kasm resources </td>
 		</tr>
 		<tr>
-			<td id="applySecurity"><a href="./values.yaml#L974">applySecurity</a></td>
+			<td id="applySecurity"><a href="./values.yaml#L979">applySecurity</a></td>
 			<td>
 bool
 </td>
@@ -261,7 +261,7 @@ string
 			<td>Set the secret name where the certificate is stored. This secret name will store a certificate created by `cert-manager` if you set `cert-manager.enabled` to true </td>
 		</tr>
 		<tr>
-			<td id="clusterDomain"><a href="./values.yaml#L957">clusterDomain</a></td>
+			<td id="clusterDomain"><a href="./values.yaml#L962">clusterDomain</a></td>
 			<td>
 string
 </td>
@@ -275,7 +275,7 @@ cluster.local
 			<td>Cluster-wide Kubernetes DNS domain name </td>
 		</tr>
 		<tr>
-			<td id="components--api--annotations"><a href="./values.yaml#L614">components.api.annotations</a></td>
+			<td id="components--api--annotations"><a href="./values.yaml#L619">components.api.annotations</a></td>
 			<td>
 object
 </td>
@@ -289,7 +289,7 @@ object
 			<td>Custom annotations to add to the Kasm api Deployment</td>
 		</tr>
 		<tr>
-			<td id="components--api--extraContainers"><a href="./values.yaml#L642">components.api.extraContainers</a></td>
+			<td id="components--api--extraContainers"><a href="./values.yaml#L647">components.api.extraContainers</a></td>
 			<td>
 list
 </td>
@@ -303,7 +303,7 @@ list
 			<td>Additional sidecar containers to run in the pod Example  - name: sidecar-example    image: busybox    command: [/bin/sh, -c, 'echo "Hello world"']</td>
 		</tr>
 		<tr>
-			<td id="components--api--extraInitContainers"><a href="./values.yaml#L648">components.api.extraInitContainers</a></td>
+			<td id="components--api--extraInitContainers"><a href="./values.yaml#L653">components.api.extraInitContainers</a></td>
 			<td>
 list
 </td>
@@ -317,7 +317,7 @@ list
 			<td>Additional sidecar containers to run in the pod Example  - name: init-example    image: busybox    command: [/bin/sh, -c, 'echo "Hello world"']</td>
 		</tr>
 		<tr>
-			<td id="components--api--extraVolumeMounts"><a href="./values.yaml#L636">components.api.extraVolumeMounts</a></td>
+			<td id="components--api--extraVolumeMounts"><a href="./values.yaml#L641">components.api.extraVolumeMounts</a></td>
 			<td>
 list
 </td>
@@ -331,7 +331,7 @@ list
 			<td>A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things  like custom SSL certificates, config files, or data volumes Kasm API container Example:    extraVolumeMounts:     - mountPath: /etc/ssl/certs/ca-certificates.crt       name: pkichain       readOnly: true       subPath: ca.crt</td>
 		</tr>
 		<tr>
-			<td id="components--api--extraVolumes"><a href="./values.yaml#L627">components.api.extraVolumes</a></td>
+			<td id="components--api--extraVolumes"><a href="./values.yaml#L632">components.api.extraVolumes</a></td>
 			<td>
 list
 </td>
@@ -345,7 +345,7 @@ list
 			<td>A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things  like custom SSL certificates, config files, or data volumes to the Kasm API container Example:   extraVolumes:     - secret:         defaultMode: 420         secretName: kasm-custom-tls       name: pkichain</td>
 		</tr>
 		<tr>
-			<td id="components--api--healthCheckTiming"><a href="./values.yaml#L606">components.api.healthCheckTiming</a></td>
+			<td id="components--api--healthCheckTiming"><a href="./values.yaml#L611">components.api.healthCheckTiming</a></td>
 			<td>
 object
 </td>
@@ -364,7 +364,7 @@ startupProbe:
 			<td>Override the pod's default healthcheck timing values for startup, liveness, and/or  readiness probes. Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10  will override only the timeoutSeconds value of the livenessProbe. Migrations run before this pod's main container ever  starts (a separate initContainer blocks until the DB is at head), so the startupProbe only needs to cover the api  process's own boot (a bounded DB connectivity retry plus imports/settings load); its failureThreshold * periodSeconds  is a safety margin, not a migration budget.  Example:    healthCheckTiming:      startupProbe:        periodSeconds: 10        failureThreshold: 60      livenessProbe:        timeoutSeconds: 10        initialDelaySeconds: 20        periodSeconds: 60        failureThreshold: 5      readinessProbe:        periodSeconds: 60        successThreshold: 3</td>
 		</tr>
 		<tr>
-			<td id="components--api--image"><a href="./values.yaml#L580">components.api.image</a></td>
+			<td id="components--api--image"><a href="./values.yaml#L585">components.api.image</a></td>
 			<td>
 object
 </td>
@@ -380,7 +380,7 @@ tag: ""
 			<td>Configure the image repository where the image is stored. Use this to point to an private hosted container registry instead of our public DockerHub hosted one. </td>
 		</tr>
 		<tr>
-			<td id="components--api--image--tag"><a href="./values.yaml#L584">components.api.image.tag</a></td>
+			<td id="components--api--image--tag"><a href="./values.yaml#L589">components.api.image.tag</a></td>
 			<td>
 string
 </td>
@@ -394,7 +394,7 @@ string
 			<td>Tag for this component's image. Leave empty to fall back to the chart-wide `useImageTags`.</td>
 		</tr>
 		<tr>
-			<td id="components--api--labels"><a href="./values.yaml#L618">components.api.labels</a></td>
+			<td id="components--api--labels"><a href="./values.yaml#L623">components.api.labels</a></td>
 			<td>
 object
 </td>
@@ -408,7 +408,7 @@ object
 			<td>Custom labels to add to the Kasm api Deployment</td>
 		</tr>
 		<tr>
-			<td id="components--api--replicas"><a href="./values.yaml#L586">components.api.replicas</a></td>
+			<td id="components--api--replicas"><a href="./values.yaml#L591">components.api.replicas</a></td>
 			<td>
 int
 </td>
@@ -422,7 +422,7 @@ int
 			<td>Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset (default).</td>
 		</tr>
 		<tr>
-			<td id="components--api--resources"><a href="./values.yaml#L616">components.api.resources</a></td>
+			<td id="components--api--resources"><a href="./values.yaml#L621">components.api.resources</a></td>
 			<td>
 object
 </td>
@@ -436,7 +436,7 @@ object
 			<td>Manually configure the Kasm api Deployment resources. This overrides the pre-defined `deploymentSize` values.</td>
 		</tr>
 		<tr>
-			<td id="components--api--threadPool"><a href="./values.yaml#L651">components.api.threadPool</a></td>
+			<td id="components--api--threadPool"><a href="./values.yaml#L656">components.api.threadPool</a></td>
 			<td>
 int
 </td>
@@ -450,7 +450,7 @@ int
 			<td>Number of CherryPy worker threads for the API server.  Increase under high concurrency. Default is 20.</td>
 		</tr>
 		<tr>
-			<td id="components--api--threadPoolLogInterval"><a href="./values.yaml#L654">components.api.threadPoolLogInterval</a></td>
+			<td id="components--api--threadPoolLogInterval"><a href="./values.yaml#L659">components.api.threadPoolLogInterval</a></td>
 			<td>
 int
 </td>
@@ -464,7 +464,7 @@ int
 			<td>Seconds between background logs of CherryPy thread-pool usage  (Threads/Active/Idle/Queue). Set to 0 to disable. Default is 0.</td>
 		</tr>
 		<tr>
-			<td id="components--connectionProxy--annotations"><a href="./values.yaml#L741">components.connectionProxy.annotations</a></td>
+			<td id="components--connectionProxy--annotations"><a href="./values.yaml#L746">components.connectionProxy.annotations</a></td>
 			<td>
 object
 </td>
@@ -478,7 +478,7 @@ object
 			<td>Custom annotations to add to the Kasm Connection Proxy StatefulSet</td>
 		</tr>
 		<tr>
-			<td id="components--connectionProxy--enabled"><a href="./values.yaml#L737">components.connectionProxy.enabled</a></td>
+			<td id="components--connectionProxy--enabled"><a href="./values.yaml#L742">components.connectionProxy.enabled</a></td>
 			<td>
 bool
 </td>
@@ -492,7 +492,7 @@ true
 			<td>Use this setting to enable/disable deployment of the entire Kasm Connection Proxy workload (nginx plus the guac, rdp-gateway, and rdp-https-gateway service containers). When false, no StatefulSet, Services, or ConfigMaps are rendered for this component. </td>
 		</tr>
 		<tr>
-			<td id="components--connectionProxy--extraContainers"><a href="./values.yaml#L916">components.connectionProxy.extraContainers</a></td>
+			<td id="components--connectionProxy--extraContainers"><a href="./values.yaml#L921">components.connectionProxy.extraContainers</a></td>
 			<td>
 list
 </td>
@@ -506,7 +506,7 @@ list
 			<td>Additional sidecar containers to run in the pod Example  - name: sidecar-example    image: busybox    command: [/bin/sh, -c, 'echo "Hello world"']</td>
 		</tr>
 		<tr>
-			<td id="components--connectionProxy--extraInitContainers"><a href="./values.yaml#L922">components.connectionProxy.extraInitContainers</a></td>
+			<td id="components--connectionProxy--extraInitContainers"><a href="./values.yaml#L927">components.connectionProxy.extraInitContainers</a></td>
 			<td>
 list
 </td>
@@ -520,7 +520,7 @@ list
 			<td>Additional sidecar containers to run in the pod Example  - name: init-example    image: busybox    command: [/bin/sh, -c, 'echo "Hello world"']</td>
 		</tr>
 		<tr>
-			<td id="components--connectionProxy--extraVolumeMounts"><a href="./values.yaml#L910">components.connectionProxy.extraVolumeMounts</a></td>
+			<td id="components--connectionProxy--extraVolumeMounts"><a href="./values.yaml#L915">components.connectionProxy.extraVolumeMounts</a></td>
 			<td>
 list
 </td>
@@ -534,7 +534,7 @@ list
 			<td>A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things  like custom SSL certificates, config files, or data volumes to the Kasm Connection Proxy containers Example:   extraVolumeMounts:     - mountPath: /etc/ssl/certs/ca-certificates.crt       name: pkichain       readOnly: true       subPath: ca.crt</td>
 		</tr>
 		<tr>
-			<td id="components--connectionProxy--extraVolumes"><a href="./values.yaml#L901">components.connectionProxy.extraVolumes</a></td>
+			<td id="components--connectionProxy--extraVolumes"><a href="./values.yaml#L906">components.connectionProxy.extraVolumes</a></td>
 			<td>
 list
 </td>
@@ -548,7 +548,7 @@ list
 			<td>A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things  like custom SSL certificates, config files, or data volumes to the Kasm Connection Proxy pod Example:   extraVolumes:     - secret:         defaultMode: 420         secretName: kasm-custom-tls       name: pkichain</td>
 		</tr>
 		<tr>
-			<td id="components--connectionProxy--guac"><a href="./values.yaml#L777">components.connectionProxy.guac</a></td>
+			<td id="components--connectionProxy--guac"><a href="./values.yaml#L782">components.connectionProxy.guac</a></td>
 			<td>
 object
 </td>
@@ -574,7 +574,7 @@ resources: {}
 			<td>Configuration settings for the Kasm Guac service container running inside the Connection Proxy pod. </td>
 		</tr>
 		<tr>
-			<td id="components--connectionProxy--guac--enabled"><a href="./values.yaml#L781">components.connectionProxy.guac.enabled</a></td>
+			<td id="components--connectionProxy--guac--enabled"><a href="./values.yaml#L786">components.connectionProxy.guac.enabled</a></td>
 			<td>
 bool
 </td>
@@ -588,7 +588,7 @@ true
 			<td>Use this setting to enable/disable deployment of the Kasm Guacamole web RDP service - [Kasm Guac Service](https://docs.kasm.com/docs/latest/guide/connection_proxies#guacamole-guac). </td>
 		</tr>
 		<tr>
-			<td id="components--connectionProxy--guac--guacClusterSize"><a href="./values.yaml#L792">components.connectionProxy.guac.guacClusterSize</a></td>
+			<td id="components--connectionProxy--guac--guacClusterSize"><a href="./values.yaml#L797">components.connectionProxy.guac.guacClusterSize</a></td>
 			<td>
 int
 </td>
@@ -602,7 +602,7 @@ int
 			<td>Override the Cluster Size count set by deploymentSize. Use this value to set the number of `guacd` processes running in the Guacamole pod. Set to 0 to use deploymentSize preset (default).</td>
 		</tr>
 		<tr>
-			<td id="components--connectionProxy--guac--healthCheckTiming"><a href="./values.yaml#L808">components.connectionProxy.guac.healthCheckTiming</a></td>
+			<td id="components--connectionProxy--guac--healthCheckTiming"><a href="./values.yaml#L813">components.connectionProxy.guac.healthCheckTiming</a></td>
 			<td>
 object
 </td>
@@ -617,7 +617,7 @@ readinessProbe: {}
 			<td>Override the pod's default healthcheck timing values for liveness and/or readiness probes.  Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only  the timeoutSeconds value of the livenessProbe.  Example:    healthCheckTiming:      livenessProbe:        timeoutSeconds: 10        initialDelaySeconds: 20        periodSeconds: 60        failureThreshold: 5      readinessProbe:        periodSeconds: 60        successThreshold: 3</td>
 		</tr>
 		<tr>
-			<td id="components--connectionProxy--guac--image"><a href="./values.yaml#L785">components.connectionProxy.guac.image</a></td>
+			<td id="components--connectionProxy--guac--image"><a href="./values.yaml#L790">components.connectionProxy.guac.image</a></td>
 			<td>
 object
 </td>
@@ -633,7 +633,7 @@ tag: ""
 			<td>Configure the image repository where the image is stored. Use this to point to an private hosted container registry instead of our public DockerHub hosted one. </td>
 		</tr>
 		<tr>
-			<td id="components--connectionProxy--guac--image--tag"><a href="./values.yaml#L789">components.connectionProxy.guac.image.tag</a></td>
+			<td id="components--connectionProxy--guac--image--tag"><a href="./values.yaml#L794">components.connectionProxy.guac.image.tag</a></td>
 			<td>
 string
 </td>
@@ -647,7 +647,7 @@ string
 			<td>Tag for this component's image. Leave empty to fall back to the chart-wide `useImageTags`.</td>
 		</tr>
 		<tr>
-			<td id="components--connectionProxy--guac--recordingData"><a href="./values.yaml#L813">components.connectionProxy.guac.recordingData</a></td>
+			<td id="components--connectionProxy--guac--recordingData"><a href="./values.yaml#L818">components.connectionProxy.guac.recordingData</a></td>
 			<td>
 object
 </td>
@@ -662,7 +662,7 @@ storageClassName: ""
 			<td>PVC backing guac /tmp for session recording segments. See [Session Recording](https://docs.kasm.com/docs/latest/guide/session_recording) for sizing guidance.</td>
 		</tr>
 		<tr>
-			<td id="components--connectionProxy--guac--recordingData--pvcSize"><a href="./values.yaml#L815">components.connectionProxy.guac.recordingData.pvcSize</a></td>
+			<td id="components--connectionProxy--guac--recordingData--pvcSize"><a href="./values.yaml#L820">components.connectionProxy.guac.recordingData.pvcSize</a></td>
 			<td>
 int
 </td>
@@ -676,7 +676,7 @@ int
 			<td>PVC size in GiB.</td>
 		</tr>
 		<tr>
-			<td id="components--connectionProxy--guac--recordingData--storageClassName"><a href="./values.yaml#L817">components.connectionProxy.guac.recordingData.storageClassName</a></td>
+			<td id="components--connectionProxy--guac--recordingData--storageClassName"><a href="./values.yaml#L822">components.connectionProxy.guac.recordingData.storageClassName</a></td>
 			<td>
 string
 </td>
@@ -690,7 +690,7 @@ string
 			<td>StorageClass. Blank uses the cluster default.</td>
 		</tr>
 		<tr>
-			<td id="components--connectionProxy--guac--resources"><a href="./values.yaml#L794">components.connectionProxy.guac.resources</a></td>
+			<td id="components--connectionProxy--guac--resources"><a href="./values.yaml#L799">components.connectionProxy.guac.resources</a></td>
 			<td>
 object
 </td>
@@ -704,7 +704,7 @@ object
 			<td>Manually configure the Kasm Guac container resources. This overrides the pre-defined `deploymentSize` values.</td>
 		</tr>
 		<tr>
-			<td id="components--connectionProxy--labels"><a href="./values.yaml#L743">components.connectionProxy.labels</a></td>
+			<td id="components--connectionProxy--labels"><a href="./values.yaml#L748">components.connectionProxy.labels</a></td>
 			<td>
 object
 </td>
@@ -718,7 +718,7 @@ object
 			<td>Custom labels to add to the Kasm Connection Proxy StatefulSet</td>
 		</tr>
 		<tr>
-			<td id="components--connectionProxy--nginx"><a href="./values.yaml#L747">components.connectionProxy.nginx</a></td>
+			<td id="components--connectionProxy--nginx"><a href="./values.yaml#L752">components.connectionProxy.nginx</a></td>
 			<td>
 object
 </td>
@@ -739,7 +739,7 @@ resources: {}
 			<td>Configuration for the consolidated nginx container fronting the guac, rdp-gateway, and rdp-https-gateway service containers. </td>
 		</tr>
 		<tr>
-			<td id="components--connectionProxy--nginx--healthCheckTiming"><a href="./values.yaml#L771">components.connectionProxy.nginx.healthCheckTiming</a></td>
+			<td id="components--connectionProxy--nginx--healthCheckTiming"><a href="./values.yaml#L776">components.connectionProxy.nginx.healthCheckTiming</a></td>
 			<td>
 object
 </td>
@@ -754,7 +754,7 @@ readinessProbe: {}
 			<td>Override the pod's default healthcheck timing values for liveness and/or readiness probes.  Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only  the timeoutSeconds value of the livenessProbe.  Example:    healthCheckTiming:      livenessProbe:        timeoutSeconds: 10        initialDelaySeconds: 20        periodSeconds: 60        failureThreshold: 5      readinessProbe:        periodSeconds: 60        successThreshold: 3</td>
 		</tr>
 		<tr>
-			<td id="components--connectionProxy--nginx--image"><a href="./values.yaml#L751">components.connectionProxy.nginx.image</a></td>
+			<td id="components--connectionProxy--nginx--image"><a href="./values.yaml#L756">components.connectionProxy.nginx.image</a></td>
 			<td>
 object
 </td>
@@ -770,7 +770,7 @@ tag: ""
 			<td>Configure the image repository where the image is stored. Use this to point to an private hosted container registry instead of our public DockerHub hosted one. </td>
 		</tr>
 		<tr>
-			<td id="components--connectionProxy--nginx--image--tag"><a href="./values.yaml#L755">components.connectionProxy.nginx.image.tag</a></td>
+			<td id="components--connectionProxy--nginx--image--tag"><a href="./values.yaml#L760">components.connectionProxy.nginx.image.tag</a></td>
 			<td>
 string
 </td>
@@ -784,7 +784,7 @@ string
 			<td>Tag for this component's image. Leave empty to fall back to the chart-wide `useImageTags`.</td>
 		</tr>
 		<tr>
-			<td id="components--connectionProxy--nginx--resources"><a href="./values.yaml#L757">components.connectionProxy.nginx.resources</a></td>
+			<td id="components--connectionProxy--nginx--resources"><a href="./values.yaml#L762">components.connectionProxy.nginx.resources</a></td>
 			<td>
 object
 </td>
@@ -798,7 +798,7 @@ object
 			<td>Manually configure resources for the nginx container. Leave empty to use the chart default.</td>
 		</tr>
 		<tr>
-			<td id="components--connectionProxy--rdpGateway"><a href="./values.yaml#L821">components.connectionProxy.rdpGateway</a></td>
+			<td id="components--connectionProxy--rdpGateway"><a href="./values.yaml#L826">components.connectionProxy.rdpGateway</a></td>
 			<td>
 object
 </td>
@@ -821,7 +821,7 @@ resources: {}
 			<td>Configuration settings for the Kasm RDP Gateway service container running inside the Connection Proxy pod. </td>
 		</tr>
 		<tr>
-			<td id="components--connectionProxy--rdpGateway--enabled"><a href="./values.yaml#L825">components.connectionProxy.rdpGateway.enabled</a></td>
+			<td id="components--connectionProxy--rdpGateway--enabled"><a href="./values.yaml#L830">components.connectionProxy.rdpGateway.enabled</a></td>
 			<td>
 bool
 </td>
@@ -835,7 +835,7 @@ true
 			<td>Use this setting to enable/disable deployment of the Kasm RDP Gateway service - [Kasm RDP Gateway](https://docs.kasm.com/docs/latest/guide/connection_proxies#rdp-gateway). </td>
 		</tr>
 		<tr>
-			<td id="components--connectionProxy--rdpGateway--healthCheckTiming"><a href="./values.yaml#L854">components.connectionProxy.rdpGateway.healthCheckTiming</a></td>
+			<td id="components--connectionProxy--rdpGateway--healthCheckTiming"><a href="./values.yaml#L859">components.connectionProxy.rdpGateway.healthCheckTiming</a></td>
 			<td>
 object
 </td>
@@ -850,7 +850,7 @@ readinessProbe: {}
 			<td>Override the pod's default healthcheck timing values for liveness and/or readiness probes.  Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only  the timeoutSeconds value of the livenessProbe.  Example:    healthCheckTiming:      livenessProbe:        timeoutSeconds: 10        initialDelaySeconds: 20        periodSeconds: 60        failureThreshold: 5      readinessProbe:        periodSeconds: 60        successThreshold: 3</td>
 		</tr>
 		<tr>
-			<td id="components--connectionProxy--rdpGateway--image"><a href="./values.yaml#L829">components.connectionProxy.rdpGateway.image</a></td>
+			<td id="components--connectionProxy--rdpGateway--image"><a href="./values.yaml#L834">components.connectionProxy.rdpGateway.image</a></td>
 			<td>
 object
 </td>
@@ -866,7 +866,7 @@ tag: ""
 			<td>Configure the image repository where the image is stored. Use this to point to an private hosted container registry instead of our public DockerHub hosted one. </td>
 		</tr>
 		<tr>
-			<td id="components--connectionProxy--rdpGateway--image--tag"><a href="./values.yaml#L833">components.connectionProxy.rdpGateway.image.tag</a></td>
+			<td id="components--connectionProxy--rdpGateway--image--tag"><a href="./values.yaml#L838">components.connectionProxy.rdpGateway.image.tag</a></td>
 			<td>
 string
 </td>
@@ -880,7 +880,7 @@ string
 			<td>Tag for this component's image. Leave empty to fall back to the chart-wide `useImageTags`.</td>
 		</tr>
 		<tr>
-			<td id="components--connectionProxy--rdpGateway--iniConfigMapName"><a href="./values.yaml#L838">components.connectionProxy.rdpGateway.iniConfigMapName</a></td>
+			<td id="components--connectionProxy--rdpGateway--iniConfigMapName"><a href="./values.yaml#L843">components.connectionProxy.rdpGateway.iniConfigMapName</a></td>
 			<td>
 string
 </td>
@@ -894,7 +894,7 @@ string
 			<td>Name of a user-created ConfigMap providing a custom `rdpproxy.ini` for the rdp-gateway pod. See the Kasm documentation for details. </td>
 		</tr>
 		<tr>
-			<td id="components--connectionProxy--rdpGateway--resources"><a href="./values.yaml#L840">components.connectionProxy.rdpGateway.resources</a></td>
+			<td id="components--connectionProxy--rdpGateway--resources"><a href="./values.yaml#L845">components.connectionProxy.rdpGateway.resources</a></td>
 			<td>
 object
 </td>
@@ -908,7 +908,7 @@ object
 			<td>Manually configure the Kasm RDP Gateway container resources. This overrides the pre-defined `deploymentSize` values.</td>
 		</tr>
 		<tr>
-			<td id="components--connectionProxy--rdpHttpsGateway"><a href="./values.yaml#L860">components.connectionProxy.rdpHttpsGateway</a></td>
+			<td id="components--connectionProxy--rdpHttpsGateway"><a href="./values.yaml#L865">components.connectionProxy.rdpHttpsGateway</a></td>
 			<td>
 object
 </td>
@@ -930,7 +930,7 @@ resources: {}
 			<td>Configuration settings for the Kasm RDP HTTPS Gateway service container running inside the Connection Proxy pod. </td>
 		</tr>
 		<tr>
-			<td id="components--connectionProxy--rdpHttpsGateway--enabled"><a href="./values.yaml#L865">components.connectionProxy.rdpHttpsGateway.enabled</a></td>
+			<td id="components--connectionProxy--rdpHttpsGateway--enabled"><a href="./values.yaml#L870">components.connectionProxy.rdpHttpsGateway.enabled</a></td>
 			<td>
 bool
 </td>
@@ -944,7 +944,7 @@ true
 			<td>Use this setting to enable/disable deployment of the Kasm RDP HTTPS Gateway service. This service allows users to use native RDP clients via HTTPS connections rather than exposing 3389 - [Kasm RDP HTTPS Gateway](https://docs.kasm.com/docs/latest/guide/connection_proxies#rdp-https-gateway). </td>
 		</tr>
 		<tr>
-			<td id="components--connectionProxy--rdpHttpsGateway--healthCheckTiming"><a href="./values.yaml#L889">components.connectionProxy.rdpHttpsGateway.healthCheckTiming</a></td>
+			<td id="components--connectionProxy--rdpHttpsGateway--healthCheckTiming"><a href="./values.yaml#L894">components.connectionProxy.rdpHttpsGateway.healthCheckTiming</a></td>
 			<td>
 object
 </td>
@@ -959,7 +959,7 @@ readinessProbe: {}
 			<td>Override the pod's default healthcheck timing values for liveness and/or readiness probes.  Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only  the timeoutSeconds value of the livenessProbe.  Example:    healthCheckTiming:      livenessProbe:        timeoutSeconds: 10        initialDelaySeconds: 20        periodSeconds: 60        failureThreshold: 5      readinessProbe:        periodSeconds: 60        successThreshold: 3</td>
 		</tr>
 		<tr>
-			<td id="components--connectionProxy--rdpHttpsGateway--image"><a href="./values.yaml#L869">components.connectionProxy.rdpHttpsGateway.image</a></td>
+			<td id="components--connectionProxy--rdpHttpsGateway--image"><a href="./values.yaml#L874">components.connectionProxy.rdpHttpsGateway.image</a></td>
 			<td>
 object
 </td>
@@ -975,7 +975,7 @@ tag: ""
 			<td>Configure the image repository where the image is stored. Use this to point to an private hosted container registry instead of our public DockerHub hosted one. </td>
 		</tr>
 		<tr>
-			<td id="components--connectionProxy--rdpHttpsGateway--image--tag"><a href="./values.yaml#L873">components.connectionProxy.rdpHttpsGateway.image.tag</a></td>
+			<td id="components--connectionProxy--rdpHttpsGateway--image--tag"><a href="./values.yaml#L878">components.connectionProxy.rdpHttpsGateway.image.tag</a></td>
 			<td>
 string
 </td>
@@ -989,7 +989,7 @@ string
 			<td>Tag for this component's image. Leave empty to fall back to the chart-wide `useImageTags`.</td>
 		</tr>
 		<tr>
-			<td id="components--connectionProxy--rdpHttpsGateway--resources"><a href="./values.yaml#L875">components.connectionProxy.rdpHttpsGateway.resources</a></td>
+			<td id="components--connectionProxy--rdpHttpsGateway--resources"><a href="./values.yaml#L880">components.connectionProxy.rdpHttpsGateway.resources</a></td>
 			<td>
 object
 </td>
@@ -1003,7 +1003,7 @@ object
 			<td>Manually configure the Kasm RDP HTTPS Gateway container resources. This overrides the pre-defined `deploymentSize` values.</td>
 		</tr>
 		<tr>
-			<td id="components--connectionProxy--replicas"><a href="./values.yaml#L739">components.connectionProxy.replicas</a></td>
+			<td id="components--connectionProxy--replicas"><a href="./values.yaml#L744">components.connectionProxy.replicas</a></td>
 			<td>
 int
 </td>
@@ -1017,7 +1017,7 @@ int
 			<td>Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset (default).</td>
 		</tr>
 		<tr>
-			<td id="components--manager--annotations"><a href="./values.yaml#L686">components.manager.annotations</a></td>
+			<td id="components--manager--annotations"><a href="./values.yaml#L691">components.manager.annotations</a></td>
 			<td>
 object
 </td>
@@ -1031,7 +1031,7 @@ object
 			<td>Custom annotations to add to the Kasm Manager Deployment</td>
 		</tr>
 		<tr>
-			<td id="components--manager--extraContainers"><a href="./values.yaml#L714">components.manager.extraContainers</a></td>
+			<td id="components--manager--extraContainers"><a href="./values.yaml#L719">components.manager.extraContainers</a></td>
 			<td>
 list
 </td>
@@ -1045,7 +1045,7 @@ list
 			<td>Additional sidecar containers to run in the pod Example  - name: sidecar-example    image: busybox    command: [/bin/sh, -c, 'echo "Hello world"']</td>
 		</tr>
 		<tr>
-			<td id="components--manager--extraInitContainers"><a href="./values.yaml#L720">components.manager.extraInitContainers</a></td>
+			<td id="components--manager--extraInitContainers"><a href="./values.yaml#L725">components.manager.extraInitContainers</a></td>
 			<td>
 list
 </td>
@@ -1059,7 +1059,7 @@ list
 			<td>Additional sidecar containers to run in the pod Example  - name: init-example    image: busybox    command: [/bin/sh, -c, 'echo "Hello world"']</td>
 		</tr>
 		<tr>
-			<td id="components--manager--extraVolumeMounts"><a href="./values.yaml#L708">components.manager.extraVolumeMounts</a></td>
+			<td id="components--manager--extraVolumeMounts"><a href="./values.yaml#L713">components.manager.extraVolumeMounts</a></td>
 			<td>
 list
 </td>
@@ -1073,7 +1073,7 @@ list
 			<td>A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things  like custom SSL certificates, config files, or data volumes Kasm Manager container Example:    extraVolumeMounts:     - mountPath: /etc/ssl/certs/ca-certificates.crt       name: pkichain       readOnly: true       subPath: ca.crt</td>
 		</tr>
 		<tr>
-			<td id="components--manager--extraVolumes"><a href="./values.yaml#L699">components.manager.extraVolumes</a></td>
+			<td id="components--manager--extraVolumes"><a href="./values.yaml#L704">components.manager.extraVolumes</a></td>
 			<td>
 list
 </td>
@@ -1087,7 +1087,7 @@ list
 			<td>A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things  like custom SSL certificates, config files, or data volumes to the Kasm Manager container Example:   extraVolumes:     - secret:         defaultMode: 420         secretName: kasm-custom-tls       name: pkichain</td>
 		</tr>
 		<tr>
-			<td id="components--manager--healthCheckTiming"><a href="./values.yaml#L682">components.manager.healthCheckTiming</a></td>
+			<td id="components--manager--healthCheckTiming"><a href="./values.yaml#L687">components.manager.healthCheckTiming</a></td>
 			<td>
 object
 </td>
@@ -1102,7 +1102,7 @@ readinessProbe: {}
 			<td>Override the pod's default healthcheck timing values for liveness and/or readiness probes.  Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only  the timeoutSeconds value of the livenessProbe.  Example:    healthCheckTiming:      livenessProbe:        timeoutSeconds: 10        initialDelaySeconds: 20        periodSeconds: 60        failureThreshold: 5      readinessProbe:        periodSeconds: 60        successThreshold: 3</td>
 		</tr>
 		<tr>
-			<td id="components--manager--image"><a href="./values.yaml#L662">components.manager.image</a></td>
+			<td id="components--manager--image"><a href="./values.yaml#L667">components.manager.image</a></td>
 			<td>
 object
 </td>
@@ -1118,7 +1118,7 @@ tag: ""
 			<td>Configure the image repository where the image is stored. Use this to point to an private hosted container registry instead of our public DockerHub hosted one. </td>
 		</tr>
 		<tr>
-			<td id="components--manager--image--tag"><a href="./values.yaml#L666">components.manager.image.tag</a></td>
+			<td id="components--manager--image--tag"><a href="./values.yaml#L671">components.manager.image.tag</a></td>
 			<td>
 string
 </td>
@@ -1132,7 +1132,7 @@ string
 			<td>Tag for this component's image. Leave empty to fall back to the chart-wide `useImageTags`.</td>
 		</tr>
 		<tr>
-			<td id="components--manager--labels"><a href="./values.yaml#L690">components.manager.labels</a></td>
+			<td id="components--manager--labels"><a href="./values.yaml#L695">components.manager.labels</a></td>
 			<td>
 object
 </td>
@@ -1146,7 +1146,7 @@ object
 			<td>Custom labels to add to the Kasm Manager Deployment</td>
 		</tr>
 		<tr>
-			<td id="components--manager--replicas"><a href="./values.yaml#L668">components.manager.replicas</a></td>
+			<td id="components--manager--replicas"><a href="./values.yaml#L673">components.manager.replicas</a></td>
 			<td>
 int
 </td>
@@ -1160,7 +1160,7 @@ int
 			<td>Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset (default).</td>
 		</tr>
 		<tr>
-			<td id="components--manager--resources"><a href="./values.yaml#L688">components.manager.resources</a></td>
+			<td id="components--manager--resources"><a href="./values.yaml#L693">components.manager.resources</a></td>
 			<td>
 object
 </td>
@@ -1174,7 +1174,7 @@ object
 			<td>Manually configure the Kasm Manager Deployment resources. This overrides the pre-defined `deploymentSize` values.</td>
 		</tr>
 		<tr>
-			<td id="components--manager--supportBundleTimer"><a href="./values.yaml#L727">components.manager.supportBundleTimer</a></td>
+			<td id="components--manager--supportBundleTimer"><a href="./values.yaml#L732">components.manager.supportBundleTimer</a></td>
 			<td>
 int
 </td>
@@ -1188,7 +1188,7 @@ int
 			<td>Configures the batching interval (in seconds) for generating support bundles.   This value determines how often the system checks for support bundle completion and expiration.  Default value is 60s.</td>
 		</tr>
 		<tr>
-			<td id="components--manager--updateTimer"><a href="./values.yaml#L723">components.manager.updateTimer</a></td>
+			<td id="components--manager--updateTimer"><a href="./values.yaml#L728">components.manager.updateTimer</a></td>
 			<td>
 int
 </td>
@@ -1202,7 +1202,7 @@ int
 			<td>Configures the delay (in seconds) between checking for updates, when automatic updates are enabled.  Default value is 86400, which equals 24 hours.</td>
 		</tr>
 		<tr>
-			<td id="components--proxy--annotations"><a href="./values.yaml#L538">components.proxy.annotations</a></td>
+			<td id="components--proxy--annotations"><a href="./values.yaml#L543">components.proxy.annotations</a></td>
 			<td>
 object
 </td>
@@ -1216,7 +1216,7 @@ object
 			<td>Custom annotations to add to the Kasm Proxy Deployment</td>
 		</tr>
 		<tr>
-			<td id="components--proxy--extraContainers"><a href="./values.yaml#L566">components.proxy.extraContainers</a></td>
+			<td id="components--proxy--extraContainers"><a href="./values.yaml#L571">components.proxy.extraContainers</a></td>
 			<td>
 list
 </td>
@@ -1230,7 +1230,7 @@ list
 			<td>Additional sidecar containers to run in the pod Example  - name: sidecar-example    image: busybox    command: [/bin/sh, -c, 'echo "Hello world"']</td>
 		</tr>
 		<tr>
-			<td id="components--proxy--extraInitContainers"><a href="./values.yaml#L572">components.proxy.extraInitContainers</a></td>
+			<td id="components--proxy--extraInitContainers"><a href="./values.yaml#L577">components.proxy.extraInitContainers</a></td>
 			<td>
 list
 </td>
@@ -1244,7 +1244,7 @@ list
 			<td>Additional sidecar containers to run in the pod Example  - name: init-example    image: busybox    command: [/bin/sh, -c, 'echo "Hello world"']</td>
 		</tr>
 		<tr>
-			<td id="components--proxy--extraVolumeMounts"><a href="./values.yaml#L560">components.proxy.extraVolumeMounts</a></td>
+			<td id="components--proxy--extraVolumeMounts"><a href="./values.yaml#L565">components.proxy.extraVolumeMounts</a></td>
 			<td>
 list
 </td>
@@ -1258,7 +1258,7 @@ list
 			<td>A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things  like custom SSL certificates, config files, or data volumes Kasm Proxy container Example:    extraVolumeMounts:     - mountPath: /etc/ssl/certs/ca-certificates.crt       name: pkichain       readOnly: true       subPath: ca.crt</td>
 		</tr>
 		<tr>
-			<td id="components--proxy--extraVolumes"><a href="./values.yaml#L551">components.proxy.extraVolumes</a></td>
+			<td id="components--proxy--extraVolumes"><a href="./values.yaml#L556">components.proxy.extraVolumes</a></td>
 			<td>
 list
 </td>
@@ -1272,7 +1272,7 @@ list
 			<td>A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things  like custom SSL certificates, config files, or data volumes to the Kasm Proxy container Example:   extraVolumes:     - secret:         defaultMode: 420         secretName: kasm-custom-tls       name: pkichain</td>
 		</tr>
 		<tr>
-			<td id="components--proxy--healthCheckTiming"><a href="./values.yaml#L534">components.proxy.healthCheckTiming</a></td>
+			<td id="components--proxy--healthCheckTiming"><a href="./values.yaml#L539">components.proxy.healthCheckTiming</a></td>
 			<td>
 object
 </td>
@@ -1287,7 +1287,7 @@ readinessProbe: {}
 			<td>Override the pod's default healthcheck timing values for liveness and/or readiness probes.  Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only  the timeoutSeconds value of the livenessProbe.  Example:    healthCheckTiming:      livenessProbe:        timeoutSeconds: 10        initialDelaySeconds: 20        periodSeconds: 60        failureThreshold: 5      readinessProbe:        periodSeconds: 60        successThreshold: 3</td>
 		</tr>
 		<tr>
-			<td id="components--proxy--image"><a href="./values.yaml#L514">components.proxy.image</a></td>
+			<td id="components--proxy--image"><a href="./values.yaml#L519">components.proxy.image</a></td>
 			<td>
 object
 </td>
@@ -1303,7 +1303,7 @@ tag: ""
 			<td>Configure the image repository where the image is stored. Use this to point to an private hosted container registry instead of our public DockerHub hosted one. </td>
 		</tr>
 		<tr>
-			<td id="components--proxy--image--tag"><a href="./values.yaml#L518">components.proxy.image.tag</a></td>
+			<td id="components--proxy--image--tag"><a href="./values.yaml#L523">components.proxy.image.tag</a></td>
 			<td>
 string
 </td>
@@ -1317,7 +1317,7 @@ string
 			<td>Tag for this component's image. Leave empty to fall back to the chart-wide `useImageTags`.</td>
 		</tr>
 		<tr>
-			<td id="components--proxy--labels"><a href="./values.yaml#L542">components.proxy.labels</a></td>
+			<td id="components--proxy--labels"><a href="./values.yaml#L547">components.proxy.labels</a></td>
 			<td>
 object
 </td>
@@ -1331,7 +1331,7 @@ object
 			<td>Custom labels to add to the Kasm Proxy Deployment</td>
 		</tr>
 		<tr>
-			<td id="components--proxy--replicas"><a href="./values.yaml#L520">components.proxy.replicas</a></td>
+			<td id="components--proxy--replicas"><a href="./values.yaml#L525">components.proxy.replicas</a></td>
 			<td>
 int
 </td>
@@ -1345,7 +1345,7 @@ int
 			<td>Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset (default).</td>
 		</tr>
 		<tr>
-			<td id="components--proxy--resources"><a href="./values.yaml#L540">components.proxy.resources</a></td>
+			<td id="components--proxy--resources"><a href="./values.yaml#L545">components.proxy.resources</a></td>
 			<td>
 object
 </td>
@@ -1359,7 +1359,7 @@ object
 			<td>Manually configure the Kasm Proxy Deployment resources. This overrides the pre-defined `deploymentSize` values.</td>
 		</tr>
 		<tr>
-			<td id="database--annotations"><a href="./values.yaml#L370">database.annotations</a></td>
+			<td id="database--annotations"><a href="./values.yaml#L375">database.annotations</a></td>
 			<td>
 object
 </td>
@@ -1373,7 +1373,7 @@ object
 			<td>Custom annotations to add to the Kasm DB StatefulSet</td>
 		</tr>
 		<tr>
-			<td id="database--extraContainers"><a href="./values.yaml#L414">database.extraContainers</a></td>
+			<td id="database--extraContainers"><a href="./values.yaml#L419">database.extraContainers</a></td>
 			<td>
 list
 </td>
@@ -1387,7 +1387,7 @@ list
 			<td>Additional sidecar containers to run in the pod Example  - name: sidecar-example    image: busybox    command: [/bin/sh, -c, 'echo "Hello world"']</td>
 		</tr>
 		<tr>
-			<td id="database--extraInitContainers"><a href="./values.yaml#L420">database.extraInitContainers</a></td>
+			<td id="database--extraInitContainers"><a href="./values.yaml#L425">database.extraInitContainers</a></td>
 			<td>
 list
 </td>
@@ -1401,7 +1401,7 @@ list
 			<td>Additional sidecar containers to run in the pod Example  - name: init-example    image: busybox    command: [/bin/sh, -c, 'echo "Hello world"']</td>
 		</tr>
 		<tr>
-			<td id="database--extraVolumeMounts"><a href="./values.yaml#L408">database.extraVolumeMounts</a></td>
+			<td id="database--extraVolumeMounts"><a href="./values.yaml#L413">database.extraVolumeMounts</a></td>
 			<td>
 list
 </td>
@@ -1415,7 +1415,7 @@ list
 			<td>A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things  like custom SSL certificates, config files, or data volumes Kasm Database container Example:    extraVolumeMounts:     - mountPath: /etc/ssl/certs/ca-certificates.crt       name: pkichain       readOnly: true       subPath: ca.crt</td>
 		</tr>
 		<tr>
-			<td id="database--extraVolumes"><a href="./values.yaml#L399">database.extraVolumes</a></td>
+			<td id="database--extraVolumes"><a href="./values.yaml#L404">database.extraVolumes</a></td>
 			<td>
 list
 </td>
@@ -1429,7 +1429,7 @@ list
 			<td>A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things  like custom SSL certificates, config files, or data volumes to the Kasm Database container Example:   extraVolumes:     - secret:         defaultMode: 420         secretName: kasm-custom-tls       name: pkichain</td>
 		</tr>
 		<tr>
-			<td id="database--healthCheckTiming"><a href="./values.yaml#L386">database.healthCheckTiming</a></td>
+			<td id="database--healthCheckTiming"><a href="./values.yaml#L391">database.healthCheckTiming</a></td>
 			<td>
 object
 </td>
@@ -1530,7 +1530,7 @@ kasmapp
 			<td>The name of the Kasm database User with READ/WRITE permission to the Kasm database </td>
 		</tr>
 		<tr>
-			<td id="database--labels"><a href="./values.yaml#L390">database.labels</a></td>
+			<td id="database--labels"><a href="./values.yaml#L395">database.labels</a></td>
 			<td>
 object
 </td>
@@ -1572,7 +1572,7 @@ object
 			<td>An object defining the PostgreSQL DB Master user and the Kubernetes secret and key values for the Master DB password. These credentials are only used by the `db-init-job` to create the `kasmDbName` database, the `kasmDbUser` user account, set permissions for the user account, and initialize and pre-seed the Kasm Database. </td>
 		</tr>
 		<tr>
-			<td id="database--resources"><a href="./values.yaml#L372">database.resources</a></td>
+			<td id="database--resources"><a href="./values.yaml#L377">database.resources</a></td>
 			<td>
 object
 </td>
@@ -1614,19 +1614,19 @@ int
 			<td>Set the size of the PVC to attach to your Kubernetes-hosted Database server. The default size is 8Gi. Just supply the integer value of the PVC size in GB you wish to use. </td>
 		</tr>
 		<tr>
-			<td id="database--storage--retentionPolicy"><a href="./values.yaml#L366">database.storage.retentionPolicy</a></td>
+			<td id="database--storage--retentionPolicy"><a href="./values.yaml#L371">database.storage.retentionPolicy</a></td>
 			<td>
 object
 </td>
 			<td>
 				<div style="max-width: 520px;">
 <pre lang="json">
-whenDeleted: Delete
+whenDeleted: Retain
 whenScaled: Retain
 </pre>
 </div>
 			</td>
-			<td>Configure how the DB volume should be retained or deleted throughout the DB's lifecycle </td>
+			<td>Configure how the DB volume should be retained or deleted throughout the DB's lifecycle. `whenDeleted: Retain` is the default on purpose: the bundled database's StatefulSet is named per Kasm version, so a version upgrade replaces it rather than updating it in place. With `Delete` the old volume goes with the old StatefulSet, and the pre-upgrade dump is then the only copy of the data. Retaining it leaves the previous version's volume in the namespace as a fallback, to be removed by hand once the upgrade is confirmed good. </td>
 		</tr>
 		<tr>
 			<td id="database--storage--storageClassName"><a href="./values.yaml#L359">database.storage.storageClassName</a></td>
@@ -1643,7 +1643,7 @@ string
 			<td>Set the storage class to attach to the DB for storage. NOTE: Leaving this blank will use the cluster-default storage class. </td>
 		</tr>
 		<tr>
-			<td id="dbManagement--backupCron--enabled"><a href="./values.yaml#L484">dbManagement.backupCron.enabled</a></td>
+			<td id="dbManagement--backupCron--enabled"><a href="./values.yaml#L489">dbManagement.backupCron.enabled</a></td>
 			<td>
 bool
 </td>
@@ -1657,7 +1657,7 @@ false
 			<td>Set to true to enable automatic Kasm DB backups </td>
 		</tr>
 		<tr>
-			<td id="dbManagement--backupCron--pvcName"><a href="./values.yaml#L487">dbManagement.backupCron.pvcName</a></td>
+			<td id="dbManagement--backupCron--pvcName"><a href="./values.yaml#L492">dbManagement.backupCron.pvcName</a></td>
 			<td>
 string
 </td>
@@ -1671,7 +1671,7 @@ string
 			<td>The name of the Persistent Volume Claim to use for DB Backups </td>
 		</tr>
 		<tr>
-			<td id="dbManagement--backupCron--pvcSize"><a href="./values.yaml#L503">dbManagement.backupCron.pvcSize</a></td>
+			<td id="dbManagement--backupCron--pvcSize"><a href="./values.yaml#L508">dbManagement.backupCron.pvcSize</a></td>
 			<td>
 int
 </td>
@@ -1685,7 +1685,7 @@ int
 			<td>Set the size of the PVC to attach to your Kubernetes-hosted Database backup job. The default size is 5Gi. Just supply the integer value of the PVC size in GB you wish to use. </td>
 		</tr>
 		<tr>
-			<td id="dbManagement--backupCron--schedule"><a href="./values.yaml#L492">dbManagement.backupCron.schedule</a></td>
+			<td id="dbManagement--backupCron--schedule"><a href="./values.yaml#L497">dbManagement.backupCron.schedule</a></td>
 			<td>
 string
 </td>
@@ -1699,7 +1699,7 @@ string
 			<td>Use a cron-style syntax to schedule how often the backup cron job runs. The default value will run a backup every 24 hours at midnight UTC. Refer to the [Kubernetes CronJob](https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/) documentation for more information. </td>
 		</tr>
 		<tr>
-			<td id="dbManagement--backupCron--storageClass"><a href="./values.yaml#L499">dbManagement.backupCron.storageClass</a></td>
+			<td id="dbManagement--backupCron--storageClass"><a href="./values.yaml#L504">dbManagement.backupCron.storageClass</a></td>
 			<td>
 string
 </td>
@@ -1713,7 +1713,7 @@ string
 			<td>The `storageClassName` to attach the DB backup job for storage of regular DB backups. Leave the value empty to use your default Kubernetes storageClass </td>
 		</tr>
 		<tr>
-			<td id="dbManagement--backupCron--timeZone"><a href="./values.yaml#L495">dbManagement.backupCron.timeZone</a></td>
+			<td id="dbManagement--backupCron--timeZone"><a href="./values.yaml#L500">dbManagement.backupCron.timeZone</a></td>
 			<td>
 string
 </td>
@@ -1727,7 +1727,7 @@ string
 			<td>The time zone to use for the backup cron job. The default is UTC. </td>
 		</tr>
 		<tr>
-			<td id="dbManagement--dbConnectionTimeout"><a href="./values.yaml#L432">dbManagement.dbConnectionTimeout</a></td>
+			<td id="dbManagement--dbConnectionTimeout"><a href="./values.yaml#L437">dbManagement.dbConnectionTimeout</a></td>
 			<td>
 int
 </td>
@@ -1741,7 +1741,7 @@ int
 			<td>The time in seconds to wait for the DB to respond to initContainer connection attempts.</td>
 		</tr>
 		<tr>
-			<td id="dbManagement--initJobTTLSecondsAfterFinished"><a href="./values.yaml#L430">dbManagement.initJobTTLSecondsAfterFinished</a></td>
+			<td id="dbManagement--initJobTTLSecondsAfterFinished"><a href="./values.yaml#L435">dbManagement.initJobTTLSecondsAfterFinished</a></td>
 			<td>
 int
 </td>
@@ -1755,7 +1755,7 @@ int
 			<td>The time in seconds the DB initialization job remains after successful completion. </td>
 		</tr>
 		<tr>
-			<td id="dbManagement--initialize"><a href="./values.yaml#L427">dbManagement.initialize</a></td>
+			<td id="dbManagement--initialize"><a href="./values.yaml#L432">dbManagement.initialize</a></td>
 			<td>
 bool
 </td>
@@ -1769,7 +1769,7 @@ true
 			<td>Initialize the DB. This is required for an initial deployment of Kasm to configure the DB for Kasm usage </td>
 		</tr>
 		<tr>
-			<td id="dbManagement--upgrade--backupStorageClass"><a href="./values.yaml#L468">dbManagement.upgrade.backupStorageClass</a></td>
+			<td id="dbManagement--upgrade--backupStorageClass"><a href="./values.yaml#L473">dbManagement.upgrade.backupStorageClass</a></td>
 			<td>
 string
 </td>
@@ -1783,7 +1783,7 @@ string
 			<td>The storageClass to use to create PV for the backup PVC. </td>
 		</tr>
 		<tr>
-			<td id="dbManagement--upgrade--enable"><a href="./values.yaml#L441">dbManagement.upgrade.enable</a></td>
+			<td id="dbManagement--upgrade--enable"><a href="./values.yaml#L446">dbManagement.upgrade.enable</a></td>
 			<td>
 bool
 </td>
@@ -1797,7 +1797,7 @@ false
 			<td></td>
 		</tr>
 		<tr>
-			<td id="dbManagement--upgrade--oldDbBackupFileName"><a href="./values.yaml#L477">dbManagement.upgrade.oldDbBackupFileName</a></td>
+			<td id="dbManagement--upgrade--oldDbBackupFileName"><a href="./values.yaml#L482">dbManagement.upgrade.oldDbBackupFileName</a></td>
 			<td>
 string
 </td>
@@ -1811,7 +1811,7 @@ kasm_dump.tar
 			<td>The file name of the database backup to restore and upgrade. </td>
 		</tr>
 		<tr>
-			<td id="dbManagement--upgrade--oldDbHostname"><a href="./values.yaml#L446">dbManagement.upgrade.oldDbHostname</a></td>
+			<td id="dbManagement--upgrade--oldDbHostname"><a href="./values.yaml#L451">dbManagement.upgrade.oldDbHostname</a></td>
 			<td>
 string
 </td>
@@ -1825,7 +1825,7 @@ string
 			<td>Hostname of the database from the previous Helm release. Only required if your old deployment used a non-default DB hostname (i.e. not kasm-db). Leave empty if using a standalone DB or to fall back to the default. </td>
 		</tr>
 		<tr>
-			<td id="dbManagement--upgrade--oldDbSecretsName"><a href="./values.yaml#L474">dbManagement.upgrade.oldDbSecretsName</a></td>
+			<td id="dbManagement--upgrade--oldDbSecretsName"><a href="./values.yaml#L479">dbManagement.upgrade.oldDbSecretsName</a></td>
 			<td>
 string
 </td>
@@ -1839,7 +1839,7 @@ string
 			<td>The name of an existing Kubernetes secret to use as the source for credential lookup during upgrades. Leave empty to use the current release's '<release>-secrets' secret. Set to a different secret name only when upgrading from a deployment that stored credentials under a non-default name. </td>
 		</tr>
 		<tr>
-			<td id="dbManagement--upgrade--skipBackupAndRestore"><a href="./values.yaml#L465">dbManagement.upgrade.skipBackupAndRestore</a></td>
+			<td id="dbManagement--upgrade--skipBackupAndRestore"><a href="./values.yaml#L470">dbManagement.upgrade.skipBackupAndRestore</a></td>
 			<td>
 bool
 </td>
@@ -1985,7 +1985,7 @@ LoadBalancer
 			<td>Service type to use. Allowed values: LoadBalancer, NodePort. RDP is raw TCP, so a LoadBalancer must be a layer 4 / network load balancer, not an HTTP one. </td>
 		</tr>
 		<tr>
-			<td id="extraAnnotations--configMap"><a href="./values.yaml#L998">extraAnnotations.configMap</a></td>
+			<td id="extraAnnotations--configMap"><a href="./values.yaml#L1003">extraAnnotations.configMap</a></td>
 			<td>
 object
 </td>
@@ -1999,7 +1999,7 @@ object
 			<td>Additional configMap annotations to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraAnnotations--cronJob"><a href="./values.yaml#L1000">extraAnnotations.cronJob</a></td>
+			<td id="extraAnnotations--cronJob"><a href="./values.yaml#L1005">extraAnnotations.cronJob</a></td>
 			<td>
 object
 </td>
@@ -2013,7 +2013,7 @@ object
 			<td>Additional cronJob annotations to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraAnnotations--cronPod"><a href="./values.yaml#L1002">extraAnnotations.cronPod</a></td>
+			<td id="extraAnnotations--cronPod"><a href="./values.yaml#L1007">extraAnnotations.cronPod</a></td>
 			<td>
 object
 </td>
@@ -2027,7 +2027,7 @@ object
 			<td>Additional annotations to apply to the pod template inside CronJobs created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraAnnotations--deployment"><a href="./values.yaml#L1004">extraAnnotations.deployment</a></td>
+			<td id="extraAnnotations--deployment"><a href="./values.yaml#L1009">extraAnnotations.deployment</a></td>
 			<td>
 object
 </td>
@@ -2041,7 +2041,7 @@ object
 			<td>Additional deployment annotations to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraAnnotations--job"><a href="./values.yaml#L1006">extraAnnotations.job</a></td>
+			<td id="extraAnnotations--job"><a href="./values.yaml#L1011">extraAnnotations.job</a></td>
 			<td>
 object
 </td>
@@ -2055,7 +2055,7 @@ object
 			<td>Additional job annotations to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraAnnotations--pod"><a href="./values.yaml#L1008">extraAnnotations.pod</a></td>
+			<td id="extraAnnotations--pod"><a href="./values.yaml#L1013">extraAnnotations.pod</a></td>
 			<td>
 object
 </td>
@@ -2069,7 +2069,7 @@ object
 			<td>Additional pod annotations to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraAnnotations--pvc"><a href="./values.yaml#L1010">extraAnnotations.pvc</a></td>
+			<td id="extraAnnotations--pvc"><a href="./values.yaml#L1015">extraAnnotations.pvc</a></td>
 			<td>
 object
 </td>
@@ -2083,7 +2083,7 @@ object
 			<td>Additional PersistentVolumeClaim annotations to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraAnnotations--secret"><a href="./values.yaml#L1014">extraAnnotations.secret</a></td>
+			<td id="extraAnnotations--secret"><a href="./values.yaml#L1019">extraAnnotations.secret</a></td>
 			<td>
 object
 </td>
@@ -2097,7 +2097,7 @@ object
 			<td>Additional secret annotations to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraAnnotations--service"><a href="./values.yaml#L1012">extraAnnotations.service</a></td>
+			<td id="extraAnnotations--service"><a href="./values.yaml#L1017">extraAnnotations.service</a></td>
 			<td>
 object
 </td>
@@ -2111,7 +2111,7 @@ object
 			<td>Additional service annotations to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraAnnotations--statefulSet"><a href="./values.yaml#L1016">extraAnnotations.statefulSet</a></td>
+			<td id="extraAnnotations--statefulSet"><a href="./values.yaml#L1021">extraAnnotations.statefulSet</a></td>
 			<td>
 object
 </td>
@@ -2125,7 +2125,7 @@ object
 			<td>Additional statefulSet annotations to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraContainerVolumeMounts"><a href="./values.yaml#L1062">extraContainerVolumeMounts</a></td>
+			<td id="extraContainerVolumeMounts"><a href="./values.yaml#L1067">extraContainerVolumeMounts</a></td>
 			<td>
 list
 </td>
@@ -2139,7 +2139,7 @@ list
 			<td>A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things  like custom SSL certificates, config files, or data volumes to all Kasm containers Example:    extraContainerVolumeMounts:     - mountPath: /etc/ssl/certs/ca-certificates.crt       name: pkichain       readOnly: true       subPath: ca.crt</td>
 		</tr>
 		<tr>
-			<td id="extraContainers"><a href="./values.yaml#L1079">extraContainers</a></td>
+			<td id="extraContainers"><a href="./values.yaml#L1084">extraContainers</a></td>
 			<td>
 list
 </td>
@@ -2153,7 +2153,7 @@ list
 			<td>Additional sidecar containers to run in every pod Example  - name: init-example    image: busybox    command: [/bin/sh, -c, 'echo "Hello world"']</td>
 		</tr>
 		<tr>
-			<td id="extraInitContainers"><a href="./values.yaml#L1086">extraInitContainers</a></td>
+			<td id="extraInitContainers"><a href="./values.yaml#L1091">extraInitContainers</a></td>
 			<td>
 list
 </td>
@@ -2167,7 +2167,7 @@ list
 			<td></td>
 		</tr>
 		<tr>
-			<td id="extraInitVolumeMounts"><a href="./values.yaml#L1072">extraInitVolumeMounts</a></td>
+			<td id="extraInitVolumeMounts"><a href="./values.yaml#L1077">extraInitVolumeMounts</a></td>
 			<td>
 list
 </td>
@@ -2181,7 +2181,7 @@ list
 			<td>A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things  like custom SSL certificates, config files, or data volumes to all Kasm Service Init containers Example:    extraInitVolumeMounts:     - mountPath: /etc/ssl/certs/ca-certificates.crt       name: pkichain       readOnly: true       subPath: ca.crt</td>
 		</tr>
 		<tr>
-			<td id="extraLabels--configMap"><a href="./values.yaml#L1024">extraLabels.configMap</a></td>
+			<td id="extraLabels--configMap"><a href="./values.yaml#L1029">extraLabels.configMap</a></td>
 			<td>
 object
 </td>
@@ -2195,7 +2195,7 @@ object
 			<td>Additional configMap labels to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraLabels--cronJob"><a href="./values.yaml#L1036">extraLabels.cronJob</a></td>
+			<td id="extraLabels--cronJob"><a href="./values.yaml#L1041">extraLabels.cronJob</a></td>
 			<td>
 object
 </td>
@@ -2209,7 +2209,7 @@ object
 			<td>Additional cronJob labels to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraLabels--cronPod"><a href="./values.yaml#L1038">extraLabels.cronPod</a></td>
+			<td id="extraLabels--cronPod"><a href="./values.yaml#L1043">extraLabels.cronPod</a></td>
 			<td>
 object
 </td>
@@ -2223,7 +2223,7 @@ object
 			<td>Additional labels to apply to the pod template inside CronJobs created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraLabels--deployment"><a href="./values.yaml#L1026">extraLabels.deployment</a></td>
+			<td id="extraLabels--deployment"><a href="./values.yaml#L1031">extraLabels.deployment</a></td>
 			<td>
 object
 </td>
@@ -2237,7 +2237,7 @@ object
 			<td>Additional deployment labels to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraLabels--job"><a href="./values.yaml#L1034">extraLabels.job</a></td>
+			<td id="extraLabels--job"><a href="./values.yaml#L1039">extraLabels.job</a></td>
 			<td>
 object
 </td>
@@ -2251,7 +2251,7 @@ object
 			<td>Additional job labels to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraLabels--pod"><a href="./values.yaml#L1028">extraLabels.pod</a></td>
+			<td id="extraLabels--pod"><a href="./values.yaml#L1033">extraLabels.pod</a></td>
 			<td>
 object
 </td>
@@ -2265,7 +2265,7 @@ object
 			<td>Additional pod labels to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraLabels--pvc"><a href="./values.yaml#L1040">extraLabels.pvc</a></td>
+			<td id="extraLabels--pvc"><a href="./values.yaml#L1045">extraLabels.pvc</a></td>
 			<td>
 object
 </td>
@@ -2279,7 +2279,7 @@ object
 			<td>Additional PersistentVolumeClaim labels to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraLabels--secret"><a href="./values.yaml#L1030">extraLabels.secret</a></td>
+			<td id="extraLabels--secret"><a href="./values.yaml#L1035">extraLabels.secret</a></td>
 			<td>
 object
 </td>
@@ -2293,7 +2293,7 @@ object
 			<td>Additional secret labels to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraLabels--service"><a href="./values.yaml#L1032">extraLabels.service</a></td>
+			<td id="extraLabels--service"><a href="./values.yaml#L1037">extraLabels.service</a></td>
 			<td>
 object
 </td>
@@ -2307,7 +2307,7 @@ object
 			<td>Additional service labels to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraLabels--statefulSet"><a href="./values.yaml#L1042">extraLabels.statefulSet</a></td>
+			<td id="extraLabels--statefulSet"><a href="./values.yaml#L1047">extraLabels.statefulSet</a></td>
 			<td>
 object
 </td>
@@ -2321,7 +2321,7 @@ object
 			<td>Additional statefulSet labels to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraObjects"><a href="./values.yaml#L1091">extraObjects</a></td>
+			<td id="extraObjects"><a href="./values.yaml#L1096">extraObjects</a></td>
 			<td>
 list
 </td>
@@ -2335,7 +2335,7 @@ list
 			<td>Deploy additional Kubernetes manifests. This field is expected to be either a multi-line string, a list of strings, or a list of objects. </td>
 		</tr>
 		<tr>
-			<td id="extraVolumes"><a href="./values.yaml#L1052">extraVolumes</a></td>
+			<td id="extraVolumes"><a href="./values.yaml#L1057">extraVolumes</a></td>
 			<td>
 list
 </td>
@@ -2349,7 +2349,7 @@ list
 			<td></td>
 		</tr>
 		<tr>
-			<td id="imagePullPolicy"><a href="./values.yaml#L930">imagePullPolicy</a></td>
+			<td id="imagePullPolicy"><a href="./values.yaml#L935">imagePullPolicy</a></td>
 			<td>
 string
 </td>
@@ -2363,7 +2363,7 @@ Always
 			<td>Configure global image pull policy </td>
 		</tr>
 		<tr>
-			<td id="imagePullSecrets--annotations"><a href="./values.yaml#L953">imagePullSecrets.annotations</a></td>
+			<td id="imagePullSecrets--annotations"><a href="./values.yaml#L958">imagePullSecrets.annotations</a></td>
 			<td>
 object
 </td>
@@ -2377,7 +2377,7 @@ object
 			<td>Additional annotations for this secret</td>
 		</tr>
 		<tr>
-			<td id="imagePullSecrets--email"><a href="./values.yaml#L949">imagePullSecrets.email</a></td>
+			<td id="imagePullSecrets--email"><a href="./values.yaml#L954">imagePullSecrets.email</a></td>
 			<td>
 string
 </td>
@@ -2391,7 +2391,7 @@ string
 			<td>The email address used to authenticate (optional, used by some registries).</td>
 		</tr>
 		<tr>
-			<td id="imagePullSecrets--enabled"><a href="./values.yaml#L936">imagePullSecrets.enabled</a></td>
+			<td id="imagePullSecrets--enabled"><a href="./values.yaml#L941">imagePullSecrets.enabled</a></td>
 			<td>
 bool
 </td>
@@ -2405,7 +2405,7 @@ false
 			<td>Enable/disable image pull secrets</td>
 		</tr>
 		<tr>
-			<td id="imagePullSecrets--labels"><a href="./values.yaml#L951">imagePullSecrets.labels</a></td>
+			<td id="imagePullSecrets--labels"><a href="./values.yaml#L956">imagePullSecrets.labels</a></td>
 			<td>
 object
 </td>
@@ -2419,7 +2419,7 @@ object
 			<td>Additional labels for this secret</td>
 		</tr>
 		<tr>
-			<td id="imagePullSecrets--name"><a href="./values.yaml#L941">imagePullSecrets.name</a></td>
+			<td id="imagePullSecrets--name"><a href="./values.yaml#L946">imagePullSecrets.name</a></td>
 			<td>
 string
 </td>
@@ -2433,7 +2433,7 @@ string
 			<td>Secret name to use. If left blank, will be dynamically generated. To use an existing Image pull secret, or one you manually created, set `imagePullSecrets.enabled`, and provide the name of the Image Pull Secret you created, making sure to leave all other values below empty. </td>
 		</tr>
 		<tr>
-			<td id="imagePullSecrets--password"><a href="./values.yaml#L947">imagePullSecrets.password</a></td>
+			<td id="imagePullSecrets--password"><a href="./values.yaml#L952">imagePullSecrets.password</a></td>
 			<td>
 string
 </td>
@@ -2447,7 +2447,7 @@ string
 			<td>The password used to authenticate agaisnt your Registry.</td>
 		</tr>
 		<tr>
-			<td id="imagePullSecrets--registry"><a href="./values.yaml#L943">imagePullSecrets.registry</a></td>
+			<td id="imagePullSecrets--registry"><a href="./values.yaml#L948">imagePullSecrets.registry</a></td>
 			<td>
 string
 </td>
@@ -2461,7 +2461,7 @@ string
 			<td>The Registry to use when pulling images (e.g. index.docker.io, myprivateregistry.com)</td>
 		</tr>
 		<tr>
-			<td id="imagePullSecrets--username"><a href="./values.yaml#L945">imagePullSecrets.username</a></td>
+			<td id="imagePullSecrets--username"><a href="./values.yaml#L950">imagePullSecrets.username</a></td>
 			<td>
 string
 </td>
@@ -2573,7 +2573,7 @@ false
 			<td>Use this flag to remove Pod and Container security ID values and allow OpenShift to dynamically set them in accordance with [OpenShift UIDs](https://www.redhat.com/en/blog/a-guide-to-openshift-and-uids) documentation.</td>
 		</tr>
 		<tr>
-			<td id="kasmConfig"><a href="./values.yaml#L1099">kasmConfig</a></td>
+			<td id="kasmConfig"><a href="./values.yaml#L1104">kasmConfig</a></td>
 			<td>
 object
 </td>
@@ -2594,7 +2594,7 @@ generatePreseed: false
 			<td>Use fields in the `kasmConfig` section to apply customization to a Kasm deployment during database initialization.  NOTE: This data is only used during DB initialization and does not have any effect on live Kasm configuration settings.  </td>
 		</tr>
 		<tr>
-			<td id="kasmConfig--adminUsername"><a href="./values.yaml#L1121">kasmConfig.adminUsername</a></td>
+			<td id="kasmConfig--adminUsername"><a href="./values.yaml#L1126">kasmConfig.adminUsername</a></td>
 			<td>
 string
 </td>
@@ -2608,7 +2608,7 @@ admin@kasm.local
 			<td>Change the username seeded on the admin-group member. Default: `admin@kasm.local`, the only true built-in admin account. Setting this to any other value seeds that account with generated (non-built-in) credentials stored under a `<local-part>-password`/`<local-part>-salt` key pair in the passwords/salts Secrets (e.g. `system@kasm.local` -> `system-password`) instead of the built-in admin-password-Secret-backed credentials. The chart will not create an `admin-password` key at all in that case, and the db-init Job will not be given a DEFAULT_ADMIN_PASSWORD env var. See docs/default-users.md. </td>
 		</tr>
 		<tr>
-			<td id="kasmConfig--config"><a href="./values.yaml#L1138">kasmConfig.config</a></td>
+			<td id="kasmConfig--config"><a href="./values.yaml#L1143">kasmConfig.config</a></td>
 			<td>
 object
 </td>
@@ -2622,7 +2622,7 @@ object
 			<td>Kasm DB pre-seed configuration settings in YAML format. Refer to the [Preseed Documentation](./docs/preseed.md) and to the [Kasm Slip-Stream Install](https://docs.kasm.com/docs/1.19.0/how-to/administration/import-export/slipstream-install) documentation for additional details. </td>
 		</tr>
 		<tr>
-			<td id="kasmConfig--defaultApiUsers"><a href="./values.yaml#L1113">kasmConfig.defaultApiUsers</a></td>
+			<td id="kasmConfig--defaultApiUsers"><a href="./values.yaml#L1118">kasmConfig.defaultApiUsers</a></td>
 			<td>
 bool
 </td>
@@ -2636,7 +2636,7 @@ false
 			<td>Creates two predefined sets of API credentials with permissions accommodating most standard deployment scenarios. Refer to the [Default API Users](./docs/default-api-users.md) for additional information about what this flag creates. </td>
 		</tr>
 		<tr>
-			<td id="kasmConfig--defaultUsers"><a href="./values.yaml#L1108">kasmConfig.defaultUsers</a></td>
+			<td id="kasmConfig--defaultUsers"><a href="./values.yaml#L1113">kasmConfig.defaultUsers</a></td>
 			<td>
 bool
 </td>
@@ -2650,7 +2650,7 @@ false
 			<td>Creates a series of 4 users and 5 groups with a standard set of permissions accommodating most standard deployment scenarios. Refer to the [Default Users](./docs/default-users.md) for additional information about what this flag creates. </td>
 		</tr>
 		<tr>
-			<td id="kasmConfig--existingDefaultPropertiesSecret"><a href="./values.yaml#L1131">kasmConfig.existingDefaultPropertiesSecret</a></td>
+			<td id="kasmConfig--existingDefaultPropertiesSecret"><a href="./values.yaml#L1136">kasmConfig.existingDefaultPropertiesSecret</a></td>
 			<td>
 object
 </td>
@@ -2665,7 +2665,7 @@ name: ""
 			<td>Reference a customer-managed Secret containing a complete `default_properties.yaml` seed file, for infrastructure-as-code workflows that manage the seed file directly as a Kubernetes Secret rather than expressing it through kasmConfig.config values.  When `name` is set, its contents (at `key`) replace the image's baked-in default_properties.yaml as the base seed file. This works independently of generatePreseed: set generatePreseed=true as well to additionally merge kasmConfig.config-generated values on top of the customer-provided file, or leave it false to use the customer-provided file as-is with no chart-side merge. </td>
 		</tr>
 		<tr>
-			<td id="kasmConfig--generatePreseed"><a href="./values.yaml#L1103">kasmConfig.generatePreseed</a></td>
+			<td id="kasmConfig--generatePreseed"><a href="./values.yaml#L1108">kasmConfig.generatePreseed</a></td>
 			<td>
 bool
 </td>
@@ -2790,7 +2790,7 @@ list
 			<td>This is a list of objects defining different Kasm Zone configurations for your deployment. This configuration is typically used for multi-region, large, or custom deployments where the customer requires a high degree of configurability and has multiple resources in disparate areas.  NOTE: If you configure custom zones below, you MUST use a valid `ingress` configuration due to the increased deployment complexity of a multi-zone Kasm deployment. Refer to the Kasm [Deployment Zones](https://docs.kasm.com/docs/latest/guide/deployment_zones) documentation for more information on Kasm Zones.  The zone marked `primary: true` is treated as the primary zone; if no zone is marked primary, the first zone in the list is used instead. At most one zone may be marked `primary: true`. Traffic to the configured `publicAddr` in the ingress rule will be routed to this primary zone.  Each zone requires a `name` (or the `zone_name` alias, if `name` is not set; `name` wins if both are set).  Each zone's `proxy_hostname` is used to build the ingress/route/certificate hostnames for that zone, as well as the zone's preseed `proxy_hostname` value. `proxyAddress` is a deprecated alias for `proxy_hostname`, kept for backwards compatibility; if both are set, `proxy_hostname` wins. </td>
 		</tr>
 		<tr>
-			<td id="labels"><a href="./values.yaml#L986">labels</a></td>
+			<td id="labels"><a href="./values.yaml#L991">labels</a></td>
 			<td>
 object
 </td>
@@ -2832,7 +2832,7 @@ string
 			<td>The IP address used by the `resolver` directive in the Kasm nginx configs (proxy and connection-proxy) for dynamic upstream DNS resolution.  Leave empty (the default) to auto-detect the cluster's kube-dns Service ClusterIP at install/upgrade time. Auto-detection requires a live cluster and read access to Services in the kube-system namespace; it silently falls back to the historical hardcoded value, 127.0.0.11, when running `helm template`/`--dry-run`, when RBAC denies the lookup, or when the cluster's DNS Service isn't named `kube-dns` in `kube-system` (uncommon, but some distros differ).  Set this explicitly to skip auto-detection and pin a specific resolver IP, such as a known CoreDNS/kube-dns ClusterIP, or 127.0.0.11 to restore the previous unconditional default. </td>
 		</tr>
 		<tr>
-			<td id="nodeSelector"><a href="./values.yaml#L962">nodeSelector</a></td>
+			<td id="nodeSelector"><a href="./values.yaml#L967">nodeSelector</a></td>
 			<td>
 object
 </td>
@@ -2876,7 +2876,7 @@ string
 			<td>Set the access URL to be used for the Kasm deployment. This is the URL you will use to access your Kasm deployment. This URL can be a private address, it just needs to be resolvable by systems you use to interface with Kasm.  If you create a self-signed or custom certificate, this is the value you should assign as the Common Name associated with the certificate. If `certificate.certManager.enabled` is set to true, this is the name used to generate the certificate. </td>
 		</tr>
 		<tr>
-			<td id="restartPolicy"><a href="./values.yaml#L982">restartPolicy</a></td>
+			<td id="restartPolicy"><a href="./values.yaml#L987">restartPolicy</a></td>
 			<td>
 string
 </td>
