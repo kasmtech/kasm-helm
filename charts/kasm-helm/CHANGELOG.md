@@ -35,6 +35,12 @@ See [Migrating to connection-proxy](./README.md#migrating-to-connection-proxy) f
 - With more than one primary-region zone, every zone's connection-proxy replicas silently reused the same `directRdpService.perServiceSettings` list and the same `RDP_ACCESS_URLS`, so every zone advertised identical RDP addresses. `perServiceSettings` entries now take a `zone` field; with more than one zone, every entry must set it, and rendering fails if it's missing, unrecognized, or a zone ends up short of entries for its replica count. <!-- hash:cb83115f48e0be49c373052ae0276c4468ad769f -->
 - The rdp-https-gateway app-config ConfigMap's `app.kubernetes.io/name` label exceeded Kubernetes' 63-character label-value limit under CI's long `kasm-e2e-<job-id>` release names, failing installs with `logFormat: json`. Shortened the four connection-proxy ConfigMap component identifiers. <!-- hash:29475046a26a06c9f16b585fdc33e0e6703b3392 -->
 
+### Known Issues in Earlier Releases
+
+- **1.1190.7 and earlier, upgrading Kasm to a new version can delete the database.** The bundled database's StatefulSet is named per Kasm version, so a version upgrade replaces it instead of updating it in place, and `database.storage.retentionPolicy.whenDeleted` defaulted to `Delete` - which removed the old volume along with the old StatefulSet. If `dbManagement.initialize` was left set instead of following the upgrade procedure (`dbManagement.initialize=false` with `dbManagement.upgrade.enable=true`), the upgrade initialized an empty database over the live deployment and every setting, user and session record was lost, with no error and no rollback.
+
+  On those versions, before upgrading Kasm: set `database.storage.retentionPolicy.whenDeleted=Retain` so the old volume survives, and follow the upgrade procedure rather than leaving `dbManagement.initialize` on. Both are fixed in this release - see Fixed, below.
+
 ### Fixed
 
 - A Kasm version upgrade no longer deletes the database it is upgrading. The bundled database's StatefulSet is named per Kasm version, so an upgrade replaces it rather than updating it in place, and `database.storage.retentionPolicy.whenDeleted` defaulted to `Delete` - which took the old volume with the old StatefulSet and left the pre-upgrade dump as the only copy of the data. It now defaults to `Retain`, so the previous version's volume stays in the namespace as a fallback and can be removed by hand once the upgrade is confirmed good.
