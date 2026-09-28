@@ -20,6 +20,12 @@ All notable changes to the kasm-helm chart are documented here.
 - DB preseed `server_pools[].type`/`server_pool_type` now normalizes case-insensitively to the two values Kasm actually accepts (`Docker Agent`, `Server Pool`) and defaults to `Docker Agent` when omitted, instead of defaulting to and passing through the unrecognized value `Docker`. Any other value now fails the render with an error naming the offending pool. <!-- hash:6a2247fa313ded8cd490744a812bc609524fb28d -->
 - Preseeded image `docker_user`/`docker_token` values that look like a YAML flow mapping — for example, the `{iam}`/`{iam:<region>}` sentinel used to authenticate to Amazon ECR via an agent IAM role — were rendered unquoted and parsed as a mapping instead of a string, so they never reached the database as credentials. These two fields are now quoted when set, while still rendering as YAML `null` when unset. <!-- hash:34c6688b7963cd485c92c30f5271ac12a636683b -->
 
+### Fixed
+
+- A Kasm version upgrade no longer deletes the database it is upgrading. The bundled database's StatefulSet is named per Kasm version, so an upgrade replaces it rather than updating it in place, and `database.storage.retentionPolicy.whenDeleted` defaulted to `Delete` - which took the old volume with the old StatefulSet and left the pre-upgrade dump as the only copy of the data. It now defaults to `Retain`, so the previous version's volume stays in the namespace as a fallback and can be removed by hand once the upgrade is confirmed good.
+
+- An upgrade that would replace the database while `dbManagement.initialize` is still set now fails to render instead of silently initializing an empty database over a live deployment. `dbManagement.initialize` is for a new deployment; upgrading an existing one needs `dbManagement.initialize=false` with `dbManagement.upgrade.enable=true`, which dumps the current database before the switch and restores it after. Previously this combination produced no error, no rollback and no data. The check reads the deployed StatefulSet, so it applies to `helm upgrade` and `--dry-run=server`, and stays quiet during `helm template`.
+
 ## [1.1190.6] - 2026-07-28
 
 ### Fixed

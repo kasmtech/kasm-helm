@@ -552,10 +552,15 @@ database:
     # size is 8Gi. Just supply the integer value of the PVC size in GB you wish to use.
     #
     pvcSize: 0
-    # database.storage.retentionPolicy -- Configure how the DB volume should be retained or deleted throughout the DB's lifecycle
+    # database.storage.retentionPolicy -- Configure how the DB volume should be retained or deleted throughout the DB's lifecycle.
+    # `whenDeleted: Retain` is the default on purpose: the bundled database's StatefulSet is named per
+    # Kasm version, so a version upgrade replaces it rather than updating it in place. With `Delete`
+    # the old volume goes with the old StatefulSet, and the pre-upgrade dump is then the only copy of
+    # the data. Retaining it leaves the previous version's volume in the namespace as a fallback, to
+    # be removed by hand once the upgrade is confirmed good.
     #
     retentionPolicy:
-      whenDeleted: Delete
+      whenDeleted: Retain
       whenScaled: Retain
   # database.annotations -- Custom annotations to add to the Kasm DB StatefulSet
   annotations: {}
