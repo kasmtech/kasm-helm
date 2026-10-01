@@ -2,6 +2,20 @@
 
 All notable changes to the kasm-helm chart are documented here.
 
+## [Unreleased]
+
+### Fixed
+
+- A Kasm version upgrade no longer deletes the database it is upgrading. The bundled database's StatefulSet is named per Kasm version, so an upgrade replaces it rather than updating it in place, and `database.storage.retentionPolicy.whenDeleted` defaulted to `Delete` - which took the old volume with the old StatefulSet and left the pre-upgrade dump as the only copy of the data. It now defaults to `Retain`, so the previous version's volume stays in the namespace as a fallback and can be removed by hand once the upgrade is confirmed good. <!-- hash:f75db3ee7bb6beee5922ca825ef32b1cea0a0c13 -->
+- An upgrade that would replace the database while `dbManagement.initialize` is still set now fails to render instead of silently initializing an empty database over a live deployment. `dbManagement.initialize` is for a new deployment; upgrading an existing one needs `dbManagement.initialize=false` with `dbManagement.upgrade.enable=true`, which dumps the current database before the switch and restores it after. Previously this combination produced no error, no rollback and no data. The check reads the deployed StatefulSet, so it applies to `helm upgrade` and `--dry-run=server`, and stays quiet during `helm template`. <!-- hash:f75db3ee7bb6beee5922ca825ef32b1cea0a0c13 -->
+- Preseeded image `docker_user`/`docker_token` values that look like a YAML flow mapping — for example, the `{iam}`/`{iam:<region>}` sentinel used to authenticate to Amazon ECR via an agent IAM role — were rendered unquoted and parsed as a mapping instead of a string, so they never reached the database as credentials. These two fields are now quoted when set, while still rendering as YAML `null` when unset. <!-- hash:34c6688b7963cd485c92c30f5271ac12a636683b --> <!-- hash:133d5132787213335e2d9372b54bf857b41a01bc --> <!-- hash:17ab92646b37d2461f16ac1b42f929cbe39c56b2 -->
+
+### Known Issues in Earlier Releases
+
+- **1.1190.7 and earlier, upgrading Kasm to a new version can delete the database.** The bundled database's StatefulSet is named per Kasm version, so a version upgrade replaces it instead of updating it in place, and `database.storage.retentionPolicy.whenDeleted` defaulted to `Delete` - which removed the old volume along with the old StatefulSet. If `dbManagement.initialize` was left set instead of following the upgrade procedure (`dbManagement.initialize=false` with `dbManagement.upgrade.enable=true`), the upgrade initialized an empty database over the live deployment and every setting, user and session record was lost, with no error and no rollback. <!-- hash:f42d0de9d937165acb5b77b2954657a99932f05a --> <!-- hash:ff60ea642436d4a78d82c1bd6e8b2ed3e2a0201a -->
+
+  On those versions, before upgrading Kasm: set `database.storage.retentionPolicy.whenDeleted=Retain` so the old volume survives, and follow the upgrade procedure rather than leaving `dbManagement.initialize` on. Both are fixed in this release - see Fixed, below.
+
 ## [1.1190.7] - 2026-09-22
 
 ### Added
@@ -18,19 +32,6 @@ All notable changes to the kasm-helm chart are documented here.
 - Tightened validation for the `httpRoute`/`tlsRoute`/`tcpRoute` and `upstreamAuth` publishers added above: `upstreamAuth.service.type` and every `backendProtocol` are now schema-enforced enums; `tcpRoute.enabled` now requires `components.rdpGateway.enabled`; and `tcpRoute`/`upstreamAuth.httpRoute`/`upstreamAuth.tlsRoute` now resolve each zone's effective `parentRefs` (per-zone override, else the global fallback) and fail at render time if any deployed zone would still attach to no Gateway, or if `.zones` names an unknown or duplicate zone. The DB preseed's `upstream_auth_address` now also resolves through the same per-zone/`upstreamAuth.hostname` fallback as the Gateway API publishers, instead of only reading a zone's own field.
 - DB preseed autoscale configs now render `connection_info` and `hooks` as JSON objects (`{}` when empty) instead of quoted strings (`"{}"`, or `"map[...]"` for non-empty maps), which left preseeded `Server` autoscale configs unreadable and uneditable in the Kasm UI/API. <!-- hash:06adf14a2137e7bc058caa2ec3d6621f0d45c24b -->
 - DB preseed `server_pools[].type`/`server_pool_type` now normalizes case-insensitively to the two values Kasm actually accepts (`Docker Agent`, `Server Pool`) and defaults to `Docker Agent` when omitted, instead of defaulting to and passing through the unrecognized value `Docker`. Any other value now fails the render with an error naming the offending pool. <!-- hash:6a2247fa313ded8cd490744a812bc609524fb28d -->
-- Preseeded image `docker_user`/`docker_token` values that look like a YAML flow mapping — for example, the `{iam}`/`{iam:<region>}` sentinel used to authenticate to Amazon ECR via an agent IAM role — were rendered unquoted and parsed as a mapping instead of a string, so they never reached the database as credentials. These two fields are now quoted when set, while still rendering as YAML `null` when unset. <!-- hash:34c6688b7963cd485c92c30f5271ac12a636683b -->
-
-### Known Issues in Earlier Releases
-
-- **1.1190.7 and earlier, upgrading Kasm to a new version can delete the database.** The bundled database's StatefulSet is named per Kasm version, so a version upgrade replaces it instead of updating it in place, and `database.storage.retentionPolicy.whenDeleted` defaulted to `Delete` - which removed the old volume along with the old StatefulSet. If `dbManagement.initialize` was left set instead of following the upgrade procedure (`dbManagement.initialize=false` with `dbManagement.upgrade.enable=true`), the upgrade initialized an empty database over the live deployment and every setting, user and session record was lost, with no error and no rollback.
-
-  On those versions, before upgrading Kasm: set `database.storage.retentionPolicy.whenDeleted=Retain` so the old volume survives, and follow the upgrade procedure rather than leaving `dbManagement.initialize` on. Both are fixed in this release - see Fixed, below.
-
-### Fixed
-
-- A Kasm version upgrade no longer deletes the database it is upgrading. The bundled database's StatefulSet is named per Kasm version, so an upgrade replaces it rather than updating it in place, and `database.storage.retentionPolicy.whenDeleted` defaulted to `Delete` - which took the old volume with the old StatefulSet and left the pre-upgrade dump as the only copy of the data. It now defaults to `Retain`, so the previous version's volume stays in the namespace as a fallback and can be removed by hand once the upgrade is confirmed good.
-
-- An upgrade that would replace the database while `dbManagement.initialize` is still set now fails to render instead of silently initializing an empty database over a live deployment. `dbManagement.initialize` is for a new deployment; upgrading an existing one needs `dbManagement.initialize=false` with `dbManagement.upgrade.enable=true`, which dumps the current database before the switch and restores it after. Previously this combination produced no error, no rollback and no data. The check reads the deployed StatefulSet, so it applies to `helm upgrade` and `--dry-run=server`, and stays quiet during `helm template`.
 
 ## [1.1190.6] - 2026-07-28
 
