@@ -30,7 +30,9 @@ tests:
   # The claim template carries the Kasm version, which is what makes an upgrade a replacement rather
   # than an in-place update; kasm.validateDatabaseVersionChange exists because of it.
   - it: names the claim template per Kasm version
+    chart:
+      appVersion: 9.8.7
     asserts:
       - matchRegex:
           path: spec.volumeClaimTemplates[0].metadata.name
-          pattern: -database-develop$
+          pattern: -database-9-8-7$
