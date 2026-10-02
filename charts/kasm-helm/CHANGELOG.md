@@ -2,7 +2,7 @@
 
 All notable changes to the kasm-helm chart are documented here.
 
-## [Unreleased]
+## [1.1190.8] - 2026-10-02
 
 ### Fixed
 
@@ -16,10 +16,15 @@ All notable changes to the kasm-helm chart are documented here.
 
   On those versions, before upgrading Kasm: set `database.storage.retentionPolicy.whenDeleted=Retain` so the old volume survives, and follow the upgrade procedure rather than leaving `dbManagement.initialize` on. Both are fixed in this release - see Fixed, below.
 
+### Added
+
+- Adds optional NetworkPolicies (disabled by default) to restrict pod-to-pod traffic within the Kasm namespace; operators can enable and tune them via `values.yaml` to enforce network segmentation. <!-- hash:d6069311afeba843a4603f561e33ad6f5566e1c3 -->
+
 ## [1.1190.7] - 2026-09-22
 
 ### Added
 
+- Adds support for upstream authentication proxying and Gateway API-based ingress (HTTPRoute/TCPRoute/TLSRoute), giving operators a way to front Kasm with a Gateway API controller or external auth layer instead of relying solely on traditional Ingress. <!-- hash:bdf28c4b9ac649c7db8c380e925855bbd5eefb81 -->
 - Adds `httpRoute`, `tlsRoute` and `tcpRoute` Gateway API publishers for the front-door Kasm proxy and RDP Gateway, and an `upstreamAuth` section publishing the out-of-band management endpoint (`/api/`, `/manager_api/`) via a Service, Ingress, OpenShift Route, HTTPRoute or TLSRoute, one per zone.
 - Adds a global `serviceAccount` value with per-component overrides for `components.api` and `components.manager`, letting operators reference an existing ServiceAccount by name (e.g. EKS Pod Identity) or have the chart create one with custom annotations (e.g. IRSA's `eks.amazonaws.com/role-arn`). `extraAnnotations.serviceAccount` / `extraLabels.serviceAccount` can also target the rendered ServiceAccount, and `serviceAccount.annotations` values are now schema-validated as strings.
 
