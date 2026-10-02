@@ -678,18 +678,62 @@ otlp:
     warn:  "4xx"
     info:  "2xx"
     debug: "3xx"
+# Query strings never enter the pipeline: nginx logs them (session and JWT parameters have
+# been seen there) but nothing downstream reads them. The request line is rebuilt query-free
+# before anything copies it.
+- type: remove
+  field: attributes.query_string
+- type: regex_parser
+  parse_from: attributes.request
+  regex: '^(?P<request_line_method>\S+) (?P<request_line_path>[^?\s]*)(?:\?\S*)? (?P<request_line_protocol>\S+)$'
+  on_error: send_quiet
+- type: add
+  field: attributes["request"]
+  value: 'EXPR(attributes["request_line_method"] != nil ? attributes["request_line_method"] + " " + attributes["request_line_path"] + " " + attributes["request_line_protocol"] : attributes["request"])'
+- type: remove
+  field: attributes.request_line_method
+- type: remove
+  field: attributes.request_line_path
+- type: remove
+  field: attributes.request_line_protocol
 - type: add
   field: body
-  value: EXPR(attributes["request"] + '" ' + attributes["http_status"] + ' ' + attributes["body_bytes_sent"] + ' "' + attributes["http_user_agent"] + '"')
+  value: EXPR('"' + attributes["request"] + '" ' + attributes["http_status"] + ' ' + attributes["body_bytes_sent"] + ' "' + attributes["http_user_agent"] + '"')
+# Bracket notation: a dotted ``to:`` path nests the value under ``attributes.url`` /
+# ``attributes.http`` and ClickHouse then stores the object as a JSON string, so
+# ``LogAttributes['url.path']`` is never set.
 - type: move
   from: attributes.request_method
-  to:   attributes.http.request.method
+  to:   attributes["http.request.method"]
 - type: move
   from: attributes.uri
-  to:   attributes.url.path
+  to:   attributes["url.path"]
 - type: move
   from: attributes.http_status
-  to:   attributes.http.response.status_code
+  to:   attributes["http.response.status_code"]
+# The session websocket's access-log row is written when the client disconnects, so for the
+# /desktop/<id>/vnc/websockify hop it *is* the client-detached event and request_time is the
+# attached duration. Only the Kasm Proxy nginx serves that path; in the Connection Proxy
+# variant this block never matches.
+- type: regex_parser
+  parse_from: attributes.request
+  regex: '^GET /desktop/(?P<detached_session_id>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/vnc/websockify '
+  on_error: send_quiet
+- type: add
+  if: 'attributes["detached_session_id"] != nil and attributes["http.response.status_code"] == "101"'
+  field: attributes["kasm.metric_name"]
+  value: kasm.session.client_detached
+- type: add
+  if: 'attributes["kasm.metric_name"] == "kasm.session.client_detached"'
+  field: attributes["kasm.kasm.id"]
+  value: EXPR(attributes["detached_session_id"])
+- type: add
+  if: 'attributes["kasm.metric_name"] == "kasm.session.client_detached"'
+  field: attributes["kasm.kasm.transition_ms"]
+  value: EXPR(int(float(attributes["request_time"]) * 1000 + 0.5))
+- type: remove
+  if: 'attributes["detached_session_id"] != nil'
+  field: attributes.detached_session_id
 - type: add
   field: resource["service.name"]
   value: {{ $serviceName }}

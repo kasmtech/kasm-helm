@@ -274,7 +274,7 @@ def _assert_no_syslog_loss(namespace: str, database: str) -> None:
 
     sql = (
         "SELECT count() FROM otel_logs WHERE ServiceName = 'kasm-proxy' "
-        f"AND JSONExtractString(LogAttributes['url'], 'path') = '{unique_path}'"
+        f"AND LogAttributes['url.path'] = '{unique_path}'"
     )
 
     def _check() -> bool:
@@ -347,29 +347,31 @@ def _assert_core_telemetry(namespace: str, database: str) -> None:
     )
     LOGGER.info("[observability] kasm-proxy log rows with k8s.pod.name: %s", pod_name_count)
 
-    # The filelog operators move fields to semconv names via dotted paths
-    # (attributes.http.request.method), which the collector treats as NESTED fields, not as a flat
-    # key. ClickHouse therefore stores LogAttributes['http'] = '{"request":{"method":"GET"},...}'
-    # and LogAttributes['url'] = '{"path":"/..."}'. There is no 'http.request.method' key to
-    # mapContains. Docker's pipeline behaves identically — same operator chain.
+    # Access-log fields are stored under flat semconv keys; the Admin UI and the gateway's
+    # healthcheck filter both read LogAttributes['url.path'] directly.
     access_attr_count = _clickhouse_query(
         namespace,
         database,
         "SELECT count() FROM otel_logs WHERE ServiceName = 'kasm-proxy' "
-        "AND JSONExtractString(LogAttributes['http'], 'request', 'method') != '' "
-        "AND JSONExtractString(LogAttributes['url'], 'path') != ''",
+        "AND LogAttributes['http.request.method'] != '' "
+        "AND LogAttributes['url.path'] != ''",
     )
     assert int(access_attr_count.splitlines()[0] or "0") > 0, (
-        "no kasm-proxy log row carries parsed access-log attributes (nested http.request.method / "
-        "url.path) — the access_json filelog chain did not run"
+        "no kasm-proxy log row carries parsed access-log attributes (http.request.method / "
+        "url.path) — the access_json syslog chain did not run"
     )
 
-    error_log_count = _clickhouse_query(
+    # Query strings never reach ClickHouse: the sidecar drops the field and rebuilds the request
+    # line without it.
+    query_string_count = _clickhouse_query(
         namespace,
         database,
-        "SELECT count() FROM otel_logs WHERE ServiceName = 'kasm-proxy' AND SeverityText != ''",
+        "SELECT count() FROM otel_logs WHERE ServiceName = 'kasm-proxy' "
+        "AND (mapContains(LogAttributes, 'query_string') OR LogAttributes['request'] LIKE '%?%')",
     )
-    LOGGER.info("[observability] kasm-proxy error-classified log rows: %s", error_log_count)
+    assert int(query_string_count.splitlines()[0] or "0") == 0, (
+        f"{query_string_count.strip()} kasm-proxy rows still carry a query string"
+    )
 
     metrics_tables = _clickhouse_query(
         namespace,

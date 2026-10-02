@@ -173,6 +173,34 @@ tests:
       - matchRegex:
           path: data["config.yaml"]
           pattern: 'field: attributes\["application"\]\s+value: kasm-proxy'
+      # Attribute keys are stored flat (bracket notation); a dotted `to:` would nest them and
+      # ClickHouse would never populate LogAttributes['url.path'].
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'to:\s+attributes\["url\.path"\]'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'to:\s+attributes\["http\.request\.method"\]'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'to:\s+attributes\["http\.response\.status_code"\]'
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: 'to:\s+attributes\.(url|http)\.'
+      # Query strings are dropped at ingest and the request line rebuilt without them.
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'type: remove\n\s+field: attributes\.query_string'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'request_line_path'
+      # The websocket close row is tagged as the client-detached lifecycle record.
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'value: kasm\.session\.client_detached'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'field: attributes\["kasm\.kasm\.transition_ms"\]'
 
   - it: connection-proxy nginx sidecar config carries service.name kasm-connection-proxy
     template: templates/otel-nginx-sidecar-configmap.yaml
