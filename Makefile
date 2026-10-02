@@ -52,6 +52,12 @@ CLOUD_PROVIDER_KIND_VERSION := v0.9.0
 # org's supply-chain standard; resolve with `bin/crane digest <ref>`.
 CLOUD_PROVIDER_KIND_IMAGE := registry.k8s.io/cloud-provider-kind/cloud-controller-manager:v0.9.0@sha256:4dc6fea7fcc986eeaf6b59d332599b125fc97f015fc87f7e2d2f9e0b1d5e6196
 CRANE_VERSION := v0.20.6
+# Real in-cluster ingress-nginx for e2e-networkpolicy-ingress-nginx (local only). The static
+# manifest is pinned by tag and sha256, and both images by digest (resolve with `bin/crane digest <ref>`).
+INGRESS_NGINX_VERSION := v1.12.1
+INGRESS_NGINX_MANIFEST_URL := https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-$(INGRESS_NGINX_VERSION)/deploy/static/provider/cloud/deploy.yaml
+INGRESS_NGINX_MANIFEST_SHA256 := c6dbb962b7b396369fce700bafe3f789fd25f31ca093d499f7c165dd31b0ecff
+INGRESS_NGINX_IMAGES := registry.k8s.io/ingress-nginx/controller:$(INGRESS_NGINX_VERSION)@sha256:d2fbc4ec70d8aa2050dd91a91506e998765e86c96f32cffb56c503c9c34eed5b registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.5.2@sha256:e8825994b7a2c7497375a9b945f386506ca6a3eda80b89b74ef2db743f66a5ea
 # helm-docs regenerates charts/kasm-helm/README.md from values.yaml + README.md.gotmpl.
 # Pinned so `make readme` and the readme-check guard in `make test` stay reproducible.
 HELM_DOCS_VERSION := v1.14.2
@@ -128,7 +134,7 @@ CRANE_ARCH := $(subst amd64,x86_64,$(ARCH))
 CLOUD_PROVIDER_KIND_CONTAINER ?= cpk-$(KIND_CLUSTER_NAME)
 CLOUD_PROVIDER_KIND_LOG ?= $(CURDIR)/.kind/cloud-provider-kind.log
 
-.PHONY: tools lint render kubeconform kyverno unittest readme readme-check changelog changelog-llm changelog-console changelog-console-llm changelog-check docs test build-pytest kind-up kind-down kind-recreate kind-ensure kind-load-images kind-load-old-images kind-clean-namespace kind-prep pytest-docker e2e e2e-basic e2e-trustedca e2e-multizone e2e-upstream-sa e2e-externaldb e2e-backup e2e-backup-pss e2e-pss e2e-json-logging e2e-upgrade e2e-upgrade-included e2e-upgrade-standalone e2e-settle e2e-preseed e2e-upstream-preseed validate-preseed extract-old-chart clean
+.PHONY: tools lint render kubeconform kyverno unittest readme readme-check changelog changelog-llm changelog-console changelog-console-llm changelog-check docs test build-pytest kind-up kind-down kind-recreate kind-ensure kind-load-images kind-load-old-images kind-clean-namespace kind-prep pytest-docker e2e e2e-basic e2e-trustedca e2e-multizone e2e-networkpolicy e2e-networkpolicy-multizone e2e-networkpolicy-ingress e2e-networkpolicy-ingress-nginx e2e-upstream-sa e2e-externaldb e2e-backup e2e-backup-pss e2e-pss e2e-json-logging e2e-upgrade e2e-upgrade-included e2e-upgrade-standalone e2e-settle e2e-preseed e2e-upstream-preseed validate-preseed extract-old-chart clean
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*## "; printf "\nUsage: make \033[36m<target>\033[0m\n"} \
@@ -584,6 +590,22 @@ e2e: ## Run all e2e scenarios sequentially (requires kind cluster)
 	$(MAKE) e2e-upstream-sa E2E_NAMESPACE=kasm-e2e-upstream-sa
 	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-upstream-sa
 	$(MAKE) e2e-settle
+	$(MAKE) e2e-networkpolicy E2E_NAMESPACE=kasm-e2e-networkpolicy
+	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-networkpolicy
+	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-networkpolicy-probe
+	$(MAKE) e2e-settle
+	$(MAKE) e2e-networkpolicy-multizone E2E_NAMESPACE=kasm-e2e-networkpolicy-multizone
+	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-networkpolicy-multizone
+	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-networkpolicy-multizone-probe
+	$(MAKE) e2e-settle
+	$(MAKE) e2e-networkpolicy-ingress E2E_NAMESPACE=kasm-e2e-networkpolicy-ingress
+	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-networkpolicy-ingress
+	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-networkpolicy-ingress-probe
+	$(MAKE) e2e-settle
+	$(MAKE) e2e-networkpolicy-ingress-nginx E2E_NAMESPACE=kasm-e2e-networkpolicy-ingress-nginx
+	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-networkpolicy-ingress-nginx
+	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-networkpolicy-ingress-nginx-probe
+	$(MAKE) e2e-settle
 	$(MAKE) e2e-externaldb E2E_NAMESPACE=kasm-e2e-externaldb
 	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-externaldb
 	$(MAKE) e2e-settle
@@ -636,6 +658,56 @@ e2e-multizone: kind-prep build-pytest ## Multi-zone topology with ingress-nginx
 	trap './tests/e2e/stop_cloud_provider_kind.sh' EXIT; \
 	./tests/e2e/install_ingress_nginx.sh && \
 	$(MAKE) pytest-docker E2E_SCENARIO=e2e-multizone PYTEST_ARGS="-m e2e -q test_03_multizone_ingress.py"
+
+e2e-networkpolicy: kind-prep build-pytest ## NetworkPolicies enabled: install, enforcement, customization, upgrade hooks
+	$(MAKE) pytest-docker E2E_SCENARIO=e2e-networkpolicy PYTEST_ARGS="-m e2e -q test_14_network_policy.py"
+
+e2e-networkpolicy-multizone: kind-prep build-pytest ## NetworkPolicies enabled on the multi-zone ingress topology
+	@set -e; \
+	export PATH="$(BIN_DIR):$$PATH"; \
+	export KUBECONFIG=$(KIND_KUBECONFIG); \
+	export CLOUD_PROVIDER_KIND_IMAGE=$(CLOUD_PROVIDER_KIND_IMAGE); \
+	export CLOUD_PROVIDER_KIND_CONTAINER=$(CLOUD_PROVIDER_KIND_CONTAINER); \
+	export CLOUD_PROVIDER_KIND_LOG=$(CLOUD_PROVIDER_KIND_LOG); \
+	export KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME); \
+	trap './tests/e2e/stop_cloud_provider_kind.sh' EXIT; \
+	./tests/e2e/install_ingress_nginx.sh && \
+	$(MAKE) pytest-docker E2E_SCENARIO=e2e-networkpolicy-multizone PYTEST_ARGS="-m e2e -q test_15_network_policy_multizone.py"
+
+e2e-networkpolicy-ingress: kind-prep build-pytest ## NetworkPolicies with proxy.from restricted to the ingress controller
+	@set -e; \
+	export PATH="$(BIN_DIR):$$PATH"; \
+	export KUBECONFIG=$(KIND_KUBECONFIG); \
+	export CLOUD_PROVIDER_KIND_IMAGE=$(CLOUD_PROVIDER_KIND_IMAGE); \
+	export CLOUD_PROVIDER_KIND_CONTAINER=$(CLOUD_PROVIDER_KIND_CONTAINER); \
+	export CLOUD_PROVIDER_KIND_LOG=$(CLOUD_PROVIDER_KIND_LOG); \
+	export KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME); \
+	trap './tests/e2e/stop_cloud_provider_kind.sh' EXIT; \
+	./tests/e2e/install_ingress_nginx.sh && \
+	$(MAKE) pytest-docker E2E_SCENARIO=e2e-networkpolicy-ingress PYTEST_ARGS="-m e2e -q test_16_network_policy_ingress.py"
+
+# Local only (not in CI): a real in-cluster ingress-nginx controller, with its images preloaded into
+# kind, so proxy.from can select the controller by namespaceSelector. The controller is removed by a
+# trap on EXIT, same pattern as the cloud-provider-kind targets.
+e2e-networkpolicy-ingress-nginx: kind-prep build-pytest ## NetworkPolicies with proxy.from = namespaceSelector for a real in-cluster ingress-nginx (local only)
+	@set -euo pipefail; \
+	export PATH="$(BIN_DIR):$$PATH"; \
+	export KUBECONFIG=$(KIND_KUBECONFIG); \
+	manifest="$(CURDIR)/.kind/ingress-nginx-$(INGRESS_NGINX_VERSION).yaml"; \
+	mkdir -p "$(CURDIR)/.kind"; \
+	curl -fsSL -o "$$manifest" "$(INGRESS_NGINX_MANIFEST_URL)"; \
+	echo "$(INGRESS_NGINX_MANIFEST_SHA256)  $$manifest" | sha256sum -c -; \
+	trap '$(KUBECTL) --kubeconfig $(KIND_KUBECONFIG) delete -f "$$manifest" --ignore-not-found --wait=true --timeout=180s || true' EXIT; \
+	for image in $(INGRESS_NGINX_IMAGES); do \
+		echo "Loading image $$image into kind cluster"; \
+		tmp_tar=$$(mktemp /tmp/kind-image-XXXXXX.tar); \
+		$(CRANE) pull --platform linux/$(ARCH) "$$image" "$$tmp_tar"; \
+		$(KIND) load image-archive "$$tmp_tar" --name $(KIND_CLUSTER_NAME) || { rm -f "$$tmp_tar"; exit 1; }; \
+		rm -f "$$tmp_tar"; \
+	done; \
+	$(KUBECTL) --kubeconfig $(KIND_KUBECONFIG) apply -f "$$manifest"; \
+	$(KUBECTL) --kubeconfig $(KIND_KUBECONFIG) -n ingress-nginx wait --for=condition=Ready pod -l app.kubernetes.io/component=controller --timeout=300s; \
+	$(MAKE) pytest-docker E2E_SCENARIO=e2e-networkpolicy-ingress-nginx PYTEST_ARGS="-m e2e -q test_17_network_policy_ingress_nginx.py"
 
 e2e-upstream-sa: kind-prep build-pytest ## serviceAccount dedupe + upstreamAuth service LoadBalancer, via cloud-provider-kind
 	@set -e; \

@@ -1343,6 +1343,99 @@ applySecurity: true
 #
 applyHealthChecks: true
 
+# Opt-in NetworkPolicies for the Kasm pods of this release. When enabled, pods are denied all ingress
+# and egress by default and then allowed the traffic Kasm needs: DNS, external egress, in-release
+# service-to-service traffic and database access. Allowed ingress ports for each component are the
+# containerPorts on its pod template (nginx sidecars included). Ingress rules select pods by the
+# instance and component labels, so one policy per component covers every zone.
+#
+networkPolicies:
+  # networkPolicies.enabled -- Render NetworkPolicy resources for the Kasm workloads
+  enabled: false
+  defaultDeny:
+    # networkPolicies.defaultDeny.enabled -- Deny all ingress and egress for the release's Kasm pods unless another policy allows it
+    enabled: true
+  dns:
+    # networkPolicies.dns.enabled -- Allow DNS (UDP/TCP 53) egress for all Kasm pods
+    enabled: true
+    # networkPolicies.dns.to -- DNS destination peers. Leave empty to use kube-system/kube-dns, or openshift-dns when isOpenshift is true.
+    to: []
+  externalEgress:
+    # networkPolicies.externalEgress.enabled -- Allow external egress for all Kasm pods. With the default peer this leaves egress effectively open; narrow `to` to restrict it.
+    enabled: true
+    # networkPolicies.externalEgress.to -- Destination peers for external egress. An empty list allows every destination.
+    to:
+      - ipBlock:
+          cidr: 0.0.0.0/0
+  database:
+    # networkPolicies.database.standaloneTo -- Destination peers for database clients when database.standalone is true. Replace with pod/namespace selectors for an in-cluster external database.
+    standaloneTo:
+      - ipBlock:
+          cidr: 0.0.0.0/0
+  proxy:
+    # networkPolicies.proxy.from -- Source peers allowed to reach the proxy, whichever way it is exposed (LoadBalancer, NodePort, Ingress, Route, Gateway API, upstream auth). An empty list allows any source. For an in-cluster ingress controller select its namespace, e.g. `[{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: ingress-nginx}}}]`; for an external load balancer or ingress use its source range, e.g. `[{ipBlock: {cidr: 192.0.2.0/24}}]`.
+    from: []
+  rdpGateway:
+    # networkPolicies.rdpGateway.from -- Source peers allowed to reach the RDP Gateway's external RDP port (3389) when directRdpService.enabled or tcpRoute.enabled is true. An empty list allows any source.
+    from: []
+  components:
+    # networkPolicies.components.proxy -- Ingress policy settings for the Kasm proxy pods.
+    proxy:
+      # networkPolicies.components.proxy.enabled -- Render the restrictive ingress policy for this component. Set to `false` to allow all ingress to it instead (the rest of the release stays default-deny), e.g. to manage it yourself.
+      enabled: true
+      # networkPolicies.components.proxy.extraIngress -- Raw NetworkPolicy ingress rules appended to this component's ingress policy.
+      extraIngress: []
+      # networkPolicies.components.proxy.extraEgress -- Raw NetworkPolicy egress rules. When set, a separate egress policy selecting this component's pods is rendered.
+      extraEgress: []
+    # networkPolicies.components.api -- Ingress policy settings for the Kasm API pods.
+    api:
+      # networkPolicies.components.api.enabled -- Render the restrictive ingress policy for this component. Set to `false` to allow all ingress to it instead (the rest of the release stays default-deny), e.g. to manage it yourself.
+      enabled: true
+      # networkPolicies.components.api.extraIngress -- Raw NetworkPolicy ingress rules appended to this component's ingress policy.
+      extraIngress: []
+      # networkPolicies.components.api.extraEgress -- Raw NetworkPolicy egress rules. When set, a separate egress policy selecting this component's pods is rendered.
+      extraEgress: []
+    # networkPolicies.components.manager -- Ingress policy settings for the Kasm Manager pods.
+    manager:
+      # networkPolicies.components.manager.enabled -- Render the restrictive ingress policy for this component. Set to `false` to allow all ingress to it instead (the rest of the release stays default-deny), e.g. to manage it yourself.
+      enabled: true
+      # networkPolicies.components.manager.extraIngress -- Raw NetworkPolicy ingress rules appended to this component's ingress policy.
+      extraIngress: []
+      # networkPolicies.components.manager.extraEgress -- Raw NetworkPolicy egress rules. When set, a separate egress policy selecting this component's pods is rendered.
+      extraEgress: []
+    # networkPolicies.components.guac -- Ingress policy settings for the Kasm Guacamole pods.
+    guac:
+      # networkPolicies.components.guac.enabled -- Render the restrictive ingress policy for this component. Set to `false` to allow all ingress to it instead (the rest of the release stays default-deny), e.g. to manage it yourself.
+      enabled: true
+      # networkPolicies.components.guac.extraIngress -- Raw NetworkPolicy ingress rules appended to this component's ingress policy.
+      extraIngress: []
+      # networkPolicies.components.guac.extraEgress -- Raw NetworkPolicy egress rules. When set, a separate egress policy selecting this component's pods is rendered.
+      extraEgress: []
+    # networkPolicies.components.rdpGateway -- Ingress policy settings for the Kasm RDP Gateway pods.
+    rdpGateway:
+      # networkPolicies.components.rdpGateway.enabled -- Render the restrictive ingress policy for this component. Set to `false` to allow all ingress to it instead (the rest of the release stays default-deny), e.g. to manage it yourself.
+      enabled: true
+      # networkPolicies.components.rdpGateway.extraIngress -- Raw NetworkPolicy ingress rules appended to this component's ingress policy.
+      extraIngress: []
+      # networkPolicies.components.rdpGateway.extraEgress -- Raw NetworkPolicy egress rules. When set, a separate egress policy selecting this component's pods is rendered.
+      extraEgress: []
+    # networkPolicies.components.rdpHttpsGateway -- Ingress policy settings for the Kasm RDP HTTPS Gateway pods.
+    rdpHttpsGateway:
+      # networkPolicies.components.rdpHttpsGateway.enabled -- Render the restrictive ingress policy for this component. Set to `false` to allow all ingress to it instead (the rest of the release stays default-deny), e.g. to manage it yourself.
+      enabled: true
+      # networkPolicies.components.rdpHttpsGateway.extraIngress -- Raw NetworkPolicy ingress rules appended to this component's ingress policy.
+      extraIngress: []
+      # networkPolicies.components.rdpHttpsGateway.extraEgress -- Raw NetworkPolicy egress rules. When set, a separate egress policy selecting this component's pods is rendered.
+      extraEgress: []
+    # networkPolicies.components.db -- Ingress policy settings for the Kasm database (ignored when database.standalone is true) pods.
+    db:
+      # networkPolicies.components.db.enabled -- Render the restrictive ingress policy for this component. Set to `false` to allow all ingress to it instead (the rest of the release stays default-deny), e.g. to manage it yourself.
+      enabled: true
+      # networkPolicies.components.db.extraIngress -- Raw NetworkPolicy ingress rules appended to this component's ingress policy.
+      extraIngress: []
+      # networkPolicies.components.db.extraEgress -- Raw NetworkPolicy egress rules. When set, a separate egress policy selecting this component's pods is rendered.
+      extraEgress: []
+
 # restartPolicy -- Configure global Pod restart policy for Kasm resources
 #
 restartPolicy: "Always"
@@ -1370,6 +1463,8 @@ extraAnnotations:
   deployment: {}
   # extraAnnotations.job -- Additional job annotations to apply to resources created by this chart
   job: {}
+  # extraAnnotations.networkPolicy -- Additional NetworkPolicy annotations to apply to resources created by this chart
+  networkPolicy: {}
   # extraAnnotations.pod -- Additional pod annotations to apply to resources created by this chart
   pod: {}
   # extraAnnotations.pvc -- Additional PersistentVolumeClaim annotations to apply to resources created by this chart
@@ -1392,6 +1487,8 @@ extraLabels:
   configMap: {}
   # extraLabels.deployment -- Additional deployment labels to apply to resources created by this chart
   deployment: {}
+  # extraLabels.networkPolicy -- Additional NetworkPolicy labels to apply to resources created by this chart
+  networkPolicy: {}
   # extraLabels.pod -- Additional pod labels to apply to resources created by this chart
   pod: {}
   # extraLabels.secret -- Additional secret labels to apply to resources created by this chart

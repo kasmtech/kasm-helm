@@ -52,7 +52,7 @@ object
 			<td>Configure node affinity settings for Kasm pods -  [Kubernetes Affinity](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/). Kasm is not guaranteed to work with Affinity settings - use caution if you must configuring these settings. The below, optional object passes in raw Affinity rules for Pods, Nodes, etc. for your environment. Make sure you use the correct values below as this Helm chart will not do any error checking for you. </td>
 		</tr>
 		<tr>
-			<td id="annotations"><a href="./values.yaml#L1356">annotations</a></td>
+			<td id="annotations"><a href="./values.yaml#L1449">annotations</a></td>
 			<td>
 object
 </td>
@@ -2106,7 +2106,7 @@ LoadBalancer
 			<td>The service type to use for the RDP Gateway service if `directRdpService.enabled` is set to true. Allowed values are LoadBalancer or NodePort. The RDP Gateway speaks raw TCP, so any cloud load balancer backing this Service must be a Layer 4 / TCP type (e.g. NLB on AWS, not ALB). </td>
 		</tr>
 		<tr>
-			<td id="extraAnnotations--configMap"><a href="./values.yaml#L1364">extraAnnotations.configMap</a></td>
+			<td id="extraAnnotations--configMap"><a href="./values.yaml#L1457">extraAnnotations.configMap</a></td>
 			<td>
 object
 </td>
@@ -2120,7 +2120,7 @@ object
 			<td>Additional configMap annotations to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraAnnotations--cronJob"><a href="./values.yaml#L1366">extraAnnotations.cronJob</a></td>
+			<td id="extraAnnotations--cronJob"><a href="./values.yaml#L1459">extraAnnotations.cronJob</a></td>
 			<td>
 object
 </td>
@@ -2134,7 +2134,7 @@ object
 			<td>Additional cronJob annotations to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraAnnotations--cronPod"><a href="./values.yaml#L1368">extraAnnotations.cronPod</a></td>
+			<td id="extraAnnotations--cronPod"><a href="./values.yaml#L1461">extraAnnotations.cronPod</a></td>
 			<td>
 object
 </td>
@@ -2148,7 +2148,7 @@ object
 			<td>Additional annotations to apply to the pod template inside CronJobs created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraAnnotations--deployment"><a href="./values.yaml#L1370">extraAnnotations.deployment</a></td>
+			<td id="extraAnnotations--deployment"><a href="./values.yaml#L1463">extraAnnotations.deployment</a></td>
 			<td>
 object
 </td>
@@ -2162,7 +2162,7 @@ object
 			<td>Additional deployment annotations to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraAnnotations--job"><a href="./values.yaml#L1372">extraAnnotations.job</a></td>
+			<td id="extraAnnotations--job"><a href="./values.yaml#L1465">extraAnnotations.job</a></td>
 			<td>
 object
 </td>
@@ -2176,7 +2176,21 @@ object
 			<td>Additional job annotations to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraAnnotations--pod"><a href="./values.yaml#L1374">extraAnnotations.pod</a></td>
+			<td id="extraAnnotations--networkPolicy"><a href="./values.yaml#L1467">extraAnnotations.networkPolicy</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+{}
+</pre>
+</div>
+			</td>
+			<td>Additional NetworkPolicy annotations to apply to resources created by this chart</td>
+		</tr>
+		<tr>
+			<td id="extraAnnotations--pod"><a href="./values.yaml#L1469">extraAnnotations.pod</a></td>
 			<td>
 object
 </td>
@@ -2190,7 +2204,7 @@ object
 			<td>Additional pod annotations to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraAnnotations--pvc"><a href="./values.yaml#L1376">extraAnnotations.pvc</a></td>
+			<td id="extraAnnotations--pvc"><a href="./values.yaml#L1471">extraAnnotations.pvc</a></td>
 			<td>
 object
 </td>
@@ -2204,7 +2218,7 @@ object
 			<td>Additional PersistentVolumeClaim annotations to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraAnnotations--secret"><a href="./values.yaml#L1380">extraAnnotations.secret</a></td>
+			<td id="extraAnnotations--secret"><a href="./values.yaml#L1475">extraAnnotations.secret</a></td>
 			<td>
 object
 </td>
@@ -2218,7 +2232,7 @@ object
 			<td>Additional secret annotations to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraAnnotations--service"><a href="./values.yaml#L1378">extraAnnotations.service</a></td>
+			<td id="extraAnnotations--service"><a href="./values.yaml#L1473">extraAnnotations.service</a></td>
 			<td>
 object
 </td>
@@ -2232,7 +2246,7 @@ object
 			<td>Additional service annotations to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraAnnotations--serviceAccount"><a href="./values.yaml#L1382">extraAnnotations.serviceAccount</a></td>
+			<td id="extraAnnotations--serviceAccount"><a href="./values.yaml#L1477">extraAnnotations.serviceAccount</a></td>
 			<td>
 object
 </td>
@@ -2246,7 +2260,7 @@ object
 			<td>Additional serviceAccount annotations to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraAnnotations--statefulSet"><a href="./values.yaml#L1384">extraAnnotations.statefulSet</a></td>
+			<td id="extraAnnotations--statefulSet"><a href="./values.yaml#L1479">extraAnnotations.statefulSet</a></td>
 			<td>
 object
 </td>
@@ -2260,7 +2274,7 @@ object
 			<td>Additional statefulSet annotations to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraContainerVolumeMounts"><a href="./values.yaml#L1432">extraContainerVolumeMounts</a></td>
+			<td id="extraContainerVolumeMounts"><a href="./values.yaml#L1529">extraContainerVolumeMounts</a></td>
 			<td>
 list
 </td>
@@ -2274,7 +2288,7 @@ list
 			<td>A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things  like custom SSL certificates, config files, or data volumes to all Kasm containers Example:    extraContainerVolumeMounts:     - mountPath: /etc/ssl/certs/ca-certificates.crt       name: pkichain       readOnly: true       subPath: ca.crt</td>
 		</tr>
 		<tr>
-			<td id="extraContainers"><a href="./values.yaml#L1449">extraContainers</a></td>
+			<td id="extraContainers"><a href="./values.yaml#L1546">extraContainers</a></td>
 			<td>
 list
 </td>
@@ -2288,7 +2302,7 @@ list
 			<td>Additional sidecar containers to run in every pod Example  - name: init-example    image: busybox    command: [/bin/sh, -c, 'echo "Hello world"']</td>
 		</tr>
 		<tr>
-			<td id="extraInitContainers"><a href="./values.yaml#L1456">extraInitContainers</a></td>
+			<td id="extraInitContainers"><a href="./values.yaml#L1553">extraInitContainers</a></td>
 			<td>
 list
 </td>
@@ -2302,7 +2316,7 @@ list
 			<td></td>
 		</tr>
 		<tr>
-			<td id="extraInitVolumeMounts"><a href="./values.yaml#L1442">extraInitVolumeMounts</a></td>
+			<td id="extraInitVolumeMounts"><a href="./values.yaml#L1539">extraInitVolumeMounts</a></td>
 			<td>
 list
 </td>
@@ -2316,7 +2330,7 @@ list
 			<td>A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things  like custom SSL certificates, config files, or data volumes to all Kasm Service Init containers Example:    extraInitVolumeMounts:     - mountPath: /etc/ssl/certs/ca-certificates.crt       name: pkichain       readOnly: true       subPath: ca.crt</td>
 		</tr>
 		<tr>
-			<td id="extraLabels--configMap"><a href="./values.yaml#L1392">extraLabels.configMap</a></td>
+			<td id="extraLabels--configMap"><a href="./values.yaml#L1487">extraLabels.configMap</a></td>
 			<td>
 object
 </td>
@@ -2330,7 +2344,7 @@ object
 			<td>Additional configMap labels to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraLabels--cronJob"><a href="./values.yaml#L1404">extraLabels.cronJob</a></td>
+			<td id="extraLabels--cronJob"><a href="./values.yaml#L1501">extraLabels.cronJob</a></td>
 			<td>
 object
 </td>
@@ -2344,7 +2358,7 @@ object
 			<td>Additional cronJob labels to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraLabels--cronPod"><a href="./values.yaml#L1406">extraLabels.cronPod</a></td>
+			<td id="extraLabels--cronPod"><a href="./values.yaml#L1503">extraLabels.cronPod</a></td>
 			<td>
 object
 </td>
@@ -2358,7 +2372,7 @@ object
 			<td>Additional labels to apply to the pod template inside CronJobs created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraLabels--deployment"><a href="./values.yaml#L1394">extraLabels.deployment</a></td>
+			<td id="extraLabels--deployment"><a href="./values.yaml#L1489">extraLabels.deployment</a></td>
 			<td>
 object
 </td>
@@ -2372,7 +2386,7 @@ object
 			<td>Additional deployment labels to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraLabels--job"><a href="./values.yaml#L1402">extraLabels.job</a></td>
+			<td id="extraLabels--job"><a href="./values.yaml#L1499">extraLabels.job</a></td>
 			<td>
 object
 </td>
@@ -2386,7 +2400,21 @@ object
 			<td>Additional job labels to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraLabels--pod"><a href="./values.yaml#L1396">extraLabels.pod</a></td>
+			<td id="extraLabels--networkPolicy"><a href="./values.yaml#L1491">extraLabels.networkPolicy</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+{}
+</pre>
+</div>
+			</td>
+			<td>Additional NetworkPolicy labels to apply to resources created by this chart</td>
+		</tr>
+		<tr>
+			<td id="extraLabels--pod"><a href="./values.yaml#L1493">extraLabels.pod</a></td>
 			<td>
 object
 </td>
@@ -2400,7 +2428,7 @@ object
 			<td>Additional pod labels to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraLabels--pvc"><a href="./values.yaml#L1408">extraLabels.pvc</a></td>
+			<td id="extraLabels--pvc"><a href="./values.yaml#L1505">extraLabels.pvc</a></td>
 			<td>
 object
 </td>
@@ -2414,7 +2442,7 @@ object
 			<td>Additional PersistentVolumeClaim labels to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraLabels--secret"><a href="./values.yaml#L1398">extraLabels.secret</a></td>
+			<td id="extraLabels--secret"><a href="./values.yaml#L1495">extraLabels.secret</a></td>
 			<td>
 object
 </td>
@@ -2428,7 +2456,7 @@ object
 			<td>Additional secret labels to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraLabels--service"><a href="./values.yaml#L1400">extraLabels.service</a></td>
+			<td id="extraLabels--service"><a href="./values.yaml#L1497">extraLabels.service</a></td>
 			<td>
 object
 </td>
@@ -2442,7 +2470,7 @@ object
 			<td>Additional service labels to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraLabels--serviceAccount"><a href="./values.yaml#L1410">extraLabels.serviceAccount</a></td>
+			<td id="extraLabels--serviceAccount"><a href="./values.yaml#L1507">extraLabels.serviceAccount</a></td>
 			<td>
 object
 </td>
@@ -2456,7 +2484,7 @@ object
 			<td>Additional serviceAccount labels to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraLabels--statefulSet"><a href="./values.yaml#L1412">extraLabels.statefulSet</a></td>
+			<td id="extraLabels--statefulSet"><a href="./values.yaml#L1509">extraLabels.statefulSet</a></td>
 			<td>
 object
 </td>
@@ -2470,7 +2498,7 @@ object
 			<td>Additional statefulSet labels to apply to resources created by this chart</td>
 		</tr>
 		<tr>
-			<td id="extraObjects"><a href="./values.yaml#L1461">extraObjects</a></td>
+			<td id="extraObjects"><a href="./values.yaml#L1558">extraObjects</a></td>
 			<td>
 list
 </td>
@@ -2484,7 +2512,7 @@ list
 			<td>Deploy additional Kubernetes manifests. This field is expected to be either a multi-line string, a list of strings, or a list of objects. </td>
 		</tr>
 		<tr>
-			<td id="extraVolumes"><a href="./values.yaml#L1422">extraVolumes</a></td>
+			<td id="extraVolumes"><a href="./values.yaml#L1519">extraVolumes</a></td>
 			<td>
 list
 </td>
@@ -2792,7 +2820,7 @@ false
 			<td>Use this flag to remove Pod and Container security ID values and allow OpenShift to dynamically set them in accordance with [OpenShift UIDs](https://www.redhat.com/en/blog/a-guide-to-openshift-and-uids) documentation.</td>
 		</tr>
 		<tr>
-			<td id="kasmConfig"><a href="./values.yaml#L1469">kasmConfig</a></td>
+			<td id="kasmConfig"><a href="./values.yaml#L1566">kasmConfig</a></td>
 			<td>
 object
 </td>
@@ -2813,7 +2841,7 @@ generatePreseed: false
 			<td>Use fields in the `kasmConfig` section to apply customization to a Kasm deployment during database initialization.  NOTE: This data is only used during DB initialization and does not have any effect on live Kasm configuration settings.  </td>
 		</tr>
 		<tr>
-			<td id="kasmConfig--adminUsername"><a href="./values.yaml#L1491">kasmConfig.adminUsername</a></td>
+			<td id="kasmConfig--adminUsername"><a href="./values.yaml#L1588">kasmConfig.adminUsername</a></td>
 			<td>
 string
 </td>
@@ -2827,7 +2855,7 @@ admin@kasm.local
 			<td>Change the username seeded on the admin-group member. Default: `admin@kasm.local`, the only true built-in admin account. Setting this to any other value seeds that account with generated (non-built-in) credentials stored under a `<local-part>-password`/`<local-part>-salt` key pair in the passwords/salts Secrets (e.g. `system@kasm.local` -> `system-password`) instead of the built-in admin-password-Secret-backed credentials. The chart will not create an `admin-password` key at all in that case, and the db-init Job will not be given a DEFAULT_ADMIN_PASSWORD env var. See docs/default-users.md. </td>
 		</tr>
 		<tr>
-			<td id="kasmConfig--config"><a href="./values.yaml#L1508">kasmConfig.config</a></td>
+			<td id="kasmConfig--config"><a href="./values.yaml#L1605">kasmConfig.config</a></td>
 			<td>
 object
 </td>
@@ -2841,7 +2869,7 @@ object
 			<td>Kasm DB pre-seed configuration settings in YAML format. Refer to the [Preseed Documentation](./docs/preseed.md) and to the [Kasm Slip-Stream Install](https://docs.kasm.com/docs/1.19.0/how-to/administration/import-export/slipstream-install) documentation for additional details. </td>
 		</tr>
 		<tr>
-			<td id="kasmConfig--defaultApiUsers"><a href="./values.yaml#L1483">kasmConfig.defaultApiUsers</a></td>
+			<td id="kasmConfig--defaultApiUsers"><a href="./values.yaml#L1580">kasmConfig.defaultApiUsers</a></td>
 			<td>
 bool
 </td>
@@ -2855,7 +2883,7 @@ false
 			<td>Creates two predefined sets of API credentials with permissions accommodating most standard deployment scenarios. Refer to the [Default API Users](./docs/default-api-users.md) for additional information about what this flag creates. </td>
 		</tr>
 		<tr>
-			<td id="kasmConfig--defaultUsers"><a href="./values.yaml#L1478">kasmConfig.defaultUsers</a></td>
+			<td id="kasmConfig--defaultUsers"><a href="./values.yaml#L1575">kasmConfig.defaultUsers</a></td>
 			<td>
 bool
 </td>
@@ -2869,7 +2897,7 @@ false
 			<td>Creates a series of 4 users and 5 groups with a standard set of permissions accommodating most standard deployment scenarios. Refer to the [Default Users](./docs/default-users.md) for additional information about what this flag creates. </td>
 		</tr>
 		<tr>
-			<td id="kasmConfig--existingDefaultPropertiesSecret"><a href="./values.yaml#L1501">kasmConfig.existingDefaultPropertiesSecret</a></td>
+			<td id="kasmConfig--existingDefaultPropertiesSecret"><a href="./values.yaml#L1598">kasmConfig.existingDefaultPropertiesSecret</a></td>
 			<td>
 object
 </td>
@@ -2884,7 +2912,7 @@ name: ""
 			<td>Reference a customer-managed Secret containing a complete `default_properties.yaml` seed file, for infrastructure-as-code workflows that manage the seed file directly as a Kubernetes Secret rather than expressing it through kasmConfig.config values.  When `name` is set, its contents (at `key`) replace the image's baked-in default_properties.yaml as the base seed file. This works independently of generatePreseed: set generatePreseed=true as well to additionally merge kasmConfig.config-generated values on top of the customer-provided file, or leave it false to use the customer-provided file as-is with no chart-side merge. </td>
 		</tr>
 		<tr>
-			<td id="kasmConfig--generatePreseed"><a href="./values.yaml#L1473">kasmConfig.generatePreseed</a></td>
+			<td id="kasmConfig--generatePreseed"><a href="./values.yaml#L1570">kasmConfig.generatePreseed</a></td>
 			<td>
 bool
 </td>
@@ -3009,7 +3037,7 @@ list
 			<td>This is a list of objects defining different Kasm Zone configurations for your deployment. This configuration is typically used for multi-region, large, or custom deployments where the customer requires a high degree of configurability and has multiple resources in disparate areas.  NOTE: If you configure custom zones below, you MUST use a valid `ingress` configuration due to the increased deployment complexity of a multi-zone Kasm deployment. Refer to the Kasm [Deployment Zones](https://docs.kasm.com/docs/latest/guide/deployment_zones) documentation for more information on Kasm Zones.  The zone marked `primary: true` is treated as the primary zone; if no zone is marked primary, the first zone in the list is used instead. At most one zone may be marked `primary: true`. Traffic to the configured `publicAddr` in the ingress rule will be routed to this primary zone.  Each zone requires a `name` (or the `zone_name` alias, if `name` is not set; `name` wins if both are set).  Each zone's `proxy_hostname` is used to build the ingress/route/certificate hostnames for that zone, as well as the zone's preseed `proxy_hostname` value. `proxyAddress` is a deprecated alias for `proxy_hostname`, kept for backwards compatibility; if both are set, `proxy_hostname` wins. </td>
 		</tr>
 		<tr>
-			<td id="labels"><a href="./values.yaml#L1352">labels</a></td>
+			<td id="labels"><a href="./values.yaml#L1445">labels</a></td>
 			<td>
 object
 </td>
@@ -3035,6 +3063,540 @@ log
 </div>
 			</td>
 			<td>Kasm Log format to write to console. Valid options are: json, log </td>
+		</tr>
+		<tr>
+			<td id="networkPolicies--components--api"><a href="./values.yaml#L1391">networkPolicies.components.api</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+enabled: true
+extraEgress: []
+extraIngress: []
+</pre>
+</div>
+			</td>
+			<td>Ingress policy settings for the Kasm API pods.</td>
+		</tr>
+		<tr>
+			<td id="networkPolicies--components--api--enabled"><a href="./values.yaml#L1393">networkPolicies.components.api.enabled</a></td>
+			<td>
+bool
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+true
+</pre>
+</div>
+			</td>
+			<td>Render the restrictive ingress policy for this component. Set to `false` to allow all ingress to it instead (the rest of the release stays default-deny), e.g. to manage it yourself.</td>
+		</tr>
+		<tr>
+			<td id="networkPolicies--components--api--extraEgress"><a href="./values.yaml#L1397">networkPolicies.components.api.extraEgress</a></td>
+			<td>
+list
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+[]
+</pre>
+</div>
+			</td>
+			<td>Raw NetworkPolicy egress rules. When set, a separate egress policy selecting this component's pods is rendered.</td>
+		</tr>
+		<tr>
+			<td id="networkPolicies--components--api--extraIngress"><a href="./values.yaml#L1395">networkPolicies.components.api.extraIngress</a></td>
+			<td>
+list
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+[]
+</pre>
+</div>
+			</td>
+			<td>Raw NetworkPolicy ingress rules appended to this component's ingress policy.</td>
+		</tr>
+		<tr>
+			<td id="networkPolicies--components--db"><a href="./values.yaml#L1431">networkPolicies.components.db</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+enabled: true
+extraEgress: []
+extraIngress: []
+</pre>
+</div>
+			</td>
+			<td>Ingress policy settings for the Kasm database (ignored when database.standalone is true) pods.</td>
+		</tr>
+		<tr>
+			<td id="networkPolicies--components--db--enabled"><a href="./values.yaml#L1433">networkPolicies.components.db.enabled</a></td>
+			<td>
+bool
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+true
+</pre>
+</div>
+			</td>
+			<td>Render the restrictive ingress policy for this component. Set to `false` to allow all ingress to it instead (the rest of the release stays default-deny), e.g. to manage it yourself.</td>
+		</tr>
+		<tr>
+			<td id="networkPolicies--components--db--extraEgress"><a href="./values.yaml#L1437">networkPolicies.components.db.extraEgress</a></td>
+			<td>
+list
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+[]
+</pre>
+</div>
+			</td>
+			<td>Raw NetworkPolicy egress rules. When set, a separate egress policy selecting this component's pods is rendered.</td>
+		</tr>
+		<tr>
+			<td id="networkPolicies--components--db--extraIngress"><a href="./values.yaml#L1435">networkPolicies.components.db.extraIngress</a></td>
+			<td>
+list
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+[]
+</pre>
+</div>
+			</td>
+			<td>Raw NetworkPolicy ingress rules appended to this component's ingress policy.</td>
+		</tr>
+		<tr>
+			<td id="networkPolicies--components--guac"><a href="./values.yaml#L1407">networkPolicies.components.guac</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+enabled: true
+extraEgress: []
+extraIngress: []
+</pre>
+</div>
+			</td>
+			<td>Ingress policy settings for the Kasm Guacamole pods.</td>
+		</tr>
+		<tr>
+			<td id="networkPolicies--components--guac--enabled"><a href="./values.yaml#L1409">networkPolicies.components.guac.enabled</a></td>
+			<td>
+bool
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+true
+</pre>
+</div>
+			</td>
+			<td>Render the restrictive ingress policy for this component. Set to `false` to allow all ingress to it instead (the rest of the release stays default-deny), e.g. to manage it yourself.</td>
+		</tr>
+		<tr>
+			<td id="networkPolicies--components--guac--extraEgress"><a href="./values.yaml#L1413">networkPolicies.components.guac.extraEgress</a></td>
+			<td>
+list
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+[]
+</pre>
+</div>
+			</td>
+			<td>Raw NetworkPolicy egress rules. When set, a separate egress policy selecting this component's pods is rendered.</td>
+		</tr>
+		<tr>
+			<td id="networkPolicies--components--guac--extraIngress"><a href="./values.yaml#L1411">networkPolicies.components.guac.extraIngress</a></td>
+			<td>
+list
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+[]
+</pre>
+</div>
+			</td>
+			<td>Raw NetworkPolicy ingress rules appended to this component's ingress policy.</td>
+		</tr>
+		<tr>
+			<td id="networkPolicies--components--manager"><a href="./values.yaml#L1399">networkPolicies.components.manager</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+enabled: true
+extraEgress: []
+extraIngress: []
+</pre>
+</div>
+			</td>
+			<td>Ingress policy settings for the Kasm Manager pods.</td>
+		</tr>
+		<tr>
+			<td id="networkPolicies--components--manager--enabled"><a href="./values.yaml#L1401">networkPolicies.components.manager.enabled</a></td>
+			<td>
+bool
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+true
+</pre>
+</div>
+			</td>
+			<td>Render the restrictive ingress policy for this component. Set to `false` to allow all ingress to it instead (the rest of the release stays default-deny), e.g. to manage it yourself.</td>
+		</tr>
+		<tr>
+			<td id="networkPolicies--components--manager--extraEgress"><a href="./values.yaml#L1405">networkPolicies.components.manager.extraEgress</a></td>
+			<td>
+list
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+[]
+</pre>
+</div>
+			</td>
+			<td>Raw NetworkPolicy egress rules. When set, a separate egress policy selecting this component's pods is rendered.</td>
+		</tr>
+		<tr>
+			<td id="networkPolicies--components--manager--extraIngress"><a href="./values.yaml#L1403">networkPolicies.components.manager.extraIngress</a></td>
+			<td>
+list
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+[]
+</pre>
+</div>
+			</td>
+			<td>Raw NetworkPolicy ingress rules appended to this component's ingress policy.</td>
+		</tr>
+		<tr>
+			<td id="networkPolicies--components--proxy"><a href="./values.yaml#L1383">networkPolicies.components.proxy</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+enabled: true
+extraEgress: []
+extraIngress: []
+</pre>
+</div>
+			</td>
+			<td>Ingress policy settings for the Kasm proxy pods.</td>
+		</tr>
+		<tr>
+			<td id="networkPolicies--components--proxy--enabled"><a href="./values.yaml#L1385">networkPolicies.components.proxy.enabled</a></td>
+			<td>
+bool
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+true
+</pre>
+</div>
+			</td>
+			<td>Render the restrictive ingress policy for this component. Set to `false` to allow all ingress to it instead (the rest of the release stays default-deny), e.g. to manage it yourself.</td>
+		</tr>
+		<tr>
+			<td id="networkPolicies--components--proxy--extraEgress"><a href="./values.yaml#L1389">networkPolicies.components.proxy.extraEgress</a></td>
+			<td>
+list
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+[]
+</pre>
+</div>
+			</td>
+			<td>Raw NetworkPolicy egress rules. When set, a separate egress policy selecting this component's pods is rendered.</td>
+		</tr>
+		<tr>
+			<td id="networkPolicies--components--proxy--extraIngress"><a href="./values.yaml#L1387">networkPolicies.components.proxy.extraIngress</a></td>
+			<td>
+list
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+[]
+</pre>
+</div>
+			</td>
+			<td>Raw NetworkPolicy ingress rules appended to this component's ingress policy.</td>
+		</tr>
+		<tr>
+			<td id="networkPolicies--components--rdpGateway"><a href="./values.yaml#L1415">networkPolicies.components.rdpGateway</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+enabled: true
+extraEgress: []
+extraIngress: []
+</pre>
+</div>
+			</td>
+			<td>Ingress policy settings for the Kasm RDP Gateway pods.</td>
+		</tr>
+		<tr>
+			<td id="networkPolicies--components--rdpGateway--enabled"><a href="./values.yaml#L1417">networkPolicies.components.rdpGateway.enabled</a></td>
+			<td>
+bool
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+true
+</pre>
+</div>
+			</td>
+			<td>Render the restrictive ingress policy for this component. Set to `false` to allow all ingress to it instead (the rest of the release stays default-deny), e.g. to manage it yourself.</td>
+		</tr>
+		<tr>
+			<td id="networkPolicies--components--rdpGateway--extraEgress"><a href="./values.yaml#L1421">networkPolicies.components.rdpGateway.extraEgress</a></td>
+			<td>
+list
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+[]
+</pre>
+</div>
+			</td>
+			<td>Raw NetworkPolicy egress rules. When set, a separate egress policy selecting this component's pods is rendered.</td>
+		</tr>
+		<tr>
+			<td id="networkPolicies--components--rdpGateway--extraIngress"><a href="./values.yaml#L1419">networkPolicies.components.rdpGateway.extraIngress</a></td>
+			<td>
+list
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+[]
+</pre>
+</div>
+			</td>
+			<td>Raw NetworkPolicy ingress rules appended to this component's ingress policy.</td>
+		</tr>
+		<tr>
+			<td id="networkPolicies--components--rdpHttpsGateway"><a href="./values.yaml#L1423">networkPolicies.components.rdpHttpsGateway</a></td>
+			<td>
+object
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+enabled: true
+extraEgress: []
+extraIngress: []
+</pre>
+</div>
+			</td>
+			<td>Ingress policy settings for the Kasm RDP HTTPS Gateway pods.</td>
+		</tr>
+		<tr>
+			<td id="networkPolicies--components--rdpHttpsGateway--enabled"><a href="./values.yaml#L1425">networkPolicies.components.rdpHttpsGateway.enabled</a></td>
+			<td>
+bool
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+true
+</pre>
+</div>
+			</td>
+			<td>Render the restrictive ingress policy for this component. Set to `false` to allow all ingress to it instead (the rest of the release stays default-deny), e.g. to manage it yourself.</td>
+		</tr>
+		<tr>
+			<td id="networkPolicies--components--rdpHttpsGateway--extraEgress"><a href="./values.yaml#L1429">networkPolicies.components.rdpHttpsGateway.extraEgress</a></td>
+			<td>
+list
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+[]
+</pre>
+</div>
+			</td>
+			<td>Raw NetworkPolicy egress rules. When set, a separate egress policy selecting this component's pods is rendered.</td>
+		</tr>
+		<tr>
+			<td id="networkPolicies--components--rdpHttpsGateway--extraIngress"><a href="./values.yaml#L1427">networkPolicies.components.rdpHttpsGateway.extraIngress</a></td>
+			<td>
+list
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+[]
+</pre>
+</div>
+			</td>
+			<td>Raw NetworkPolicy ingress rules appended to this component's ingress policy.</td>
+		</tr>
+		<tr>
+			<td id="networkPolicies--database--standaloneTo"><a href="./values.yaml#L1372">networkPolicies.database.standaloneTo</a></td>
+			<td>
+list
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+- ipBlock:
+    cidr: 0.0.0.0/0
+</pre>
+</div>
+			</td>
+			<td>Destination peers for database clients when database.standalone is true. Replace with pod/namespace selectors for an in-cluster external database.</td>
+		</tr>
+		<tr>
+			<td id="networkPolicies--defaultDeny--enabled"><a href="./values.yaml#L1357">networkPolicies.defaultDeny.enabled</a></td>
+			<td>
+bool
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+true
+</pre>
+</div>
+			</td>
+			<td>Deny all ingress and egress for the release's Kasm pods unless another policy allows it</td>
+		</tr>
+		<tr>
+			<td id="networkPolicies--dns--enabled"><a href="./values.yaml#L1360">networkPolicies.dns.enabled</a></td>
+			<td>
+bool
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+true
+</pre>
+</div>
+			</td>
+			<td>Allow DNS (UDP/TCP 53) egress for all Kasm pods</td>
+		</tr>
+		<tr>
+			<td id="networkPolicies--dns--to"><a href="./values.yaml#L1362">networkPolicies.dns.to</a></td>
+			<td>
+list
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+[]
+</pre>
+</div>
+			</td>
+			<td>DNS destination peers. Leave empty to use kube-system/kube-dns, or openshift-dns when isOpenshift is true.</td>
+		</tr>
+		<tr>
+			<td id="networkPolicies--enabled"><a href="./values.yaml#L1354">networkPolicies.enabled</a></td>
+			<td>
+bool
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+false
+</pre>
+</div>
+			</td>
+			<td>Render NetworkPolicy resources for the Kasm workloads</td>
+		</tr>
+		<tr>
+			<td id="networkPolicies--externalEgress--enabled"><a href="./values.yaml#L1365">networkPolicies.externalEgress.enabled</a></td>
+			<td>
+bool
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+true
+</pre>
+</div>
+			</td>
+			<td>Allow external egress for all Kasm pods. With the default peer this leaves egress effectively open; narrow `to` to restrict it.</td>
+		</tr>
+		<tr>
+			<td id="networkPolicies--externalEgress--to"><a href="./values.yaml#L1367">networkPolicies.externalEgress.to</a></td>
+			<td>
+list
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+- ipBlock:
+    cidr: 0.0.0.0/0
+</pre>
+</div>
+			</td>
+			<td>Destination peers for external egress. An empty list allows every destination.</td>
+		</tr>
+		<tr>
+			<td id="networkPolicies--proxy--from"><a href="./values.yaml#L1377">networkPolicies.proxy.from</a></td>
+			<td>
+list
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+[]
+</pre>
+</div>
+			</td>
+			<td>Source peers allowed to reach the proxy, whichever way it is exposed (LoadBalancer, NodePort, Ingress, Route, Gateway API, upstream auth). An empty list allows any source. For an in-cluster ingress controller select its namespace, e.g. `[{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: ingress-nginx}}}]`; for an external load balancer or ingress use its source range, e.g. `[{ipBlock: {cidr: 192.0.2.0/24}}]`.</td>
+		</tr>
+		<tr>
+			<td id="networkPolicies--rdpGateway--from"><a href="./values.yaml#L1380">networkPolicies.rdpGateway.from</a></td>
+			<td>
+list
+</td>
+			<td>
+				<div style="max-width: 520px;">
+<pre lang="json">
+[]
+</pre>
+</div>
+			</td>
+			<td>Source peers allowed to reach the RDP Gateway's external RDP port (3389) when directRdpService.enabled or tcpRoute.enabled is true. An empty list allows any source.</td>
 		</tr>
 		<tr>
 			<td id="nginxResolver"><a href="./values.yaml#L65">nginxResolver</a></td>
@@ -3095,7 +3657,7 @@ string
 			<td>Set the access URL to be used for the Kasm deployment. This is the URL you will use to access your Kasm deployment. This URL can be a private address, it just needs to be resolvable by systems you use to interface with Kasm.  If you create a self-signed or custom certificate, this is the value you should assign as the Common Name associated with the certificate. If `certificate.certManager.enabled` is set to true, this is the name used to generate the certificate. </td>
 		</tr>
 		<tr>
-			<td id="restartPolicy"><a href="./values.yaml#L1348">restartPolicy</a></td>
+			<td id="restartPolicy"><a href="./values.yaml#L1441">restartPolicy</a></td>
 			<td>
 string
 </td>

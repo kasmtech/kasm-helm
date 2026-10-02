@@ -325,11 +325,13 @@ e2e_group_c:
           - e2e-externaldb
           - e2e-upstream-sa
 
-# Group D: upstream-preseed only.  Verifies upstreamAuth.hostname falls
-# back for the primary zone while a zone-level upstream_auth_address
-# override is preserved (kasm.zoneUpstreamAuthAddress) — kept in its own
-# group rather than folded into an existing one to avoid growing any
-# single stage's peak load past the four-per-group budget above.
+# Group D: upstream-preseed and networkpolicy.  upstream-preseed verifies
+# upstreamAuth.hostname falls back for the primary zone while a zone-level
+# upstream_auth_address override is preserved (kasm.zoneUpstreamAuthAddress).
+# networkpolicy installs with NetworkPolicies enabled and probes enforcement,
+# customization and the upgrade hooks.  Both are kept in their own group rather
+# than folded into an existing one to avoid growing any single stage's peak
+# load past the four-per-group budget above.
 e2e_group_d:
   extends: .e2e_kind_base
   stage: e2e_group_d
@@ -337,3 +339,4 @@ e2e_group_d:
     matrix:
       - E2E_TARGET:
           - e2e-upstream-preseed
+          - e2e-networkpolicy
