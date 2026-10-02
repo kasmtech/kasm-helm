@@ -106,6 +106,12 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
+        {{- if .Values.isOpenshift }}
+        - protocol: UDP
+          port: 5353
+        - protocol: TCP
+          port: 5353
+        {{- end }}
 {{- end }}
 {{- if $np.externalEgress.enabled }}
 ---

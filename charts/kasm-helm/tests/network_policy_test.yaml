@@ -909,6 +909,48 @@ tests:
             - protocol: TCP
               port: 53
 
+  - it: dns egress also allows UDP and TCP 5353 on OpenShift
+    template: templates/networkpolicies.yaml
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-network-policy-dns-egress
+    set:
+      isOpenshift: true
+      networkPolicies:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.egress[0].ports
+          value:
+            - protocol: UDP
+              port: 53
+            - protocol: TCP
+              port: 53
+            - protocol: UDP
+              port: 5353
+            - protocol: TCP
+              port: 5353
+
+  - it: dns egress adds 5353 on OpenShift even when dns.to is set
+    template: templates/networkpolicies.yaml
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-network-policy-dns-egress
+    set:
+      isOpenshift: true
+      networkPolicies:
+        enabled: true
+        dns:
+          to:
+            - ipBlock:
+                cidr: 192.0.2.53/32
+    asserts:
+      - contains:
+          path: spec.egress[0].ports
+          content:
+            protocol: UDP
+            port: 5353
+
   - it: global labels, annotations and extraLabels/extraAnnotations.networkPolicy are applied
     template: templates/networkpolicies.yaml
     documentSelector:
