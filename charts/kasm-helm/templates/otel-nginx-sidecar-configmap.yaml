@@ -1,7 +1,7 @@
 {{/*
 Collector config for the nginx pods' sidecar. Rendered once per consumer (Kasm Proxy Deployment,
-Kasm Connection Proxy StatefulSet) because each needs its own resource["service.name"]/
-attributes["application"] baked into the syslog receiver operator chains (kasm.otelNginxAccessLogOperators,
+Kasm Connection Proxy StatefulSet) because each needs its own resource["service.name"] baked
+into the syslog receiver operator chains (kasm.otelNginxAccessLogOperators,
 kasm.otelNginxErrorLogOperators) so their logs are distinguishable in ClickHouse. Everything else is
 identical between the two; the gateway endpoint is supplied per-pod through
 OTEL_EXPORTER_OTLP_ENDPOINT by kasm.otelSidecar.

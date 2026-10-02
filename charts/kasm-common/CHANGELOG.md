@@ -10,7 +10,7 @@ All notable changes to the kasm-common chart are documented here.
 
 ### Changed
 
-- `kasm.common.otelNginxAccessLogOperators` drops `query_string` and rebuilds the request line without it, stores `url.path`/`http.request.method`/`http.response.status_code` under flat keys instead of nested objects, tags the session websocket close row as `kasm.session.client_detached`.
+- `kasm.common.otelNginxAccessLogOperators` drops `query_string` and rebuilds the request line without it, stores `url.path`/`http.request.method`/`http.response.status_code` under flat keys instead of nested objects, tags the session websocket close row as `kasm.session.client_detached`, and no longer adds an `application` attribute.
 
 ### Fixed
 

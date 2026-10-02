@@ -170,9 +170,9 @@ tests:
       - matchRegex:
           path: data["config.yaml"]
           pattern: 'field: resource\["service\.name"\]\s+value: kasm-proxy'
-      - matchRegex:
+      - notMatchRegex:
           path: data["config.yaml"]
-          pattern: 'field: attributes\["application"\]\s+value: kasm-proxy'
+          pattern: 'attributes\["application"\]'
       # Attribute keys are stored flat (bracket notation); a dotted `to:` would nest them and
       # ClickHouse would never populate LogAttributes['url.path'].
       - matchRegex:
@@ -209,9 +209,9 @@ tests:
       - matchRegex:
           path: data["config.yaml"]
           pattern: 'field: resource\["service\.name"\]\s+value: kasm-connection-proxy'
-      - matchRegex:
+      - notMatchRegex:
           path: data["config.yaml"]
-          pattern: 'field: attributes\["application"\]\s+value: kasm-connection-proxy'
+          pattern: 'attributes\["application"\]'
       - notMatchRegex:
           path: data["config.yaml"]
           pattern: 'value: kasm-proxy'

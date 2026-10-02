@@ -657,7 +657,7 @@ otlp:
   attributes.message, so the chain's json_parser reads from there instead of body.
   Args (dict):
     context     = root context (.)
-    serviceName = resource["service.name"]/attributes["application"] to stamp on every record
+    serviceName = resource["service.name"] to stamp on every record
                   (e.g. "kasm-proxy", "kasm-connection-proxy")
   Usage:
     operators:
@@ -736,9 +736,6 @@ otlp:
   field: attributes.detached_session_id
 - type: add
   field: resource["service.name"]
-  value: {{ $serviceName }}
-- type: add
-  field: attributes["application"]
   value: {{ $serviceName }}
 {{- end -}}
 
