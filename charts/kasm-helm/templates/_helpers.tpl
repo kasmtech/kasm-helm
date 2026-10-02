@@ -1531,3 +1531,31 @@ Dedup rules:
   value: /etc/ssl/certs/ca-certificates.crt
 {{- end }}
 {{- end }}
+
+{{/*
+  Refuse an upgrade that would replace the bundled database while still in initialize mode.
+
+  The database's StatefulSet is named per Kasm version (<release>-db-1-19-0), so a Kasm version bump
+  replaces it rather than updating it in place: the old StatefulSet is pruned and the new one starts
+  an empty database on the Postgres major it ships. The data moves through the pre-upgrade dump, which
+  renders under dbManagement.upgrade.enable.
+
+  With dbManagement.initialize left on instead, nothing dumps and nothing restores - the upgrade
+  initializes a fresh database over a live deployment and every setting, user and session record is
+  gone, with no error and no rollback.
+
+  lookup returns nothing during helm template and on a client-side dry run, so this fires only where
+  it can see the cluster: a real helm upgrade, or --dry-run=server.
+*/}}
+{{- define "kasm.validateDatabaseVersionChange" -}}
+{{- if and .Release.IsUpgrade (not .Values.database.standalone) .Values.dbManagement.initialize (not .Values.dbManagement.upgrade.enable) -}}
+  {{- $want := printf "%s-db-%s" .Release.Name (.Chart.AppVersion | replace "." "-") | trunc 63 | trimSuffix "-" -}}
+  {{- $found := (lookup "apps/v1" "StatefulSet" .Release.Namespace "") | default dict -}}
+  {{- range $sts := ($found.items | default list) -}}
+    {{- $labels := $sts.metadata.labels | default dict -}}
+    {{- if and (eq (index $labels "app.kubernetes.io/component") "db") (eq (index $labels "app.kubernetes.io/instance") $.Release.Name) (ne $sts.metadata.name $want) -}}
+      {{- fail (printf "This upgrade would replace the Kasm database and lose its data. The bundled database is named per Kasm version: %s is deployed now and this chart renders %s, so the current StatefulSet and its volume are removed and an empty database is initialized in their place. dbManagement.initialize is for a new deployment; to upgrade an existing one set dbManagement.initialize=false and dbManagement.upgrade.enable=true, which dumps the current database before the switch and restores it after. Refer to the upgrade procedures - https://some.upgrade.url" $sts.metadata.name $want) -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+{{- end -}}

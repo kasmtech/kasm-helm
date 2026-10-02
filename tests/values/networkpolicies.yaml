@@ -1,0 +1,32 @@
+deploymentSize: small
+
+dbManagement:
+  backupCron:
+    enabled: false
+
+imagePullSecrets:
+  enabled: true
+  name: kasm-test-regcred
+  username: test-user
+  password: test-
+  registry: ghcr.io
+
+components:
+  guac:
+    enabled: true
+  rdpGateway:
+    enabled: true
+  rdpHttpsGateway:
+    enabled: true
+
+directRdpService:
+  enabled: true
+  type: LoadBalancer
+  rdpAccessURL: rdp.example.com:3389
+
+networkPolicies:
+  enabled: true
+  proxy:
+    from:
+      - ipBlock:
+          cidr: 192.0.2.0/24

@@ -2,10 +2,29 @@
 
 All notable changes to the kasm-helm chart are documented here.
 
+## [1.1190.8] - 2026-10-02
+
+### Fixed
+
+- A Kasm version upgrade no longer deletes the database it is upgrading. The bundled database's StatefulSet is named per Kasm version, so an upgrade replaces it rather than updating it in place, and `database.storage.retentionPolicy.whenDeleted` defaulted to `Delete` - which took the old volume with the old StatefulSet and left the pre-upgrade dump as the only copy of the data. It now defaults to `Retain`, so the previous version's volume stays in the namespace as a fallback and can be removed by hand once the upgrade is confirmed good. <!-- hash:f75db3ee7bb6beee5922ca825ef32b1cea0a0c13 -->
+- An upgrade that would replace the database while `dbManagement.initialize` is still set now fails to render instead of silently initializing an empty database over a live deployment. `dbManagement.initialize` is for a new deployment; upgrading an existing one needs `dbManagement.initialize=false` with `dbManagement.upgrade.enable=true`, which dumps the current database before the switch and restores it after. Previously this combination produced no error, no rollback and no data. The check reads the deployed StatefulSet, so it applies to `helm upgrade` and `--dry-run=server`, and stays quiet during `helm template`. <!-- hash:f75db3ee7bb6beee5922ca825ef32b1cea0a0c13 -->
+- Preseeded image `docker_user`/`docker_token` values that look like a YAML flow mapping — for example, the `{iam}`/`{iam:<region>}` sentinel used to authenticate to Amazon ECR via an agent IAM role — were rendered unquoted and parsed as a mapping instead of a string, so they never reached the database as credentials. These two fields are now quoted when set, while still rendering as YAML `null` when unset. <!-- hash:34c6688b7963cd485c92c30f5271ac12a636683b --> <!-- hash:133d5132787213335e2d9372b54bf857b41a01bc --> <!-- hash:17ab92646b37d2461f16ac1b42f929cbe39c56b2 -->
+
+### Known Issues in Earlier Releases
+
+- **1.1190.7 and earlier, upgrading Kasm to a new version can delete the database.** The bundled database's StatefulSet is named per Kasm version, so a version upgrade replaces it instead of updating it in place, and `database.storage.retentionPolicy.whenDeleted` defaulted to `Delete` - which removed the old volume along with the old StatefulSet. If `dbManagement.initialize` was left set instead of following the upgrade procedure (`dbManagement.initialize=false` with `dbManagement.upgrade.enable=true`), the upgrade initialized an empty database over the live deployment and every setting, user and session record was lost, with no error and no rollback. <!-- hash:f42d0de9d937165acb5b77b2954657a99932f05a --> <!-- hash:ff60ea642436d4a78d82c1bd6e8b2ed3e2a0201a -->
+
+  On those versions, before upgrading Kasm: set `database.storage.retentionPolicy.whenDeleted=Retain` so the old volume survives, and follow the upgrade procedure rather than leaving `dbManagement.initialize` on. Both are fixed in this release - see Fixed, below.
+
+### Added
+
+- Adds optional NetworkPolicies (disabled by default) to restrict pod-to-pod traffic within the Kasm namespace; operators can enable and tune them via `values.yaml` to enforce network segmentation. <!-- hash:d6069311afeba843a4603f561e33ad6f5566e1c3 -->
+
 ## [1.1190.7] - 2026-09-22
 
 ### Added
 
+- Adds support for upstream authentication proxying and Gateway API-based ingress (HTTPRoute/TCPRoute/TLSRoute), giving operators a way to front Kasm with a Gateway API controller or external auth layer instead of relying solely on traditional Ingress. <!-- hash:bdf28c4b9ac649c7db8c380e925855bbd5eefb81 -->
 - Adds `httpRoute`, `tlsRoute` and `tcpRoute` Gateway API publishers for the front-door Kasm proxy and RDP Gateway, and an `upstreamAuth` section publishing the out-of-band management endpoint (`/api/`, `/manager_api/`) via a Service, Ingress, OpenShift Route, HTTPRoute or TLSRoute, one per zone.
 - Adds a global `serviceAccount` value with per-component overrides for `components.api` and `components.manager`, letting operators reference an existing ServiceAccount by name (e.g. EKS Pod Identity) or have the chart create one with custom annotations (e.g. IRSA's `eks.amazonaws.com/role-arn`). `extraAnnotations.serviceAccount` / `extraLabels.serviceAccount` can also target the rendered ServiceAccount, and `serviceAccount.annotations` values are now schema-validated as strings.
 

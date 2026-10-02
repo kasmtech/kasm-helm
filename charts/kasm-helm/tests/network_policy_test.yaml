@@ -1,0 +1,1018 @@
+suite: network policies
+templates:
+  - templates/networkpolicies.yaml
+  - templates/proxy-deployment.yaml
+  - templates/api-deployment.yaml
+  - templates/manager-deployment.yaml
+  - templates/guac-statefulset.yaml
+  - templates/rdp-gateway-deployment.yaml
+  - templates/rdp-https-gateway-statefulset.yaml
+  - templates/db-statefulset.yaml
+
+tests:
+  - it: renders nothing by default
+    template: templates/networkpolicies.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders the default policy set when enabled
+    template: templates/networkpolicies.yaml
+    set:
+      networkPolicies:
+        enabled: true
+    asserts:
+      - hasDocuments:
+          count: 12
+      - isKind:
+          of: NetworkPolicy
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-network-policy-default-deny
+        documentIndex: 0
+      - equal:
+          path: metadata.labels["app.kubernetes.io/part-of"]
+          value: kasm
+        documentIndex: 0
+
+  - it: omits the guac and rdp gateway policies when those components are disabled
+    template: templates/networkpolicies.yaml
+    set:
+      networkPolicies:
+        enabled: true
+      components:
+        guac:
+          enabled: false
+        rdpGateway:
+          enabled: false
+        rdpHttpsGateway:
+          enabled: false
+    asserts:
+      - hasDocuments:
+          count: 9
+      - lengthEqual:
+          path: spec.egress
+          count: 3
+        documentSelector:
+          path: metadata.name
+          value: RELEASE-NAME-network-policy-internal-egress
+      - equal:
+          path: spec.ingress[0].from[0].podSelector.matchExpressions[1].values
+          value: [proxy, manager]
+        documentSelector:
+          path: metadata.name
+          value: RELEASE-NAME-network-policy-api-ingress
+
+  - it: defaultDeny, dns and externalEgress can each be switched off
+    template: templates/networkpolicies.yaml
+    set:
+      networkPolicies:
+        enabled: true
+        defaultDeny:
+          enabled: false
+        dns:
+          enabled: false
+        externalEgress:
+          enabled: false
+    asserts:
+      - hasDocuments:
+          count: 9
+      - notExists:
+          path: spec.policyTypes[1]
+        documentSelector:
+          path: metadata.name
+          value: RELEASE-NAME-network-policy-internal-egress
+
+  - it: proxy ingress allows exactly the pod template containerPorts
+    template: templates/networkpolicies.yaml
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-network-policy-proxy-ingress
+    set:
+      networkPolicies:
+        enabled: true
+      components:
+        guac:
+          enabled: true
+        rdpGateway:
+          enabled: true
+        rdpHttpsGateway:
+          enabled: true
+    asserts:
+      - isKind:
+          of: NetworkPolicy
+      - equal:
+          path: spec.podSelector.matchLabels["app.kubernetes.io/component"]
+          value: proxy
+      - equal:
+          path: spec.ingress[0].ports
+          value:
+            - protocol: TCP
+              port: 8080
+            - protocol: TCP
+              port: 8443
+
+  - it: proxy pod template declares the containerPorts the ingress policy allows
+    template: templates/proxy-deployment.yaml
+    set:
+      components:
+        guac:
+          enabled: true
+        rdpGateway:
+          enabled: true
+        rdpHttpsGateway:
+          enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].containerPort
+          value: 8080
+      - equal:
+          path: spec.template.spec.containers[0].ports[1].containerPort
+          value: 8443
+
+  - it: api ingress allows exactly the pod template containerPorts
+    template: templates/networkpolicies.yaml
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-network-policy-api-ingress
+    set:
+      networkPolicies:
+        enabled: true
+      components:
+        guac:
+          enabled: true
+        rdpGateway:
+          enabled: true
+        rdpHttpsGateway:
+          enabled: true
+    asserts:
+      - isKind:
+          of: NetworkPolicy
+      - equal:
+          path: spec.podSelector.matchLabels["app.kubernetes.io/component"]
+          value: api
+      - equal:
+          path: spec.ingress[0].ports
+          value:
+            - protocol: TCP
+              port: 8080
+
+  - it: api pod template declares the containerPorts the ingress policy allows
+    template: templates/api-deployment.yaml
+    set:
+      components:
+        guac:
+          enabled: true
+        rdpGateway:
+          enabled: true
+        rdpHttpsGateway:
+          enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].containerPort
+          value: 8080
+
+  - it: manager ingress allows exactly the pod template containerPorts
+    template: templates/networkpolicies.yaml
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-network-policy-manager-ingress
+    set:
+      networkPolicies:
+        enabled: true
+      components:
+        guac:
+          enabled: true
+        rdpGateway:
+          enabled: true
+        rdpHttpsGateway:
+          enabled: true
+    asserts:
+      - isKind:
+          of: NetworkPolicy
+      - equal:
+          path: spec.podSelector.matchLabels["app.kubernetes.io/component"]
+          value: manager
+      - equal:
+          path: spec.ingress[0].ports
+          value:
+            - protocol: TCP
+              port: 8181
+
+  - it: manager pod template declares the containerPorts the ingress policy allows
+    template: templates/manager-deployment.yaml
+    set:
+      components:
+        guac:
+          enabled: true
+        rdpGateway:
+          enabled: true
+        rdpHttpsGateway:
+          enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].containerPort
+          value: 8181
+
+  - it: guac ingress allows exactly the pod template containerPorts
+    template: templates/networkpolicies.yaml
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-network-policy-guac-ingress
+    set:
+      networkPolicies:
+        enabled: true
+      components:
+        guac:
+          enabled: true
+        rdpGateway:
+          enabled: true
+        rdpHttpsGateway:
+          enabled: true
+    asserts:
+      - isKind:
+          of: NetworkPolicy
+      - equal:
+          path: spec.podSelector.matchLabels["app.kubernetes.io/component"]
+          value: guac
+      - equal:
+          path: spec.ingress[0].ports
+          value:
+            - protocol: TCP
+              port: 3000
+            - protocol: TCP
+              port: 9000
+
+  - it: guac pod template declares the containerPorts the ingress policy allows
+    template: templates/guac-statefulset.yaml
+    set:
+      components:
+        guac:
+          enabled: true
+        rdpGateway:
+          enabled: true
+        rdpHttpsGateway:
+          enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].containerPort
+          value: 3000
+      - equal:
+          path: spec.template.spec.containers[1].ports[0].containerPort
+          value: 9000
+
+  - it: rdp-gateway ingress allows exactly the pod template containerPorts
+    template: templates/networkpolicies.yaml
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-network-policy-rdp-gateway-ingress
+    set:
+      networkPolicies:
+        enabled: true
+      components:
+        guac:
+          enabled: true
+        rdpGateway:
+          enabled: true
+        rdpHttpsGateway:
+          enabled: true
+    asserts:
+      - isKind:
+          of: NetworkPolicy
+      - equal:
+          path: spec.podSelector.matchLabels["app.kubernetes.io/component"]
+          value: rdp-gateway
+      - equal:
+          path: spec.ingress[0].ports
+          value:
+            - protocol: TCP
+              port: 5555
+            - protocol: TCP
+              port: 9001
+
+  - it: rdp-gateway pod template declares the containerPorts the ingress policy allows
+    template: templates/rdp-gateway-deployment.yaml
+    set:
+      components:
+        guac:
+          enabled: true
+        rdpGateway:
+          enabled: true
+        rdpHttpsGateway:
+          enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].containerPort
+          value: 5555
+      - equal:
+          path: spec.template.spec.containers[1].ports[0].containerPort
+          value: 9001
+
+  - it: rdp-https-gateway ingress allows exactly the pod template containerPorts
+    template: templates/networkpolicies.yaml
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-network-policy-rdp-https-gateway-ingress
+    set:
+      networkPolicies:
+        enabled: true
+      components:
+        guac:
+          enabled: true
+        rdpGateway:
+          enabled: true
+        rdpHttpsGateway:
+          enabled: true
+    asserts:
+      - isKind:
+          of: NetworkPolicy
+      - equal:
+          path: spec.podSelector.matchLabels["app.kubernetes.io/component"]
+          value: rdp-https-gateway
+      - equal:
+          path: spec.ingress[0].ports
+          value:
+            - protocol: TCP
+              port: 9002
+
+  - it: rdp-https-gateway pod template declares the containerPorts the ingress policy allows
+    template: templates/rdp-https-gateway-statefulset.yaml
+    set:
+      components:
+        guac:
+          enabled: true
+        rdpGateway:
+          enabled: true
+        rdpHttpsGateway:
+          enabled: true
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].ports
+      - equal:
+          path: spec.template.spec.containers[1].ports[0].containerPort
+          value: 9002
+
+  - it: db ingress allows exactly the pod template containerPorts
+    template: templates/networkpolicies.yaml
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-network-policy-db-ingress
+    set:
+      networkPolicies:
+        enabled: true
+      components:
+        guac:
+          enabled: true
+        rdpGateway:
+          enabled: true
+        rdpHttpsGateway:
+          enabled: true
+    asserts:
+      - isKind:
+          of: NetworkPolicy
+      - equal:
+          path: spec.podSelector.matchLabels["app.kubernetes.io/component"]
+          value: db
+      - equal:
+          path: spec.ingress[0].ports
+          value:
+            - protocol: TCP
+              port: 5432
+
+  - it: db pod template declares the containerPorts the ingress policy allows
+    template: templates/db-statefulset.yaml
+    set:
+      components:
+        guac:
+          enabled: true
+        rdpGateway:
+          enabled: true
+        rdpHttpsGateway:
+          enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].containerPort
+          value: 5432
+
+  - it: proxy ingress is open to any source when proxy.from is empty
+    template: templates/networkpolicies.yaml
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-network-policy-proxy-ingress
+    set:
+      networkPolicies:
+        enabled: true
+    asserts:
+      - notExists:
+          path: spec.ingress[0].from
+
+  - it: proxy ingress is restricted to proxy.from when set
+    template: templates/networkpolicies.yaml
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-network-policy-proxy-ingress
+    set:
+      networkPolicies:
+        enabled: true
+        proxy:
+          from:
+            - ipBlock:
+                cidr: 192.0.2.0/24
+    asserts:
+      - equal:
+          path: spec.ingress[0].from[0].ipBlock.cidr
+          value: 192.0.2.0/24
+
+  - it: proxy ingress admits guac, rdp-gateway and rdp-https-gateway on the http port
+    template: templates/networkpolicies.yaml
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-network-policy-proxy-ingress
+    set:
+      networkPolicies:
+        enabled: true
+        proxy:
+          from:
+            - ipBlock:
+                cidr: 192.0.2.0/24
+      components:
+        guac:
+          enabled: true
+        rdpGateway:
+          enabled: true
+        rdpHttpsGateway:
+          enabled: true
+    asserts:
+      - equal:
+          path: spec.ingress[1].from[0].podSelector.matchExpressions[1].values
+          value: [guac, rdp-gateway, rdp-https-gateway]
+      - equal:
+          path: spec.ingress[1].ports
+          value:
+            - protocol: TCP
+              port: 8080
+
+  - it: proxy ingress is still rendered for Gateway API and upstreamAuth installs
+    template: templates/networkpolicies.yaml
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-network-policy-proxy-ingress
+    set:
+      publicAddr: kasm.example.com
+      networkPolicies:
+        enabled: true
+      proxyService:
+        type: ClusterIP
+      httpRoute:
+        enabled: true
+        parentRefs:
+          - name: kasm-gateway
+      upstreamAuth:
+        hostname: ua.example.com
+        httpRoute:
+          enabled: true
+          parentRefs:
+            - name: kasm-gateway
+    asserts:
+      - equal:
+          path: spec.ingress[0].ports[1].port
+          value: 8443
+
+  - it: rdp-gateway external RDP port is open to rdpGateway.from with directRdpService
+    template: templates/networkpolicies.yaml
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-network-policy-rdp-gateway-ingress
+    set:
+      networkPolicies:
+        enabled: true
+        rdpGateway:
+          from:
+            - ipBlock:
+                cidr: 198.51.100.0/24
+      components:
+        rdpGateway:
+          enabled: true
+      directRdpService:
+        enabled: true
+        type: LoadBalancer
+        rdpAccessURL: rdp.example.com:3389
+    asserts:
+      - equal:
+          path: spec.ingress[1].from[0].ipBlock.cidr
+          value: 198.51.100.0/24
+      - equal:
+          path: spec.ingress[1].ports
+          value:
+            - protocol: TCP
+              port: 3389
+
+  - it: rdp-gateway external RDP port is also opened by tcpRoute
+    template: templates/networkpolicies.yaml
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-network-policy-rdp-gateway-ingress
+    set:
+      networkPolicies:
+        enabled: true
+      proxyService:
+        type: ClusterIP
+      components:
+        rdpGateway:
+          enabled: true
+      tcpRoute:
+        enabled: true
+        parentRefs:
+          - name: kasm-gateway
+    asserts:
+      - equal:
+          path: spec.ingress[1].ports[0].port
+          value: 3389
+      - notExists:
+          path: spec.ingress[1].from
+
+  - it: rdp-gateway has no external RDP rule without directRdpService or tcpRoute
+    template: templates/networkpolicies.yaml
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-network-policy-rdp-gateway-ingress
+    set:
+      networkPolicies:
+        enabled: true
+      components:
+        rdpGateway:
+          enabled: true
+    asserts:
+      - notExists:
+          path: spec.ingress[1]
+
+  - it: standalone database has no db ingress policy and egresses to standaloneTo
+    template: templates/networkpolicies.yaml
+    set:
+      networkPolicies:
+        enabled: true
+        database:
+          standaloneTo:
+            - ipBlock:
+                cidr: 203.0.113.10/32
+      database:
+        standalone: true
+        hostname: db.example.com
+    asserts:
+      - hasDocuments:
+          count: 11
+      - equal:
+          path: spec.egress[0].to[0].ipBlock.cidr
+          value: 203.0.113.10/32
+        documentSelector:
+          path: metadata.name
+          value: RELEASE-NAME-network-policy-database-egress
+      - equal:
+          path: spec.egress[0].ports[0].port
+          value: 5432
+        documentSelector:
+          path: metadata.name
+          value: RELEASE-NAME-network-policy-database-egress
+
+  - it: in-release database egress targets the db pods
+    template: templates/networkpolicies.yaml
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-network-policy-database-egress
+    set:
+      networkPolicies:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.egress[0].to[0].podSelector.matchLabels["app.kubernetes.io/component"]
+          value: db
+
+  - it: per-component enabled false swaps the restrictive policy for allow-all ingress
+    template: templates/networkpolicies.yaml
+    set:
+      networkPolicies:
+        enabled: true
+        components:
+          api:
+            enabled: false
+          db:
+            enabled: false
+    asserts:
+      - hasDocuments:
+          count: 12
+      - equal:
+          path: spec.ingress
+          value:
+            - {}
+        documentSelector:
+          path: metadata.name
+          value: RELEASE-NAME-network-policy-api-ingress-allow-all
+      - equal:
+          path: spec.podSelector.matchLabels["app.kubernetes.io/component"]
+          value: api
+        documentSelector:
+          path: metadata.name
+          value: RELEASE-NAME-network-policy-api-ingress-allow-all
+      - equal:
+          path: spec.policyTypes
+          value:
+            - Ingress
+        documentSelector:
+          path: metadata.name
+          value: RELEASE-NAME-network-policy-db-ingress-allow-all
+      - equal:
+          path: spec.podSelector.matchLabels["app.kubernetes.io/component"]
+          value: db
+        documentSelector:
+          path: metadata.name
+          value: RELEASE-NAME-network-policy-db-ingress-allow-all
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-network-policy-manager-ingress
+        documentIndex: 7
+
+  - it: per-component enabled false renders no restrictive ingress policy for that component
+    template: templates/networkpolicies.yaml
+    set:
+      networkPolicies:
+        enabled: true
+        components:
+          api:
+            enabled: false
+    asserts:
+      - notExists:
+          path: spec.ingress[0].from
+        documentSelector:
+          path: metadata.name
+          value: RELEASE-NAME-network-policy-api-ingress-allow-all
+      - notEqual:
+          path: metadata.name
+          value: RELEASE-NAME-network-policy-api-ingress
+        documentIndex: 6
+
+  - it: no allow-all policy for a component that is not deployed
+    template: templates/networkpolicies.yaml
+    set:
+      networkPolicies:
+        enabled: true
+        components:
+          guac:
+            enabled: false
+      components:
+        guac:
+          enabled: false
+    asserts:
+      - hasDocuments:
+          count: 11
+
+  - it: proxy.from with a namespaceSelector renders exactly that peer on the proxy rule
+    template: templates/networkpolicies.yaml
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-network-policy-proxy-ingress
+    set:
+      networkPolicies:
+        enabled: true
+        proxy:
+          from:
+            - namespaceSelector:
+                matchLabels:
+                  kubernetes.io/metadata.name: ingress-nginx
+    asserts:
+      - equal:
+          path: spec.ingress[0].from
+          value:
+            - namespaceSelector:
+                matchLabels:
+                  kubernetes.io/metadata.name: ingress-nginx
+
+  - it: extraIngress and extraEgress are appended per component
+    template: templates/networkpolicies.yaml
+    set:
+      networkPolicies:
+        enabled: true
+        components:
+          manager:
+            extraIngress:
+              - from:
+                  - ipBlock:
+                      cidr: 192.0.2.5/32
+                ports:
+                  - protocol: TCP
+                    port: 8181
+            extraEgress:
+              - to:
+                  - ipBlock:
+                      cidr: 192.0.2.6/32
+    asserts:
+      - hasDocuments:
+          count: 13
+      - equal:
+          path: spec.ingress[1].from[0].ipBlock.cidr
+          value: 192.0.2.5/32
+        documentSelector:
+          path: metadata.name
+          value: RELEASE-NAME-network-policy-manager-ingress
+      - equal:
+          path: spec.policyTypes
+          value: [Egress]
+        documentSelector:
+          path: metadata.name
+          value: RELEASE-NAME-network-policy-manager-egress
+      - equal:
+          path: spec.egress[0].to[0].ipBlock.cidr
+          value: 192.0.2.6/32
+        documentSelector:
+          path: metadata.name
+          value: RELEASE-NAME-network-policy-manager-egress
+
+  - it: dns egress defaults to kube-dns
+    template: templates/networkpolicies.yaml
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-network-policy-dns-egress
+    set:
+      networkPolicies:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.egress[0].to[0].podSelector.matchLabels["k8s-app"]
+          value: kube-dns
+
+  - it: dns egress uses openshift-dns on OpenShift
+    template: templates/networkpolicies.yaml
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-network-policy-dns-egress
+    set:
+      isOpenshift: true
+      networkPolicies:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.egress[0].to[0].namespaceSelector.matchLabels["kubernetes.io/metadata.name"]
+          value: openshift-dns
+
+  - it: dns.to overrides the auto-detected peers
+    template: templates/networkpolicies.yaml
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-network-policy-dns-egress
+    set:
+      networkPolicies:
+        enabled: true
+        dns:
+          to:
+            - ipBlock:
+                cidr: 192.0.2.53/32
+    asserts:
+      - equal:
+          path: spec.egress[0].to[0].ipBlock.cidr
+          value: 192.0.2.53/32
+
+  - it: db ingress and database egress name every db client
+    template: templates/networkpolicies.yaml
+    set:
+      networkPolicies:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.ingress[0].from[0].podSelector.matchExpressions[1].values
+          value: [api, manager, db-init, db-upgrade, pre-upgrade-backup, db-backup]
+        documentSelector:
+          path: metadata.name
+          value: RELEASE-NAME-network-policy-db-ingress
+      - equal:
+          path: spec.podSelector.matchExpressions[1].values
+          value: [api, manager, db-init, db-upgrade, pre-upgrade-backup, db-backup]
+        documentSelector:
+          path: metadata.name
+          value: RELEASE-NAME-network-policy-database-egress
+
+  - it: internal egress targets every component and port
+    template: templates/networkpolicies.yaml
+    set:
+      networkPolicies:
+        enabled: true
+    asserts:
+      - lengthEqual:
+          path: spec.egress
+          count: 6
+        documentSelector:
+          path: metadata.name
+          value: RELEASE-NAME-network-policy-internal-egress
+      - equal:
+          path: spec.egress[0].to[0].podSelector.matchLabels["app.kubernetes.io/component"]
+          value: proxy
+        documentSelector:
+          path: metadata.name
+          value: RELEASE-NAME-network-policy-internal-egress
+      - equal:
+          path: spec.egress[0].ports
+          value:
+            - protocol: TCP
+              port: 8080
+            - protocol: TCP
+              port: 8443
+        documentSelector:
+          path: metadata.name
+          value: RELEASE-NAME-network-policy-internal-egress
+      - equal:
+          path: spec.egress[1].to[0].podSelector.matchLabels["app.kubernetes.io/component"]
+          value: api
+        documentSelector:
+          path: metadata.name
+          value: RELEASE-NAME-network-policy-internal-egress
+      - equal:
+          path: spec.egress[1].ports
+          value:
+            - protocol: TCP
+              port: 8080
+        documentSelector:
+          path: metadata.name
+          value: RELEASE-NAME-network-policy-internal-egress
+      - equal:
+          path: spec.egress[2].to[0].podSelector.matchLabels["app.kubernetes.io/component"]
+          value: manager
+        documentSelector:
+          path: metadata.name
+          value: RELEASE-NAME-network-policy-internal-egress
+      - equal:
+          path: spec.egress[2].ports
+          value:
+            - protocol: TCP
+              port: 8181
+        documentSelector:
+          path: metadata.name
+          value: RELEASE-NAME-network-policy-internal-egress
+      - equal:
+          path: spec.egress[3].to[0].podSelector.matchLabels["app.kubernetes.io/component"]
+          value: guac
+        documentSelector:
+          path: metadata.name
+          value: RELEASE-NAME-network-policy-internal-egress
+      - equal:
+          path: spec.egress[3].ports
+          value:
+            - protocol: TCP
+              port: 3000
+            - protocol: TCP
+              port: 9000
+        documentSelector:
+          path: metadata.name
+          value: RELEASE-NAME-network-policy-internal-egress
+      - equal:
+          path: spec.egress[4].to[0].podSelector.matchLabels["app.kubernetes.io/component"]
+          value: rdp-gateway
+        documentSelector:
+          path: metadata.name
+          value: RELEASE-NAME-network-policy-internal-egress
+      - equal:
+          path: spec.egress[4].ports
+          value:
+            - protocol: TCP
+              port: 5555
+            - protocol: TCP
+              port: 9001
+        documentSelector:
+          path: metadata.name
+          value: RELEASE-NAME-network-policy-internal-egress
+      - equal:
+          path: spec.egress[5].to[0].podSelector.matchLabels["app.kubernetes.io/component"]
+          value: rdp-https-gateway
+        documentSelector:
+          path: metadata.name
+          value: RELEASE-NAME-network-policy-internal-egress
+      - equal:
+          path: spec.egress[5].ports
+          value:
+            - protocol: TCP
+              port: 9002
+        documentSelector:
+          path: metadata.name
+          value: RELEASE-NAME-network-policy-internal-egress
+
+  - it: dns egress allows UDP and TCP 53
+    template: templates/networkpolicies.yaml
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-network-policy-dns-egress
+    set:
+      networkPolicies:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.egress[0].ports
+          value:
+            - protocol: UDP
+              port: 53
+            - protocol: TCP
+              port: 53
+
+  - it: dns egress also allows UDP and TCP 5353 on OpenShift
+    template: templates/networkpolicies.yaml
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-network-policy-dns-egress
+    set:
+      isOpenshift: true
+      networkPolicies:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.egress[0].ports
+          value:
+            - protocol: UDP
+              port: 53
+            - protocol: TCP
+              port: 53
+            - protocol: UDP
+              port: 5353
+            - protocol: TCP
+              port: 5353
+
+  - it: dns egress adds 5353 on OpenShift even when dns.to is set
+    template: templates/networkpolicies.yaml
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-network-policy-dns-egress
+    set:
+      isOpenshift: true
+      networkPolicies:
+        enabled: true
+        dns:
+          to:
+            - ipBlock:
+                cidr: 192.0.2.53/32
+    asserts:
+      - contains:
+          path: spec.egress[0].ports
+          content:
+            protocol: UDP
+            port: 5353
+
+  - it: global labels, annotations and extraLabels/extraAnnotations.networkPolicy are applied
+    template: templates/networkpolicies.yaml
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-network-policy-default-deny
+    set:
+      networkPolicies:
+        enabled: true
+      labels:
+        example.com/global: g
+      annotations:
+        example.com/global-note: g
+      extraLabels:
+        networkPolicy:
+          example.com/np: "true"
+      extraAnnotations:
+        networkPolicy:
+          example.com/np-note: "true"
+    asserts:
+      - equal:
+          path: metadata.labels["example.com/global"]
+          value: g
+      - equal:
+          path: metadata.labels["example.com/np"]
+          value: "true"
+      - equal:
+          path: metadata.annotations["example.com/global-note"]
+          value: g
+      - equal:
+          path: metadata.annotations["example.com/np-note"]
+          value: "true"
+
+  - it: policy names stay within 63 characters with a long release name
+    template: templates/networkpolicies.yaml
+    release:
+      name: a-very-long-release-name-of-fifty-three-chars-1234567
+    set:
+      networkPolicies:
+        enabled: true
+      components:
+        rdpHttpsGateway:
+          enabled: true
+    asserts:
+      - matchRegex:
+          path: metadata.name
+          pattern: '^.{1,63}$'
+        documentIndex: 0
+      - matchRegex:
+          path: metadata.name
+          pattern: '^.{1,63}$'
+        documentIndex: 10
+      - matchRegex:
+          path: metadata.name
+          pattern: 'network-policy-rdp-https-gateway-ingress$'
+        documentIndex: 10
+
+  - it: schema rejects an unknown key under networkPolicies
+    template: templates/networkpolicies.yaml
+    set:
+      networkPolicies:
+        enabled: true
+        extraPolicies: []
+    asserts:
+      - failedTemplate:
+          errorPattern: "networkPolicies"

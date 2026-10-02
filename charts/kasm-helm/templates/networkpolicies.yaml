@@ -1,0 +1,270 @@
+{{/*
+  Opt-in NetworkPolicies (networkPolicies.enabled). Selectors use the instance + component
+  labels only, so one policy per component covers every zone. Allowed ports for a component are
+  the containerPorts declared on its pod template (nginx sidecars included).
+*/}}
+
+{{- define "kasm.networkPolicy.name" -}}
+{{- $tail := printf "-network-policy-%s" (index . 1) -}}
+{{- printf "%s%s" ((index . 0).Release.Name | trunc (int (sub 63 (len $tail))) | trimSuffix "-") $tail -}}
+{{- end -}}
+
+{{- define "kasm.networkPolicy.metadata" -}}
+{{- include "kasm.metadata" (dict "context" (index . 0) "component" "network-policy" "resource" "networkPolicy" "name" (include "kasm.networkPolicy.name" .) "include" "all") -}}
+{{- end -}}
+
+{{- define "kasm.networkPolicy.selector" -}}
+matchLabels:
+  app.kubernetes.io/instance: {{ .context.Release.Name }}
+  app.kubernetes.io/component: {{ .component }}
+{{- end -}}
+
+{{- define "kasm.networkPolicy.selectorIn" -}}
+matchExpressions:
+  - key: app.kubernetes.io/instance
+    operator: In
+    values:
+      - {{ .context.Release.Name | quote }}
+  - key: app.kubernetes.io/component
+    operator: In
+    values:
+      {{- range .components }}
+      - {{ . | quote }}
+      {{- end }}
+{{- end -}}
+
+{{- define "kasm.networkPolicy.ports" -}}
+ports:
+  {{- range . }}
+  - protocol: TCP
+    port: {{ . }}
+  {{- end }}
+{{- end -}}
+
+{{- if .Values.networkPolicies.enabled -}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $np := .Values.networkPolicies -}}
+{{- $comps := dict
+  "proxy" (dict "label" "proxy" "deployed" true "ports" (list $constants.proxy.http $constants.proxy.https))
+  "api" (dict "label" "api" "deployed" true "ports" (list $constants.api.port))
+  "manager" (dict "label" "manager" "deployed" true "ports" (list $constants.manager.port))
+  "guac" (dict "label" "guac" "deployed" .Values.components.guac.enabled "ports" (list $constants.guac.port $constants.guac.nginxPort))
+  "rdpGateway" (dict "label" "rdp-gateway" "deployed" .Values.components.rdpGateway.enabled "ports" (list $constants.rdpGateway.port $constants.rdpGateway.nginxPort))
+  "rdpHttpsGateway" (dict "label" "rdp-https-gateway" "deployed" .Values.components.rdpHttpsGateway.enabled "ports" (list $constants.rdpHttpsGateway.nginxPort))
+  "db" (dict "label" "db" "deployed" (not .Values.database.standalone) "ports" (list $constants.db.port))
+-}}
+{{- $order := list "proxy" "api" "manager" "guac" "rdpGateway" "rdpHttpsGateway" "db" -}}
+{{- $ingressFrom := dict
+  "api" (list "proxy" "manager" "guac" "rdpGateway" "rdpHttpsGateway")
+  "manager" (list "proxy" "api")
+  "guac" (list "proxy")
+  "rdpGateway" (list "proxy")
+  "rdpHttpsGateway" (list "proxy")
+-}}
+{{- $dbClients := list "api" "manager" "db-init" "db-upgrade" "pre-upgrade-backup" "db-backup" -}}
+{{- $dnsTo := $np.dns.to | default (list) -}}
+{{- if empty $dnsTo -}}
+  {{- if .Values.isOpenshift -}}
+    {{- $dnsTo = list (dict "namespaceSelector" (dict "matchLabels" (dict "kubernetes.io/metadata.name" "openshift-dns")) "podSelector" (dict "matchLabels" (dict "dns.operator.openshift.io/daemonset-dns" "default"))) -}}
+  {{- else -}}
+    {{- $dnsTo = list (dict "namespaceSelector" (dict "matchLabels" (dict "kubernetes.io/metadata.name" "kube-system")) "podSelector" (dict "matchLabels" (dict "k8s-app" "kube-dns"))) -}}
+  {{- end -}}
+{{- end -}}
+{{- if $np.defaultDeny.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  {{- include "kasm.networkPolicy.metadata" (list . "default-deny") | nindent 2 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/part-of: kasm
+  policyTypes:
+    - Ingress
+    - Egress
+{{- end }}
+{{- if $np.dns.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  {{- include "kasm.networkPolicy.metadata" (list . "dns-egress") | nindent 2 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/part-of: kasm
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        {{- toYaml $dnsTo | nindent 8 }}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+        {{- if .Values.isOpenshift }}
+        - protocol: UDP
+          port: 5353
+        - protocol: TCP
+          port: 5353
+        {{- end }}
+{{- end }}
+{{- if $np.externalEgress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  {{- include "kasm.networkPolicy.metadata" (list . "external-egress") | nindent 2 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/part-of: kasm
+  policyTypes:
+    - Egress
+  egress:
+    - {{- with $np.externalEgress.to }}
+      to:
+        {{- toYaml . | nindent 8 }}
+      {{- else }} {}
+      {{- end }}
+{{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  {{- include "kasm.networkPolicy.metadata" (list . "internal-egress") | nindent 2 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/part-of: kasm
+  policyTypes:
+    - Egress
+  egress:
+    {{- range $key := without $order "db" }}
+    {{- $c := get $comps $key }}
+    {{- if $c.deployed }}
+    - to:
+        - podSelector:
+            {{- include "kasm.networkPolicy.selector" (dict "context" $ "component" $c.label) | nindent 12 }}
+      {{- include "kasm.networkPolicy.ports" $c.ports | nindent 6 }}
+    {{- end }}
+    {{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  {{- include "kasm.networkPolicy.metadata" (list . "database-egress") | nindent 2 }}
+spec:
+  podSelector:
+    {{- include "kasm.networkPolicy.selectorIn" (dict "context" . "components" $dbClients) | nindent 4 }}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+      {{- if .Values.database.standalone }}
+        {{- toYaml $np.database.standaloneTo | nindent 8 }}
+      {{- else }}
+        - podSelector:
+            {{- include "kasm.networkPolicy.selector" (dict "context" . "component" "db") | nindent 12 }}
+      {{- end }}
+      {{- include "kasm.networkPolicy.ports" (list $constants.db.port) | nindent 6 }}
+{{- range $key := $order }}
+{{- $c := get $comps $key }}
+{{- $cnp := get $np.components $key }}
+{{- if and $c.deployed (not $cnp.enabled) }}
+{{- /* Opted out: allow all ingress so default-deny does not close the component to its own clients. */}}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  {{- include "kasm.networkPolicy.metadata" (list $ (printf "%s-ingress-allow-all" $c.label)) | nindent 2 }}
+spec:
+  podSelector:
+    {{- include "kasm.networkPolicy.selector" (dict "context" $ "component" $c.label) | nindent 4 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - {}
+{{- end }}
+{{- if and $c.deployed $cnp.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  {{- include "kasm.networkPolicy.metadata" (list $ (printf "%s-ingress" $c.label)) | nindent 2 }}
+spec:
+  podSelector:
+    {{- include "kasm.networkPolicy.selector" (dict "context" $ "component" $c.label) | nindent 4 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    {{- if eq $key "proxy" }}
+    {{- /* Anything may reach the proxy when proxy.from is empty, whatever the exposure mode. */}}
+    - {{- with $np.proxy.from }}
+      from:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- include "kasm.networkPolicy.ports" $c.ports | nindent 6 }}
+    {{- /* guac, rdp-gateway and rdp-https-gateway call the proxy service on its http port. */}}
+    {{- $callers := list }}
+    {{- range $k := list "guac" "rdpGateway" "rdpHttpsGateway" }}
+      {{- if (get $comps $k).deployed }}
+        {{- $callers = append $callers (get $comps $k).label }}
+      {{- end }}
+    {{- end }}
+    {{- if $callers }}
+    - from:
+        - podSelector:
+            {{- include "kasm.networkPolicy.selectorIn" (dict "context" $ "components" $callers) | nindent 12 }}
+      {{- include "kasm.networkPolicy.ports" (list $constants.proxy.http) | nindent 6 }}
+    {{- end }}
+    {{- else }}
+    {{- $peers := list }}
+    {{- if eq $key "db" }}
+      {{- $peers = $dbClients }}
+    {{- else }}
+      {{- range $k := get $ingressFrom $key }}
+        {{- if (get $comps $k).deployed }}
+          {{- $peers = append $peers (get $comps $k).label }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+    - from:
+        - podSelector:
+            {{- include "kasm.networkPolicy.selectorIn" (dict "context" $ "components" $peers) | nindent 12 }}
+      {{- include "kasm.networkPolicy.ports" $c.ports | nindent 6 }}
+    {{- end }}
+    {{- if and (eq $key "rdpGateway") (or $.Values.directRdpService.enabled $.Values.tcpRoute.enabled) }}
+    {{- /* External RDP: the Service targetPort is the literal 3389 (rdp-gateway-service.yaml). */}}
+    - {{- with $np.rdpGateway.from }}
+      from:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- include "kasm.networkPolicy.ports" (list 3389) | nindent 6 }}
+    {{- end }}
+    {{- with $cnp.extraIngress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}
+{{- if and $c.deployed $cnp.enabled $cnp.extraEgress }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  {{- include "kasm.networkPolicy.metadata" (list $ (printf "%s-egress" $c.label)) | nindent 2 }}
+spec:
+  podSelector:
+    {{- include "kasm.networkPolicy.selector" (dict "context" $ "component" $c.label) | nindent 4 }}
+  policyTypes:
+    - Egress
+  egress:
+    {{- toYaml $cnp.extraEgress | nindent 4 }}
+{{- end }}
+{{- end }}
+{{- end }}

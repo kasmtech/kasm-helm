@@ -393,6 +393,55 @@ tests:
           path: stringData["custom_properties.yaml"]
           pattern: "uncompressed_size_mb:"
 
+  - it: docker_token and docker_user quote the {iam} sentinel so it renders as a string, not a mapping
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.images:
+        - name: "kasmweb/ubuntu-focal-desktop"
+          docker_registry: "123456789012.dkr.ecr.us-east-1.amazonaws.com"
+          docker_user: "{iam}"
+          docker_token: "{iam:us-east-1}"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'docker_user: "\{iam\}"'
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'docker_token: "\{iam:us-east-1\}"'
+
+  - it: docker_token and docker_user still render as YAML null when unset
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.images:
+        - name: "kasmweb/ubuntu-focal-desktop"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "docker_token: null"
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "docker_user: null"
+
   - it: zones include enable_rdp_direct_login
     set:
       publicAddr: kasm.example.com

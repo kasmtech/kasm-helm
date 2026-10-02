@@ -80,6 +80,12 @@
           "title": "job",
           "type": "object"
         },
+        "networkPolicy": {
+          "additionalProperties": true,
+          "description": "Additional NetworkPolicy annotations to apply to resources created by this chart",
+          "title": "networkPolicy",
+          "type": "object"
+        },
         "pod": {
           "additionalProperties": true,
           "description": "Additional pod annotations to apply to resources created by this chart",
@@ -125,6 +131,7 @@
         "cronPod",
         "deployment",
         "job",
+        "networkPolicy",
         "pod",
         "pvc",
         "service",
@@ -2053,6 +2060,12 @@
           "title": "job",
           "type": "object"
         },
+        "networkPolicy": {
+          "additionalProperties": true,
+          "description": "Additional NetworkPolicy labels to apply to resources created by this chart",
+          "title": "networkPolicy",
+          "type": "object"
+        },
         "pod": {
           "additionalProperties": true,
           "description": "Additional pod labels to apply to resources created by this chart",
@@ -2095,6 +2108,7 @@
       "required": [
         "configMap",
         "deployment",
+        "networkPolicy",
         "pod",
         "secret",
         "service",
@@ -2578,6 +2592,449 @@
       "type": "string",
       "required": [
         "publicAddr"
+      ]
+    },
+    "networkPolicies": {
+      "additionalProperties": false,
+      "description": "Opt-in NetworkPolicies for the Kasm pods of this release.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Render NetworkPolicy resources for the Kasm workloads",
+          "title": "enabled",
+          "type": "boolean"
+        },
+        "defaultDeny": {
+          "additionalProperties": false,
+          "description": "",
+          "properties": {
+            "enabled": {
+              "default": true,
+              "description": "Deny all ingress and egress for the release's Kasm pods unless another policy allows it",
+              "title": "enabled",
+              "type": "boolean"
+            }
+          },
+          "title": "defaultDeny",
+          "type": "object",
+          "required": [
+            "enabled"
+          ]
+        },
+        "dns": {
+          "additionalProperties": false,
+          "description": "",
+          "properties": {
+            "enabled": {
+              "default": true,
+              "description": "Allow DNS (UDP/TCP 53) egress for all Kasm pods",
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "to": {
+              "default": [],
+              "description": "DNS destination peers. Leave empty to use kube-system/kube-dns, or openshift-dns when isOpenshift is true.",
+              "items": {
+                "type": "object"
+              },
+              "title": "to",
+              "type": "array"
+            }
+          },
+          "title": "dns",
+          "type": "object",
+          "required": [
+            "enabled",
+            "to"
+          ]
+        },
+        "externalEgress": {
+          "additionalProperties": false,
+          "description": "",
+          "properties": {
+            "enabled": {
+              "default": true,
+              "description": "Allow external egress for all Kasm pods. With the default peer this leaves egress effectively open; narrow `to` to restrict it.",
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "to": {
+              "default": [
+                {
+                  "ipBlock": {
+                    "cidr": "0.0.0.0/0"
+                  }
+                }
+              ],
+              "description": "Destination peers for external egress. An empty list allows every destination.",
+              "items": {
+                "type": "object"
+              },
+              "title": "to",
+              "type": "array"
+            }
+          },
+          "title": "externalEgress",
+          "type": "object",
+          "required": [
+            "enabled",
+            "to"
+          ]
+        },
+        "database": {
+          "additionalProperties": false,
+          "description": "",
+          "properties": {
+            "standaloneTo": {
+              "default": [
+                {
+                  "ipBlock": {
+                    "cidr": "0.0.0.0/0"
+                  }
+                }
+              ],
+              "description": "Destination peers for database clients when database.standalone is true. Replace with pod/namespace selectors for an in-cluster external database.",
+              "items": {
+                "type": "object"
+              },
+              "title": "standaloneTo",
+              "type": "array"
+            }
+          },
+          "title": "database",
+          "type": "object",
+          "required": [
+            "standaloneTo"
+          ]
+        },
+        "proxy": {
+          "additionalProperties": false,
+          "description": "",
+          "properties": {
+            "from": {
+              "default": [],
+              "description": "Source peers allowed to reach the proxy, whichever way it is exposed (LoadBalancer, NodePort, Ingress, Route, Gateway API, upstream auth). An empty list allows any source. For an in-cluster ingress controller select its namespace, e.g. `[{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: ingress-nginx}}}]`; for an external load balancer or ingress use its source range, e.g. `[{ipBlock: {cidr: 192.0.2.0/24}}]`.",
+              "items": {
+                "type": "object"
+              },
+              "title": "from",
+              "type": "array"
+            }
+          },
+          "title": "proxy",
+          "type": "object",
+          "required": [
+            "from"
+          ]
+        },
+        "rdpGateway": {
+          "additionalProperties": false,
+          "description": "",
+          "properties": {
+            "from": {
+              "default": [],
+              "description": "Source peers allowed to reach the RDP Gateway's external RDP port (3389) when directRdpService.enabled or tcpRoute.enabled is true. An empty list allows any source.",
+              "items": {
+                "type": "object"
+              },
+              "title": "from",
+              "type": "array"
+            }
+          },
+          "title": "rdpGateway",
+          "type": "object",
+          "required": [
+            "from"
+          ]
+        },
+        "components": {
+          "additionalProperties": false,
+          "description": "Per-component ingress policy settings.",
+          "properties": {
+            "proxy": {
+              "additionalProperties": false,
+              "description": "Ingress policy settings for the Kasm proxy pods.",
+              "properties": {
+                "enabled": {
+                  "default": true,
+                  "description": "Render the restrictive ingress policy for this component. Set to `false` to allow all ingress to it instead (the rest of the release stays default-deny), e.g. to manage it yourself.",
+                  "title": "enabled",
+                  "type": "boolean"
+                },
+                "extraIngress": {
+                  "default": [],
+                  "description": "Raw NetworkPolicy ingress rules appended to this component's ingress policy.",
+                  "items": {
+                    "type": "object"
+                  },
+                  "title": "extraIngress",
+                  "type": "array"
+                },
+                "extraEgress": {
+                  "default": [],
+                  "description": "Raw NetworkPolicy egress rules. When set, a separate egress policy selecting this component's pods is rendered.",
+                  "items": {
+                    "type": "object"
+                  },
+                  "title": "extraEgress",
+                  "type": "array"
+                }
+              },
+              "title": "proxy",
+              "type": "object",
+              "required": [
+                "enabled",
+                "extraIngress",
+                "extraEgress"
+              ]
+            },
+            "api": {
+              "additionalProperties": false,
+              "description": "Ingress policy settings for the Kasm API pods.",
+              "properties": {
+                "enabled": {
+                  "default": true,
+                  "description": "Render the restrictive ingress policy for this component. Set to `false` to allow all ingress to it instead (the rest of the release stays default-deny), e.g. to manage it yourself.",
+                  "title": "enabled",
+                  "type": "boolean"
+                },
+                "extraIngress": {
+                  "default": [],
+                  "description": "Raw NetworkPolicy ingress rules appended to this component's ingress policy.",
+                  "items": {
+                    "type": "object"
+                  },
+                  "title": "extraIngress",
+                  "type": "array"
+                },
+                "extraEgress": {
+                  "default": [],
+                  "description": "Raw NetworkPolicy egress rules. When set, a separate egress policy selecting this component's pods is rendered.",
+                  "items": {
+                    "type": "object"
+                  },
+                  "title": "extraEgress",
+                  "type": "array"
+                }
+              },
+              "title": "api",
+              "type": "object",
+              "required": [
+                "enabled",
+                "extraIngress",
+                "extraEgress"
+              ]
+            },
+            "manager": {
+              "additionalProperties": false,
+              "description": "Ingress policy settings for the Kasm Manager pods.",
+              "properties": {
+                "enabled": {
+                  "default": true,
+                  "description": "Render the restrictive ingress policy for this component. Set to `false` to allow all ingress to it instead (the rest of the release stays default-deny), e.g. to manage it yourself.",
+                  "title": "enabled",
+                  "type": "boolean"
+                },
+                "extraIngress": {
+                  "default": [],
+                  "description": "Raw NetworkPolicy ingress rules appended to this component's ingress policy.",
+                  "items": {
+                    "type": "object"
+                  },
+                  "title": "extraIngress",
+                  "type": "array"
+                },
+                "extraEgress": {
+                  "default": [],
+                  "description": "Raw NetworkPolicy egress rules. When set, a separate egress policy selecting this component's pods is rendered.",
+                  "items": {
+                    "type": "object"
+                  },
+                  "title": "extraEgress",
+                  "type": "array"
+                }
+              },
+              "title": "manager",
+              "type": "object",
+              "required": [
+                "enabled",
+                "extraIngress",
+                "extraEgress"
+              ]
+            },
+            "guac": {
+              "additionalProperties": false,
+              "description": "Ingress policy settings for the Kasm Guacamole pods.",
+              "properties": {
+                "enabled": {
+                  "default": true,
+                  "description": "Render the restrictive ingress policy for this component. Set to `false` to allow all ingress to it instead (the rest of the release stays default-deny), e.g. to manage it yourself.",
+                  "title": "enabled",
+                  "type": "boolean"
+                },
+                "extraIngress": {
+                  "default": [],
+                  "description": "Raw NetworkPolicy ingress rules appended to this component's ingress policy.",
+                  "items": {
+                    "type": "object"
+                  },
+                  "title": "extraIngress",
+                  "type": "array"
+                },
+                "extraEgress": {
+                  "default": [],
+                  "description": "Raw NetworkPolicy egress rules. When set, a separate egress policy selecting this component's pods is rendered.",
+                  "items": {
+                    "type": "object"
+                  },
+                  "title": "extraEgress",
+                  "type": "array"
+                }
+              },
+              "title": "guac",
+              "type": "object",
+              "required": [
+                "enabled",
+                "extraIngress",
+                "extraEgress"
+              ]
+            },
+            "rdpGateway": {
+              "additionalProperties": false,
+              "description": "Ingress policy settings for the Kasm RDP Gateway pods.",
+              "properties": {
+                "enabled": {
+                  "default": true,
+                  "description": "Render the restrictive ingress policy for this component. Set to `false` to allow all ingress to it instead (the rest of the release stays default-deny), e.g. to manage it yourself.",
+                  "title": "enabled",
+                  "type": "boolean"
+                },
+                "extraIngress": {
+                  "default": [],
+                  "description": "Raw NetworkPolicy ingress rules appended to this component's ingress policy.",
+                  "items": {
+                    "type": "object"
+                  },
+                  "title": "extraIngress",
+                  "type": "array"
+                },
+                "extraEgress": {
+                  "default": [],
+                  "description": "Raw NetworkPolicy egress rules. When set, a separate egress policy selecting this component's pods is rendered.",
+                  "items": {
+                    "type": "object"
+                  },
+                  "title": "extraEgress",
+                  "type": "array"
+                }
+              },
+              "title": "rdpGateway",
+              "type": "object",
+              "required": [
+                "enabled",
+                "extraIngress",
+                "extraEgress"
+              ]
+            },
+            "rdpHttpsGateway": {
+              "additionalProperties": false,
+              "description": "Ingress policy settings for the Kasm RDP HTTPS Gateway pods.",
+              "properties": {
+                "enabled": {
+                  "default": true,
+                  "description": "Render the restrictive ingress policy for this component. Set to `false` to allow all ingress to it instead (the rest of the release stays default-deny), e.g. to manage it yourself.",
+                  "title": "enabled",
+                  "type": "boolean"
+                },
+                "extraIngress": {
+                  "default": [],
+                  "description": "Raw NetworkPolicy ingress rules appended to this component's ingress policy.",
+                  "items": {
+                    "type": "object"
+                  },
+                  "title": "extraIngress",
+                  "type": "array"
+                },
+                "extraEgress": {
+                  "default": [],
+                  "description": "Raw NetworkPolicy egress rules. When set, a separate egress policy selecting this component's pods is rendered.",
+                  "items": {
+                    "type": "object"
+                  },
+                  "title": "extraEgress",
+                  "type": "array"
+                }
+              },
+              "title": "rdpHttpsGateway",
+              "type": "object",
+              "required": [
+                "enabled",
+                "extraIngress",
+                "extraEgress"
+              ]
+            },
+            "db": {
+              "additionalProperties": false,
+              "description": "Ingress policy settings for the Kasm database pods.",
+              "properties": {
+                "enabled": {
+                  "default": true,
+                  "description": "Render the restrictive ingress policy for this component. Set to `false` to allow all ingress to it instead (the rest of the release stays default-deny), e.g. to manage it yourself.",
+                  "title": "enabled",
+                  "type": "boolean"
+                },
+                "extraIngress": {
+                  "default": [],
+                  "description": "Raw NetworkPolicy ingress rules appended to this component's ingress policy.",
+                  "items": {
+                    "type": "object"
+                  },
+                  "title": "extraIngress",
+                  "type": "array"
+                },
+                "extraEgress": {
+                  "default": [],
+                  "description": "Raw NetworkPolicy egress rules. When set, a separate egress policy selecting this component's pods is rendered.",
+                  "items": {
+                    "type": "object"
+                  },
+                  "title": "extraEgress",
+                  "type": "array"
+                }
+              },
+              "title": "db",
+              "type": "object",
+              "required": [
+                "enabled",
+                "extraIngress",
+                "extraEgress"
+              ]
+            }
+          },
+          "title": "components",
+          "type": "object",
+          "required": [
+            "proxy",
+            "api",
+            "manager",
+            "guac",
+            "rdpGateway",
+            "rdpHttpsGateway",
+            "db"
+          ]
+        }
+      },
+      "title": "networkPolicies",
+      "type": "object",
+      "required": [
+        "enabled",
+        "defaultDeny",
+        "dns",
+        "externalEgress",
+        "database",
+        "proxy",
+        "rdpGateway",
+        "components"
       ]
     },
     "restartPolicy": {
