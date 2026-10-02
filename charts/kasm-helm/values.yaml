@@ -558,6 +558,11 @@ database:
     # the old volume goes with the old StatefulSet, and the pre-upgrade dump is then the only copy of
     # the data. Retaining it leaves the previous version's volume in the namespace as a fallback, to
     # be removed by hand once the upgrade is confirmed good.
+    # A retained volume keeps the credentials it was initialized with. A plain uninstall and
+    # reinstall is safe, because the chart's password Secret outlives `helm uninstall` and is
+    # reused. If you delete that Secret to rotate passwords, also delete the old DB volume, or
+    # set `kasmSecrets.passwords` to the original values; otherwise the database rejects the
+    # new credentials.
     #
     retentionPolicy:
       whenDeleted: Retain
