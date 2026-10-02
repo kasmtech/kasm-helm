@@ -347,6 +347,17 @@ def _assert_core_telemetry(namespace: str, database: str) -> None:
     )
     LOGGER.info("[observability] kasm-proxy log rows with k8s.pod.name: %s", pod_name_count)
 
+    # The Admin UI's Server filter reads only host.name; the sidecar stamps the pod name so
+    # sidecar-collected rows are filterable alongside the SDK-emitted ones.
+    host_name_count = _wait_for_query_nonzero(
+        namespace,
+        database,
+        "SELECT count() FROM otel_logs WHERE ServiceName = 'kasm-proxy' "
+        "AND ResourceAttributes['host.name'] NOT IN ('', 'unknown')",
+        description="kasm-proxy otel_logs rows carry a real (non-fallback) host.name",
+    )
+    LOGGER.info("[observability] kasm-proxy log rows with host.name: %s", host_name_count)
+
     # Access-log fields are stored under flat semconv keys; the Admin UI and the gateway's
     # healthcheck filter both read LogAttributes['url.path'] directly.
     access_attr_count = _clickhouse_query(
@@ -372,6 +383,17 @@ def _assert_core_telemetry(namespace: str, database: str) -> None:
     assert int(query_string_count.splitlines()[0] or "0") == 0, (
         f"{query_string_count.strip()} kasm-proxy rows still carry a query string"
     )
+
+    # The gateway normalises SeverityText to the Python logging names the Admin UI's level
+    # cascade compares against, so no lowercase value or bare HTTP status code should remain.
+    severities = _clickhouse_query(
+        namespace,
+        database,
+        "SELECT DISTINCT SeverityText FROM otel_logs WHERE ServiceName = 'kasm-proxy' AND SeverityText != ''",
+    ).split()
+    unexpected = [s for s in severities if s != s.upper() or s.isdigit()]
+    assert not unexpected, f"kasm-proxy rows carry non-normalised SeverityText values: {unexpected}"
+    LOGGER.info("[observability] kasm-proxy SeverityText values: %s", severities)
 
     metrics_tables = _clickhouse_query(
         namespace,

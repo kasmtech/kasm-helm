@@ -611,6 +611,12 @@ resource:
     - key: k8s.pod.name
       value: "${env:POD_NAME:-unknown}"
       action: upsert
+    # The Admin UI's Server filter reads host.name and nothing else. The SDKs in the Kasm app
+    # containers report the pod name as their hostname, so sidecar-collected signals use the
+    # same name and every row of a pod is filterable together.
+    - key: host.name
+      value: "${env:POD_NAME:-unknown}"
+      action: upsert
     - key: service.namespace
       value: {{ $ctx.Release.Namespace | quote }}
       action: upsert

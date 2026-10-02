@@ -113,6 +113,24 @@ file-based caveat it can also recur on every sidecar restart, not just pod start
 nginx **traces** are unaffected by any of this — `ngx_otel_module` talks to the sidecar directly
 over the network as spans are emitted, with nothing to tail from a file.
 
+### Attributes the Admin UI relies on
+
+The Kasm Admin UI's Logging page and reporting views query ClickHouse by a small set of
+attributes. The chart's sidecars and gateway produce them; keep them intact if you post-process
+telemetry or supply your own gateway config (§9).
+
+| Attribute                                  | Set by                        | Read for                                                     |
+| ------------------------------------------ | ----------------------------- | ------------------------------------------------------------ |
+| `ServiceName` (`service.name`)             | every emitter and sidecar     | Application column, facet and filters                        |
+| `host.name`                                | SDKs (pod hostname), sidecars | Server filter; the sidecars stamp the pod name so proxy and DB rows match the API pods' naming |
+| `SeverityText`                             | gateway `transform/severity`  | Level cascade; normalised to the Python names (`WARNING`, `CRITICAL`, status codes mapped by class) |
+| `url.path`, `http.request.method`, `http.response.status_code` | nginx sidecar access-log chain | Request filters; stored as flat keys, never nested objects |
+| `kasm.metric_name` = `kasm.session.client_detached` | nginx sidecar (Kasm Proxy) | Session lifecycle reporting; carries `kasm.kasm.id` and `kasm.kasm.transition_ms` |
+
+Two things are deliberately absent: query strings (dropped at the sidecar before the request line
+is copied anywhere, and stripped from `kasm-proxy` span attributes at the gateway) and successful
+`/api/__healthcheck` rows (filtered at the gateway; failed probes are kept).
+
 ## 5. Using your own ClickHouse
 
 Set `observability.clickhouse.standalone: true` and point at an instance you already run:
@@ -309,6 +327,11 @@ illustrative rather than preset-derived), `examples/otel-collector-splunk.yaml` 
 exporter), or `examples/otel-collector-debug.yaml` (adds the `debug` stdout exporter from §3). All
 three are complete, applyable ConfigMaps for the gateway — the only OTel Collector tier in the
 chart.
+
+A BYO config inherits nothing from the chart's gateway template. Carry over its `transform/severity`,
+`filter/healthcheck` and `transform/nginx_scrub` processors (all three examples include them) or the
+Admin UI's level filter stops matching, healthcheck noise reaches storage, and `kasm-proxy` spans
+keep raw query strings. See §4, "Attributes the Admin UI relies on".
 
 ## 10. Disabling telemetry
 

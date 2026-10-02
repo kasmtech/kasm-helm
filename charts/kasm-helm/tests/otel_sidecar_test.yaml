@@ -231,7 +231,7 @@ tests:
           path: spec.template.spec.containers[1].volumeMounts[?(@.mountPath=="/var/lib/otelcol/checkpoints")]
         template: templates/db-statefulset.yaml
 
-  # ---------- kasm.zone / k8s.pod.name / service.namespace / deployment.environment ----------
+  # ---------- kasm.zone / k8s.pod.name / host.name / service.namespace / deployment.environment ----------
   # These identity attributes are stamped by a resource processor in the sidecar's own Collector
   # config (kasm.common.otelResourceProcessor), not by OTEL_RESOURCE_ATTRIBUTES: that SDK env var
   # is inert on a Collector container (see DECISIONS.md D4) and has been removed from the sidecar.
@@ -289,6 +289,11 @@ tests:
       - matchRegex:
           path: data["config.yaml"]
           pattern: 'key: k8s\.pod\.name\n\s+value: "\$\{env:POD_NAME:-unknown\}"'
+      # host.name is what the Admin UI's Server filter reads; the pod name matches what the
+      # SDKs in the app containers report as their hostname.
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'key: host\.name\n\s+value: "\$\{env:POD_NAME:-unknown\}"'
       - matchRegex:
           path: data["config.yaml"]
           pattern: 'key: kasm\.zone\n\s+value: "\$\{env:OTEL_KASM_ZONE:-unknown\}"'
@@ -311,6 +316,9 @@ tests:
       - matchRegex:
           path: data["config.yaml"]
           pattern: 'key: k8s\.pod\.name\n\s+value: "\$\{env:POD_NAME:-unknown\}"'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'key: host\.name\n\s+value: "\$\{env:POD_NAME:-unknown\}"'
       - notMatchRegex:
           path: data["config.yaml"]
           pattern: "kasm\\.zone"
