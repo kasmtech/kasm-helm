@@ -1553,7 +1553,7 @@ Dedup rules:
   {{- $found := (lookup "apps/v1" "StatefulSet" .Release.Namespace "") | default dict -}}
   {{- range $sts := ($found.items | default list) -}}
     {{- $labels := $sts.metadata.labels | default dict -}}
-    {{- if and (eq (index $labels "app.kubernetes.io/component") "db") (ne $sts.metadata.name $want) -}}
+    {{- if and (eq (index $labels "app.kubernetes.io/component") "db") (eq (index $labels "app.kubernetes.io/instance") $.Release.Name) (ne $sts.metadata.name $want) -}}
       {{- fail (printf "This upgrade would replace the Kasm database and lose its data. The bundled database is named per Kasm version: %s is deployed now and this chart renders %s, so the current StatefulSet and its volume are removed and an empty database is initialized in their place. dbManagement.initialize is for a new deployment; to upgrade an existing one set dbManagement.initialize=false and dbManagement.upgrade.enable=true, which dumps the current database before the switch and restores it after. Refer to the upgrade procedures - https://some.upgrade.url" $sts.metadata.name $want) -}}
     {{- end -}}
   {{- end -}}

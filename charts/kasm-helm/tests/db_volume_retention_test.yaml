@@ -36,3 +36,66 @@ tests:
       - matchRegex:
           path: spec.volumeClaimTemplates[0].metadata.name
           pattern: -database-9-8-7$
+
+  # The guard lists StatefulSets by namespace, so it has to ignore other releases' databases.
+  - it: does not fail on another release's database StatefulSet in the namespace
+    release:
+      upgrade: true
+    set:
+      dbManagement:
+        initialize: true
+        upgrade:
+          enable: false
+      database:
+        standalone: false
+    kubernetesProvider:
+      scheme:
+        "apps/v1/StatefulSet":
+          gvr:
+            group: apps
+            version: v1
+            resource: statefulsets
+          namespaced: true
+      objects:
+        - apiVersion: apps/v1
+          kind: StatefulSet
+          metadata:
+            name: other-db-1-18-0
+            namespace: NAMESPACE
+            labels:
+              app.kubernetes.io/component: db
+              app.kubernetes.io/instance: other
+    asserts:
+      - isKind:
+          of: StatefulSet
+
+  - it: fails on this release's database StatefulSet under a different name
+    release:
+      upgrade: true
+    set:
+      dbManagement:
+        initialize: true
+        upgrade:
+          enable: false
+      database:
+        standalone: false
+    kubernetesProvider:
+      scheme:
+        "apps/v1/StatefulSet":
+          gvr:
+            group: apps
+            version: v1
+            resource: statefulsets
+          namespaced: true
+      objects:
+        - apiVersion: apps/v1
+          kind: StatefulSet
+          metadata:
+            name: RELEASE-NAME-db-1-18-0
+            namespace: NAMESPACE
+            labels:
+              app.kubernetes.io/component: db
+              app.kubernetes.io/instance: RELEASE-NAME
+    asserts:
+      - failedTemplate:
+          errorPattern: would replace the Kasm database
