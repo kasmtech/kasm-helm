@@ -194,6 +194,17 @@ tests:
       - matchRegex:
           path: data["config.yaml"]
           pattern: 'request_line_path'
+      # The request-line regex_parser is send_quiet, so on a non-matching request the temp
+      # fields never exist; each remove must be guarded or stanza logs an error per record.
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'type: remove\n\s+if: ''attributes\["request_line_method"\] != nil''\n\s+field: attributes\.request_line_method'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'type: remove\n\s+if: ''attributes\["request_line_path"\] != nil''\n\s+field: attributes\.request_line_path'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'type: remove\n\s+if: ''attributes\["request_line_protocol"\] != nil''\n\s+field: attributes\.request_line_protocol'
       # The websocket close row is tagged as the client-detached lifecycle record.
       - matchRegex:
           path: data["config.yaml"]

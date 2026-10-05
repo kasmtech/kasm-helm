@@ -697,10 +697,13 @@ otlp:
   field: attributes["request"]
   value: 'EXPR(attributes["request_line_method"] != nil ? attributes["request_line_method"] + " " + attributes["request_line_path"] + " " + attributes["request_line_protocol"] : attributes["request"])'
 - type: remove
+  if: 'attributes["request_line_method"] != nil'
   field: attributes.request_line_method
 - type: remove
+  if: 'attributes["request_line_path"] != nil'
   field: attributes.request_line_path
 - type: remove
+  if: 'attributes["request_line_protocol"] != nil'
   field: attributes.request_line_protocol
 - type: add
   field: body
