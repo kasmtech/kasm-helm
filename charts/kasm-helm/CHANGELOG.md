@@ -22,6 +22,7 @@ See [Migrating to connection-proxy](./README.md#migrating-to-connection-proxy) f
 
 ### Added
 
+- The Kasm Proxy sidecar tags the access-log row written when a session websocket closes (`GET /desktop/<id>/vnc/websockify`, status 101) as the `kasm.session.client_detached` lifecycle record, carrying `kasm.kasm.id` and the attached duration in `kasm.kasm.transition_ms`.
 - Built-in OpenTelemetry observability stack, enabled by default: a single cluster-wide gateway Collector and a bundled ClickHouse StatefulSet that back logs, traces, metrics, and the Kasm Admin UI's reporting views. See the new `charts/kasm-helm/docs/observability.md`.
 - nginx distributed tracing (nginx is the trace root for every request) and nginx connection metrics, both collected by an always-on Collector sidecar in the Proxy/Connection Proxy pods — no separate opt-in.
 - Browser telemetry for the Kasm web UI (`observability.browser`).
@@ -45,6 +46,11 @@ See [Migrating to connection-proxy](./README.md#migrating-to-connection-proxy) f
 
 ### Changed
 
+- nginx access-log attributes are stored under flat keys (`url.path`, `http.request.method`, `http.response.status_code`) instead of nested objects, so `LogAttributes['url.path']` is queryable and the Admin UI's Logging page can filter on it. Query strings never enter the pipeline: the sidecar drops `query_string` and rebuilds the request line without it before anything copies it.
+- The nginx sidecars no longer stamp an `application` log attribute. The Admin UI's Application column and filters read `ServiceName`, which every component sets.
+- Sidecar-collected signals (Kasm Proxy, Connection Proxy, DB) carry `host.name` set to the pod name, matching what the Kasm app containers report, so the Logging page's Server filter lists every pod rather than only API pods.
+- The gateway Collector normalises `SeverityText` at ingest (upper-cased, `WARN` to `WARNING`, `FATAL` to `CRITICAL`, bare HTTP status codes mapped by class), drops successful `/api/__healthcheck` rows from both the nginx access log and the API's own access log, and strips query strings from the `http.target`/`http.url` attributes of `kasm-proxy` spans before tail sampling. A gateway supplied through `observability.collector.gateway.existingConfigMap` inherits none of these; the three `examples/otel-collector-*.yaml` configs carry them, see `charts/kasm-helm/docs/observability.md` §9.
+- The Kasm Proxy's API upstream pool holds idle connections for `keepalive_timeout 30s`, and the API locations send `Connection $connection_upgrade` (an empty header unless the client asked for a WebSocket upgrade) instead of an unconditional `upgrade`, so pooled connections are reused rather than closed after every response. The API's own keep-alive is 75 s by default (set in the API image's config), which exceeds the pool timeout; no chart value is needed.
 - **The `logFormat` value was removed from the chart.** Console output is human-readable text for every service except the Kasm Proxy, whose stdout access log is JSON (`json_combined`) whenever `observability.enabled` is true (the default); structured logs are exported over OpenTelemetry regardless. If you were scraping JSON from pod stdout, switch to OTLP collection. (The root values schema does not reject unknown keys, so a leftover `logFormat` in a values file is a silent no-op, not a render error.)
 - **New PVC and new workloads on every deployment**: a ClickHouse StatefulSet + PVC, a gateway Collector Deployment, and one extra sidecar container in every Proxy, Connection Proxy, and DB pod. Budget resources and storage accordingly before upgrading; see `charts/kasm-helm/docs/observability.md` §2 and §6.
 - The Kasm Proxy's stdout access log is JSON whenever `observability.enabled` is true (the default), because the sidecar collector parses it as JSON.
