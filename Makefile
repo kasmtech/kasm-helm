@@ -113,7 +113,9 @@ KIND_LOAD_CHART_DIR ?= $(CHART_DIR)
 # Extra images required by e2e tests but not referenced by the chart itself:
 #   postgres:16        external-DB scenario (tests/e2e/start_external_postgres.sh)
 #   nginx:1.30-alpine  trusted-CA scenario (tests/e2e/test_02_trusted_ca.py)
-KIND_EXTRA_IMAGES ?= postgres:16 nginx:1.30-alpine
+#   curlimages/curl    ephemeral debug container for curl_from_pod (tests/e2e/helpers.py);
+#                      keep the tag in step with CURL_DEBUG_IMAGE
+KIND_EXTRA_IMAGES ?= postgres:16 nginx:1.30-alpine curlimages/curl:8.10.1
 
 
 UNAME_S := $(shell uname -s)

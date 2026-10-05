@@ -1099,6 +1099,9 @@ def exec_in_pod(
     return kubectl(cmd + exec_args, namespace=namespace)
 
 
+CURL_DEBUG_IMAGE = os.environ.get("E2E_CURL_IMAGE", "curlimages/curl:8.10.1")
+
+
 def curl_from_pod(
     namespace: str,
     pod_name: str,
@@ -1126,7 +1129,20 @@ def curl_from_pod(
     curl_args.append(url)
 
     try:
-        result = exec_in_pod(namespace, pod_name, curl_args)
+        # The app images ship no curl; run it from an ephemeral container sharing the pod netns.
+        result = kubectl(
+            [
+                "debug",
+                pod_name,
+                "--profile=restricted",
+                f"--image={CURL_DEBUG_IMAGE}",
+                "--attach",
+                "--quiet",
+                "--",
+            ]
+            + curl_args,
+            namespace=namespace,
+        )
     except CommandError as exc:
         stderr = exc.result.stderr.strip()
         stdout = exc.result.stdout.strip()
