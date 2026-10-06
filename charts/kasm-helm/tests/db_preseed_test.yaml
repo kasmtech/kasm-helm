@@ -734,3 +734,127 @@ tests:
         equal:
           path: metadata.labels["my-label"]
           value: my-value
+
+  - it: renders cast_configs passthrough settings
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.cast_configs:
+        - casting_config_name: "My Cast"
+          key: "cast-key-001"
+          image_id: "image-uuid-001"
+          allow_kasm_smart_card_passthrough: true
+          allow_kasm_webauthn_passthrough: true
+          allow_kasm_ssh_agent_passthrough: true
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "allow_kasm_smart_card_passthrough: true"
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "allow_kasm_webauthn_passthrough: true"
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "allow_kasm_ssh_agent_passthrough: true"
+
+  - it: defaults cast_configs passthrough settings to false
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.cast_configs:
+        - casting_config_name: "My Cast"
+          key: "cast-key-001"
+          image_id: "image-uuid-001"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "allow_kasm_smart_card_passthrough: false"
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "allow_kasm_webauthn_passthrough: false"
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "allow_kasm_ssh_agent_passthrough: false"
+
+  - it: renders staging_configs passthrough settings
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.staging_configs:
+        - image_id: "image-uuid-001"
+          zone_id: "zone-uuid-001"
+          num_sessions: 1
+          expiration: 1
+          allow_kasm_smart_card_passthrough: true
+          allow_kasm_webauthn_passthrough: true
+          allow_kasm_ssh_agent_passthrough: true
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "allow_kasm_smart_card_passthrough: true"
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "allow_kasm_webauthn_passthrough: true"
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "allow_kasm_ssh_agent_passthrough: true"
+
+  - it: defaults staging_configs passthrough settings to false
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.staging_configs:
+        - image_id: "image-uuid-001"
+          zone_id: "zone-uuid-001"
+          num_sessions: 1
+          expiration: 1
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "allow_kasm_smart_card_passthrough: false"
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "allow_kasm_webauthn_passthrough: false"
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "allow_kasm_ssh_agent_passthrough: false"
