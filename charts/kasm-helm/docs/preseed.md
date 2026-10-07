@@ -337,11 +337,13 @@ kasmConfig:
   config:
     samlConfigs:
       - display_name: "AzureAD"        # optional
+        saml_id: "0b3f6c1e2d4a4f5b8c9d0e1f2a3b4c5d"  # set explicitly: the SP URLs must embed it
         idp_sso_url: "https://..."
         idp_entity_id: "https://..."
         idp_x509_cert: "MIIC..."
-        sp_entity_id: "https://kasm.example.com"
-        sp_acs_url: "https://kasm.example.com/api/public/acs"
+        sp_entity_id: "https://kasm.example.com/api/metadata/?id=0b3f6c1e2d4a4f5b8c9d0e1f2a3b4c5d"
+        sp_acs_url: "https://kasm.example.com/api/acs/?id=0b3f6c1e2d4a4f5b8c9d0e1f2a3b4c5d"
+        sp_slo_url: "https://kasm.example.com/api/slo/?id=0b3f6c1e2d4a4f5b8c9d0e1f2a3b4c5d"
         enabled: true
 ```
 
