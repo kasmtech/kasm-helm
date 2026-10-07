@@ -94,6 +94,7 @@ See [Migrating to connection-proxy](./README.md#migrating-to-connection-proxy) f
 ### Documentation
 
 - Documents how edge-injected trace-context headers are trusted and how ClickHouse credentials are managed for observability — no functional change to the chart itself. <!-- hash:780fc043281accf8cd334a9b3f915248bffdc95b -->
+- Corrects the SAML example in `docs/preseed.md`: `sp_acs_url` pointed at `/api/public/acs`, which Kasm no longer serves and which never carried the required SAML config id. The example now sets an explicit `saml_id` and uses the `/api/auth/sso/<saml_id>/acs`, `/metadata`, and `/slo` endpoints. No chart behavior change.
 - Rewrites the observability documentation to describe the forwarder/gateway architecture and clarifies that the gateway only accepts traffic from forwarders, not from the host-log DaemonSet directly. No configuration or deployment changes for operators. <!-- hash:1b4f0ca90686716e5cd4448ab5a34726dccd1f56 -->
 
 
