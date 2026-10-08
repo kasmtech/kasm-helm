@@ -34,7 +34,7 @@ tests:
           path: data["client_api.conf"]
           pattern: 'Connection \$connection_upgrade;'
       - matchRegex:
-          path: data["manager_api.conf"]
+          path: data["internal_agents.conf"]
           pattern: 'Connection \$connection_upgrade;'
       - matchRegex:
           path: data["subscription_api.conf"]
@@ -46,7 +46,7 @@ tests:
           path: data["client_api.conf"]
           pattern: 'Connection "upgrade"'
       - notMatchRegex:
-          path: data["manager_api.conf"]
+          path: data["internal_agents.conf"]
           pattern: 'Connection "upgrade"'
       - notMatchRegex:
           path: data["subscription_api.conf"]
