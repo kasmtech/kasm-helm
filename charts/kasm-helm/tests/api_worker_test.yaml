@@ -2,7 +2,8 @@ suite: components.api.workerPool (kasm-helm-37c)
 # workerPool empty (default): every API replica keeps consuming BullMQ queues itself
 # (KASM_PROCESS=TRUE), no separate worker Deployment. workerPool non-empty: API replicas stop
 # consuming (KASM_PROCESS=FALSE) and templates/api-worker-deployment.yaml renders one
-# Deployment per pool per zone instead.
+# Deployment per pool per zone instead. Either way the api container serves HTTP
+# (KASM_SERVE_API=TRUE) and worker containers never do (KASM_SERVE_API=FALSE).
 
 templates:
   - templates/api-deployment.yaml
@@ -10,9 +11,14 @@ templates:
 
 tests:
   # ---------- empty workerPool (default) ----------
-  - it: empty workerPool sets KASM_PROCESS=TRUE on the api container
+  - it: empty workerPool sets KASM_SERVE_API=TRUE and KASM_PROCESS=TRUE on the api container
     template: templates/api-deployment.yaml
     asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KASM_SERVE_API
+            value: "TRUE"
       - contains:
           path: spec.template.spec.containers[0].env
           content:
@@ -57,12 +63,17 @@ tests:
           path: spec.template.spec.terminationGracePeriodSeconds
 
   # ---------- non-empty workerPool ----------
-  - it: non-empty workerPool sets KASM_PROCESS=FALSE and no worker envs on the api container
+  - it: non-empty workerPool sets KASM_SERVE_API=TRUE, KASM_PROCESS=FALSE and no worker envs on the api container
     template: templates/api-deployment.yaml
     set:
       components.api.workerPool:
         - name: default
     asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KASM_SERVE_API
+            value: "TRUE"
       - contains:
           path: spec.template.spec.containers[0].env
           content:
@@ -83,7 +94,7 @@ tests:
           path: metadata.name
           pattern: "^.*-api-default-default$"
 
-  - it: worker container sets KASM_PROCESS=TRUE, KASM_WORKER_QUEUES, and shutdown timeout
+  - it: worker container sets KASM_SERVE_API=FALSE, KASM_PROCESS=TRUE, KASM_WORKER_QUEUES, and shutdown timeout
     template: templates/api-worker-deployment.yaml
     set:
       components:
@@ -92,6 +103,11 @@ tests:
             - name: media
               queues: "media,thumbnails"
     asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KASM_SERVE_API
+            value: "FALSE"
       - contains:
           path: spec.template.spec.containers[0].env
           content:
@@ -163,7 +179,7 @@ tests:
           path: spec.template.spec.containers[0].readinessProbe.httpGet.port
           value: api-pt
 
-  - it: worker liveness probe uses /livez; readiness uses /api/__healthcheck (workers run the full API)
+  - it: worker liveness probe uses /livez and has no readiness probe (workers serve no API)
     template: templates/api-worker-deployment.yaml
     set:
       applyHealthChecks: true
@@ -176,12 +192,8 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.httpGet.port
           value: api-live-pt
-      - equal:
-          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
-          value: "/api/__healthcheck"
-      - equal:
-          path: spec.template.spec.containers[0].readinessProbe.httpGet.port
-          value: api-pt
+      - notExists:
+          path: spec.template.spec.containers[0].readinessProbe
 
   - it: worker liveness probe honors components.api.healthCheckTiming overrides
     template: templates/api-worker-deployment.yaml

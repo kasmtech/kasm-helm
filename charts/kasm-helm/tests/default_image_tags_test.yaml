@@ -16,7 +16,7 @@ tests:
       # api: per-component override wins
       - equal:
           path: spec.template.spec.containers[0].image
-          value: docker.io/kasmweb/api:1.19.0-hotfix
+          value: docker.io/kasmweb/appserver:1.19.0-hotfix
         template: templates/api-deployment.yaml
       # other components: untouched, fall back to useImageTags
       - equal:
@@ -58,7 +58,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: docker.io/kasmweb/api:1.19.0-rolling
+          value: docker.io/kasmweb/appserver:1.19.0-rolling
         template: templates/api-deployment.yaml
       - equal:
           path: spec.template.spec.containers[0].image
@@ -94,7 +94,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: docker.io/kasmweb/api:1.19.0-rolling-2026-06-02
+          value: docker.io/kasmweb/appserver:1.19.0-rolling-2026-06-02
 
   # ---------- bare frozen tag ----------
   - it: useImageTags accepts a bare frozen tag verbatim
@@ -105,7 +105,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: docker.io/kasmweb/api:1.19.0
+          value: docker.io/kasmweb/appserver:1.19.0
 
   # ---------- per-component tag carries the load when useImageTags is empty ----------
   - it: per-component tag is used when useImageTags is empty
@@ -124,7 +124,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: docker.io/kasmweb/api:1.19.0-hotfix
+          value: docker.io/kasmweb/appserver:1.19.0-hotfix
 
   # ---------- partial coverage also fails, error names the offending component ----------
   - it: empty useImageTags with only SOME per-component tags set fails render and names the missing component
@@ -168,4 +168,4 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: docker.io/kasmweb/api:1.19.0-hotfix
+          value: docker.io/kasmweb/appserver:1.19.0-hotfix

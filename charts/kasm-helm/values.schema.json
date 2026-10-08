@@ -368,7 +368,7 @@
                   "type": "string"
                 },
                 "repository": {
-                  "default": "kasmweb/api",
+                  "default": "kasmweb/appserver",
                   "title": "repository",
                   "type": "string"
                 },

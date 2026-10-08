@@ -88,6 +88,8 @@ spec:
               value: "true"
             - name: "SERVER_ID"
               value: "auto"
+            - name: KASM_SERVE_API
+              value: "TRUE"
             - name: KASM_PROCESS
               value: {{ $kasmProcess | quote }}
             {{- if not $hasWorkerPool }}

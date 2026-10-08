@@ -20,6 +20,8 @@ See [Migrating to connection-proxy](./README.md#migrating-to-connection-proxy) f
 
 - **The Kasm Manager service is removed.** The API absorbs its functions. `templates/manager-deployment.yaml` and `templates/manager-service.yaml` are deleted, and `components.manager` is removed from `values.yaml` and `values.schema.json` (the schema now rejects it). nginx keeps the `/manager_api/` agent-facing path, but it now proxies to the API service instead of a separate Manager upstream. See [Manager removed](./README.md#manager-removed).
 
+- **The API image is renamed from `kasmweb/api` to `kasmweb/appserver`.** The default `components.api.image.repository` is now `kasmweb/appserver`; if you override it (for example to a private registry mirror), update the repository name. The image now requires `KASM_SERVE_API` alongside `KASM_PROCESS`, which the chart sets: `TRUE` on the API pods, `FALSE` on `workerPool` pods. Worker pods no longer define a readinessProbe because they serve no HTTP API; their `/livez` livenessProbe is unchanged.
+
 ### Added
 
 - The Kasm Proxy sidecar tags the access-log row written when a session websocket closes (`GET /desktop/<id>/vnc/websockify`, status 101) as the `kasm.session.client_detached` lifecycle record, carrying `kasm.kasm.id` and the attached duration in `kasm.kasm.transition_ms`.

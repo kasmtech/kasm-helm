@@ -608,7 +608,7 @@ components:
     #
     image:
       registry: docker.io
-      repository: kasmweb/api
+      repository: kasmweb/appserver
       # components.api.image.tag -- Tag for this component's image. Leave empty to fall back to the chart-wide `useImageTags`.
       tag: ""
     # components.api.replicas -- Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset (default).
@@ -696,8 +696,9 @@ components:
     # components.api.workerPool -- One Deployment is rendered per pool per zone, named
     #  <release>-api-<pool-name>[-<zone>], when this list is non-empty. In that case the api Deployment
     #  itself stops consuming queues (KASM_PROCESS=FALSE, publish-only) and these dedicated worker
-    #  deployments consume them instead (KASM_PROCESS=TRUE). Leave empty (default) for every API replica
-    #  to consume queues itself instead (KASM_PROCESS=TRUE, no separate workload). Each entry:
+    #  deployments consume them instead (KASM_SERVE_API=FALSE, KASM_PROCESS=TRUE), the equivalent of the
+    #  docker installer's kasm_manager. Leave empty (default) for every API replica to consume queues
+    #  itself instead (KASM_PROCESS=TRUE, no separate workload). Each entry:
     #    name             -- (required) pool name; normalized (like a zone name) into the Deployment name.
     #    queues           -- KASM_WORKER_QUEUES value: a comma-separated queue list, or "all". Default "all".
     #    replicas         -- Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset (default).
