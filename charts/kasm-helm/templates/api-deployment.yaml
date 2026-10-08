@@ -95,7 +95,7 @@ spec:
               value: {{ $.Values.components.api.queues | quote }}
             {{- if $.Values.components.api.queueConcurrency }}
             - name: KASM_WORKER_QUEUE_CONCURRENCY
-              value: {{ toJson $.Values.components.api.queueConcurrency | quote }}
+              value: {{ include "kasm.queueConcurrency" $.Values.components.api.queueConcurrency | quote }}
             {{- end }}
             - name: KASM_WORKER_SHUTDOWN_TIMEOUT
               value: "60"
