@@ -18,7 +18,7 @@ The three independent replica counts (`components.guac.replicas`, `components.rd
 
 See [Migrating to connection-proxy](./README.md#migrating-to-connection-proxy) for the full old-key-to-new-key mapping.
 
-- **The Kasm Manager service is removed.** The API absorbs its functions. `templates/manager-deployment.yaml` and `templates/manager-service.yaml` are deleted, and `components.manager` is removed from `values.yaml` and `values.schema.json` (the schema now rejects it). nginx keeps the `/manager_api/` agent-facing path, but it now proxies to the API service instead of a separate Manager upstream. See [Manager removed](./README.md#manager-removed).
+- **The Kasm Manager service is removed.** The API absorbs its functions. `templates/manager-deployment.yaml` and `templates/manager-service.yaml` are deleted, and `components.manager` is removed from `values.yaml` and `values.schema.json` (the schema now rejects it). nginx no longer serves `/manager_api/`: agents call the API's Internal surface at `/api/internal/agent-vm/` and `/api/internal/agent-k8s/`, which proxy to the API service and honour the agent drain flag (`kasm_agent_draining`). The `manager_api.conf` entry of the proxy services ConfigMap is replaced by `internal_agents.conf`. Agents still configured with `/manager_api/...` paths must be upgraded to the matching release. See [Manager removed](./README.md#manager-removed).
 
 ### Added
 
