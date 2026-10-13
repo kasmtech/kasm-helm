@@ -4,6 +4,7 @@ Kasm DB server StatefullSet definition
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- $dbReplicas := include "replicas.preset" (dict "node" $constants.db.component "size" .Values.deploymentSize) -}}
 {{- $merged := fromYaml (include "kasm.mergedValues" (dict "root" . "componentName" "database")) -}}
+{{- include "kasm.validateDatabaseVersionChange" . -}}
 {{- if not .Values.database.standalone }}
 apiVersion: apps/v1
 kind: StatefulSet
