@@ -84,6 +84,8 @@ spec:
               value: "true"
             - name: "SERVER_ID"
               value: "auto"
+            - name: "MANAGER_ID"
+              value: "auto"
             - name: SERVER_HOSTNAME
               value: {{ include "kasm.name" (list $ "apiWorker" "" $poolZone) | quote }}
             - name: SERVER_INTERNAL_SCHEMA
