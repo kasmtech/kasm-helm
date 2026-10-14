@@ -240,15 +240,33 @@ spec:
     ]
     for component, container in openssl_curl_targets:
         pod = get_first_pod_by_selector(namespace, f"app.kubernetes.io/component={component}")
-        result = exec_in_pod(
-            namespace,
-            pod,
-            ["curl", "-sS", "--max-time", "20", f"https://{server_dns_name}:443/"],
-            container=container,
-        )
-        assert result.returncode == 0 and "ok" in result.stdout, (
+        if component == "proxy":
+            # The proxy image ships no curl; verify with its own OpenSSL + system store.
+            check = "openssl"
+            result = exec_in_pod(
+                namespace,
+                pod,
+                [
+                    "sh",
+                    "-c",
+                    f"openssl s_client -connect {server_dns_name}:443 -servername {server_dns_name} "
+                    "-verify_return_error -CAfile /etc/ssl/certs/ca-certificates.crt </dev/null 2>&1",
+                ],
+                container=container,
+            )
+            trusted = result.returncode == 0 and "Verify return code: 0 (ok)" in result.stdout
+        else:
+            check = "curl"
+            result = exec_in_pod(
+                namespace,
+                pod,
+                ["curl", "-sS", "--max-time", "20", f"https://{server_dns_name}:443/"],
+                container=container,
+            )
+            trusted = result.returncode == 0 and "ok" in result.stdout
+        assert trusted, (
             f"{component} (container={container or 'default'}) CA trust check "
-            f"(curl) failed.\n"
+            f"({check}) failed.\n"
             f"stdout: {result.stdout}\n"
             f"stderr: {result.stderr}"
         )
