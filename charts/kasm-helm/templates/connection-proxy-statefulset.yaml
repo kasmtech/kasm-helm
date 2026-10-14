@@ -140,10 +140,10 @@ spec:
             - name: API_SCHEMA
               value: "http"
             {{/*
-              Connection proxies must reach the API's /manager_api/ endpoint
-              (support-bundle uploads) as well as /api/ (registration/heartbeat).
-              Only the kasm-proxy nginx service serves both on one port, so point
-              the API endpoint at the Kasm Proxy rather than the api (CherryPy) service.
+              Connection proxies reach the API's Internal surface under /api/
+              (registration, heartbeat, support-bundle uploads) through the
+              kasm-proxy nginx service, so point the API endpoint at the Kasm Proxy
+              rather than the api (CherryPy) service.
             */}}
             - name: API_HOSTNAME
               value: {{ printf "%s-%s" $constants.proxy.svc (include "kasm.zoneName" $zone.name) | quote }}
@@ -235,10 +235,10 @@ spec:
             - name: API_SCHEMA
               value: "http"
             {{/*
-              Connection proxies must reach the API's /manager_api/ endpoint
-              (support-bundle uploads) as well as /api/ (registration/heartbeat).
-              Only the kasm-proxy nginx service serves both on one port, so point
-              the API endpoint at the Kasm Proxy rather than the api (CherryPy) service.
+              Connection proxies reach the API's Internal surface under /api/
+              (registration, heartbeat, support-bundle uploads) through the
+              kasm-proxy nginx service, so point the API endpoint at the Kasm Proxy
+              rather than the api (CherryPy) service.
             */}}
             - name: API_HOSTNAME
               value: {{ printf "%s-%s" $constants.proxy.svc (include "kasm.zoneName" $zone.name) | quote }}
@@ -336,10 +336,10 @@ spec:
             - name: API_SCHEMA
               value: http
             {{/*
-              Connection proxies must reach the API's /manager_api/ endpoint
-              (support-bundle uploads) as well as /api/ (registration/heartbeat).
-              Only the kasm-proxy nginx service serves both on one port, so point
-              the API endpoint at the Kasm Proxy rather than the api (CherryPy) service.
+              Connection proxies reach the API's Internal surface under /api/
+              (registration, heartbeat, support-bundle uploads) through the
+              kasm-proxy nginx service, so point the API endpoint at the Kasm Proxy
+              rather than the api (CherryPy) service.
             */}}
             - name: API_HOSTNAME
               value: {{ printf "%s-%s" $constants.proxy.svc (include "kasm.zoneName" $zone.name) | quote }}

@@ -18,7 +18,7 @@ The three independent replica counts (`components.guac.replicas`, `components.rd
 
 See [Migrating to connection-proxy](./README.md#migrating-to-connection-proxy) for the full old-key-to-new-key mapping.
 
-- **The Kasm Manager service is removed.** The API absorbs its functions. `templates/manager-deployment.yaml` and `templates/manager-service.yaml` are deleted, and `components.manager` is removed from `values.yaml` and `values.schema.json` (the schema now rejects it). nginx keeps the `/manager_api/` agent-facing path, but it now proxies to the API service instead of a separate Manager upstream. See [Manager removed](./README.md#manager-removed).
+- **The Kasm Manager service is removed.** The API absorbs its functions. `templates/manager-deployment.yaml` and `templates/manager-service.yaml` are deleted, and `components.manager` is removed from `values.yaml` and `values.schema.json` (the schema now rejects it). nginx no longer serves `/manager_api/`: agents call the API's Internal surface at `/api/internal/agent-vm/` and `/api/internal/agent-k8s/`, which proxy to the API service and honour the agent drain flag (`kasm_agent_draining`). The `manager_api.conf` entry of the proxy services ConfigMap is replaced by `internal_agents.conf`. Agents still configured with `/manager_api/...` paths must be upgraded to the matching release. See [Manager removed](./README.md#manager-removed).
 
 ### Added
 
@@ -95,6 +95,7 @@ See [Migrating to connection-proxy](./README.md#migrating-to-connection-proxy) f
 ### Documentation
 
 - Documents how edge-injected trace-context headers are trusted and how ClickHouse credentials are managed for observability — no functional change to the chart itself. <!-- hash:780fc043281accf8cd334a9b3f915248bffdc95b -->
+- Corrects the SAML example in `docs/preseed.md`: `sp_acs_url` pointed at `/api/public/acs`, which Kasm no longer serves and which never carried the required SAML config id. The example now sets an explicit `saml_id` and uses the `/api/auth/sso/<saml_id>/acs`, `/metadata`, and `/slo` endpoints. No chart behavior change.
 - Rewrites the observability documentation to describe the forwarder/gateway architecture and clarifies that the gateway only accepts traffic from forwarders, not from the host-log DaemonSet directly. No configuration or deployment changes for operators. <!-- hash:1b4f0ca90686716e5cd4448ab5a34726dccd1f56 -->
 
 

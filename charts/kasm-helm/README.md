@@ -93,7 +93,7 @@ Guac, RDP Gateway, and RDP HTTPS Gateway are consolidated into a single `connect
 
 ## Manager removed
 
-The Kasm Manager service is removed. The API absorbs its functions, and nginx keeps the `/manager_api/` agent-facing path but now proxies it to the API service instead. Delete `components.manager` from `values.yaml` — the schema rejects it if present.
+The Kasm Manager service is removed. The API absorbs its functions, and nginx no longer serves the `/manager_api/` path: agents call the API's Internal surface at `/api/internal/agent-vm/` and `/api/internal/agent-k8s/`, which proxy to the API service. Agents still configured with `/manager_api/...` paths must be upgraded to the matching release. Delete `components.manager` from `values.yaml` — the schema rejects it if present.
 
 ## Direct RDP Service
 
