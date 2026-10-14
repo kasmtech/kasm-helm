@@ -80,8 +80,6 @@ spec:
             {{- include "kasm.trustedCaEnv" $ | indent 12 }}
             - name: "SERVER_ZONE_NAME"
               value: {{ $zone.name | quote }}
-            - name: "KASM_EPHEMERAL"
-              value: "true"
             - name: "SERVER_ID"
               value: "auto"
             - name: "MANAGER_ID"

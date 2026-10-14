@@ -66,6 +66,8 @@ See [Migrating to connection-proxy](./README.md#migrating-to-connection-proxy) f
 - Reworks OpenTelemetry into a forwarder/gateway architecture: nginx and Postgres now emit telemetry through dedicated sidecars instead of writing to a shared collector, removing the cross-zone hop connection-proxy pods used to take and bounding Postgres log growth on the data volume to one day. <!-- hash:a6f317b839f6adcfcd380c3a3b986357b0507157 -->
 - Adds OpenTelemetry-based observability: distributed tracing and metrics/log collection for API, Manager, Guac, Proxy, RDP Gateway/HTTPS Gateway, and nginx, backed by a new ClickHouse store with configurable retention. Operators can enable this via new OTel collector, gateway, and ClickHouse values. <!-- hash:31e3bbba5fbdea28df316d826c3d0bda9c49f330 -->
 - The browser telemetry config served at `/otel-config.js` points the Kasm web UI's exporter at `/api/telemetry` instead of `/api/client/telemetry`, matching the API's telemetry ingest route. Pair this chart with an API image that serves `/api/telemetry`, or browser telemetry exports will fail (only relevant when `observability.browser` is enabled). <!-- hash:b2e97505de4083df3e83bae4c5ef7682a33379bd -->
+- The API and API-worker pods no longer set `KASM_EPHEMERAL`; the API image no longer reads it. `MANAGER_ID=auto`, which the chart already sets, is what marks each pod's manager row ephemeral.
+- `components.api.threadPool` caps how many synchronous request handlers the API server runs at once; requests past it queue. `components.api.threadPoolLogInterval` logs request-thread usage (in use, total, waiting). The values and their defaults are unchanged; only the descriptions, which still named CherryPy, are corrected.
 
 ### Removed
 
