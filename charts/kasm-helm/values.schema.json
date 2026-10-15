@@ -421,10 +421,13 @@
               "default": "all"
             },
             "queueConcurrency": {
-              "additionalProperties": true,
-              "description": "Rendered as JSON into KASM_WORKER_QUEUE_CONCURRENCY when workerPool is empty, to tune per-queue concurrency.",
+              "description": "KASM_WORKER_QUEUE_CONCURRENCY when workerPool is empty: an integer for every queue, or an object keyed by queue name.",
               "title": "queueConcurrency",
-              "type": "object"
+              "anyOf": [
+                { "type": "null" },
+                { "type": "integer", "minimum": 1 },
+                { "type": "object", "additionalProperties": { "type": "integer", "minimum": 1 } }
+              ]
             },
             "workerPool": {
               "default": [],
@@ -452,10 +455,12 @@
                     "type": "integer"
                   },
                   "queueConcurrency": {
-                    "additionalProperties": true,
-                    "description": "Rendered as JSON into KASM_WORKER_QUEUE_CONCURRENCY, to tune per-queue concurrency.",
+                    "description": "KASM_WORKER_QUEUE_CONCURRENCY: an integer for every queue, or an object keyed by queue name.",
                     "title": "queueConcurrency",
-                    "type": "object"
+                    "anyOf": [
+                      { "type": "integer", "minimum": 1 },
+                      { "type": "object", "additionalProperties": { "type": "integer", "minimum": 1 } }
+                    ]
                   },
                   "resources": {
                     "additionalProperties": true,
