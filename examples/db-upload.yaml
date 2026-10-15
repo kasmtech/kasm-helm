@@ -11,7 +11,8 @@
 #   - Run this job before applying db-restore.yaml.
 #
 # Field reference:
-#   image             — Replace with your Kasm version, e.g. kasmweb/api:1.19.0
+#   image             — Replace with your Kasm version, e.g. kasmweb/appserver:1.20.0
+#                       (kasmweb/api for 1.19 and earlier).
 #   storageClassName  — Storage class for the backup PVC. Commented out by default to use the namespace
 #                       default. Uncomment and set a value to use a specific storage class.
 #
@@ -39,7 +40,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: kasm-old-db-upload-container
-          image: kasmweb/api:1.19.0  # <-- REPLACE with your Kasm version
+          image: kasmweb/appserver:1.20.0  # <-- REPLACE with your Kasm version
           imagePullPolicy: IfNotPresent
           command:
             - "/bin/bash"
