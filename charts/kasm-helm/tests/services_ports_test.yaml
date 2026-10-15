@@ -2,7 +2,6 @@ suite: service ports, types, and zone fan-out
 
 templates:
   - templates/api-service.yaml
-  - templates/manager-service.yaml
   - templates/db-service.yaml
   - templates/proxy-service.yaml
   - templates/proxy-service-external.yaml
@@ -17,16 +16,6 @@ tests:
       - equal:
           path: spec.ports[0].port
           value: 8080
-      - equal:
-          path: spec.ports[0].protocol
-          value: TCP
-
-  - it: manager Service exposes port 8181/TCP
-    template: templates/manager-service.yaml
-    asserts:
-      - equal:
-          path: spec.ports[0].port
-          value: 8181
       - equal:
           path: spec.ports[0].protocol
           value: TCP
@@ -196,22 +185,6 @@ tests:
         equal:
           path: metadata.name
           value: RELEASE-NAME-api-zoneb
-
-  - it: manager Service fans out one Service per kasmZone
-    template: templates/manager-service.yaml
-    values:
-      - ../../../tests/values/multizone-config.yaml
-    asserts:
-      - hasDocuments:
-          count: 2
-      - documentIndex: 0
-        equal:
-          path: metadata.name
-          value: RELEASE-NAME-manager-zonea
-      - documentIndex: 1
-        equal:
-          path: metadata.name
-          value: RELEASE-NAME-manager-zoneb
 
   - it: proxy Service fans out one Service per kasmZone
     template: templates/proxy-service.yaml

@@ -4,6 +4,15 @@ Kasm API server Deployment definition
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- $apiReplicas := ternary .Values.components.api.replicas (include "replicas.preset" (dict "node" ($constants.api.component) "size" .Values.deploymentSize)) (gt (int .Values.components.api.replicas) 0) -}}
 {{- $merged := fromYaml (include "kasm.mergedValues" (dict "root" . "componentName" "api")) -}}
+{{/*
+  components.api.workerPool empty (default) keeps every API process also consuming BullMQ
+  queues itself (KASM_PROCESS=TRUE, queues from components.api.queues/queueConcurrency).
+  Non-empty moves queue consumption to the dedicated api-worker-deployment.yaml pools and turns
+  it off here (KASM_PROCESS=FALSE) so API replicas only serve HTTP.
+*/}}
+{{- $workerPools := (include "kasm.apiWorkerPools" .Values | fromYamlArray) -}}
+{{- $hasWorkerPool := gt (len $workerPools) 0 -}}
+{{- $kasmProcess := ternary "FALSE" "TRUE" $hasWorkerPool -}}
 {{- range $idx, $zone := (include "kasm.zones" $ | fromYamlArray) }}
 ---
 apiVersion: apps/v1
@@ -25,6 +34,15 @@ spec:
       {{- include "kasm.metadata" (dict "context" $ "component" "api" "resource" "pod" "zone" $zone.name "include" "la") | indent 6 }}
     spec:
       restartPolicy: {{ $.Values.restartPolicy }}
+      {{- /*
+        D018: with an empty workerPool (KASM_PROCESS=TRUE) this API replica also drains BullMQ
+        queues (KASM_WORKER_SHUTDOWN_TIMEOUT=60 on the worker path), so it needs the same 80s
+        grace as api-worker-deployment.yaml to avoid a SIGKILL mid-drain. A non-empty workerPool's
+        publish-only replicas never consume queues, so they keep the Kubernetes default (30s).
+      */}}
+      {{- if not $hasWorkerPool }}
+      terminationGracePeriodSeconds: 80
+      {{- end }}
       {{- if $.Values.imagePullSecrets.enabled }}
       imagePullSecrets:
         - name: {{ $.Values.imagePullSecrets.name | default (printf "%s-image-pull-secret" $.Release.Name) }}
@@ -70,6 +88,18 @@ spec:
               value: "true"
             - name: "SERVER_ID"
               value: "auto"
+            - name: KASM_PROCESS
+              value: {{ $kasmProcess | quote }}
+            {{- if not $hasWorkerPool }}
+            - name: KASM_WORKER_QUEUES
+              value: {{ $.Values.components.api.queues | quote }}
+            {{- if $.Values.components.api.queueConcurrency }}
+            - name: KASM_WORKER_QUEUE_CONCURRENCY
+              value: {{ toJson $.Values.components.api.queueConcurrency | quote }}
+            {{- end }}
+            - name: KASM_WORKER_SHUTDOWN_TIMEOUT
+              value: "60"
+            {{- end }}
             - name: SERVER_HOSTNAME
               value: {{ printf "%s-%s" $constants.api.svc (include "kasm.zoneName" $zone.name) | quote }}
             {{/*
@@ -92,6 +122,11 @@ spec:
                   name: {{ $constants.secrets.name }}
                   key: "db-password"
                 {{- end }}
+            {{- include "kasm.otelEnv" (dict "context" $ "serviceName" "kasm-api" "zone" $zone.name "python" true) | nindent 12 }}
+            {{- include "kasm.clickhouseEnv" (dict "context" $) | nindent 12 }}
+            {{- with $merged.extraEnv }}
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
           ports:
             - name: {{ $constants.api.portName }}
               containerPort: {{ $constants.api.port }}
@@ -102,24 +137,12 @@ spec:
           volumeMounts:
             - name: tmp-data
               mountPath: /tmp
-            {{- if eq $.Values.logFormat "json" }}
-            - name: kasm-api-app-config
-              mountPath: /opt/kasm/current/conf/app/api/api.app.config.yaml
-              subPath: api.app.config.yaml
-            {{- end }}
             {{- with $merged.containerMounts }}
               {{- toYaml . | nindent 12 }}
             {{- end }}
             {{- include "kasm.trustedCaVolumeMounts" $ | nindent 12 }}
+            {{- include "kasm.clickhouseCaVolumeMount" $ | nindent 12 }}
           {{- if $.Values.applyHealthChecks }}
-          {{/*
-            Migrations run before this container ever starts (the db-is-ready initContainer above blocks until the
-            DB is at head), so /livez's remaining startup delay is just the api process's own boot: a bounded DB
-            connectivity retry plus imports/settings load. A startupProbe still suppresses the liveness probe until
-            /livez first answers, so a slow bind can't be mistaken for a deadlock and trigger a restart loop.
-          */}}
-          startupProbe:
-            {{- include "health.probe" (dict "root" $ "component" "api" "probeType" "startupProbe" "type" "http" "path" "/livez" "portName" $constants.api.livenessPortName) | nindent 12 }}
           livenessProbe:
             {{- include "health.probe" (dict "root" $ "component" "api" "probeType" "livenessProbe" "type" "http" "path" "/livez" "portName" $constants.api.livenessPortName) | nindent 12 }}
           readinessProbe:
@@ -138,13 +161,9 @@ spec:
         - name: tmp-data
           emptyDir:
             sizeLimit: 256Mi
-        {{- if eq $.Values.logFormat "json" }}
-        - name: kasm-api-app-config
-          configMap:
-            name: {{ include "kasm.name" (list $ "api-app-config") }}
-        {{- end}}
       {{- with $merged.volumes }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
       {{- include "kasm.trustedCaVolumes" $ | nindent 8 }}
+      {{- include "kasm.clickhouseCaVolume" $ | nindent 8 }}
 {{- end }}

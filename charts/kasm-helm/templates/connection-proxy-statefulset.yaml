@@ -140,7 +140,7 @@ spec:
             - name: API_SCHEMA
               value: "http"
             {{/*
-              Connection proxies must reach the manager's /manager_api/ endpoint
+              Connection proxies must reach the API's /manager_api/ endpoint
               (support-bundle uploads) as well as /api/ (registration/heartbeat).
               Only the kasm-proxy nginx service serves both on one port, so point
               the API endpoint at the Kasm Proxy rather than the api (CherryPy) service.
@@ -151,6 +151,10 @@ spec:
               value: {{ $constants.proxy.http | quote }}
             - name: KASM_EPHEMERAL
               value: "true"
+            {{- include "kasm.otelEnv" (dict "context" $ "serviceName" "kasm-guac" "zone" $zone.name "sidecar" true) | nindent 12 }}
+            {{- with $merged.extraEnv }}
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
           ports:
             - name: {{ $constants.connectionProxy.guac.portName }}
               containerPort: {{ $constants.connectionProxy.guac.port }}
@@ -231,7 +235,7 @@ spec:
             - name: API_SCHEMA
               value: "http"
             {{/*
-              Connection proxies must reach the manager's /manager_api/ endpoint
+              Connection proxies must reach the API's /manager_api/ endpoint
               (support-bundle uploads) as well as /api/ (registration/heartbeat).
               Only the kasm-proxy nginx service serves both on one port, so point
               the API endpoint at the Kasm Proxy rather than the api (CherryPy) service.
@@ -256,6 +260,10 @@ spec:
               value: "30"
             - name: FORWARD_LOGS
               value: "true"
+            {{- include "kasm.otelEnv" (dict "context" $ "serviceName" "kasm-rdp-gateway" "zone" $zone.name "sidecar" true) | nindent 12 }}
+            {{- with $merged.extraEnv }}
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
           ports:
             - name: {{ $constants.connectionProxy.rdpGateway.portName }}
               containerPort: {{ $constants.connectionProxy.rdpGateway.port }}
@@ -328,7 +336,7 @@ spec:
             - name: API_SCHEMA
               value: http
             {{/*
-              Connection proxies must reach the manager's /manager_api/ endpoint
+              Connection proxies must reach the API's /manager_api/ endpoint
               (support-bundle uploads) as well as /api/ (registration/heartbeat).
               Only the kasm-proxy nginx service serves both on one port, so point
               the API endpoint at the Kasm Proxy rather than the api (CherryPy) service.
@@ -353,6 +361,10 @@ spec:
               value: "30"
             - name: FORWARD_LOGS
               value: "true"
+            {{- include "kasm.otelEnv" (dict "context" $ "serviceName" "kasm-rdp-https-gateway" "zone" $zone.name "sidecar" true) | nindent 12 }}
+            {{- with $merged.extraEnv }}
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- if $.Values.applyHealthChecks }}
           livenessProbe:
             {{- include "health.probe" (dict "root" $ "component" "connectionProxy" "timingScope" "rdpHttpsGateway" "probeType" "livenessProbe" "type" "tcp" "port" $constants.connectionProxy.rdpHttpsGateway.port) | nindent 12 }}
@@ -376,15 +388,19 @@ spec:
               mountPath: /opt/kasm/current/log
             - name: kasm-connection-proxy-rdp-https-gateway-data
               mountPath: /tmp
-            {{- if eq $.Values.logFormat "json" }}
-            - name: kasm-connection-proxy-rdp-https-gateway-app-config
-              mountPath: /opt/rdpgw/conf/rdp_https_gateway.app.config.yaml
-              subPath: rdp_https_gateway.app.config.yaml
-            {{- end }}
             {{- with $merged.containerMounts }}
               {{- toYaml . | nindent 12 }}
             {{- end }}
             {{- include "kasm.trustedCaVolumeMounts" $ | nindent 12 }}
+        {{- end }}
+        {{- if $.Values.observability.enabled }}
+        {{- /*
+          One Collector sidecar per pod. It receives this pod's nginx logs over loopback syslog,
+          scrapes stub_status over loopback, and receives OTLP from the guac / rdp-gateway /
+          rdp-https-gateway containers on 127.0.0.1, so the pod has a single egress point to the
+          gateway.
+        */}}
+        {{- include "kasm.otelSidecar" (dict "context" $ "zone" $zone.name "configMap" (include "kasm.name" (list $ "otel-nginx-sidecar-connection-proxy" "configmap"))) | nindent 8 }}
         {{- end }}
         {{- with $merged.extraContainers }}
           {{- toYaml . | nindent 8 }}
@@ -408,6 +424,14 @@ spec:
         - name: kasm-connection-proxy-nginx-log-tmp
           emptyDir:
             sizeLimit: 1Gi
+        {{- if $.Values.observability.enabled }}
+        - name: otel-sidecar-config
+          configMap:
+            name: {{ include "kasm.name" (list $ "otel-nginx-sidecar-connection-proxy" "configmap") }}
+        - name: otel-sidecar-tmp
+          emptyDir:
+            sizeLimit: 64Mi
+        {{- end }}
         {{- if $cp.guac.enabled }}
         - name: kasm-connection-proxy-guac-log
           emptyDir:
@@ -436,11 +460,6 @@ spec:
         - name: kasm-connection-proxy-rdp-https-gateway-data
           emptyDir:
             sizeLimit: 150Mi
-        {{- if eq $.Values.logFormat "json" }}
-        - name: kasm-connection-proxy-rdp-https-gateway-app-config
-          configMap:
-            name: {{ include "kasm.name" (list $ "cpx-rdp-https-gw-app-config") }}
-        {{- end }}
         {{- end }}
         {{- with $merged.volumes }}
           {{- toYaml . | nindent 8 }}

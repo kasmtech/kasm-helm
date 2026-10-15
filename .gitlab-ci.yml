@@ -131,9 +131,18 @@ helm-deploy-gitlab:
 validate:
   stage: validate
   image: python:3.12-bookworm
+  # docker:dind backs `make test`'s otel-validate target, which runs the pinned OTel
+  # Collector image's own `validate` command against rendered configs.
+  services:
+    - name: docker:28.2.2-dind
+      alias: docker
+      command: ["--mtu=1460"]
   before_script:
     - apt-get update
-    - apt-get install -y --no-install-recommends bash curl make git ca-certificates
+    - apt-get install -y --no-install-recommends bash curl make git ca-certificates docker.io
+    # otel-validate's scripts/otel_validate_extract.py needs PyYAML, which the bare
+    # python:3.12-bookworm image does not ship.
+    - python -m pip install --no-cache-dir pyyaml
   script:
     - make test
   rules:

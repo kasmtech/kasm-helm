@@ -21,7 +21,7 @@ def test_multizone_ingress_routes_publicaddr_and_zone_hosts(installer, temp_work
 
     # Use HTTP backend for ingress -> proxy to keep this deterministic in KinD.
     # Lower per-component resource requests so all multizone pods schedule on
-    # a single kind node. Each zone now runs api, manager, proxy, and ONE
+    # a single kind node. Each zone now runs api, proxy, and ONE
     # consolidated connection-proxy StatefulSet (nginx plus the guac,
     # rdp-gateway, and rdp-https-gateway service containers), plus a single
     # non-zoned db pod. Chart's small preset requests 500m per pod which
@@ -49,7 +49,6 @@ def test_multizone_ingress_routes_publicaddr_and_zone_hosts(installer, temp_work
         },
         "components": {
             "api": {"resources": low_resources},
-            "manager": {"resources": low_resources},
             "proxy": {"resources": low_resources_proxy},
             "connectionProxy": {
                 "nginx": {"resources": low_resources_proxy},

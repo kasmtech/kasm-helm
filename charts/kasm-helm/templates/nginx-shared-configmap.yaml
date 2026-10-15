@@ -14,6 +14,17 @@ metadata:
   {{- include "kasm.metadata" (dict "context" . "component" "nginx-shared" "resource" "configMap" "include" "all") | indent 2 }}
 data:
   nginx.conf: |
+    {{- if .Values.observability.enabled }}
+    {{- /*
+      Loading the module is gated on observability.enabled so that turning telemetry off leaves a
+      config that starts on any proxy image, including pre-1.20 ones that predate ngx_otel_module.
+      An unknown load_module path is fatal to nginx, and it is the only otel-dependent line in the
+      disabled path (no otel_* directives render, and /otel-config.js serves the disabled stub), so
+      gating it costs nothing and keeps `observability.enabled: false` deployable everywhere.
+    */}}
+    load_module modules/ngx_otel_module.so;
+    {{- end }}
+
     user  nginx;
     worker_processes {{ include "resources.preset" (dict "node" "proxy-processes" "size" $.Values.deploymentSize) }};
 
@@ -32,8 +43,6 @@ data:
                         '$status $body_bytes_sent "$http_referer" '
                         '"$http_user_agent" "$http_x_forwarded_for"';
 
-      access_log  /var/log/nginx/access.log  main;
-
       sendfile        on;
 
       keepalive_timeout  65;
@@ -41,6 +50,12 @@ data:
       include /etc/nginx/compress.conf;
       include /etc/nginx/logging.conf;
       include /etc/nginx/orchestrator.conf;
+
+      {{- if .Values.observability.enabled }}
+      access_log  /dev/stdout  json_combined;
+      {{- else }}
+      access_log  /dev/stdout  main;
+      {{- end }}
 
       include /etc/nginx/conf.d/*.conf;
       include /etc/nginx/services.d/*.conf;
@@ -90,8 +105,20 @@ data:
         '"cookie_username": "$cookie_username",'
         '"upstream_header_time": "$upstream_header_time"'
       '}';
-      access_log /dev/stdout {{ ternary "json_combined" "main" (eq .Values.logFormat "json") }};
-      error_log  /var/log/nginx/error.log warn;
+      # Console format follows observability.enabled: json_combined when on (the default), main
+      # when off. Independently of the console, nginx sends JSON access logs and its error log
+      # over loopback syslog UDP to the in-pod otel sidecar collector (a sidecar cannot read
+      # another container's stdout).
+      {{- if .Values.observability.enabled }}
+      access_log /dev/stdout json_combined;
+      {{- else }}
+      access_log /dev/stdout main;
+      {{- end }}
+      error_log  /dev/stderr warn;
+      {{- if .Values.observability.enabled }}
+      access_log syslog:server=127.0.0.1:{{ $constants.otel.syslogAccess }},tag=nginx json_combined;
+      error_log  syslog:server=127.0.0.1:{{ $constants.otel.syslogError }} warn;
+      {{- end }}
 
 
   orchestrator.conf: |

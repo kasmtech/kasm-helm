@@ -1,0 +1,4 @@
+observability:
+  collector:
+    gateway:
+      existingConfigMap: my-gateway-collector-config

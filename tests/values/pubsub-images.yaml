@@ -1,0 +1,42 @@
+# Branch-build image overrides applied to every e2e scenario via the E2E_IMAGE_VALUES default
+# (Makefile). All app images (api, proxy, connectionProxy's nginx/guac/rdpGateway/
+# rdpHttpsGateway) come from this branch's build (integ/otel-openapi-pubsub) — the backend/OTel
+# rework (API absorbing the manager role, BullMQ-on-PostgreSQL pub/sub, OTel instrumentation)
+# only exists there, so released tags won't do.
+#
+# There is no `postgres-private:integ-otel-openapi-pubsub` build, so `database.image` is
+# deliberately left untouched here — it stays on the chart's default released `kasmweb/postgres`
+# tag (D021).
+#
+# Formerly split against tests/values/dev31-images.yaml (OTel-only scenarios vs. pub/sub
+# scenarios); DEV-31 merged into this integ branch, so a single overlay now covers every
+# scenario (D021) and dev31-images.yaml was deleted.
+#
+# Tags verified present on this host (2026-09-17):
+#   kasmweb/{api,proxy,kasm-guac,rdp-gateway,rdp-https-gateway}-private:integ-otel-openapi-pubsub
+components:
+  api:
+    image:
+      repository: kasmweb/api-private
+      tag: "integ-otel-openapi-pubsub"
+  proxy:
+    image:
+      repository: kasmweb/proxy-private
+      tag: "integ-otel-openapi-pubsub"
+  connectionProxy:
+    nginx:
+      image:
+        repository: kasmweb/proxy-private
+        tag: "integ-otel-openapi-pubsub"
+    guac:
+      image:
+        repository: kasmweb/kasm-guac-private
+        tag: "integ-otel-openapi-pubsub"
+    rdpGateway:
+      image:
+        repository: kasmweb/rdp-gateway-private
+        tag: "integ-otel-openapi-pubsub"
+    rdpHttpsGateway:
+      image:
+        repository: kasmweb/rdp-https-gateway-private
+        tag: "integ-otel-openapi-pubsub"

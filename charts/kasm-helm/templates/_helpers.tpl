@@ -8,7 +8,7 @@
 
   Call with a three-element list: (list <root context> <componentTag> <componentName>)
   where <componentTag> is e.g. .Values.components.api.image.tag and <componentName>
-  is the values-path component name used in the fail message ("api", "manager",
+  is the values-path component name used in the fail message ("api",
   "proxy", "connectionProxy.nginx", "connectionProxy.guac", "connectionProxy.rdpGateway",
   "connectionProxy.rdpHttpsGateway", or "database").
 */}}
@@ -67,14 +67,8 @@ api:
   portName: api-pt
   image: {{ printf "%s/%s:%s" .Values.components.api.image.registry .Values.components.api.image.repository (include "kasm.imageTag" (list . .Values.components.api.image.tag "api")) }}
   port: 8080
-  livenessPortName: api-liveness-pt
+  livenessPortName: api-live-pt
   livenessPort: 8081
-manager:
-  component: manager
-  svc: {{ printf "%s-manager" .Release.Name }}
-  portName: manager-pt
-  image: {{ printf "%s/%s:%s" .Values.components.manager.image.registry .Values.components.manager.image.repository (include "kasm.imageTag" (list . .Values.components.manager.image.tag "manager")) }}
-  port: 8181
 proxy:
   component: proxy
   svc: {{ printf "%s-proxy" .Release.Name }}
@@ -115,15 +109,40 @@ connectionProxy:
     port: 9443
     portName: cp-rdp-tls-pt
     image: {{ if and $cp.rdpHttpsGateway.image.registry $cp.rdpHttpsGateway.image.repository }}{{ printf "%s/%s:%s" $cp.rdpHttpsGateway.image.registry $cp.rdpHttpsGateway.image.repository (include "kasm.imageTag" (list . $cp.rdpHttpsGateway.image.tag "connectionProxy.rdpHttpsGateway")) }}{{ end }}
+otel:
+  portName: otel-pt
+  gatewayComponent: otel-gateway
+  gatewaySvc: {{ printf "%s-otel-gateway" .Release.Name }}
+  gatewayImage: {{ include "kasm.common.imageRef" .Values.components.otelGateway.image }}
+  sidecarImage: {{ include "kasm.common.imageRef" .Values.components.otelSidecar.image }}
+  otlpHttp: 4318
+  otlpGrpc: 4317
+  otlpNginx: 4316
+  syslogAccess: 5140
+  syslogError: 5141
+  health: 13133
+  selfMetrics: 8888
+clickhouse:
+  component: clickhouse
+  svc: {{ printf "%s-clickhouse" .Release.Name }}
+  portName: ch-pt
+  image: {{ printf "%s/%s:%s" .Values.components.clickhouse.image.registry .Values.components.clickhouse.image.repository .Values.components.clickhouse.image.tag }}
+  http: 8123
+  native: 9000
+  httpTls: 8443
+  nativeTls: 9440
+proxyStubStatus: 8090
 {{- end }}
 
 {{/*
   Normalize a zone name to a DNS-safe label component.
   Mirrors the normalization used by `kasm.name` so hostnames built inline
   (proxy upstreams, init containers, env vars) match the actual Service names.
+  Delegates to kasm.common.zoneName (charts/kasm-common); see that chart's _helpers.tpl for the
+  real implementation.
 */}}
 {{- define "kasm.zoneName" -}}
-{{- regexReplaceAll "[^a-zA-Z0-9]+" . "-" | lower -}}
+{{- include "kasm.common.zoneName" . -}}
 {{- end -}}
 
 {{/*
@@ -364,33 +383,11 @@ true
 
 {{/*
   Full resource name
+  Delegates to kasm.common.name (charts/kasm-common); see that chart's _helpers.tpl for the real
+  implementation.
 */}}
 {{- define "kasm.name" -}}
-{{- $context := index . 0 -}}
-{{- $component := kebabcase (index . 1) -}}
-
-{{- $resource := "" -}}
-{{- if ge (len .) 3 -}}
-  {{- $resource = index . 2 -}}
-{{- end -}}
-
-{{- $zone := "" -}}
-{{- if ge (len .) 4 -}}
-  {{- $zone = index . 3 -}}
-{{- end -}}
-
-{{- $extra := "" -}}
-{{- if ge (len .) 5 -}}
-  {{- $extra = index . 4 -}}
-{{- end -}}
-
-{{- if $extra -}}
-  {{- printf "%s-%s-%s-%s" $context.Release.Name $component (include "kasm.zoneName" $zone) $extra -}}
-{{- else if $zone -}}
-  {{- printf "%s-%s-%s" $context.Release.Name $component (include "kasm.zoneName" $zone) -}}
-{{- else -}}
-  {{- printf "%s-%s" $context.Release.Name $component -}}
-{{- end -}}
+{{- include "kasm.common.name" . -}}
 {{- end -}}
 
 {{/*
@@ -404,229 +401,11 @@ Where:
   .zone      = (optional) zone name for Kasm zone-scoped resources
   .include   = (optional) if set to "la", includes only labels and annotations; otherwise emits all
   .name      = (optional) overrides name generation
+  Delegates to kasm.common.metadata (charts/kasm-common); see that chart's _helpers.tpl for the
+  real implementation.
 */}}
 {{- define "kasm.metadata" -}}
-{{- $ctx := .context -}}
-{{- $component := .component -}}
-{{- $resource := .resource -}}
-{{- $zone := .zone | default "" -}}
-{{- $include := .include | default "" -}}
-{{- $nameOrig := .name | default "" -}}
-
-{{/* Name Resolution */}}
-{{- $constants := include "kasm.constants" $ctx | fromYaml -}}
-
-{{- $labelName := "" -}}
-{{- if $zone -}}
-  {{- $labelName = include "kasm.name" (list $ctx $component "" $zone) -}}
-{{- else -}}
-  {{- $labelName = include "kasm.name" (list $ctx $component) -}}
-{{- end -}}
-
-{{- $name := "" -}}
-{{- if $nameOrig -}}
-  {{- $name = $nameOrig -}}
-{{- else if and (eq $component "db") (eq $resource "statefulSet") -}}
-  {{- $name = printf "%s-db-%s" $ctx.Release.Name ($ctx.Chart.AppVersion | replace "." "-") | trunc 63 | trimSuffix "-" -}}
-{{- else if and (eq $component "pre-upgrade-backup") (eq $resource "pvc") -}}
-  {{- $name = include "kasm.dbUpgradeBackupPvcName" $ctx -}}
-{{- else if $zone -}}
-  {{- $name = include "kasm.name" (list $ctx $component "" $zone) -}}
-{{- else -}}
-  {{- $name = include "kasm.name" (list $ctx $component) -}}
-{{- end -}}
-
-{{/* Labels */}}
-{{- $labels := dict -}}
-
-{{- with $ctx.Values.labels -}}
-  {{- $labels = merge $labels . -}}
-{{- end -}}
-
-{{- with (get $ctx.Values.components .component) -}}
-  {{- with .labels -}}
-    {{- $labels = merge $labels . -}}
-  {{- end -}}
-{{- end -}}
-
-{{- if $resource -}}
-  {{- with (get $ctx.Values.extraLabels $resource) -}}
-    {{- $labels = merge $labels . -}}
-  {{- end -}}
-{{- end -}}
-
-{{- if eq $resource "ingress" -}}
-  {{- with $ctx.Values.ingress.labels -}}
-    {{- $labels = merge $labels . -}}
-  {{- end -}}
-{{- end -}}
-
-{{- if eq $resource "route" -}}
-  {{- with $ctx.Values.route.labels -}}
-    {{- $labels = merge $labels . -}}
-  {{- end -}}
-{{- end -}}
-
-{{- if eq $component "cert-manager" -}}
-  {{- with $ctx.Values.certificate.certManager.labels -}}
-    {{- $labels = merge $labels . -}}
-  {{- end -}}
-{{- end -}}
-
-{{- if eq $component "db" -}}
-  {{- with $ctx.Values.database.labels -}}
-    {{- $labels = merge $labels . -}}
-  {{- end -}}
-{{- end -}}
-
-{{- if eq $component "image-pull" -}}
-  {{- with $ctx.Values.imagePullSecrets.labels -}}
-    {{- $labels = merge $labels . -}}
-  {{- end -}}
-{{- end -}}
-
-{{- if eq $component "secrets" -}}
-  {{- with $ctx.Values.kasmSecrets.labels -}}
-    {{- $labels = merge $labels . -}}
-  {{- end -}}
-{{- end -}}
-
-{{- if and (or (eq $component "proxy") (eq $component "proxy-ext")) (eq $resource "service") -}}
-  {{- with $ctx.Values.proxyService.labels -}}
-    {{- $labels = merge $labels . -}}
-  {{- end -}}
-{{- end -}}
-
-{{- $labels = merge $labels (dict
-  "kasm.com/version" $ctx.Chart.AppVersion
-  "app.kubernetes.io/name" $labelName
-  "app.kubernetes.io/component" (kebabcase $component)
-  "app.kubernetes.io/instance" $ctx.Release.Name
-  "app.kubernetes.io/version" $ctx.Chart.AppVersion
-  "app.kubernetes.io/managed-by" "Helm"
-  "helm.sh/chart" (printf "%s-%s" $ctx.Chart.Name $ctx.Chart.Version)
-  "app.kubernetes.io/part-of" "kasm"
-) -}}
-
-
-{{/* Annotations */}}
-{{- $annotations := dict -}}
-
-{{- with $ctx.Values.annotations -}}
-  {{- $annotations = merge $annotations . -}}
-{{- end -}}
-
-{{- if eq $resource "ingress" -}}
-  {{- with $ctx.Values.ingress.annotations -}}
-    {{- $annotations = merge $annotations . -}}
-  {{- end -}}
-{{- end -}}
-
-{{- with (get $ctx.Values.components .component) -}}
-  {{- with .annotations }}
-    {{- $annotations = merge $annotations . -}}
-  {{- end }}
-{{- end }}
-
-{{- if .resource -}}
-  {{- with (get $ctx.Values.extraAnnotations .resource) -}}
-    {{- $annotations = merge $annotations . -}}
-  {{- end }}
-{{- end -}}
-
-{{- if and (or (eq $component "proxy") (eq $component "proxy-ext")) (eq $resource "service") -}}
-  {{- with $ctx.Values.proxyService.annotations -}}
-    {{- $annotations = merge $annotations . -}}
-  {{- end -}}
-{{- end -}}
-
-{{- if eq $resource "route" -}}
-  {{- with $ctx.Values.route.annotations -}}
-    {{- $annotations = merge $annotations . -}}
-  {{- end -}}
-{{- end -}}
-
-{{- if eq $component "cert-manager" -}}
-  {{- with $ctx.Values.certificate.certManager.annotations -}}
-    {{- $annotations = merge $annotations . -}}
-  {{- end -}}
-{{- end -}}
-
-{{- if eq $component "db" -}}
-  {{- with $ctx.Values.database.annotations -}}
-    {{- $annotations = merge $annotations . -}}
-  {{- end -}}
-{{- end -}}
-
-{{- if eq $component "image-pull" -}}
-  {{- with $ctx.Values.imagePullSecrets.annotations -}}
-    {{- $annotations = merge $annotations . -}}
-  {{- end -}}
-{{- end -}}
-
-{{- if eq $component "secrets" -}}
-  {{- with $ctx.Values.kasmSecrets.annotations -}}
-    {{- $annotations = merge $annotations . -}}
-  {{- end -}}
-{{- end -}}
-
-{{/* Special Cases */}}
-
-{{- if and $ctx.Values.applyHealthChecks (has .resource (list "deployment" "pod" "statefulSet" "daemonset" "job" "cronJob" "cronPod")) -}}
-  {{- $annotations = merge $annotations (dict "kasm.com/healthcheck" "true") -}}
-{{- end -}}
-
-{{- if and $ctx.Values.applySecurity (has .resource (list "deployment" "pod" "statefulSet" "daemonset" "job" "cronJob" "cronPod")) -}}
-  {{- $annotations = merge $annotations (dict "kasm.com/security" "true") -}}
-{{- end -}}
-
-{{- if and (eq .component "db-backup") (eq .resource "pvc") -}}
-  {{- $annotations = merge $annotations (dict
-  "helm.sh/resource-policy" "keep"
-  "helm.sh/hook-weight" "100"
-  ) -}}
-{{- end -}}
-
-{{- if (or (eq $component "secrets") (eq $component "image-pull") (eq $component "db-preseed")) -}}
-  {{- $annotations = merge $annotations (dict
-      "helm.sh/hook" "pre-install,pre-upgrade"
-    ) -}}
-{{- end -}}
-
-{{- if (and (eq $component "pre-upgrade-backup") (eq $resource "pvc")) -}}
-  {{- $annotations = merge $annotations (dict
-      "helm.sh/resource-policy" "keep"
-      "helm.sh/hook-weight" "-10"
-      "helm.sh/hook" "pre-upgrade,pre-install"
-    ) -}}
-{{- end -}}
-
-{{- if (and (eq $component "pre-upgrade-backup") (eq $resource "job")) -}}
-  {{- $annotations = merge $annotations (dict
-      "helm.sh/hook-weight" "10"
-      "helm.sh/hook" "pre-upgrade,pre-install"
-    ) -}}
-{{- end -}}
-
-{{/* Output Metadata Block */}}
-
-{{- if eq .include "all" }}
-name: {{ $name }}
-namespace: {{ $ctx.Release.Namespace }}
-{{- end }}
-{{- if or (eq .include "all") (eq .include "la") }}
-labels:
-{{- toYaml $labels | nindent 2 }}
-{{- with $annotations }}
-annotations:
-{{- toYaml . | nindent 2 }}
-{{- end }}
-{{- end }}
-{{- if eq .include "match" }}
-app.kubernetes.io/name: {{ $labelName }}
-app.kubernetes.io/component: {{ (kebabcase $component) }}
-app.kubernetes.io/instance: {{ $ctx.Release.Name }}
-{{- end }}
+{{- include "kasm.common.metadata" . -}}
 {{- end -}}
 
 {{/*
@@ -636,45 +415,11 @@ Usage:
 Where:
   index 1 = runAsUser/runAsGroup integer
   index 2 = context ("pod" or "container")
+  Delegates to kasm.common.securityContext (charts/kasm-common); see that chart's _helpers.tpl for
+  the real implementation.
 */}}
 {{- define "kasm.securityContext" -}}
-{{- $rootContext := index . 0 -}}
-{{- $runAs := index . 1 -}}
-{{- $context := index . 2 -}}
-{{- $ro := true -}}
-{{- if ge (len .) 4 -}}
-  {{- $opts := index . 3 -}}
-  {{- if and $opts (hasKey $opts "readOnlyRootFilesystem") -}}
-    {{- $ro = get $opts "readOnlyRootFilesystem" -}}
-  {{- end -}}
-{{- end -}}
-
-{{- if $rootContext.Values.applySecurity -}}
-securityContext:
-  {{- if eq $context "pod" }}
-    {{- if not $rootContext.Values.isOpenshift }}
-  runAsUser: {{ $runAs }}
-  runAsGroup: {{ $runAs }}
-  fsGroup: {{ $runAs }}
-    {{- end }}
-  fsGroupChangePolicy: OnRootMismatch
-  {{- else if eq $context "container" -}}
-    {{- if not $rootContext.Values.isOpenshift }}
-  runAsUser: {{ $runAs }}
-  runAsGroup: {{ $runAs }}
-    {{- end }}
-  allowPrivilegeEscalation: false
-  readOnlyRootFilesystem: {{ $ro }}
-  runAsNonRoot: true
-  capabilities:
-    drop:
-      - ALL
-  seccompProfile:
-    type: RuntimeDefault
-  {{- else -}}
-    {{- printf "ERROR: Invalid context value '%s'. Allowed values are %s" $context "pod, container" | fail }}
-  {{- end -}}
-{{- end -}}
+{{- include "kasm.common.securityContext" . -}}
 {{- end -}}
 
 {{/*
@@ -689,13 +434,17 @@ securityContext:
     component: Component selector used to locate healthCheckTiming in values.yaml. Standard components resolve from:
                 .Values.components.<component>.healthCheckTiming. The database component is special-cased: component: db
                 resolves from: .Values.database.healthCheckTiming
-    probeType: Probe timing selector under healthCheckTiming. Expected values: livenessProbe, readinessProbe, startupProbe type: Kubernetes
+    probeType: Probe timing selector under healthCheckTiming. Expected values: livenessProbe, readinessProbe type: Kubernetes
               probe implementation type. Allowed values: http, https, tcp, command
 
   Optional args:
     timingScope: Optional sub-selector for components with multiple containers and container-specific health check timing. When
                 supplied, timing resolves from: .Values.components.<component>.<timingScope>.healthCheckTiming.<probeType>
                 Example timingScope selectors: nginxSidecar
+    timingParent: Optional dict, used in place of the .Values.components.<component> lookup for components that
+                don't live under .Values.components (e.g. observability.clickhouse, observability.collector).
+                When supplied, timing resolves from: <timingParent>.healthCheckTiming.<probeType>, and both the
+                "db" special-case and the "components" lookup are skipped entirely. Takes priority over timingScope.
 
   Probe-specific args:
     For type: http or https 
@@ -731,87 +480,12 @@ securityContext:
             "path" "/healthz"
             "portName" "api"
           ) | nindent 6 }}
+
+  Delegates to health.common.probe (charts/kasm-common); see that chart's _helpers.tpl for the real
+  implementation.
 */}}
 {{- define "health.probe" -}}
-{{- $root := required "health.probe requires root" .root -}}
-{{- $componentName := required "health.probe requires component" .component -}}
-{{- $probeType := required "health.probe requires probeType" .probeType -}}
-{{- $probeKind := required "health.probe requires type: http, https, tcp, or command" .type | lower -}}
-
-{{- $healthCheckParent := dict -}}
-
-{{- if eq $componentName "db" -}}
-  {{- $healthCheckParent = get $root.Values "database" | default dict -}}
-{{- else -}}
-  {{- $components := get $root.Values "components" | default dict -}}
-  {{- $component := get $components $componentName | default dict -}}
-
-  {{- if hasKey . "timingScope" -}}
-    {{- $timingScope := .timingScope -}}
-    {{- $healthCheckParent = get $component $timingScope | default dict -}}
-  {{- else -}}
-    {{- $healthCheckParent = $component -}}
-  {{- end -}}
-{{- end -}}
-
-{{- $healthCheckTiming := get $healthCheckParent "healthCheckTiming" | default dict -}}
-{{- $timing := get $healthCheckTiming $probeType | default dict -}}
-
-{{- $timeoutSeconds := get $timing "timeoutSeconds" | default 5 -}}
-{{- $initialDelaySeconds := get $timing "initialDelaySeconds" | default 10 -}}
-{{- $periodSeconds := get $timing "periodSeconds" | default 30 -}}
-{{- $failureThreshold := get $timing "failureThreshold" | default 3 -}}
-{{- $successThreshold := get $timing "successThreshold" | default 1 -}}
-
-{{- if or (eq $probeKind "http") (eq $probeKind "https") -}}
-{{- $path := required "health.probe type http/https requires path" .path -}}
-{{- $port := "" -}}
-{{- if hasKey . "port" -}}
-  {{- $port = .port -}}
-{{- else if hasKey . "portName" -}}
-  {{- $port = .portName -}}
-{{- else -}}
-  {{- fail "health.probe type http/https requires port or portName" -}}
-{{- end -}}
-httpGet:
-  path: {{ $path | quote }}
-  port: {{ $port }}
-{{- if eq $probeKind "https" }}
-  scheme: HTTPS
-{{- end }}
-
-{{- else if eq $probeKind "tcp" -}}
-{{- $port := "" -}}
-{{- if hasKey . "port" -}}
-  {{- $port = .port -}}
-{{- else if hasKey . "portName" -}}
-  {{- $port = .portName -}}
-{{- else -}}
-  {{- fail "health.probe type tcp requires port or portName" -}}
-{{- end -}}
-tcpSocket:
-  port: {{ $port }}
-
-{{- else if eq $probeKind "command" -}}
-{{- $command := required "health.probe type command requires command" .command -}}
-exec:
-  command:
-{{- if kindIs "slice" $command }}
-{{ toYaml $command | nindent 4 }}
-{{- else }}
-    - /bin/sh
-    - -c
-    - {{ $command | quote }}
-{{- end }}
-
-{{- else -}}
-{{- fail (printf "health.probe received unsupported type %q. Allowed values: http, https, tcp, command" $probeKind) -}}
-{{- end }}
-timeoutSeconds: {{ $timeoutSeconds }}
-initialDelaySeconds: {{ $initialDelaySeconds }}
-periodSeconds: {{ $periodSeconds }}
-failureThreshold: {{ $failureThreshold }}
-successThreshold: {{ $successThreshold }}
+{{- include "health.common.probe" . -}}
 {{- end -}}
 
 {{/*
@@ -1059,6 +733,11 @@ successThreshold: {{ $successThreshold }}
   Return a replica object based on given presets
   Example usage:
   {{ include "replicas.preset" (dict "node" "proxy" "size" "small") -}}
+
+  Note: "otel-gateway" is 1 at every size and pinned there — kasm.observabilityValidate fails the
+  render if components.otelGateway.replicas is set above 1. Every sender now talks to the gateway's
+  ClusterIP Service directly; nothing partitions traces by ID in front of it, so a second replica
+  would let tail_sampling see partial traces and silently drop spans.
 */}}
 {{- define "replicas.preset" -}}
 {{- $presetSizes := dict
@@ -1077,15 +756,15 @@ successThreshold: {{ $successThreshold }}
     "medium" 2
     "large" 3
   )
-  "manager" (dict
-    "small" 1
-    "medium" 2
-    "large" 3
-  )
   "connection-proxy" (dict
     "small" 1
     "medium" 2
     "large" 3
+  )
+  "otel-gateway" (dict
+    "small" 1
+    "medium" 1
+    "large" 1
   )
 -}}
 
@@ -1102,6 +781,48 @@ successThreshold: {{ $successThreshold }}
 {{- end -}}
 
 {{/*
+  Resolve, normalize, and validate components.api.workerPool.
+  Usage: {{ include "kasm.apiWorkerPools" $.Values | fromYamlArray }}
+  Returns an empty YAML list when workerPool is empty (the default -- every API replica
+  consumes its own queues, no separate workload). Otherwise returns one entry per pool:
+  {name, slug, queues, replicas, queueConcurrency, resources}, where slug is the pool name
+  normalized via kasm.zoneName (mirrors how zone names get slugged into resource names) and
+  replicas resolves the 0 = deploymentSize-preset convention using the "api" node's
+  replicas.preset (worker pools are just API processes, so they share the api preset).
+  Fails if: any pool missing (or with an empty) 'name'; two pools normalizing to the same slug.
+*/}}
+{{- define "kasm.apiWorkerPools" -}}
+{{- $vals := . -}}
+{{- $components := default dict (index $vals "components") -}}
+{{- $api := default dict (index $components "api") -}}
+{{- $pools := default (list) (index $api "workerPool") -}}
+{{- $seen := dict -}}
+{{- $result := list -}}
+{{- range $i, $p := $pools -}}
+  {{- if not $p.name -}}
+    {{- fail (printf "components.api.workerPool[%d] is missing required field 'name'" $i) -}}
+  {{- end -}}
+  {{- $slug := include "kasm.zoneName" $p.name -}}
+  {{- if hasKey $seen $slug -}}
+    {{- fail (printf "components.api.workerPool has duplicate normalized name %q (pool %q collides with an earlier pool)" $slug $p.name) -}}
+  {{- end -}}
+  {{- $_ := set $seen $slug true -}}
+  {{- $poolReplicas := default 0 $p.replicas -}}
+  {{- $replicas := ternary (int $poolReplicas) (include "replicas.preset" (dict "node" "api" "size" $vals.deploymentSize) | int) (gt (int $poolReplicas) 0) -}}
+  {{- $entry := dict
+      "name" $p.name
+      "slug" $slug
+      "queues" (default "all" $p.queues)
+      "replicas" $replicas
+      "queueConcurrency" (default dict $p.queueConcurrency)
+      "resources" $p.resources
+    -}}
+  {{- $result = append $result $entry -}}
+{{- end -}}
+{{- toYaml $result -}}
+{{- end -}}
+
+{{/*
   Return a resource request/limit object based on given presets
   Example usage:
   {{- include "resources.preset" (dict "node" "proxy" "size" "small" "context" .) -}}
@@ -1109,6 +830,17 @@ successThreshold: {{ $successThreshold }}
 {{- define "resources.preset" }}
   {{- $context := default (dict) .context -}}
   {{- $zoneCount := len (default (list 1) (index $context "kasmZones")) -}}
+  {{/*
+    Extra Postgres connection headroom for split-mode worker pods. Each worker pod is a full API
+    process (POSTGRES_POOL_SIZE 10 + POSTGRES_MAX_OVERFLOW 20 = 30 possible connections), running
+    once per pool per zone, so headroom = 30 * (sum of every pool's replica count) * zoneCount.
+    Zero in combined mode (no separate worker pods exist; the base preset already covers the api
+    pods either way).
+  */}}
+  {{- $workerConnHeadroom := 0 -}}
+  {{- range $p := (include "kasm.apiWorkerPools" $context | fromYamlArray) -}}
+    {{- $workerConnHeadroom = add $workerConnHeadroom (mul (mul (int $p.replicas) $zoneCount) 30) -}}
+  {{- end -}}
   {{- $presetSizes := dict
     "proxy" (dict
       "small" (dict 
@@ -1125,7 +857,11 @@ successThreshold: {{ $successThreshold }}
       )
     )
     "proxy-processes" (dict "small" 2 "medium" 6 "large" 12)
-    "db-max-connections" (dict "small" 200 "medium" (mul 400 $zoneCount) "large" (mul 600 $zoneCount))
+    "db-max-connections" (dict
+      "small" (add 200 $workerConnHeadroom)
+      "medium" (add (mul 400 $zoneCount) $workerConnHeadroom)
+      "large" (add (mul 600 $zoneCount) $workerConnHeadroom)
+    )
     "db" (dict
       "small" (dict 
         "requests" (dict "cpu" "750m" "memory" "512Mi" "ephemeral-storage" "50Mi")
@@ -1141,20 +877,6 @@ successThreshold: {{ $successThreshold }}
       )
     )
     "api" (dict
-      "small" (dict 
-        "requests" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "500m" "memory" "1Gi" "ephemeral-storage" "2Gi")
-      )
-      "medium" (dict 
-        "requests" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "500m" "memory" "1Gi" "ephemeral-storage" "2Gi")
-      )
-      "large" (dict 
-        "requests" (dict "cpu" "500m" "memory" "1Gi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "500m" "memory" "2Gi" "ephemeral-storage" "2Gi")
-      )
-    )
-    "manager" (dict
       "small" (dict 
         "requests" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "50Mi")
         "limits" (dict "cpu" "500m" "memory" "1Gi" "ephemeral-storage" "2Gi")
@@ -1239,6 +961,53 @@ successThreshold: {{ $successThreshold }}
         "limits" (dict "cpu" "1500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
       )
     )
+    "otel-gateway" (dict
+      "small" (dict
+        "requests" (dict "cpu" "300m" "memory" "512Mi" "ephemeral-storage" "50Mi")
+        "limits" (dict "cpu" "1" "memory" "1Gi" "ephemeral-storage" "2Gi")
+      )
+      "medium" (dict
+        "requests" (dict "cpu" "500m" "memory" "1Gi" "ephemeral-storage" "50Mi")
+        "limits" (dict "cpu" "1" "memory" "2Gi" "ephemeral-storage" "2Gi")
+      )
+      "large" (dict
+        "requests" (dict "cpu" "1" "memory" "2Gi" "ephemeral-storage" "50Mi")
+        "limits" (dict "cpu" "2" "memory" "4Gi" "ephemeral-storage" "2Gi")
+      )
+    )
+    "clickhouse" (dict
+      "small" (dict
+        "requests" (dict "cpu" "500m" "memory" "1Gi" "ephemeral-storage" "50Mi")
+        "limits" (dict "cpu" "1" "memory" "2Gi" "ephemeral-storage" "2Gi")
+      )
+      "medium" (dict
+        "requests" (dict "cpu" "1" "memory" "2Gi" "ephemeral-storage" "50Mi")
+        "limits" (dict "cpu" "2" "memory" "4Gi" "ephemeral-storage" "2Gi")
+      )
+      "large" (dict
+        "requests" (dict "cpu" "2" "memory" "4Gi" "ephemeral-storage" "50Mi")
+        "limits" (dict "cpu" "4" "memory" "8Gi" "ephemeral-storage" "2Gi")
+      )
+    )
+    "otel-sidecar" (dict
+      "small" (dict
+        "requests" (dict "cpu" "100m" "memory" "128Mi" "ephemeral-storage" "50Mi")
+        "limits" (dict "cpu" "200m" "memory" "256Mi" "ephemeral-storage" "2Gi")
+      )
+      "medium" (dict
+        "requests" (dict "cpu" "100m" "memory" "128Mi" "ephemeral-storage" "50Mi")
+        "limits" (dict "cpu" "200m" "memory" "256Mi" "ephemeral-storage" "2Gi")
+      )
+      "large" (dict
+        "requests" (dict "cpu" "100m" "memory" "128Mi" "ephemeral-storage" "50Mi")
+        "limits" (dict "cpu" "200m" "memory" "256Mi" "ephemeral-storage" "2Gi")
+      )
+    )
+    "otel-gateway-tuning" (dict
+      "small" (dict "limit_mib" 800 "spike_limit_mib" 200 "num_traces" 25000)
+      "medium" (dict "limit_mib" 1600 "spike_limit_mib" 400 "num_traces" 50000)
+      "large" (dict "limit_mib" 3200 "spike_limit_mib" 800 "num_traces" 100000)
+    )
   }}
 
 {{- if not (hasKey $presetSizes .node) -}}
@@ -1261,10 +1030,13 @@ Returns a single YAML object with:
 - initMounts:         deduped []corev1.VolumeMount  (for init containers)
 - extraContainers:    deduped []corev1.Container    (sidecars)
 - extraInitContainers:deduped []corev1.Container    (init sidecars)
+- extraEnv:           deduped []corev1.EnvVar       (main container only, this round)
 Dedup rules:
 - Containers: by .name (component overrides global on same name)
 - VolumeMounts: by "<name>|<mountPath>" (separate sets for init vs main)
 - Volumes: by a stable synthetic key (secret/configmap/pvc/emptyDir/name)
+- EnvVar: by .name (component overrides global on same name); each entry is passed through
+  `tpl` against the root context before merging, so values can reference e.g. {{ .Release.Name }}
 */}}
 {{- define "kasm.volumeKey" -}}
   {{- if .secret -}}
@@ -1296,12 +1068,14 @@ Dedup rules:
       "extraInitMounts"      (default (list) $root.Values.extraInitVolumeMounts)
       "extraContainers"      (default (list) $root.Values.extraContainers)
       "extraInitContainers"  (default (list) $root.Values.extraInitContainers)
+      "extraEnv"             (default (list) $root.Values.extraEnv)
     -}}
   {{- $componentLevel := dict
       "extraVolumes"         (default (list) $component.extraVolumes)
       "extraContainerMounts" (default (list) $component.extraVolumeMounts)
       "extraContainers"      (default (list) $component.extraContainers)
       "extraInitContainers"  (default (list) $component.extraInitContainers)
+      "extraEnv"             (default (list) $component.extraEnv)
       "nginxSidecarVolumes"  (default (list) (dig "nginxSidecar" "extraVolumes" (list) $component))
       "nginxSidecarMounts"   (default (list) (dig "nginxSidecar" "extraVolumeMounts" (list) $component))
     -}}
@@ -1356,6 +1130,46 @@ Dedup rules:
     {{- $_ := set $initCtrMap $containers.name $containers -}}
   {{- end -}}
 
+  {{/*
+    extraEnv order must be deterministic (sprig `values` on a map returns randomized Go map
+    order, which would reshuffle the container env list on every render/upgrade). Scheme:
+    global entries keep their values-order position unless a component entry overrides the
+    same name, in which case that name is dropped from the global position and re-emitted at
+    its component-list position instead. Ties within a single list (duplicate names) keep the
+    first occurrence's position.
+  */}}
+  {{- $envMap := dict -}}
+  {{- $envOrder := list -}}
+  {{- $envSeen := dict -}}
+  {{- $compEnvNames := dict -}}
+  {{- range $e := get $componentLevel "extraEnv" -}}
+    {{- if $e.name -}}
+      {{- $_ := set $compEnvNames $e.name true -}}
+    {{- end -}}
+  {{- end -}}
+  {{- range $e := get $global "extraEnv" -}}
+    {{- if not $e.name -}} {{- fail "extraEnv entries must define 'name'" -}} {{- end -}}
+    {{- $tplE := tpl ($e | toYaml) $root | fromYaml -}}
+    {{- $_ := set $envMap $tplE.name $tplE -}}
+    {{- if and (not (hasKey $compEnvNames $tplE.name)) (not (hasKey $envSeen $tplE.name)) -}}
+      {{- $envOrder = append $envOrder $tplE.name -}}
+      {{- $_ := set $envSeen $tplE.name true -}}
+    {{- end -}}
+  {{- end -}}
+  {{- range $e := get $componentLevel "extraEnv" -}}
+    {{- if not $e.name -}} {{- fail "extraEnv entries must define 'name'" -}} {{- end -}}
+    {{- $tplE := tpl ($e | toYaml) $root | fromYaml -}}
+    {{- $_ := set $envMap $tplE.name $tplE -}}
+    {{- if not (hasKey $envSeen $tplE.name) -}}
+      {{- $envOrder = append $envOrder $tplE.name -}}
+      {{- $_ := set $envSeen $tplE.name true -}}
+    {{- end -}}
+  {{- end -}}
+  {{- $envList := list -}}
+  {{- range $n := $envOrder -}}
+    {{- $envList = append $envList (get $envMap $n) -}}
+  {{- end -}}
+
   {{/* Convert maps back to lists in a single object; emit YAML once */}}
   {{- $out := dict -}}
   {{- $_ := set $out "volumes"            (values $volMap) -}}
@@ -1364,6 +1178,7 @@ Dedup rules:
   {{- $_ := set $out "extraContainers"    (values $sidecarMap) -}}
   {{- $_ := set $out "extraInitContainers" (values $initCtrMap) -}}
   {{- $_ := set $out "nginxSidecarMounts" (values $sidecarMountMap) -}}
+  {{- $_ := set $out "extraEnv"           $envList -}}
   {{- toYaml $out -}}
 {{- end -}}
 
@@ -1441,6 +1256,483 @@ Dedup rules:
 - name: REQUESTS_CA_BUNDLE
   value: /etc/ssl/certs/ca-certificates.crt
 {{- end }}
+{{- end }}
+
+{{/*
+  Shared OpenTelemetry SDK env block for Kasm service containers.
+  Usage:
+    {{- include "kasm.otelEnv" (dict "context" $ "serviceName" "kasm-api" "zone" $zone.name) | nindent 12 }}
+  Where:
+    context     = root context (.)
+    serviceName = OTEL_SERVICE_NAME value, e.g. "kasm-api"
+    zone        = (optional) zone name (from kasm.zones), recorded as the kasm.zone resource
+                  attribute. Zones no longer select an endpoint: there is one cluster-wide gateway.
+    sidecar     = (optional bool) set true for containers in a pod that runs a Collector sidecar
+                  (Connection Proxy). Those export to the sidecar over loopback and the sidecar is the
+                  pod's single egress point; everything else exports straight to the gateway Service.
+    python      = (optional bool) set true for the Python services (api) to also emit
+                  OTEL_PYTHON_EXCLUDED_URLS.
+  Emits a YAML list fragment suitable for splicing into a container's `env:`.
+*/}}
+{{- define "kasm.otelEnv" -}}
+{{- $ctx := .context -}}
+{{- $obs := $ctx.Values.observability -}}
+{{- $serviceName := required "kasm.otelEnv requires serviceName" .serviceName -}}
+{{- if not $obs.enabled }}
+- name: OTEL_SDK_DISABLED
+  value: "true"
+{{- else }}
+{{- $constants := include "kasm.constants" $ctx | fromYaml -}}
+{{- $zone := .zone | default "" -}}
+{{- $upstream := $obs.collector.upstream -}}
+{{- $upstreamEnabled := ne $upstream.endpoint "" -}}
+{{- $endpoint := "" -}}
+{{- $protocol := "" -}}
+{{- if .sidecar -}}
+  {{- $endpoint = printf "http://localhost:%v" $constants.otel.otlpHttp -}}
+  {{- $protocol = "http/protobuf" -}}
+{{- else -}}
+  {{/* Every non-sidecar sender (Kasm app services) talks straight to the gateway (no forwarder
+       tier between them), authenticated with the same bearer token the gateway's
+       bearertokenauth/server extension checks. HTTP, not gRPC: the Kasm app SDKs are wired to
+       the OTLP HTTP exporter (that choice lives in kasm_backend, not this chart), so the gateway
+       exposes an authenticated HTTP receiver alongside the gRPC one the Collector sidecars use.
+       observability.collector.upstream overrides this endpoint (and its bearer token) to redirect
+       these senders at an external collector instead; Collector sidecars are untouched by that
+       override (see values.yaml doc). */}}
+  {{- if $upstreamEnabled -}}
+    {{- $endpoint = $upstream.endpoint -}}
+  {{- else -}}
+    {{- $endpoint = printf "http://%s:%v" $constants.otel.gatewaySvc $constants.otel.otlpHttp -}}
+  {{- end -}}
+  {{- $protocol = "http/protobuf" -}}
+{{- end }}
+- name: OTEL_SERVICE_NAME
+  value: {{ $serviceName | quote }}
+{{- if not .sidecar }}
+{{- if $upstreamEnabled }}
+{{- if $upstream.existingSecret.name }}
+- name: OTEL_BEARER_TOKEN
+  valueFrom:
+    secretKeyRef:
+      name: {{ $upstream.existingSecret.name }}
+      key: {{ $upstream.existingSecret.key }}
+{{- else }}
+- name: OTEL_BEARER_TOKEN
+  value: {{ $upstream.token | quote }}
+{{- end }}
+{{- else }}
+- name: OTEL_BEARER_TOKEN
+  valueFrom:
+    secretKeyRef:
+      name: {{ $constants.secrets.name }}
+      key: otel-bearer-token
+{{- end }}
+- name: OTEL_EXPORTER_OTLP_HEADERS
+  value: "Authorization=Bearer $(OTEL_BEARER_TOKEN)"
+{{- end }}
+- name: OTEL_EXPORTER_OTLP_ENDPOINT
+  value: {{ $endpoint | quote }}
+- name: OTEL_EXPORTER_OTLP_PROTOCOL
+  value: {{ $protocol | quote }}
+{{- if .python }}
+- name: OTEL_PYTHON_EXCLUDED_URLS
+  value: "socket.io/*,healthcheck"
+{{- end }}
+- name: OTEL_RESOURCE_ATTRIBUTES
+  {{- if $zone }}
+  value: {{ printf "deployment.environment=kubernetes,service.namespace=%s,kasm.zone=%s" $ctx.Release.Namespace (include "kasm.zoneName" $zone) | quote }}
+  {{- else }}
+  value: {{ printf "deployment.environment=kubernetes,service.namespace=%s" $ctx.Release.Namespace | quote }}
+  {{- end }}
+{{- end }}
+{{- /*
+  The logging vars below are emitted whether or not observability is enabled. They are not OTel
+  settings: kasm_telemetry defaults log_file_enabled to TRUE, and init_logging() then does
+  mkdir(parents=True) + opens the log file. With the chart's default readOnlyRootFilesystem and
+  nothing mounted at /opt/kasm/current/log, that raises OSError and the container dies at startup.
+  Gating these on observability.enabled would therefore make `observability.enabled: false`
+  un-deployable.
+*/ -}}
+{{- include "kasm.loggingEnv" (dict "context" $ctx "serviceName" $serviceName "component" (.component | default "")) }}
+{{- end }}
+
+{{/*
+  ClickHouse HTTP(S) endpoint Kasm (api) reads reports from.
+  Usage:
+    {{ include "kasm.clickhouseHttpEndpoint" (dict "context" $) }}
+*/}}
+{{- define "kasm.clickhouseHttpEndpoint" -}}
+{{- $ctx := .context -}}
+{{- $ch := $ctx.Values.observability.clickhouse -}}
+{{- if $ch.standalone -}}
+{{- $ch.httpEndpoint -}}
+{{- else -}}
+{{- $scheme := ternary "https" "http" $ch.tls -}}
+{{- $port := ternary 8443 8123 $ch.tls -}}
+{{- printf "%s://%s-clickhouse:%d" $scheme $ctx.Release.Name (int $port) -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+  ClickHouse native-protocol DSN the Collector writes telemetry to.
+  Usage:
+    {{ include "kasm.clickhouseNativeDsn" (dict "context" $) }}
+*/}}
+{{- define "kasm.clickhouseNativeDsn" -}}
+{{- $ctx := .context -}}
+{{- $ch := $ctx.Values.observability.clickhouse -}}
+{{- if $ch.standalone -}}
+  {{- if contains "://" $ch.nativeEndpoint -}}
+    {{- $ch.nativeEndpoint -}}
+  {{- else -}}
+    {{- printf "tcp://%s" $ch.nativeEndpoint -}}
+  {{- end -}}
+{{- else -}}
+{{- $port := ternary 9440 9000 $ch.tls -}}
+{{- printf "tcp://%s-clickhouse:%d%s" $ctx.Release.Name (int $port) (ternary "?secure=true" "" $ch.tls) -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+  ClickHouse reporting read-path env vars for the Kasm api container.
+  Emits nothing when observability is disabled, or when there is no store to read
+  (clickhouse.enabled is false and standalone is false).
+  Usage:
+    {{- include "kasm.clickhouseEnv" (dict "context" $) | nindent 12 }}
+*/}}
+{{- define "kasm.clickhouseEnv" -}}
+{{- $ctx := .context -}}
+{{- $obs := $ctx.Values.observability -}}
+{{- $ch := $obs.clickhouse -}}
+{{- if and $obs.enabled (or $ch.standalone $ch.enabled) }}
+{{- $constants := include "kasm.constants" $ctx | fromYaml -}}
+{{- $endpoint := include "kasm.clickhouseHttpEndpoint" (dict "context" $ctx) -}}
+{{- $secretName := default $constants.secrets.name $ch.existingSecret.name -}}
+{{- $secretKey := default "clickhouse-password" $ch.existingSecret.key -}}
+{{- /* api reads as the RO user when one is configured. An unset readUsername defaults to
+     "kasm_otel_ro" when the chart manages ClickHouse (enabled && !standalone) — a stock install
+     gets the read-only split without extra values. A standalone external ClickHouse has no
+     RO user provisioned unless readUsername is set explicitly, so an unset value there falls
+     back to the writer credential unchanged. */ -}}
+{{- $readUser := $ch.readUsername -}}
+{{- if not $readUser -}}
+{{- if and $ch.enabled (not $ch.standalone) -}}
+{{- $readUser = "kasm_otel_ro" -}}
+{{- else -}}
+{{- $readUser = $ch.username -}}
+{{- end -}}
+{{- end -}}
+{{- $readSecretKey := $secretKey -}}
+{{- if ne $readUser $ch.username }}
+{{- if $ch.existingSecret.readKey }}
+{{- $readSecretKey = $ch.existingSecret.readKey }}
+{{- else if $ch.existingSecret.name }}
+{{- $readSecretKey = $secretKey }}
+{{- else }}
+{{- $readSecretKey = "clickhouse-ro-password" }}
+{{- end }}
+{{- end -}}
+- name: KASM_CLICKHOUSE_ENDPOINT
+  value: {{ $endpoint | quote }}
+- name: KASM_CLICKHOUSE_DATABASE
+  value: {{ $ch.database | quote }}
+- name: KASM_CLICKHOUSE_USER
+  value: {{ $readUser | quote }}
+- name: KASM_CLICKHOUSE_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      name: {{ $secretName }}
+      key: {{ $readSecretKey }}
+{{- if and (not $ch.standalone) $ch.tls }}
+- name: KASM_CLICKHOUSE_CA_CERT
+  value: /etc/ssl/certs/kasm_clickhouse.crt
+{{- else if and $ch.standalone (or $ch.caCert $ch.caCertConfigMap) }}
+- name: KASM_CLICKHOUSE_CA_CERT
+  value: /etc/ssl/certs/kasm_clickhouse_ca.crt
+{{- else if and $ch.standalone (not $ch.tlsVerify) }}
+- name: KASM_CLICKHOUSE_VERIFY
+  value: "false"
+{{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
+  Render-time validation for the observability values tree. Call once from a template that
+  always renders (called at the top of templates/otel-gateway-configmap.yaml).
+  Usage:
+    {{ include "kasm.observabilityValidate" $ }}
+*/}}
+{{- define "kasm.observabilityValidate" -}}
+{{- $ctx := . -}}
+{{- $obs := $ctx.Values.observability -}}
+{{- $ch := $obs.clickhouse -}}
+{{- $collector := $obs.collector -}}
+{{- if $ch.standalone -}}
+  {{- if or (not $ch.nativeEndpoint) (not $ch.httpEndpoint) -}}
+    {{- fail "observability.clickhouse.standalone requires both observability.clickhouse.nativeEndpoint and observability.clickhouse.httpEndpoint to be set." -}}
+  {{- end -}}
+  {{- if not $ch.enabled -}}
+    {{- fail "observability.clickhouse.standalone and observability.clickhouse.enabled=false are mutually exclusive: standalone already means 'use an external ClickHouse', while enabled=false means 'no ClickHouse store at all'." -}}
+  {{- end -}}
+{{- end -}}
+{{- if and $ch.caCert $ch.caCertConfigMap -}}
+  {{- fail "observability.clickhouse.caCert and observability.clickhouse.caCertConfigMap are mutually exclusive: caCert has the chart render a ConfigMap from literal PEM text, caCertConfigMap points at one you already manage." -}}
+{{- end -}}
+{{- /* Same default readUsername resolution as kasm.clickhouseEnv/clickhouse-configmap.yaml/
+     clickhouse-statefulset.yaml: bundled ClickHouse defaults to kasm_otel_ro, external stays empty. */ -}}
+{{- $effectiveReadUsername := $ch.readUsername -}}
+{{- if and (not $effectiveReadUsername) $ch.enabled (not $ch.standalone) -}}
+  {{- $effectiveReadUsername = "kasm_otel_ro" -}}
+{{- end -}}
+{{- if and $effectiveReadUsername (eq $effectiveReadUsername $ch.username) -}}
+  {{- fail (printf "observability.clickhouse.readUsername (%q) must differ from observability.clickhouse.username (%q): ClickHouse's users.xml cannot define two users with the same name, and the second definition silently discards the read-only password." $effectiveReadUsername $ch.username) -}}
+{{- end -}}
+{{- $forwardSecretNameSet := ne $collector.gateway.forward.existingSecret.name "" -}}
+{{- $forwardSecretKeySet := ne $collector.gateway.forward.existingSecret.key "" -}}
+{{- if and (or $forwardSecretNameSet $forwardSecretKeySet) (not (and $forwardSecretNameSet $forwardSecretKeySet)) -}}
+  {{- fail "observability.collector.gateway.forward.existingSecret requires both 'name' and 'key' to be set." -}}
+{{- end -}}
+{{- $upstreamSecretNameSet := ne $collector.upstream.existingSecret.name "" -}}
+{{- $upstreamSecretKeySet := ne $collector.upstream.existingSecret.key "" -}}
+{{- if and (or $upstreamSecretNameSet $upstreamSecretKeySet) (not (and $upstreamSecretNameSet $upstreamSecretKeySet)) -}}
+  {{- fail "observability.collector.upstream.existingSecret requires both 'name' and 'key' to be set." -}}
+{{- end -}}
+{{- $chSecretNameSet := ne $ch.existingSecret.name "" -}}
+{{- $chSecretKeySet := ne $ch.existingSecret.key "" -}}
+{{- if and (or $chSecretNameSet $chSecretKeySet) (not (and $chSecretNameSet $chSecretKeySet)) -}}
+  {{- fail "observability.clickhouse.existingSecret requires both 'name' and 'key' to be set." -}}
+{{- end -}}
+{{- if and (ne $ch.existingSecret.readKey "") (not $chSecretNameSet) -}}
+  {{- fail "observability.clickhouse.existingSecret.readKey requires observability.clickhouse.existingSecret.name to also be set: readKey names a key inside that same Secret." -}}
+{{- end -}}
+{{- if or (lt (int $collector.gateway.tailSamplePercentage) 0) (gt (int $collector.gateway.tailSamplePercentage) 100) -}}
+  {{- fail (printf "observability.collector.gateway.tailSamplePercentage must be between 0 and 100, got %d." (int $collector.gateway.tailSamplePercentage)) -}}
+{{- end -}}
+{{- /* observability.enabled with no destination and no BYO config means every span/log/metric
+     the gateway receives is silently dropped. existingConfigMap is exempt: that config decides
+     its own routing. */ -}}
+{{- if and $obs.enabled (not $collector.gateway.existingConfigMap) (not (or $ch.enabled $ch.standalone)) (eq $collector.gateway.forward.endpoint "") -}}
+  {{- fail "observability.enabled is true but the gateway has nowhere to send telemetry: set observability.clickhouse.enabled (or observability.clickhouse.standalone) to true, or set observability.collector.gateway.forward.endpoint to an external OTLP/HTTP endpoint." -}}
+{{- end -}}
+{{- /* Every sender exports straight to the gateway; nothing in front of it partitions traces by
+     ID the way the removed forwarder's loadbalancing exporter did. A second replica would let
+     tail_sampling see only some of a trace's spans and silently drop the rest. */ -}}
+{{- if gt (int $ctx.Values.components.otelGateway.replicas) 1 -}}
+  {{- fail (printf "components.otelGateway.replicas (%d) must be 0 (use the deploymentSize preset, always 1) or 1: every sender exports straight to the gateway, and nothing partitions traces by ID in front of it, so a second replica would make tail_sampling decide on partial traces and silently drop spans." (int $ctx.Values.components.otelGateway.replicas)) -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+  Compute a GOMEMLIMIT value (~80% of a Kubernetes memory limit quantity) so the Collector's Go
+  runtime starts proactively GCing before memory_limiter has to act. Accepts the binary memory
+  quantities (Mi/Gi suffixes) used by every resources.preset entry in this chart; any other
+  suffix is treated as a plain Mi count.
+  Usage:
+    {{ include "kasm.gomemlimit" "512Mi" }}
+*/}}
+{{- define "kasm.gomemlimit" -}}
+{{- $mem := . -}}
+{{- $mib := 0.0 -}}
+{{- if hasSuffix "Gi" $mem -}}
+  {{- $mib = mulf (trimSuffix "Gi" $mem | float64) 1024 -}}
+{{- else if hasSuffix "Mi" $mem -}}
+  {{- $mib = trimSuffix "Mi" $mem | float64 -}}
+{{- else -}}
+  {{- $mib = $mem | float64 -}}
+{{- end -}}
+{{- printf "%dMiB" (int64 (mulf $mib 0.8)) -}}
+{{- end -}}
+
+{{/*
+  Volume for the standalone-ClickHouse CA certificate, when configured. No-op for the bundled
+  ClickHouse (which is trusted via the shared Kasm certificate, mounted separately) or when neither
+  `caCert` nor `caCertConfigMap` is set.
+  Usage:
+    {{- include "kasm.clickhouseCaVolume" . | nindent 8 }}
+*/}}
+{{- define "kasm.clickhouseCaVolume" -}}
+{{- $ch := .Values.observability.clickhouse -}}
+{{- if and $ch.standalone (or $ch.caCert $ch.caCertConfigMap) }}
+- name: clickhouse-ca-cert
+  configMap:
+    name: {{ $ch.caCertConfigMap | default (include "kasm.name" (list . "clickhouse-ca" "configmap")) }}
+{{- end }}
+{{- end -}}
+
+{{/*
+  Volume mount for the standalone-ClickHouse CA certificate, matching kasm.clickhouseCaVolume.
+  Usage:
+    {{- include "kasm.clickhouseCaVolumeMount" . | nindent 12 }}
+*/}}
+{{- define "kasm.clickhouseCaVolumeMount" -}}
+{{- $ch := .Values.observability.clickhouse -}}
+{{- if and $ch.standalone (or $ch.caCert $ch.caCertConfigMap) }}
+- name: clickhouse-ca-cert
+  mountPath: /etc/ssl/certs/kasm_clickhouse_ca.crt
+  subPath: ca.crt
+  readOnly: true
+{{- end }}
+{{- end -}}
+
+{{/*
+  Operator chain for the nginx JSON access log, ported (including overwrite_text: true) from
+  kasm_backend/install/conf/otel/otel-collector-local.yaml. Used directly as the `operators:` list
+  of the otel-sidecar's syslog/nginx_access receiver (otel-nginx-sidecar-configmap.yaml). nginx
+  sends the JSON payload as the syslog message; the syslog receiver already lands it in
+  attributes.message, so the chain's json_parser reads from there instead of body.
+  Args (dict):
+    context     = root context (.)
+    serviceName = resource["service.name"]/attributes["application"] to stamp on every record
+                  (e.g. "kasm-proxy", "kasm-connection-proxy")
+  Usage:
+    operators:
+      {{- include "kasm.otelNginxAccessLogOperators" (dict "context" . "serviceName" "kasm-proxy") | nindent 8 }}
+
+  Delegates to kasm.common.otelNginxAccessLogOperators (charts/kasm-common); see that chart's
+  _helpers.tpl for the real implementation.
+*/}}
+{{- define "kasm.otelNginxAccessLogOperators" -}}
+{{- include "kasm.common.otelNginxAccessLogOperators" . -}}
+{{- end -}}
+
+{{/*
+  Operator chain for the nginx error log, ported from
+  kasm_backend/install/conf/otel/otel-collector-local.yaml. See kasm.otelNginxAccessLogOperators
+  for the serviceName arg this define shares and why parse_from targets attributes.message: nginx's
+  syslog error_log keeps its own "date [level] pid#tid: message" text as the syslog message body, so
+  the regex still matches, just against attributes.message instead of the file line.
+  Args (dict):
+    context     = root context (.)
+    serviceName = resource["service.name"] to stamp on every record (e.g. "kasm-proxy",
+                  "kasm-connection-proxy")
+  Usage:
+    operators:
+      {{- include "kasm.otelNginxErrorLogOperators" (dict "context" . "serviceName" "kasm-proxy") | nindent 8 }}
+
+  Delegates to kasm.common.otelNginxErrorLogOperators (charts/kasm-common); see that chart's
+  _helpers.tpl for the real implementation.
+*/}}
+{{- define "kasm.otelNginxErrorLogOperators" -}}
+{{- include "kasm.common.otelNginxErrorLogOperators" . -}}
+{{- end -}}
+
+{{/*
+  Shared OTel Collector sidecar container. A sidecar runs in every pod whose telemetry can only be
+  read from inside the pod, and is that pod's single egress point to the gateway:
+    - Kasm Proxy and Connection Proxy (loopback syslog for nginx logs, plus stub_status metrics)
+    - Kasm DB (PostgreSQL JSON log files on the data PVC)
+  The caller is responsible for adding matching volumes to the pod spec:
+    - a ConfigMap volume named "otel-sidecar-config" (the same name passed as .configMap)
+    - an emptyDir volume named "otel-sidecar-tmp"
+    - if volumeName/mountPath are given, that log volume already mounted (read-write) into the
+      primary container — omit both for callers with no file-based logs to read (the nginx sidecars,
+      which receive everything over loopback syslog/OTLP)
+  Optional args:
+    uid         = uid/gid to run as (default 10001, the collector image's user). The DB sidecar must
+                  run as 70: PostgreSQL writes its log files 0600 owned by the postgres user, so any
+                  other uid cannot read them.
+    zone        = zone name (from kasm.zones), recorded as the kasm.zone resource attribute.
+    serviceName = OTEL_SERVICE_NAME to report resource attributes under (e.g. "kasm-db"). Omit for
+                  callers whose collector config already hardcodes the service name (the nginx
+                  operator chains set resource["service.name"]=kasm-proxy themselves).
+    volumeName/mountPath = a file-based log volume to mount read-only into the sidecar. Omit both
+                  if the sidecar has no files to read (see above).
+    subPath     = (optional) subPath for the log volume mount, for callers whose logs live inside a
+                  larger volume (the DB PVC).
+    extraVolumeMounts = (optional) YAML list of additional mounts, e.g. the DB sidecar's checkpoint
+                  directory on the data PVC.
+  Usage:
+    {{- include "kasm.otelSidecar" (dict "context" $ "configMap" "my-cm" "volumeName" "my-logs" "mountPath" "/var/log/postgres") | nindent 8 }}
+*/}}
+{{- define "kasm.otelSidecar" -}}
+{{- $ctx := .context -}}
+{{- $volumeName := .volumeName -}}
+{{- $mountPath := .mountPath -}}
+{{- $constants := include "kasm.constants" $ctx | fromYaml -}}
+{{- $zone := .zone | default "" -}}
+{{- $uid := .uid | default 10001 -}}
+{{/* This container's own exported config (kasm.common.otelOtlpExporterToGateway) forwards to the
+     gateway over OTLP/gRPC, authenticated with the same bearer token the gateway's
+     bearertokenauth/server extension checks. */}}
+{{- $endpoint := printf "%s:%v" $constants.otel.gatewaySvc $constants.otel.otlpGrpc -}}
+- name: otel-sidecar
+  image: {{ $constants.otel.sidecarImage }}
+  imagePullPolicy: {{ $ctx.Values.imagePullPolicy }}
+  {{- include "kasm.securityContext" (list $ctx $uid "container") | nindent 2 }}
+  env:
+    - name: POD_NAME
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.name
+    - name: OTEL_EXPORTER_OTLP_ENDPOINT
+      value: {{ $endpoint | quote }}
+    - name: OTEL_BEARER_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: {{ $constants.secrets.name }}
+          key: otel-bearer-token
+    {{- if .serviceName }}
+    - name: OTEL_SERVICE_NAME
+      value: {{ .serviceName | quote }}
+    {{- end }}
+    {{/* No OTEL_RESOURCE_ATTRIBUTES here: it's an SDK env var the Collector binary does not apply
+         to pipeline data (see kasm.common.otelResourceProcessor). POD_NAME above and this zone var
+         feed that processor's ${env:} expansion instead. */}}
+    {{- if $zone }}
+    - name: OTEL_KASM_ZONE
+      value: {{ include "kasm.zoneName" $zone | quote }}
+    {{- end }}
+  {{- if $ctx.Values.components.otelSidecar.resources }}
+  resources: {{- toYaml $ctx.Values.components.otelSidecar.resources | nindent 4 }}
+  {{- else }}
+  resources: {{- include "resources.preset" (dict "node" "otel-sidecar" "size" $ctx.Values.deploymentSize) | nindent 4 }}
+  {{- end }}
+  volumeMounts:
+    {{- if $volumeName }}
+    - name: {{ $volumeName }}
+      mountPath: {{ $mountPath }}
+      {{- with .subPath }}
+      subPath: {{ . }}
+      {{- end }}
+      readOnly: true
+    {{- end }}
+    - name: otel-sidecar-config
+      mountPath: /etc/otelcol-contrib/config.yaml
+      subPath: config.yaml
+    - name: otel-sidecar-tmp
+      mountPath: /tmp
+    {{- with .extraVolumeMounts }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- if $ctx.Values.applyHealthChecks }}
+  livenessProbe:
+    {{- include "health.probe" (dict "root" $ctx "component" "otel-sidecar" "probeType" "livenessProbe" "type" "http" "path" "/" "port" 13133) | nindent 4 }}
+  readinessProbe:
+    {{- include "health.probe" (dict "root" $ctx "component" "otel-sidecar" "probeType" "readinessProbe" "type" "http" "path" "/" "port" 13133) | nindent 4 }}
+  {{- end }}
+{{- end -}}
+
+{{/*
+  kasm_telemetry logging env. Emitted regardless of observability.enabled: log_file_enabled
+  defaults to TRUE in the library and init_logging() mkdirs the path, which fails on the chart's
+  readOnlyRootFilesystem. Every workload running Kasm python needs this, Jobs included.
+  Usage:
+    {{- include "kasm.loggingEnv" (dict "context" $ "serviceName" "kasm-api" "component" "api") | nindent 12 }}
+*/}}
+{{- define "kasm.loggingEnv" -}}
+{{- $ctx := .context -}}
+{{- $obs := $ctx.Values.observability -}}
+{{- $serviceName := required "kasm.loggingEnv requires serviceName" .serviceName -}}
+{{- /*
+  File logging is always off. Kasm services export their logs over OTLP, so a second, file-shaped
+  copy inside the pod would only store every line twice; the sidecars exist for nginx and PostgreSQL,
+  which cannot export OTLP themselves.
+*/}}
+- name: KASM_LOG_FILE_ENABLED
+  value: "false"
+- name: KASM_LOG_CONSOLE_COLOR
+  value: "false"
 {{- end }}
 
 {{/*

@@ -1,0 +1,24 @@
+suite: "kasm-otel-router — k8sEvents requires replicaCount 1"
+# Kept in its own suite file listing only deployment.yaml -- see registrations_required_test.yaml
+# for the helm-unittest v1.0.3 quirk this sidesteps (a `fail` is not surfaced when the suite's
+# top-level `templates:` list also contains another template).
+
+templates:
+  - templates/deployment.yaml
+
+tests:
+  - it: fails to render when k8sEvents is enabled with more than one replica
+    set:
+      ingestAuth.existingSecret.name: kasm-otel-router-secrets
+      ingestAuth.existingSecret.key: otel-bearer-token
+      registrations:
+        - namespace: kasm-prod
+          endpoint: "otel-gateway.kasm-prod.svc.cluster.local:4317"
+          tokenSecret:
+            name: kasm-prod-secrets
+            key: otel-bearer-token
+      k8sEvents.enabled: true
+      replicaCount: 2
+    asserts:
+      - failedTemplate:
+          errorMessage: "kasm-otel-router: k8sEvents.enabled requires replicaCount: 1 -- each replica would independently watch and forward the same events, duplicating every event downstream."

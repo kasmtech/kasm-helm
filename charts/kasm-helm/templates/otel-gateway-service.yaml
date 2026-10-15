@@ -1,0 +1,40 @@
+{{/*
+Kasm OTel Collector gateway Service — cluster-wide, not zone-scoped.
+
+A single ClusterIP Service. Every Kasm service, Collector sidecar, and out-of-cluster sender
+exports straight to it — Collector sidecars over OTLP/gRPC :4317, Kasm app services over
+OTLP/HTTP :4318. The gateway is pinned to one replica
+(kasm.observabilityValidate enforces this), so a plain ClusterIP is sufficient: there is no
+per-trace-ID routing to preserve, unlike the removed forwarder tier's loadbalancing exporter,
+which needed a headless Service to resolve every backend pod individually.
+
+No external Service variant: out-of-cluster senders were previously routed through the
+forwarder's externalService, which was removed along with the rest of that tier.
+*/}}
+{{- $obs := .Values.observability -}}
+{{- $ch := $obs.clickhouse -}}
+{{- $useClickhouse := or $ch.enabled $ch.standalone -}}
+{{- $forwardEnabled := ne $obs.collector.gateway.forward.endpoint "" -}}
+{{- if and $obs.enabled (or $obs.collector.gateway.existingConfigMap $useClickhouse $forwardEnabled) }}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+apiVersion: v1
+kind: Service
+metadata:
+  {{- include "kasm.common.metadata" (dict "context" $ "component" "otel-gateway" "resource" "service" "include" "all") | indent 2 }}
+spec:
+  selector:
+    {{- include "kasm.common.metadata" (dict "context" $ "component" "otel-gateway" "resource" "service" "include" "match") | indent 4 }}
+  ports:
+    - name: otlp-grpc
+      protocol: TCP
+      port: {{ $constants.otel.otlpGrpc }}
+    - name: otlp-http
+      protocol: TCP
+      port: {{ $constants.otel.otlpHttp }}
+    - name: health
+      protocol: TCP
+      port: {{ $constants.otel.health }}
+    - name: self-metrics
+      protocol: TCP
+      port: {{ $constants.otel.selfMetrics }}
+{{- end }}

@@ -28,7 +28,7 @@ def test_chart_installs_in_restricted_namespace_and_rejects_noncompliant_pods(
 
     apply_restricted_pod_security(namespace)
 
-    # Lower per-component resource requests so all pods (api, manager, proxy,
+    # Lower per-component resource requests so all pods (api, proxy,
     # the consolidated connection-proxy StatefulSet — one nginx plus the
     # guac, rdp-gateway, and rdp-https-gateway service containers — bundled
     # db, and the manual db-backup job) fit on the single-node kind cluster
@@ -53,7 +53,6 @@ def test_chart_installs_in_restricted_namespace_and_rejects_noncompliant_pods(
         },
         "components": {
             "api": {"resources": low_resources},
-            "manager": {"resources": low_resources},
             "proxy": {"resources": low_resources_proxy},
             "connectionProxy": {
                 "nginx": {"resources": low_resources_proxy},
@@ -81,6 +80,11 @@ def test_chart_installs_in_restricted_namespace_and_rejects_noncompliant_pods(
                 "schedule": "0 * * * *",
             },
         },
+        # Restructured topology: log collection is an unconditional Collector sidecar in the
+        # proxy, connection-proxy, and db pods (kasm.otelSidecar), not a node-level DaemonSet.
+        # Those sidecars run under kasm.securityContext like every other container, so no
+        # observability values are needed here for this install to be admissible under the
+        # restricted Pod Security Standard.
     }
     values_path = temp_workdir / "values.yaml"
     values_path.write_text(yaml.safe_dump(values_obj, sort_keys=False))

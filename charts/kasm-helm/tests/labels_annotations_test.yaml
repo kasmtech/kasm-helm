@@ -1,7 +1,6 @@
 suite: labels and annotations propagation through kasm.metadata
 templates:
   - templates/api-deployment.yaml
-  - templates/manager-deployment.yaml
   - templates/db-statefulset.yaml
   - templates/db-configmap.yaml
   - templates/db-init-job.yaml
@@ -94,7 +93,7 @@ tests:
           annotations:
             api-only-anno: yes
     templates:
-      - templates/manager-deployment.yaml
+      - templates/proxy-deployment.yaml
     asserts:
       - notExists:
           path: metadata.annotations["api-only-anno"]
@@ -106,7 +105,7 @@ tests:
           labels:
             tier: backend
     templates:
-      - templates/manager-deployment.yaml
+      - templates/proxy-deployment.yaml
     asserts:
       - notExists:
           path: metadata.labels.tier
@@ -118,7 +117,6 @@ tests:
           scope: apps
     templates:
       - templates/api-deployment.yaml
-      - templates/manager-deployment.yaml
       - templates/proxy-deployment.yaml
     asserts:
       - equal:

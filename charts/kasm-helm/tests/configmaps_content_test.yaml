@@ -211,3 +211,34 @@ tests:
     asserts:
       - hasDocuments:
           count: 3
+
+  # D005/D010: components.manager was removed; /manager_api/ now proxies to the api
+  # service, and the agent-drain flag is deliberately separate from the zone-health flag
+  # gating /health (D010) so an operator can shed agent traffic without pulling the node
+  # out of the LB/zone-health pool mid in-flight-request. Assertions are specific enough
+  # that retargeting proxy_pass to another service, or swapping either drain filename,
+  # fails this suite.
+  - it: manager_api.conf proxies to the api service and drains on kasm_agent_draining
+    template: templates/proxy-configmaps.yaml
+    documentIndex: 1
+    asserts:
+      - matchRegex:
+          path: data["manager_api.conf"]
+          pattern: 'proxy_pass\s+http://RELEASE-NAME-api;'
+      - matchRegex:
+          path: data["manager_api.conf"]
+          pattern: '-f /opt/kasm/current/tmp/api/kasm_agent_draining'
+      - notMatchRegex:
+          path: data["manager_api.conf"]
+          pattern: 'kasm_api_draining'
+
+  - it: health.conf drains on kasm_api_draining, not the agent flag
+    template: templates/proxy-configmaps.yaml
+    documentIndex: 1
+    asserts:
+      - matchRegex:
+          path: data["health.conf"]
+          pattern: '-f /opt/kasm/current/tmp/api/kasm_api_draining'
+      - notMatchRegex:
+          path: data["health.conf"]
+          pattern: 'kasm_agent_draining'

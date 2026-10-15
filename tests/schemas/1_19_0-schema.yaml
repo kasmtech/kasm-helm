@@ -162,9 +162,6 @@ autoscale_configs:
   agent_memory_override_bytes:
     required: false
     type: BIGINT
-  aggressive_scaling:
-    required: false
-    type: BOOLEAN
   autoscale_config_id:
     required: false
     type: UUID
@@ -246,9 +243,6 @@ autoscale_configs:
     foreign_key: harvester_vm_configs.config_id
     required: false
     type: UUID
-  hooks:
-    required: false
-    type: JSON
   kubevirt_vm_config_id:
     foreign_key: kubevirt_vm_configs.config_id
     required: false
@@ -3224,10 +3218,6 @@ zones:
   load_strategy:
     required: false
     type: VARCHAR
-  primary_manager_id:
-    foreign_key: managers.manager_id
-    required: false
-    type: UUID
   prioritize_static_agents:
     required: false
     type: BOOLEAN
