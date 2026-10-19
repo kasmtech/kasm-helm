@@ -316,7 +316,7 @@ data:
         otel_trace     off;
         default_type   application/javascript;
         add_header     Cache-Control "no-store";
-        return 200     'window.__OTEL__={"enabled":true,"endpoint":"/api/client/telemetry","serviceName":"kasm-web"};';
+        return 200     'window.__OTEL__={"enabled":true,"endpoint":"/api/telemetry","serviceName":"kasm-web"};';
     }
 
     # /otel-time — NTP-style time probe for browser clock-skew correction.
