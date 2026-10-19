@@ -694,10 +694,11 @@ components:
     # components.api.queues -- KASM_WORKER_QUEUES value used when workerPool is empty (every API replica also
     #  consumes BullMQ queues itself): a comma-separated queue list, or "all". Default "all".
     queues: all
-    # components.api.queueConcurrency -- Optional object, rendered as JSON into KASM_WORKER_QUEUE_CONCURRENCY,
-    #  used when workerPool is empty to tune per-queue concurrency. Ignored (each pool has its own) once
-    #  workerPool is non-empty.
-    queueConcurrency: {}
+    # components.api.queueConcurrency -- (int or object) Optional KASM_WORKER_QUEUE_CONCURRENCY: how many jobs of each queue
+    #  an API replica runs at once. An integer applies to every queue (e.g. 3); an object sets named queues
+    #  (e.g. {heartbeat: 10}) and leaves the rest at the image default of 5. Used when workerPool is empty;
+    #  ignored (each pool has its own) once workerPool is non-empty. Null (default) keeps the image default.
+    queueConcurrency: null
     # components.api.workerPool -- One Deployment is rendered per pool per zone, named
     #  <release>-api-<pool-name>[-<zone>], when this list is non-empty. In that case the api Deployment
     #  itself stops consuming queues (KASM_PROCESS=FALSE, publish-only) and these dedicated worker
@@ -706,7 +707,7 @@ components:
     #    name             -- (required) pool name; normalized (like a zone name) into the Deployment name.
     #    queues           -- KASM_WORKER_QUEUES value: a comma-separated queue list, or "all". Default "all".
     #    replicas         -- Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset (default).
-    #    queueConcurrency -- Optional object, rendered as JSON into KASM_WORKER_QUEUE_CONCURRENCY, to tune per-queue concurrency.
+    #    queueConcurrency -- Optional KASM_WORKER_QUEUE_CONCURRENCY: an integer for every queue, or an object per queue.
     #    resources        -- Optional per-pool resources override (wins over components.api.resources).
     workerPool: []
 

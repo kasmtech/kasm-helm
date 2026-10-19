@@ -823,6 +823,18 @@ Where:
 {{- end -}}
 
 {{/*
+  KASM_WORKER_QUEUE_CONCURRENCY value: an integer applies to every queue, a map
+  is per-queue JSON. Callers skip the env var when the value is empty.
+*/}}
+{{- define "kasm.queueConcurrency" -}}
+{{- if kindIs "map" . -}}
+{{- toJson . -}}
+{{- else -}}
+{{- int . -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
   Return a resource request/limit object based on given presets
   Example usage:
   {{- include "resources.preset" (dict "node" "proxy" "size" "small" "context" .) -}}

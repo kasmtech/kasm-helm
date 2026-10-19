@@ -125,6 +125,38 @@ tests:
             name: KASM_WORKER_QUEUE_CONCURRENCY
             value: '{"sessions":5,"thumbnails":2}'
 
+  - it: worker renders an integer KASM_WORKER_QUEUE_CONCURRENCY for every queue
+    template: templates/api-worker-deployment.yaml
+    set:
+      components:
+        api:
+          workerPool:
+            - name: default
+              queueConcurrency: 8
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KASM_WORKER_QUEUE_CONCURRENCY
+            value: "8"
+
+  - it: empty workerPool renders components.api.queueConcurrency on the api container
+    template: templates/api-deployment.yaml
+    set:
+      components.api.queueConcurrency: 3
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KASM_WORKER_QUEUE_CONCURRENCY
+            value: "3"
+
+  - it: empty workerPool omits KASM_WORKER_QUEUE_CONCURRENCY by default
+    template: templates/api-deployment.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_WORKER_QUEUE_CONCURRENCY")]
+
   - it: worker omits KASM_WORKER_QUEUE_CONCURRENCY when not set
     template: templates/api-worker-deployment.yaml
     set:
