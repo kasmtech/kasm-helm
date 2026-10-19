@@ -18,7 +18,7 @@ The three independent replica counts (`components.guac.replicas`, `components.rd
 
 See [Migrating to connection-proxy](./README.md#migrating-to-connection-proxy) for the full old-key-to-new-key mapping.
 
-- **The Kasm Manager service is removed.** The API absorbs its functions. `templates/manager-deployment.yaml` and `templates/manager-service.yaml` are deleted, and `components.manager` is removed from `values.yaml` and `values.schema.json` (the schema now rejects it). nginx keeps the `/manager_api/` agent-facing path, but it now proxies to the API service instead of a separate Manager upstream. See [Manager removed](./README.md#manager-removed).
+- **The Kasm Manager service is removed.** The API absorbs its functions. `templates/manager-deployment.yaml` and `templates/manager-service.yaml` are deleted, and `components.manager` is removed from `values.yaml` and `values.schema.json` (the schema now rejects it). nginx no longer serves `/manager_api/`: agents call the API's Internal surface at `/api/internal/agent-vm/` and `/api/internal/agent-k8s/`, which proxy to the API service and honour the agent drain flag (`kasm_agent_draining`). The `manager_api.conf` entry of the proxy services ConfigMap is replaced by `internal_agents.conf`. Agents still configured with `/manager_api/...` paths must be upgraded to the matching release. See [Manager removed](./README.md#manager-removed).
 
 ### Added
 
@@ -64,6 +64,7 @@ See [Migrating to connection-proxy](./README.md#migrating-to-connection-proxy) f
 - Reworks OpenTelemetry into a forwarder/gateway architecture: nginx and Postgres now emit telemetry through dedicated sidecars instead of writing to a shared collector, removing the cross-zone hop connection-proxy pods used to take and bounding Postgres log growth on the data volume to one day. <!-- hash:a6f317b839f6adcfcd380c3a3b986357b0507157 -->
 - Adds OpenTelemetry-based observability: distributed tracing and metrics/log collection for API, Manager, Guac, Proxy, RDP Gateway/HTTPS Gateway, and nginx, backed by a new ClickHouse store with configurable retention. Operators can enable this via new OTel collector, gateway, and ClickHouse values. <!-- hash:31e3bbba5fbdea28df316d826c3d0bda9c49f330 -->
 - The browser telemetry config served at `/otel-config.js` points the Kasm web UI's exporter at `/api/telemetry` instead of `/api/client/telemetry`, matching the API's telemetry ingest route. Pair this chart with an API image that serves `/api/telemetry`, or browser telemetry exports will fail (only relevant when `observability.browser` is enabled). <!-- hash:b2e97505de4083df3e83bae4c5ef7682a33379bd -->
+- `components.api.queueConcurrency` and `components.api.workerPool[].queueConcurrency` accept an integer, applied to every queue, as well as a per-queue object. `components.api.queueConcurrency` now defaults to `null` instead of `{}`, so an integer can override it without a Helm "cannot overwrite table" warning; leaving it unset uses the API image default, which is now 5 jobs per queue (previously 1).
 
 ### Removed
 
@@ -95,6 +96,7 @@ See [Migrating to connection-proxy](./README.md#migrating-to-connection-proxy) f
 ### Documentation
 
 - Documents how edge-injected trace-context headers are trusted and how ClickHouse credentials are managed for observability — no functional change to the chart itself. <!-- hash:780fc043281accf8cd334a9b3f915248bffdc95b -->
+- Corrects the SAML example in `docs/preseed.md`: `sp_acs_url` pointed at `/api/public/acs`, which Kasm no longer serves and which never carried the required SAML config id. The example now sets an explicit `saml_id` and uses the `/api/auth/sso/<saml_id>/acs`, `/metadata`, and `/slo` endpoints. No chart behavior change.
 - Rewrites the observability documentation to describe the forwarder/gateway architecture and clarifies that the gateway only accepts traffic from forwarders, not from the host-log DaemonSet directly. No configuration or deployment changes for operators. <!-- hash:1b4f0ca90686716e5cd4448ab5a34726dccd1f56 -->
 
 

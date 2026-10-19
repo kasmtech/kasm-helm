@@ -108,9 +108,9 @@ data:
       otel_trace off;
       {{- end }}
       default_type application/json;
-      # Zone-health flag: separate from the agent drain below so an operator can
-      # shed agent traffic without pulling this node out of the LB/zone-health pool
-      # mid in-flight-request.
+      # Zone-health flag: separate from the agent drain (internal_agents.conf) so an
+      # operator can shed agent traffic without pulling this node out of the
+      # LB/zone-health pool mid in-flight-request.
       if (-f /opt/kasm/current/tmp/api/kasm_api_draining) {
         add_header Retry-After "30" always;
         add_header Cache-Control "no-store" always;
@@ -169,14 +169,15 @@ data:
       proxy_pass	            {{ printf "http://%s" $constants.api.svc }};
     }
 
-  manager_api.conf: |
-    # The agent-facing surface. The path is preserved from when a separate manager
-    # service served it: deployed agents hold /manager_api/... in their own config
-    # and upgrade independently of the deployment, so it is a contract rather than
-    # an implementation detail. The API mounts its agent routes at the same paths.
-    location /manager_api/ {
+  internal_agents.conf: |
+    # The agents' Internal prefixes. Everything else under /api/internal/ is served
+    # by the generic /api/ location; these two carry the agent drain, which lets a
+    # node being replaced shed its agents to a peer (they fail over across the API
+    # endpoints they were given) while it keeps serving users.
+    {{- range $prefix := list "/api/internal/agent-vm/" "/api/internal/agent-k8s/" }}
+    location {{ $prefix }} {
       {{- if $.Values.observability.enabled }}
-      otel_span_name "$request_method /manager_api/";
+      otel_span_name "$request_method {{ $prefix }}";
       otel_span_attr http.method $request_method;
       otel_span_attr http.target $request_uri;
       otel_span_attr http.status $status;
@@ -196,9 +197,11 @@ data:
       proxy_set_header	      Connection $connection_upgrade;
       proxy_set_header	      X-Real-IP $remote_addr;
       proxy_set_header	      X-Forwarded-For $proxy_add_x_forwarded_for;
-      proxy_set_header	      X-Forwarded-Proto $scheme;
+      proxy_set_header	      X-Forwarded-Proto $x_forwarded_proto;
+      proxy_set_header	      X-Forwarded-Port $x_forwarded_port;
       proxy_pass	            {{ printf "http://%s" $constants.api.svc }};
     }
+    {{- end }}
 
   subscription_api.conf: |
     location /api/subscriptions/ {
