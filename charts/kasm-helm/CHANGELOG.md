@@ -92,6 +92,7 @@ See [Migrating to connection-proxy](./README.md#migrating-to-connection-proxy) f
 - Connection-proxy logs and traces now carry their own service name in the OTel pipeline, instead of sharing a generic identifier — logs and traces from this proxy are now distinguishable from other components in your observability backend. <!-- hash:0e45a36382cb0c7bf4d1e259d9cf748b1e900001 -->
 - Fixed documentation wording in the observability guide describing scaling behavior and log format settings; no functional or configuration changes for operators. <!-- hash:a74229f9804ba81d58aa160c3308cadeabd96049 -->
 - Fixes the OpenTelemetry forwarder's DNS-based load balancing exporters, which failed to resolve the gateway service because the resolver port was not quoted as a string in the generated configuration. <!-- hash:b1e5dfd5f90dbefb3bb1fa57435edbe067e58cd1 -->
+- Preseeded image `docker_user`/`docker_token` values that look like a YAML flow mapping — for example, the `{iam}`/`{iam:<region>}` sentinel used to authenticate to Amazon ECR via an agent IAM role — were rendered unquoted and parsed as a mapping instead of a string, so they never reached the database as credentials. These two fields are now quoted when set, while still rendering as YAML `null` when unset. <!-- hash:34c6688b7963cd485c92c30f5271ac12a636683b -->
 
 ### Documentation
 
@@ -99,6 +100,17 @@ See [Migrating to connection-proxy](./README.md#migrating-to-connection-proxy) f
 - Corrects the SAML example in `docs/preseed.md`: `sp_acs_url` pointed at `/api/public/acs`, which Kasm no longer serves and which never carried the required SAML config id. The example now sets an explicit `saml_id` and uses the `/api/auth/sso/<saml_id>/acs`, `/metadata`, and `/slo` endpoints. No chart behavior change.
 - Rewrites the observability documentation to describe the forwarder/gateway architecture and clarifies that the gateway only accepts traffic from forwarders, not from the host-log DaemonSet directly. No configuration or deployment changes for operators. <!-- hash:1b4f0ca90686716e5cd4448ab5a34726dccd1f56 -->
 
+### Known Issues in Earlier Releases
+
+- **1.1190.7 and earlier, upgrading Kasm to a new version can delete the database.** The bundled database's StatefulSet is named per Kasm version, so a version upgrade replaces it instead of updating it in place, and `database.storage.retentionPolicy.whenDeleted` defaulted to `Delete` - which removed the old volume along with the old StatefulSet. If `dbManagement.initialize` was left set instead of following the upgrade procedure (`dbManagement.initialize=false` with `dbManagement.upgrade.enable=true`), the upgrade initialized an empty database over the live deployment and every setting, user and session record was lost, with no error and no rollback.
+
+  On those versions, before upgrading Kasm: set `database.storage.retentionPolicy.whenDeleted=Retain` so the old volume survives, and follow the upgrade procedure rather than leaving `dbManagement.initialize` on. Both are fixed in this release - see Fixed, below.
+
+### Fixed
+
+- A Kasm version upgrade no longer deletes the database it is upgrading. The bundled database's StatefulSet is named per Kasm version, so an upgrade replaces it rather than updating it in place, and `database.storage.retentionPolicy.whenDeleted` defaulted to `Delete` - which took the old volume with the old StatefulSet and left the pre-upgrade dump as the only copy of the data. It now defaults to `Retain`, so the previous version's volume stays in the namespace as a fallback and can be removed by hand once the upgrade is confirmed good.
+
+- An upgrade that would replace the database while `dbManagement.initialize` is still set now fails to render instead of silently initializing an empty database over a live deployment. `dbManagement.initialize` is for a new deployment; upgrading an existing one needs `dbManagement.initialize=false` with `dbManagement.upgrade.enable=true`, which dumps the current database before the switch and restores it after. Previously this combination produced no error, no rollback and no data. The check reads the deployed StatefulSet, so it applies to `helm upgrade` and `--dry-run=server`, and stays quiet during `helm template`.
 
 ## [1.1190.6] - 2026-07-28
 
