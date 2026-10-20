@@ -140,7 +140,7 @@ stdout/stderr, the container runtime persists that to `/var/log/pods/...` on the
 node-local collector tails it.
 
 This mirrors the Docker install's two tiers exactly: `otel-collector-remote.yaml` batches and forwards
-with no sampling and no ClickHouse exporter, and `otel-collector-local.yaml` on the app node is the only
+with no sampling and no ClickHouse exporter, and `otel-collector-local.yaml` on the appserver node is the only
 place `tail_sampling` and the ClickHouse exporters live. The Kubernetes shape is the same split, with
 the zone forwarder playing the role of the remote collector.
 
@@ -187,7 +187,7 @@ the zone forwarder playing the role of the remote collector.
   Docker. It holds no cross-request state, so it scales freely with `deploymentSize`. The `otlp/remote`
   receiver is still rendered so out-of-cluster agents and proxies can point at the zone's Service.
 - **One gateway Deployment per cluster**, `replicas: 1`. It owns the `tail_sampling` processor and the
-  three ClickHouse exporters, mirroring `otel-collector-local.yaml` on the Docker app node.
+  three ClickHouse exporters, mirroring `otel-collector-local.yaml` on the Docker appserver node.
   **`replicas: 1` is a correctness requirement, not a sizing choice** — `tail_sampling` must observe
   every span of a trace in one process to decide keep-or-drop, and a ClusterIP Service spreads a
   trace's spans across replicas. Splitting it produces traces with missing spans, and
