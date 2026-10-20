@@ -35,6 +35,15 @@ workflow:
     - if: '$CI_COMMIT_REF_NAME == "develop" || $CI_COMMIT_REF_NAME =~ /^release\/.*$/'
     - when: never
 
+# Lint/package also run in MR pipelines so failures surface before merge.
+# Push pipelines for branches with open MRs are suppressed by `workflow`,
+# so the MR rule is what covers feature branches.
+.run-verify:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: '$CI_COMMIT_REF_NAME == "develop" || $CI_COMMIT_REF_NAME =~ /^release\/.*$/'
+    - when: never
+
 variables:
   DOCKER_TLS_CERTDIR: ""
   DOCKER_HOST: tcp://docker:2375
@@ -72,8 +81,10 @@ helm-lint:
     name: alpine/helm:latest
     entrypoint: [""]
   extends:
-    - .run-deploy
+    - .run-verify
   script:
+    # charts/kasm-helm/charts/ is gitignored; vendor the kasm-common file:// dependency first.
+    - helm dependency build charts/kasm-helm
     - helm lint ./charts/kasm-helm
   tags: ["oci-fixed-amd"]
 
@@ -83,8 +94,9 @@ helm-build:
     name: alpine/helm:latest
     entrypoint: [""]
   extends:
-    - .run-deploy
+    - .run-verify
   script:
+    - helm dependency build charts/kasm-helm
     - helm package charts/kasm-helm
   artifacts:
     paths:

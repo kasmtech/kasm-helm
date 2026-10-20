@@ -61,7 +61,7 @@ tests:
           path: data["stub_status.conf"]
 
   # ---------- span attrs on the API locations ----------
-  - it: admin_api/client_api/manager_api locations get otel_span_name and otel_span_attr when enabled
+  - it: admin_api/client_api/internal_agents locations get otel_span_name and otel_span_attr when enabled
     template: templates/proxy-configmaps.yaml
     documentIndex: 1
     asserts:
@@ -72,10 +72,13 @@ tests:
           path: data["client_api.conf"]
           pattern: 'otel_span_name "\$request_method /api/";'
       - matchRegex:
-          path: data["manager_api.conf"]
-          pattern: 'otel_span_name "\$request_method /manager_api/";'
+          path: data["internal_agents.conf"]
+          pattern: 'otel_span_name "\$request_method /api/internal/agent-vm/";'
+      - matchRegex:
+          path: data["internal_agents.conf"]
+          pattern: 'otel_span_name "\$request_method /api/internal/agent-k8s/";'
 
-  - it: admin_api/client_api/manager_api locations have no span directives when disabled
+  - it: admin_api/client_api/internal_agents locations have no span directives when disabled
     template: templates/proxy-configmaps.yaml
     documentIndex: 1
     set:
@@ -88,7 +91,7 @@ tests:
           path: data["client_api.conf"]
           pattern: "otel_span_name"
       - notMatchRegex:
-          path: data["manager_api.conf"]
+          path: data["internal_agents.conf"]
           pattern: "otel_span_name"
 
   # ---------- otel_trace off on health/checkvalid/internal locations ----------
