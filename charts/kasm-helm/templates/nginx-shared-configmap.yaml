@@ -148,3 +148,10 @@ data:
       default $http_x_forwarded_port;
       ""      $real_request_port;
     }
+
+    # Forward an Upgrade when the client asked for one; otherwise send an empty Connection so the
+    # API upstream keepalive pool can reuse the connection.
+      map $http_upgrade $connection_upgrade {
+      default upgrade;
+      ''      "";
+    }

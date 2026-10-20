@@ -170,9 +170,48 @@ tests:
       - matchRegex:
           path: data["config.yaml"]
           pattern: 'field: resource\["service\.name"\]\s+value: kasm-proxy'
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: 'attributes\["application"\]'
+      # Attribute keys are stored flat (bracket notation); a dotted `to:` would nest them and
+      # ClickHouse would never populate LogAttributes['url.path'].
       - matchRegex:
           path: data["config.yaml"]
-          pattern: 'field: attributes\["application"\]\s+value: kasm-proxy'
+          pattern: 'to:\s+attributes\["url\.path"\]'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'to:\s+attributes\["http\.request\.method"\]'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'to:\s+attributes\["http\.response\.status_code"\]'
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: 'to:\s+attributes\.(url|http)\.'
+      # Query strings are dropped at ingest and the request line rebuilt without them.
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'type: remove\n\s+field: attributes\.query_string'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'request_line_path'
+      # The request-line regex_parser is send_quiet, so on a non-matching request the temp
+      # fields never exist; each remove must be guarded or stanza logs an error per record.
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'type: remove\n\s+if: ''attributes\["request_line_method"\] != nil''\n\s+field: attributes\.request_line_method'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'type: remove\n\s+if: ''attributes\["request_line_path"\] != nil''\n\s+field: attributes\.request_line_path'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'type: remove\n\s+if: ''attributes\["request_line_protocol"\] != nil''\n\s+field: attributes\.request_line_protocol'
+      # The websocket close row is tagged as the client-detached lifecycle record.
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'value: kasm\.session\.client_detached'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'field: attributes\["kasm\.kasm\.transition_ms"\]'
 
   - it: connection-proxy nginx sidecar config carries service.name kasm-connection-proxy
     template: templates/otel-nginx-sidecar-configmap.yaml
@@ -181,9 +220,9 @@ tests:
       - matchRegex:
           path: data["config.yaml"]
           pattern: 'field: resource\["service\.name"\]\s+value: kasm-connection-proxy'
-      - matchRegex:
+      - notMatchRegex:
           path: data["config.yaml"]
-          pattern: 'field: attributes\["application"\]\s+value: kasm-connection-proxy'
+          pattern: 'attributes\["application"\]'
       - notMatchRegex:
           path: data["config.yaml"]
           pattern: 'value: kasm-proxy'
@@ -203,7 +242,7 @@ tests:
           path: spec.template.spec.containers[1].volumeMounts[?(@.mountPath=="/var/lib/otelcol/checkpoints")]
         template: templates/db-statefulset.yaml
 
-  # ---------- kasm.zone / k8s.pod.name / service.namespace / deployment.environment ----------
+  # ---------- kasm.zone / k8s.pod.name / host.name / service.namespace / deployment.environment ----------
   # These identity attributes are stamped by a resource processor in the sidecar's own Collector
   # config (kasm.common.otelResourceProcessor), not by OTEL_RESOURCE_ATTRIBUTES: that SDK env var
   # is inert on a Collector container (see DECISIONS.md D4) and has been removed from the sidecar.
@@ -261,6 +300,11 @@ tests:
       - matchRegex:
           path: data["config.yaml"]
           pattern: 'key: k8s\.pod\.name\n\s+value: "\$\{env:POD_NAME:-unknown\}"'
+      # host.name is what the Admin UI's Server filter reads; the pod name matches what the
+      # SDKs in the app containers report as their hostname.
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'key: host\.name\n\s+value: "\$\{env:POD_NAME:-unknown\}"'
       - matchRegex:
           path: data["config.yaml"]
           pattern: 'key: kasm\.zone\n\s+value: "\$\{env:OTEL_KASM_ZONE:-unknown\}"'
@@ -283,6 +327,9 @@ tests:
       - matchRegex:
           path: data["config.yaml"]
           pattern: 'key: k8s\.pod\.name\n\s+value: "\$\{env:POD_NAME:-unknown\}"'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'key: host\.name\n\s+value: "\$\{env:POD_NAME:-unknown\}"'
       - notMatchRegex:
           path: data["config.yaml"]
           pattern: "kasm\\.zone"

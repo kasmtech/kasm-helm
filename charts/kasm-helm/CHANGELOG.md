@@ -18,10 +18,11 @@ The three independent replica counts (`components.guac.replicas`, `components.rd
 
 See [Migrating to connection-proxy](./README.md#migrating-to-connection-proxy) for the full old-key-to-new-key mapping.
 
-- **The Kasm Manager service is removed.** The API absorbs its functions. `templates/manager-deployment.yaml` and `templates/manager-service.yaml` are deleted, and `components.manager` is removed from `values.yaml` and `values.schema.json` (the schema now rejects it). nginx keeps the `/manager_api/` agent-facing path, but it now proxies to the API service instead of a separate Manager upstream. See [Manager removed](./README.md#manager-removed).
+- **The Kasm Manager service is removed.** The API absorbs its functions. `templates/manager-deployment.yaml` and `templates/manager-service.yaml` are deleted, and `components.manager` is removed from `values.yaml` and `values.schema.json` (the schema now rejects it). nginx no longer serves `/manager_api/`: agents call the API's Internal surface at `/api/internal/agent-vm/` and `/api/internal/agent-k8s/`, which proxy to the API service and honour the agent drain flag (`kasm_agent_draining`). The `manager_api.conf` entry of the proxy services ConfigMap is replaced by `internal_agents.conf`. Agents still configured with `/manager_api/...` paths must be upgraded to the matching release. See [Manager removed](./README.md#manager-removed).
 
 ### Added
 
+- The Kasm Proxy sidecar tags the access-log row written when a session websocket closes (`GET /desktop/<id>/vnc/websockify`, status 101) as the `kasm.session.client_detached` lifecycle record, carrying `kasm.kasm.id` and the attached duration in `kasm.kasm.transition_ms`.
 - Built-in OpenTelemetry observability stack, enabled by default: a single cluster-wide gateway Collector and a bundled ClickHouse StatefulSet that back logs, traces, metrics, and the Kasm Admin UI's reporting views. See the new `charts/kasm-helm/docs/observability.md`.
 - nginx distributed tracing (nginx is the trace root for every request) and nginx connection metrics, both collected by an always-on Collector sidecar in the Proxy/Connection Proxy pods — no separate opt-in.
 - Browser telemetry for the Kasm web UI (`observability.browser`).
@@ -45,6 +46,11 @@ See [Migrating to connection-proxy](./README.md#migrating-to-connection-proxy) f
 
 ### Changed
 
+- nginx access-log attributes are stored under flat keys (`url.path`, `http.request.method`, `http.response.status_code`) instead of nested objects, so `LogAttributes['url.path']` is queryable and the Admin UI's Logging page can filter on it. Query strings never enter the pipeline: the sidecar drops `query_string` and rebuilds the request line without it before anything copies it.
+- The nginx sidecars no longer stamp an `application` log attribute. The Admin UI's Application column and filters read `ServiceName`, which every component sets.
+- Sidecar-collected signals (Kasm Proxy, Connection Proxy, DB) carry `host.name` set to the pod name, matching what the Kasm app containers report, so the Logging page's Server filter lists every pod rather than only API pods.
+- The gateway Collector normalises `SeverityText` at ingest (upper-cased, `WARN` to `WARNING`, `FATAL` to `CRITICAL`, bare HTTP status codes mapped by class), drops successful `/api/__healthcheck` rows from both the nginx access log and the API's own access log, and strips query strings from the `http.target`/`http.url` attributes of `kasm-proxy` spans before tail sampling. A gateway supplied through `observability.collector.gateway.existingConfigMap` inherits none of these; the three `examples/otel-collector-*.yaml` configs carry them, see `charts/kasm-helm/docs/observability.md` §9.
+- The Kasm Proxy's API upstream pool holds idle connections for `keepalive_timeout 30s`, and the API locations send `Connection $connection_upgrade` (an empty header unless the client asked for a WebSocket upgrade) instead of an unconditional `upgrade`, so pooled connections are reused rather than closed after every response. The API's own keep-alive is 75 s by default (set in the API image's config), which exceeds the pool timeout; no chart value is needed.
 - **The `logFormat` value was removed from the chart.** Console output is human-readable text for every service except the Kasm Proxy, whose stdout access log is JSON (`json_combined`) whenever `observability.enabled` is true (the default); structured logs are exported over OpenTelemetry regardless. If you were scraping JSON from pod stdout, switch to OTLP collection. (The root values schema does not reject unknown keys, so a leftover `logFormat` in a values file is a silent no-op, not a render error.)
 - **New PVC and new workloads on every deployment**: a ClickHouse StatefulSet + PVC, a gateway Collector Deployment, and one extra sidecar container in every Proxy, Connection Proxy, and DB pod. Budget resources and storage accordingly before upgrading; see `charts/kasm-helm/docs/observability.md` §2 and §6.
 - The Kasm Proxy's stdout access log is JSON whenever `observability.enabled` is true (the default), because the sidecar collector parses it as JSON.
@@ -57,6 +63,8 @@ See [Migrating to connection-proxy](./README.md#migrating-to-connection-proxy) f
 - **The gateway Collector now renders only when it has somewhere to send telemetry.** Previously, `observability.enabled: true` with no ClickHouse and no `observability.collector.gateway.forward.endpoint` deployed a Collector that received and silently discarded everything. That combination now fails the render with a message naming `observability.clickhouse.enabled`/`.standalone` and `observability.collector.gateway.forward.endpoint` as the fix. `existingConfigMap` is unaffected — it always renders, since that config owns its own routing.
 - Reworks OpenTelemetry into a forwarder/gateway architecture: nginx and Postgres now emit telemetry through dedicated sidecars instead of writing to a shared collector, removing the cross-zone hop connection-proxy pods used to take and bounding Postgres log growth on the data volume to one day. <!-- hash:a6f317b839f6adcfcd380c3a3b986357b0507157 -->
 - Adds OpenTelemetry-based observability: distributed tracing and metrics/log collection for API, Manager, Guac, Proxy, RDP Gateway/HTTPS Gateway, and nginx, backed by a new ClickHouse store with configurable retention. Operators can enable this via new OTel collector, gateway, and ClickHouse values. <!-- hash:31e3bbba5fbdea28df316d826c3d0bda9c49f330 -->
+- The browser telemetry config served at `/otel-config.js` points the Kasm web UI's exporter at `/api/telemetry` instead of `/api/client/telemetry`, matching the API's telemetry ingest route. Pair this chart with an API image that serves `/api/telemetry`, or browser telemetry exports will fail (only relevant when `observability.browser` is enabled). <!-- hash:b2e97505de4083df3e83bae4c5ef7682a33379bd -->
+- `components.api.queueConcurrency` and `components.api.workerPool[].queueConcurrency` accept an integer, applied to every queue, as well as a per-queue object. `components.api.queueConcurrency` now defaults to `null` instead of `{}`, so an integer can override it without a Helm "cannot overwrite table" warning; leaving it unset uses the API image default, which is now 5 jobs per queue (previously 1).
 
 ### Removed
 
@@ -89,6 +97,7 @@ See [Migrating to connection-proxy](./README.md#migrating-to-connection-proxy) f
 ### Documentation
 
 - Documents how edge-injected trace-context headers are trusted and how ClickHouse credentials are managed for observability — no functional change to the chart itself. <!-- hash:780fc043281accf8cd334a9b3f915248bffdc95b -->
+- Corrects the SAML example in `docs/preseed.md`: `sp_acs_url` pointed at `/api/public/acs`, which Kasm no longer serves and which never carried the required SAML config id. The example now sets an explicit `saml_id` and uses the `/api/auth/sso/<saml_id>/acs`, `/metadata`, and `/slo` endpoints. No chart behavior change.
 - Rewrites the observability documentation to describe the forwarder/gateway architecture and clarifies that the gateway only accepts traffic from forwarders, not from the host-log DaemonSet directly. No configuration or deployment changes for operators. <!-- hash:1b4f0ca90686716e5cd4448ab5a34726dccd1f56 -->
 
 ### Known Issues in Earlier Releases

@@ -60,6 +60,39 @@ data:
         limit_mib: 512
         spike_limit_mib: 128
 
+      # Emitters disagree on severity spelling: Python logs WARNING, Go logs lowercase, the nginx
+      # access parser passes a raw status through when it has no mapping. The Admin UI's level
+      # cascade compares the Python names, so normalise here.
+      transform/severity:
+        log_statements:
+          - context: log
+            statements:
+              - set(severity_text, ConvertCase(severity_text, "upper")) where severity_text != nil
+              - set(severity_text, "WARNING") where severity_text == "WARN"
+              - set(severity_text, "CRITICAL") where severity_text == "FATAL"
+              - set(severity_text, "ERROR") where IsMatch(severity_text, "^5[0-9][0-9]$")
+              - set(severity_text, "WARNING") where IsMatch(severity_text, "^4[0-9][0-9]$")
+              - set(severity_text, "INFO") where IsMatch(severity_text, "^[0-9]+$")
+
+      # Successful readiness polls are a large share of log volume on an idle cluster and never
+      # useful in a search. Failed probes stay: a 502 on the healthcheck is the clearest sign the
+      # API was down. Both the nginx access row and the API's own access log line are covered.
+      filter/healthcheck:
+        error_mode: ignore
+        logs:
+          log_record:
+            - 'attributes["url.path"] == "/api/__healthcheck" and attributes["http.response.status_code"] == "200"'
+            - 'resource.attributes["service.name"] == "kasm-api" and IsMatch(body, "/api/__healthcheck HTTP/1\\.[01]. 200 ")'
+
+      # ngx_otel_module's http.target/http.url span attributes carry the raw query string (JWTs and
+      # session passwords have been observed in it). Strip it before tail sampling buffers the span.
+      transform/nginx_scrub:
+        trace_statements:
+          - context: span
+            statements:
+              - replace_pattern(attributes["http.target"], "\\?.*$", "") where resource.attributes["service.name"] == "kasm-proxy" and attributes["http.target"] != nil
+              - replace_pattern(attributes["http.url"], "\\?.*$", "") where resource.attributes["service.name"] == "kasm-proxy" and attributes["http.url"] != nil
+
       tail_sampling:
         decision_wait: 30s
         num_traces: 50000
@@ -161,18 +194,18 @@ data:
       pipelines:
         logs:
           receivers: [otlp/remote]
-          processors: [memory_limiter, batch]
+          processors: [memory_limiter, transform/severity, filter/healthcheck, batch]
           exporters: [clickhouse/logs]
 
         # Parallel pipeline: the same incoming logs, forwarded to Splunk as well as ClickHouse.
         logs/splunk:
           receivers: [otlp/remote]
-          processors: [memory_limiter, batch]
+          processors: [memory_limiter, transform/severity, filter/healthcheck, batch]
           exporters: [splunk_hec/logs]
 
         traces:
           receivers: [otlp/remote]
-          processors: [memory_limiter, tail_sampling, batch]
+          processors: [memory_limiter, transform/nginx_scrub, tail_sampling, batch]
           exporters: [clickhouse/traces]
 
         metrics:

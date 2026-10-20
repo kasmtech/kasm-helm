@@ -93,7 +93,7 @@ spec:
               value: {{ $pool.queues | quote }}
             {{- if $pool.queueConcurrency }}
             - name: KASM_WORKER_QUEUE_CONCURRENCY
-              value: {{ toJson $pool.queueConcurrency | quote }}
+              value: {{ include "kasm.queueConcurrency" $pool.queueConcurrency | quote }}
             {{- end }}
             - name: KASM_WORKER_SHUTDOWN_TIMEOUT
               value: "60"
