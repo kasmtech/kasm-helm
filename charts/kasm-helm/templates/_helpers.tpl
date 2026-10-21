@@ -95,9 +95,8 @@ guac:
   port: 3000
   nginxPort: 9000
   ports:
-    {{- $clusterSize := ternary .Values.components.guac.guacClusterSize (include "resources.preset" (dict "node" "guac-processes" "size" .Values.deploymentSize "context" .Values)) (gt (int .Values.components.guac.guacClusterSize) 0) }}
-    {{- range $idx := until (int $clusterSize) }}
-    - {{ printf "300%d" (add $idx 1) }}
+    {{- range $idx := until (include "kasm.guacClusterSize" . | int) }}
+    - {{ add 3001 $idx }}
     {{- end }}
 rdpGateway:
   component: rdp-gateway
@@ -920,13 +919,7 @@ successThreshold: {{ $successThreshold }}
   image: {{ $image }}
   imagePullPolicy: {{ $context.Values.imagePullPolicy }}
   {{- include "kasm.securityContext" (list $context 1000 "container") | nindent 2 }}
-  resources:
-    requests:
-      cpu: 200m
-      memory: 128Mi
-    limits:
-      cpu: 200m
-      memory: 128Mi
+  resources: {{- include "kasm.initResources" . | nindent 4 }}
   command:
   - /bin/sh
   - -ec
@@ -1002,7 +995,6 @@ successThreshold: {{ $successThreshold }}
 {{- end -}}
 
 {{- $needsDbCredentials := or $isReady $isVersion -}}
-{{- $needsResources := or $isReady $isVersion -}}
 {{- $needsTmpDir := or $isInit $isReady $isBackup $isVersion -}}
 {{- $hasTrustedCaBundle := and (not $isBackup) $context.Values.trustedCaBundle.enabled -}}
 {{- $initMounts := get $merged "initMounts" -}}
@@ -1013,9 +1005,7 @@ successThreshold: {{ $successThreshold }}
 - name: {{ $containerName }}
   image: {{ $constants.api.image }}
   imagePullPolicy: {{ $context.Values.imagePullPolicy }}
-  {{- if $needsResources }}
-  resources: {{- include "resources.preset" (dict "node" "api" "size" "small" "context" $context.Values) | nindent 4 }}
-  {{- end }}
+  resources: {{- include (ternary "kasm.initResourcesHigh" "kasm.initResources" $isReady) . | nindent 4 }}
   {{- include "kasm.securityContext" (list $context 1000 "container") | nindent 2 }}
   env:
     - name: POSTGRES_HOST
@@ -1191,7 +1181,22 @@ successThreshold: {{ $successThreshold }}
 {{- end -}}
 
 {{/*
-  Return a resource request/limit object based on given presets
+  Guac cluster size: components.guac.guacClusterSize when > 0, else the guac-processes preset for deploymentSize.
+  Used for both the nginx upstream ports and the CLUSTER_SIZE env. Takes the root context.
+*/}}
+{{- define "kasm.guacClusterSize" -}}
+  {{- if gt (int .Values.components.guac.guacClusterSize) 0 -}}
+    {{- int .Values.components.guac.guacClusterSize -}}
+  {{- else -}}
+    {{- include "resources.preset" (dict "node" "guac-processes" "size" .Values.deploymentSize) -}}
+  {{- end -}}
+{{- end -}}
+
+{{/*
+  Return a resource request/limit object based on given presets.
+  An override section that is an empty map ({}) removes that section from the result.
+  An override key set to null or "" removes only that key (and the section when it becomes empty).
+  Optional "override" (dict) is merged over the preset per key; when a request exceeds its limit and only one of the two is overridden, the other is set equal to it.
   Example usage:
   {{- include "resources.preset" (dict "node" "proxy" "size" "small" "context" .) -}}
 */}}
@@ -1210,7 +1215,7 @@ successThreshold: {{ $successThreshold }}
       )
       "large" (dict 
         "requests" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "500m" "memory" "1Gi" "ephemeral-storage" "2Gi")
+        "limits" (dict "cpu" "1000m" "memory" "1Gi" "ephemeral-storage" "2Gi")
       )
     )
     "proxy-processes" (dict "small" 2 "medium" 6 "large" 12)
@@ -1221,12 +1226,12 @@ successThreshold: {{ $successThreshold }}
         "limits" (dict "cpu" "750m" "memory" "512Mi" "ephemeral-storage" "2Gi")
       )
       "medium" (dict 
-        "requests" (dict "cpu" "1.5" "memory" "2048Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "1.5" "memory" "2048Mi" "ephemeral-storage" "2Gi")
+        "requests" (dict "cpu" "2000m" "memory" "2048Mi" "ephemeral-storage" "50Mi")
+        "limits" (dict "cpu" "2000m" "memory" "2048Mi" "ephemeral-storage" "2Gi")
       )
       "large" (dict 
-        "requests" (dict "cpu" "4.0" "memory" "8192Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "4.0" "memory" "8192Mi" "ephemeral-storage" "2Gi")
+        "requests" (dict "cpu" "4000m" "memory" "8192Mi" "ephemeral-storage" "50Mi")
+        "limits" (dict "cpu" "4000m" "memory" "8192Mi" "ephemeral-storage" "2Gi")
       )
     )
     "api" (dict
@@ -1236,11 +1241,11 @@ successThreshold: {{ $successThreshold }}
       )
       "medium" (dict 
         "requests" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "500m" "memory" "1Gi" "ephemeral-storage" "2Gi")
+        "limits" (dict "cpu" "1000m" "memory" "1Gi" "ephemeral-storage" "2Gi")
       )
       "large" (dict 
-        "requests" (dict "cpu" "500m" "memory" "1Gi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "500m" "memory" "2Gi" "ephemeral-storage" "2Gi")
+        "requests" (dict "cpu" "1000m" "memory" "1Gi" "ephemeral-storage" "50Mi")
+        "limits" (dict "cpu" "2000m" "memory" "2Gi" "ephemeral-storage" "2Gi")
       )
     )
     "manager" (dict
@@ -1250,11 +1255,11 @@ successThreshold: {{ $successThreshold }}
       )
       "medium" (dict 
         "requests" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "500m" "memory" "1Gi" "ephemeral-storage" "2Gi")
+        "limits" (dict "cpu" "1000m" "memory" "1Gi" "ephemeral-storage" "2Gi")
       )
       "large" (dict 
         "requests" (dict "cpu" "500m" "memory" "1Gi" "ephemeral-storage" "50Mi")
-        "limits" (dict "cpu" "500m" "memory" "2Gi" "ephemeral-storage" "2Gi")
+        "limits" (dict "cpu" "2000m" "memory" "2Gi" "ephemeral-storage" "2Gi")
       )
     )
     "guac-processes" (dict "small" 4 "medium" 6 "large" 8)
@@ -1278,11 +1283,11 @@ successThreshold: {{ $successThreshold }}
         "limits" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
       )
       "medium" (dict 
-        "requests" (dict "cpu" "1000m" "memory" "512Mi" "ephemeral-storage" "50Mi")
+        "requests" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "50Mi")
         "limits" (dict "cpu" "1000m" "memory" "512Mi" "ephemeral-storage" "2Gi")
       )
       "large" (dict 
-        "requests" (dict "cpu" "1500m" "memory" "512Mi" "ephemeral-storage" "50Mi")
+        "requests" (dict "cpu" "1000m" "memory" "512Mi" "ephemeral-storage" "50Mi")
         "limits" (dict "cpu" "1500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
       )
     )
@@ -1292,11 +1297,11 @@ successThreshold: {{ $successThreshold }}
         "limits" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
       )
       "medium" (dict
-        "requests" (dict "cpu" "1000m" "memory" "512Mi" "ephemeral-storage" "50Mi")
+        "requests" (dict "cpu" "500m" "memory" "512Mi" "ephemeral-storage" "50Mi")
         "limits" (dict "cpu" "1000m" "memory" "512Mi" "ephemeral-storage" "2Gi")
       )
       "large" (dict
-        "requests" (dict "cpu" "1500m" "memory" "512Mi" "ephemeral-storage" "50Mi")
+        "requests" (dict "cpu" "1000m" "memory" "512Mi" "ephemeral-storage" "50Mi")
         "limits" (dict "cpu" "1500m" "memory" "512Mi" "ephemeral-storage" "2Gi")
       )
     )
@@ -1339,7 +1344,72 @@ successThreshold: {{ $successThreshold }}
   -}}
 {{- end -}}
 
-{{- dig .node .size nil $presetSizes | toYaml -}}
+{{- $result := dig .node .size nil $presetSizes -}}
+{{- if and (kindIs "map" $result) (kindIs "map" .override) -}}
+  {{- $result = deepCopy $result -}}
+  {{- range $section, $vals := .override -}}
+    {{- if and (kindIs "map" $vals) (eq (len $vals) 0) -}}
+      {{- $_ := unset $result $section -}}
+    {{- else if kindIs "map" $vals -}}
+      {{- $cur := default (dict) (get $result $section) -}}
+      {{- range $k, $v := $vals -}}
+        {{- if or (kindIs "invalid" $v) (and (kindIs "string" $v) (eq $v "")) -}}
+          {{- $_ := unset $cur $k -}}
+        {{- else -}}
+          {{- $_ := set $cur $k $v -}}
+        {{- end -}}
+      {{- end -}}
+      {{- if eq (len $cur) 0 -}}
+        {{- $_ := unset $result $section -}}
+      {{- else -}}
+        {{- $_ := set $result $section $cur -}}
+      {{- end -}}
+    {{- else if not (kindIs "invalid" $vals) -}}
+      {{- $_ := set $result $section $vals -}}
+    {{- end -}}
+  {{- end -}}
+  {{- $requests := default (dict) (get $result "requests") -}}
+  {{- $limits := default (dict) (get $result "limits") -}}
+  {{- $oReq := default (dict) (get .override "requests") -}}
+  {{- $oLim := default (dict) (get .override "limits") -}}
+  {{- range $k, $req := $requests -}}
+    {{- if hasKey $limits $k -}}
+      {{- if gt (include "resources.quantity" $req | float64) (include "resources.quantity" (get $limits $k) | float64) -}}
+        {{- if and (hasKey $oLim $k) (not (hasKey $oReq $k)) -}}
+          {{- $_ := set $requests $k (get $limits $k) -}}
+        {{- else if and (hasKey $oReq $k) (not (hasKey $oLim $k)) -}}
+          {{- $_ := set $limits $k $req -}}
+        {{- end -}}
+      {{- end -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+{{- $result | toYaml -}}
+{{- end -}}
+
+{{/*
+  Parse a Kubernetes quantity (1, 1.5, "+1", "1.", "500m", "250u", "1Gi", "2G") to a plain number.
+  Fails the render when the value is not a valid quantity.
+*/}}
+{{- define "resources.quantity" -}}
+  {{- $s := toString . -}}
+  {{- $num := regexFind "^\\+?([0-9]+\\.?[0-9]*|\\.[0-9]+)([eE][+-]?[0-9]+)?" $s -}}
+  {{- $suffix := trimPrefix $num $s -}}
+  {{- $num = regexReplaceAll "\\.($|[eE])" (trimPrefix "+" $num) "${1}" -}}
+  {{- $mult := dict "" 1.0 "Ki" 1024.0 "Mi" 1048576.0 "Gi" 1073741824.0 "Ti" 1099511627776.0
+      "Pi" 1125899906842624.0 "Ei" 1152921504606846976.0 "k" 1e3 "M" 1e6 "G" 1e9 "T" 1e12 "P" 1e15 "E" 1e18 -}}
+  {{- if or (eq $num "") (and (not (has $suffix (list "m" "u" "n"))) (not (hasKey $mult $suffix))) -}}
+    {{- printf "ERROR: invalid resource quantity '%s'" $s | fail -}}
+  {{- end -}}
+  {{- if eq $suffix "m" -}}
+    {{- divf $num 1000 -}}
+  {{- else if eq $suffix "u" -}}
+    {{- divf $num 1000000 -}}
+  {{- else if eq $suffix "n" -}}
+    {{- divf $num 1000000000 -}}
+  {{- else -}}
+    {{- mulf $num (get $mult $suffix) -}}
+  {{- end -}}
 {{- end -}}
 
 {{/*
@@ -1457,6 +1527,31 @@ Dedup rules:
 {{- end -}}
 
 {{/*
+  Fixed resources for chart-owned init containers (not configurable)
+  Low tier: wait and setup containers
+*/}}
+{{- define "kasm.initResources" -}}
+requests:
+  cpu: 10m
+  memory: 64Mi
+limits:
+  cpu: 500m
+  memory: 128Mi
+{{- end -}}
+
+{{/*
+  High tier: the db-is-ready container, which runs alembic
+*/}}
+{{- define "kasm.initResourcesHigh" -}}
+requests:
+  cpu: 50m
+  memory: 128Mi
+limits:
+  cpu: 500m
+  memory: 256Mi
+{{- end -}}
+
+{{/*
   Script to load custom CA bundle into Kasm containers
 */}}
 {{- define "kasm.trustedCaInit" }}
@@ -1472,6 +1567,7 @@ Dedup rules:
   image: {{ $constants.api.image }}
   imagePullPolicy: {{ $context.Values.imagePullPolicy }}
   {{- include "kasm.securityContext" (list $context $uidGid "container") | nindent 2 }}
+  resources: {{- include "kasm.initResources" . | nindent 4 }}
   command:
     - /bin/bash
     - -c

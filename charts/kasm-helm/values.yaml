@@ -569,7 +569,24 @@ database:
       whenScaled: Retain
   # database.annotations -- Custom annotations to add to the Kasm DB StatefulSet
   annotations: {}
-  # database.resources -- Manually configure the Kasm DB StatefulSet resources. This overrides the pre-defined `deploymentSize` values.
+  # database.resources -- Resource requests and limits for this container. Leave empty to use the `deploymentSize` preset.
+  # Each value set overrides only that key of the preset, e.g. requests.cpu: 1 changes only the CPU request.
+  # If only the limit is set and it is below the preset request, the request is lowered to the limit.
+  # If only the request is set and it is above the preset limit, the limit is raised to the request.
+  # If both are set, the values are used as given.
+  # Set `limits: {}` or `requests: {}` to remove that whole section instead of using the preset.
+  # Set a single key to null or "" to remove only that key.
+  # With `requests: {}` Kubernetes sets each request equal to its limit, so the pod reserves its full limit when scheduled.
+  # Example:
+  #   resources:
+  #     requests:
+  #       cpu: 1
+  #       memory: 1Gi
+  #       ephemeral-storage: 1Gi
+  #     limits:
+  #       cpu: 2
+  #       memory: 2Gi
+  #       ephemeral-storage: 3Gi
   resources: {}
   # database.healthCheckTiming -- Override the pod's default healthcheck timing values for liveness and/or readiness probes.
   #  Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only
@@ -737,7 +754,24 @@ components:
       readinessProbe: {}
     # components.proxy.annotations -- Custom annotations to add to the Kasm Proxy Deployment
     annotations: {}
-    # components.proxy.resources -- Manually configure the Kasm Proxy Deployment resources. This overrides the pre-defined `deploymentSize` values.
+    # components.proxy.resources -- Resource requests and limits for this container. Leave empty to use the `deploymentSize` preset.
+    # Each value set overrides only that key of the preset, e.g. requests.cpu: 1 changes only the CPU request.
+    # If only the limit is set and it is below the preset request, the request is lowered to the limit.
+    # If only the request is set and it is above the preset limit, the limit is raised to the request.
+    # If both are set, the values are used as given.
+    # Set `limits: {}` or `requests: {}` to remove that whole section instead of using the preset.
+    # Set a single key to null or "" to remove only that key.
+    # With `requests: {}` Kubernetes sets each request equal to its limit, so the pod reserves its full limit when scheduled.
+    # Example:
+    #   resources:
+    #     requests:
+    #       cpu: 1
+    #       memory: 1Gi
+    #       ephemeral-storage: 1Gi
+    #     limits:
+    #       cpu: 2
+    #       memory: 2Gi
+    #       ephemeral-storage: 3Gi
     resources: {}
     # components.proxy.labels -- Custom labels to add to the Kasm Proxy Deployment
     labels: {}
@@ -803,7 +837,24 @@ components:
       readinessProbe: {}
     # components.api.annotations -- Custom annotations to add to the Kasm api Deployment
     annotations: {}
-    # components.api.resources -- Manually configure the Kasm api Deployment resources. This overrides the pre-defined `deploymentSize` values.
+    # components.api.resources -- Resource requests and limits for this container. Leave empty to use the `deploymentSize` preset.
+    # Each value set overrides only that key of the preset, e.g. requests.cpu: 1 changes only the CPU request.
+    # If only the limit is set and it is below the preset request, the request is lowered to the limit.
+    # If only the request is set and it is above the preset limit, the limit is raised to the request.
+    # If both are set, the values are used as given.
+    # Set `limits: {}` or `requests: {}` to remove that whole section instead of using the preset.
+    # Set a single key to null or "" to remove only that key.
+    # With `requests: {}` Kubernetes sets each request equal to its limit, so the pod reserves its full limit when scheduled.
+    # Example:
+    #   resources:
+    #     requests:
+    #       cpu: 1
+    #       memory: 1Gi
+    #       ephemeral-storage: 1Gi
+    #     limits:
+    #       cpu: 2
+    #       memory: 2Gi
+    #       ephemeral-storage: 3Gi
     resources: {}
     # components.api.labels -- Custom labels to add to the Kasm api Deployment
     labels: {}
@@ -878,7 +929,24 @@ components:
       readinessProbe: {}
     # components.manager.annotations -- Custom annotations to add to the Kasm Manager Deployment
     annotations: {}
-    # components.manager.resources -- Manually configure the Kasm Manager Deployment resources. This overrides the pre-defined `deploymentSize` values.
+    # components.manager.resources -- Resource requests and limits for this container. Leave empty to use the `deploymentSize` preset.
+    # Each value set overrides only that key of the preset, e.g. requests.cpu: 1 changes only the CPU request.
+    # If only the limit is set and it is below the preset request, the request is lowered to the limit.
+    # If only the request is set and it is above the preset limit, the limit is raised to the request.
+    # If both are set, the values are used as given.
+    # Set `limits: {}` or `requests: {}` to remove that whole section instead of using the preset.
+    # Set a single key to null or "" to remove only that key.
+    # With `requests: {}` Kubernetes sets each request equal to its limit, so the pod reserves its full limit when scheduled.
+    # Example:
+    #   resources:
+    #     requests:
+    #       cpu: 1
+    #       memory: 1Gi
+    #       ephemeral-storage: 1Gi
+    #     limits:
+    #       cpu: 2
+    #       memory: 2Gi
+    #       ephemeral-storage: 3Gi
     resources: {}
     # components.manager.labels -- Custom labels to add to the Kasm Manager Deployment
     labels: {}
@@ -961,11 +1029,45 @@ components:
       readinessProbe: {}
     # components.guac.annotations -- Custom annotations to add to the Kasm Guac Deployment
     annotations: {}
-    # components.guac.resources -- Manually configure the Kasm Guac Deployment resources. This overrides the pre-defined `deploymentSize` values.
+    # components.guac.resources -- Resource requests and limits for this container. Leave empty to use the `deploymentSize` preset.
+    # Each value set overrides only that key of the preset, e.g. requests.cpu: 1 changes only the CPU request.
+    # If only the limit is set and it is below the preset request, the request is lowered to the limit.
+    # If only the request is set and it is above the preset limit, the limit is raised to the request.
+    # If both are set, the values are used as given.
+    # Set `limits: {}` or `requests: {}` to remove that whole section instead of using the preset.
+    # Set a single key to null or "" to remove only that key.
+    # With `requests: {}` Kubernetes sets each request equal to its limit, so the pod reserves its full limit when scheduled.
+    # Example:
+    #   resources:
+    #     requests:
+    #       cpu: 1
+    #       memory: 1Gi
+    #       ephemeral-storage: 1Gi
+    #     limits:
+    #       cpu: 2
+    #       memory: 2Gi
+    #       ephemeral-storage: 3Gi
     resources: {}
     # components.guac.nginxSidecar -- Configuration for the nginx sidecar container.
     nginxSidecar:
-      # components.guac.nginxSidecar.resources -- Manually configure resources for the nginx sidecar container. Leave empty to use the chart default.
+      # components.guac.nginxSidecar.resources -- Resource requests and limits for this container. Leave empty to use the `deploymentSize` preset.
+      # Each value set overrides only that key of the preset, e.g. requests.cpu: 1 changes only the CPU request.
+      # If only the limit is set and it is below the preset request, the request is lowered to the limit.
+      # If only the request is set and it is above the preset limit, the limit is raised to the request.
+      # If both are set, the values are used as given.
+      # Set `limits: {}` or `requests: {}` to remove that whole section instead of using the preset.
+      # Set a single key to null or "" to remove only that key.
+      # With `requests: {}` Kubernetes sets each request equal to its limit, so the pod reserves its full limit when scheduled.
+      # Example:
+      #   resources:
+      #     requests:
+      #       cpu: 1
+      #       memory: 1Gi
+      #       ephemeral-storage: 1Gi
+      #     limits:
+      #       cpu: 2
+      #       memory: 2Gi
+      #       ephemeral-storage: 3Gi
       resources: {}
       # components.guac.nginxSidecar.healthCheckTiming -- Override the pod's default healthcheck timing values for liveness and/or readiness probes.
       #  Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only
@@ -1080,11 +1182,45 @@ components:
       readinessProbe: {}
     # components.rdpGateway.annotations -- Custom annotations to add to the Kasm RDP Gateway Deployment
     annotations: {}
-    # components.rdpGateway.resources -- Manually configure the Kasm RDP Gateway Deployment resources. This overrides the pre-defined `deploymentSize` values.
+    # components.rdpGateway.resources -- Resource requests and limits for this container. Leave empty to use the `deploymentSize` preset.
+    # Each value set overrides only that key of the preset, e.g. requests.cpu: 1 changes only the CPU request.
+    # If only the limit is set and it is below the preset request, the request is lowered to the limit.
+    # If only the request is set and it is above the preset limit, the limit is raised to the request.
+    # If both are set, the values are used as given.
+    # Set `limits: {}` or `requests: {}` to remove that whole section instead of using the preset.
+    # Set a single key to null or "" to remove only that key.
+    # With `requests: {}` Kubernetes sets each request equal to its limit, so the pod reserves its full limit when scheduled.
+    # Example:
+    #   resources:
+    #     requests:
+    #       cpu: 1
+    #       memory: 1Gi
+    #       ephemeral-storage: 1Gi
+    #     limits:
+    #       cpu: 2
+    #       memory: 2Gi
+    #       ephemeral-storage: 3Gi
     resources: {}
     # components.rdpGateway.nginxSidecar -- Configuration for the nginx sidecar container.
     nginxSidecar:
-      # components.rdpGateway.nginxSidecar.resources -- Manually configure resources for the nginx sidecar container. Leave empty to use the chart default.
+      # components.rdpGateway.nginxSidecar.resources -- Resource requests and limits for this container. Leave empty to use the `deploymentSize` preset.
+      # Each value set overrides only that key of the preset, e.g. requests.cpu: 1 changes only the CPU request.
+      # If only the limit is set and it is below the preset request, the request is lowered to the limit.
+      # If only the request is set and it is above the preset limit, the limit is raised to the request.
+      # If both are set, the values are used as given.
+      # Set `limits: {}` or `requests: {}` to remove that whole section instead of using the preset.
+      # Set a single key to null or "" to remove only that key.
+      # With `requests: {}` Kubernetes sets each request equal to its limit, so the pod reserves its full limit when scheduled.
+      # Example:
+      #   resources:
+      #     requests:
+      #       cpu: 1
+      #       memory: 1Gi
+      #       ephemeral-storage: 1Gi
+      #     limits:
+      #       cpu: 2
+      #       memory: 2Gi
+      #       ephemeral-storage: 3Gi
       resources: {}
       # components.rdpGateway.nginxSidecar.healthCheckTiming -- Override the pod's default healthcheck timing values for liveness and/or readiness probes.
       #  Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only
@@ -1195,11 +1331,45 @@ components:
       readinessProbe: {}
     # components.rdpHttpsGateway.annotations -- Custom annotations to add to the Kasm RDP HTTPS Gateway Deployment
     annotations: {}
-    # components.rdpHttpsGateway.resources -- Manually configure the Kasm RDP HTTPS Gateway Deployment resources. This overrides the pre-defined `deploymentSize` values.
+    # components.rdpHttpsGateway.resources -- Resource requests and limits for this container. Leave empty to use the `deploymentSize` preset.
+    # Each value set overrides only that key of the preset, e.g. requests.cpu: 1 changes only the CPU request.
+    # If only the limit is set and it is below the preset request, the request is lowered to the limit.
+    # If only the request is set and it is above the preset limit, the limit is raised to the request.
+    # If both are set, the values are used as given.
+    # Set `limits: {}` or `requests: {}` to remove that whole section instead of using the preset.
+    # Set a single key to null or "" to remove only that key.
+    # With `requests: {}` Kubernetes sets each request equal to its limit, so the pod reserves its full limit when scheduled.
+    # Example:
+    #   resources:
+    #     requests:
+    #       cpu: 1
+    #       memory: 1Gi
+    #       ephemeral-storage: 1Gi
+    #     limits:
+    #       cpu: 2
+    #       memory: 2Gi
+    #       ephemeral-storage: 3Gi
     resources: {}
     # components.rdpHttpsGateway.nginxSidecar -- Configuration for the nginx sidecar container.
     nginxSidecar:
-      # components.rdpHttpsGateway.nginxSidecar.resources -- Manually configure resources for the nginx sidecar container. Leave empty to use the chart default.
+      # components.rdpHttpsGateway.nginxSidecar.resources -- Resource requests and limits for this container. Leave empty to use the `deploymentSize` preset.
+      # Each value set overrides only that key of the preset, e.g. requests.cpu: 1 changes only the CPU request.
+      # If only the limit is set and it is below the preset request, the request is lowered to the limit.
+      # If only the request is set and it is above the preset limit, the limit is raised to the request.
+      # If both are set, the values are used as given.
+      # Set `limits: {}` or `requests: {}` to remove that whole section instead of using the preset.
+      # Set a single key to null or "" to remove only that key.
+      # With `requests: {}` Kubernetes sets each request equal to its limit, so the pod reserves its full limit when scheduled.
+      # Example:
+      #   resources:
+      #     requests:
+      #       cpu: 1
+      #       memory: 1Gi
+      #       ephemeral-storage: 1Gi
+      #     limits:
+      #       cpu: 2
+      #       memory: 2Gi
+      #       ephemeral-storage: 3Gi
       resources: {}
       # components.rdpHttpsGateway.nginxSidecar.healthCheckTiming -- Override the pod's default healthcheck timing values for liveness and/or readiness probes.
       #  Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only

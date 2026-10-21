@@ -1,10 +1,11 @@
 {{/*
 Deploy the Guacamole Web RDP StatefulSet if .Values.components.guac.enabled is true.
-Each pod runs a guac container (ports 3000-3004, local only) and an nginx sidecar
+Each pod runs a guac container (port 3000 plus one port per process, 3001 to 3000+N, where N = kasm.guacClusterSize; local only) and an nginx sidecar
 (port 9000) that owns all external guac routing.
 */}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- $guacReplicas := ternary .Values.components.guac.replicas (include "replicas.preset" (dict "node" ($constants.guac.component) "size" .Values.deploymentSize)) (gt (int .Values.components.guac.replicas) 0) -}}
+{{- $guacClusterSize := include "kasm.guacClusterSize" . -}}
 {{- $merged := fromYaml (include "kasm.mergedValues" (dict "root" . "componentName" "guac")) -}}
 {{- if .Values.components.guac.enabled }}
 {{- range $zone := (include "kasm.primaryRegionZones" $ | fromYamlArray) }}
@@ -50,7 +51,7 @@ spec:
           imagePullPolicy: {{ $.Values.imagePullPolicy }}
           env:
             - name: CLUSTER_SIZE
-              value: "4"
+              value: {{ $guacClusterSize | quote }}
             - name: REGISTRATION_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -106,11 +107,7 @@ spec:
           readinessProbe:
             {{- include "health.probe" (dict "root" $ "component" "guac" "probeType" "readinessProbe" "type" "http" "path" "/__healthcheck" "portName" $constants.guac.portName) | nindent 12 }}
           {{- end }}
-          {{- if $.Values.components.guac.resources }}
-          resources: {{- toYaml $.Values.components.guac.resources | nindent 12 }}
-          {{- else }}
-          resources: {{- include "resources.preset" (dict "node" ($constants.guac.component) "size" $.Values.deploymentSize) | nindent 12 }}
-          {{- end }}
+          resources: {{- include "resources.preset" (dict "node" ($constants.guac.component) "size" $.Values.deploymentSize "override" $.Values.components.guac.resources) | nindent 12 }}
           {{- include "kasm.securityContext" (list $ 1000 "container") | nindent 10 }}
         - name: {{ printf "%s-guac-nginx" $.Release.Name }}
           image: {{ $constants.proxy.image }}
@@ -160,11 +157,7 @@ spec:
           readinessProbe:
             {{- include "health.probe" (dict "root" $ "component" "guac" "timingScope" "nginxSidecar" "probeType" "readinessProbe" "type" "https" "path" "/guac/__healthcheck" "portName" "guac-nginx-pt") | nindent 12 }}
           {{- end }}
-          {{- if $.Values.components.guac.nginxSidecar.resources }}
-          resources: {{- toYaml $.Values.components.guac.nginxSidecar.resources | nindent 12 }}
-          {{- else }}
-          resources: {{- include "resources.preset" (dict "node" "nginx-sidecar" "size" $.Values.deploymentSize) | nindent 12 }}
-          {{- end }}
+          resources: {{- include "resources.preset" (dict "node" "nginx-sidecar" "size" $.Values.deploymentSize "override" $.Values.components.guac.nginxSidecar.resources) | nindent 12 }}
           {{- include "kasm.securityContext" (list $ 1000 "container") | nindent 10 }}
         {{- with $merged.extraContainers }}
           {{- toYaml . | nindent 8 }}

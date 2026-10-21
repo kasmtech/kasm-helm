@@ -5,6 +5,7 @@ templates:
   - templates/db-upgrade-job.yaml
   - templates/db-upgrade-backup-job.yaml
   - templates/db-backup-cron.yaml
+  - templates/proxy-deployment.yaml
 tests:
   - it: api deployment "ready" init container is named db-is-ready and has POSTGRES_PASSWORD from release secret
     template: templates/api-deployment.yaml
@@ -244,3 +245,131 @@ tests:
       - equal:
           path: spec.jobTemplate.spec.template.spec.initContainers[0].name
           value: db-is-ready
+
+  - it: api deployment db-is-ready has the fixed init resources
+    template: templates/api-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name=="db-is-ready")].resources
+          value:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+
+  - it: db init job db-is-ready has the fixed init resources
+    template: templates/db-init-job.yaml
+    set:
+      dbManagement:
+        initialize: true
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name=="db-is-ready")].resources
+          value:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 128Mi
+
+  - it: db init job prepare-db-preseed has the fixed init resources
+    template: templates/db-init-job.yaml
+    set:
+      kasmConfig:
+        generatePreseed: true
+      dbManagement:
+        initialize: true
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name=="prepare-db-preseed")].resources
+          value:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 128Mi
+
+  - it: db upgrade backup job db wait container has the fixed init resources
+    template: templates/db-upgrade-backup-job.yaml
+    documentSelector:
+      path: kind
+      value: Job
+    set:
+      dbManagement:
+        initialize: false
+        upgrade:
+          enable: true
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].resources
+          value:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 128Mi
+
+  - it: proxy deployment kasm.initContainer wait containers have the fixed init resources
+    template: templates/proxy-deployment.yaml
+    documentSelector:
+      path: kind
+      value: Deployment
+    set:
+      trustedCaBundle:
+        enabled: false
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].resources
+          value:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 128Mi
+
+  - it: proxy deployment trusted-ca-init has the fixed init resources
+    template: templates/proxy-deployment.yaml
+    documentSelector:
+      path: kind
+      value: Deployment
+    set:
+      trustedCaBundle:
+        enabled: true
+        configMapName: kasm-trusted-ca-test
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name=="trusted-ca-init")].resources
+          value:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 128Mi
+
+  - it: db upgrade job version wait container has the low tier init resources
+    template: templates/db-upgrade-job.yaml
+    documentSelector:
+      path: kind
+      value: Job
+    set:
+      dbManagement:
+        initialize: false
+        upgrade:
+          enable: true
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name=="db-major-version-is-ready")].resources
+          value:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 128Mi

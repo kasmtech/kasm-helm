@@ -371,7 +371,7 @@
             },
             "resources": {
               "additionalProperties": true,
-              "description": "Manually configure the Kasm api Deployment resources. This overrides the pre-defined `deploymentSize` values.",
+              "description": "Resource requests and limits for this container. Leave empty to use the `deploymentSize` preset. Each value set overrides only that key of the preset, e.g. requests.cpu: 1 changes only the CPU request. If only the limit is set and it is below the preset request, the request is lowered to the limit. If only the request is set and it is above the preset limit, the limit is raised to the request. If both are set, the values are used as given. Set `limits: {}` or `requests: {}` to remove that whole section instead of using the preset. Set a single key to null or \"\" to remove only that key. With `requests: {}` Kubernetes sets each request equal to its limit, so the pod reserves its full limit when scheduled.",
               "title": "resources",
               "type": "object"
             },
@@ -563,7 +563,7 @@
             },
             "resources": {
               "additionalProperties": true,
-              "description": "Manually configure the Kasm Guac Deployment resources. This overrides the pre-defined `deploymentSize` values.",
+              "description": "Resource requests and limits for this container. Leave empty to use the `deploymentSize` preset. Each value set overrides only that key of the preset, e.g. requests.cpu: 1 changes only the CPU request. If only the limit is set and it is below the preset request, the request is lowered to the limit. If only the request is set and it is above the preset limit, the limit is raised to the request. If both are set, the values are used as given. Set `limits: {}` or `requests: {}` to remove that whole section instead of using the preset. Set a single key to null or \"\" to remove only that key. With `requests: {}` Kubernetes sets each request equal to its limit, so the pod reserves its full limit when scheduled.",
               "title": "resources",
               "type": "object"
             },
@@ -573,7 +573,7 @@
               "properties": {
                 "resources": {
                   "additionalProperties": true,
-                  "description": "Manually configure resources for the nginx sidecar container. Leave empty to use the chart default.",
+                  "description": "Resource requests and limits for this container. Leave empty to use the `deploymentSize` preset. Each value set overrides only that key of the preset, e.g. requests.cpu: 1 changes only the CPU request. If only the limit is set and it is below the preset request, the request is lowered to the limit. If only the request is set and it is above the preset limit, the limit is raised to the request. If both are set, the values are used as given. Set `limits: {}` or `requests: {}` to remove that whole section instead of using the preset. Set a single key to null or \"\" to remove only that key. With `requests: {}` Kubernetes sets each request equal to its limit, so the pod reserves its full limit when scheduled.",
                   "title": "resources",
                   "type": "object"
                 },
@@ -825,7 +825,7 @@
             },
             "resources": {
               "additionalProperties": true,
-              "description": "Manually configure the Kasm Manager Deployment resources. This overrides the pre-defined `deploymentSize` values.",
+              "description": "Resource requests and limits for this container. Leave empty to use the `deploymentSize` preset. Each value set overrides only that key of the preset, e.g. requests.cpu: 1 changes only the CPU request. If only the limit is set and it is below the preset request, the request is lowered to the limit. If only the request is set and it is above the preset limit, the limit is raised to the request. If both are set, the values are used as given. Set `limits: {}` or `requests: {}` to remove that whole section instead of using the preset. Set a single key to null or \"\" to remove only that key. With `requests: {}` Kubernetes sets each request equal to its limit, so the pod reserves its full limit when scheduled.",
               "title": "resources",
               "type": "object"
             },
@@ -1006,7 +1006,7 @@
             },
             "resources": {
               "additionalProperties": true,
-              "description": "Manually configure the Kasm Proxy Deployment resources. This overrides the pre-defined `deploymentSize` values.",
+              "description": "Resource requests and limits for this container. Leave empty to use the `deploymentSize` preset. Each value set overrides only that key of the preset, e.g. requests.cpu: 1 changes only the CPU request. If only the limit is set and it is below the preset request, the request is lowered to the limit. If only the request is set and it is above the preset limit, the limit is raised to the request. If both are set, the values are used as given. Set `limits: {}` or `requests: {}` to remove that whole section instead of using the preset. Set a single key to null or \"\" to remove only that key. With `requests: {}` Kubernetes sets each request equal to its limit, so the pod reserves its full limit when scheduled.",
               "title": "resources",
               "type": "object"
             }
@@ -1167,7 +1167,7 @@
             },
             "resources": {
               "additionalProperties": true,
-              "description": "Manually configure the Kasm RDP Gateway Deployment resources. This overrides the pre-defined `deploymentSize` values.",
+              "description": "Resource requests and limits for this container. Leave empty to use the `deploymentSize` preset. Each value set overrides only that key of the preset, e.g. requests.cpu: 1 changes only the CPU request. If only the limit is set and it is below the preset request, the request is lowered to the limit. If only the request is set and it is above the preset limit, the limit is raised to the request. If both are set, the values are used as given. Set `limits: {}` or `requests: {}` to remove that whole section instead of using the preset. Set a single key to null or \"\" to remove only that key. With `requests: {}` Kubernetes sets each request equal to its limit, so the pod reserves its full limit when scheduled.",
               "title": "resources",
               "type": "object"
             },
@@ -1177,7 +1177,7 @@
               "properties": {
                 "resources": {
                   "additionalProperties": true,
-                  "description": "Manually configure resources for the nginx sidecar container. Leave empty to use the chart default.",
+                  "description": "Resource requests and limits for this container. Leave empty to use the `deploymentSize` preset. Each value set overrides only that key of the preset, e.g. requests.cpu: 1 changes only the CPU request. If only the limit is set and it is below the preset request, the request is lowered to the limit. If only the request is set and it is above the preset limit, the limit is raised to the request. If both are set, the values are used as given. Set `limits: {}` or `requests: {}` to remove that whole section instead of using the preset. Set a single key to null or \"\" to remove only that key. With `requests: {}` Kubernetes sets each request equal to its limit, so the pod reserves its full limit when scheduled.",
                   "title": "resources",
                   "type": "object"
                 },
@@ -1412,7 +1412,7 @@
             },
             "resources": {
               "additionalProperties": true,
-              "description": "Manually configure the Kasm RDP HTTPS Gateway Deployment resources. This overrides the pre-defined `deploymentSize` values.",
+              "description": "Resource requests and limits for this container. Leave empty to use the `deploymentSize` preset. Each value set overrides only that key of the preset, e.g. requests.cpu: 1 changes only the CPU request. If only the limit is set and it is below the preset request, the request is lowered to the limit. If only the request is set and it is above the preset limit, the limit is raised to the request. If both are set, the values are used as given. Set `limits: {}` or `requests: {}` to remove that whole section instead of using the preset. Set a single key to null or \"\" to remove only that key. With `requests: {}` Kubernetes sets each request equal to its limit, so the pod reserves its full limit when scheduled.",
               "title": "resources",
               "type": "object"
             },
@@ -1422,7 +1422,7 @@
               "properties": {
                 "resources": {
                   "additionalProperties": true,
-                  "description": "Manually configure resources for the nginx sidecar container. Leave empty to use the chart default.",
+                  "description": "Resource requests and limits for this container. Leave empty to use the `deploymentSize` preset. Each value set overrides only that key of the preset, e.g. requests.cpu: 1 changes only the CPU request. If only the limit is set and it is below the preset request, the request is lowered to the limit. If only the request is set and it is above the preset limit, the limit is raised to the request. If both are set, the values are used as given. Set `limits: {}` or `requests: {}` to remove that whole section instead of using the preset. Set a single key to null or \"\" to remove only that key. With `requests: {}` Kubernetes sets each request equal to its limit, so the pod reserves its full limit when scheduled.",
                   "title": "resources",
                   "type": "object"
                 },
@@ -1724,7 +1724,7 @@
         },
         "resources": {
           "additionalProperties": true,
-          "description": "Manually configure the Kasm DB StatefulSet resources. This overrides the pre-defined `deploymentSize` values.",
+          "description": "Resource requests and limits for this container. Leave empty to use the `deploymentSize` preset. Each value set overrides only that key of the preset, e.g. requests.cpu: 1 changes only the CPU request. If only the limit is set and it is below the preset request, the request is lowered to the limit. If only the request is set and it is above the preset limit, the limit is raised to the request. If both are set, the values are used as given. Set `limits: {}` or `requests: {}` to remove that whole section instead of using the preset. Set a single key to null or \"\" to remove only that key. With `requests: {}` Kubernetes sets each request equal to its limit, so the pod reserves its full limit when scheduled.",
           "title": "resources",
           "type": "object"
         },

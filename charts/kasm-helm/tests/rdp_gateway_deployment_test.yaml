@@ -157,5 +157,9 @@ tests:
       - equal:
           path: spec.template.spec.containers[1].resources.requests.memory
           value: 64Mi
-      - notExists:
-          path: spec.template.spec.containers[1].resources.limits
+      - equal:
+          path: spec.template.spec.containers[1].resources.limits.cpu
+          value: 500m
+      - equal:
+          path: spec.template.spec.containers[1].resources.limits.memory
+          value: 256Mi

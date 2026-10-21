@@ -1,0 +1,367 @@
+suite: resources override merge
+# deploymentSize preset is the base; user values override per key; a limit
+# below its request lowers the request; a request above its limit raises the limit;
+# when both are set values pass through as given. Default size is small:
+#   api requests 500m/512Mi/50Mi, limits 500m/1Gi/2Gi
+#   nginx-sidecar requests=limits 500m/256Mi
+templates:
+  - templates/api-deployment.yaml
+  - templates/db-statefulset.yaml
+  - templates/guac-statefulset.yaml
+  - templates/manager-deployment.yaml
+  - templates/proxy-deployment.yaml
+  - templates/rdp-gateway-deployment.yaml
+  - templates/rdp-https-gateway-statefulset.yaml
+
+tests:
+  - it: empty override renders the preset
+    template: templates/api-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources
+          value:
+            requests: {cpu: 500m, memory: 512Mi, ephemeral-storage: 50Mi}
+            limits: {cpu: 500m, memory: 1Gi, ephemeral-storage: 2Gi}
+
+  - it: request-only override above the preset limit raises the limit
+    template: templates/api-deployment.yaml
+    set:
+      components.api.resources.requests.cpu: 1
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources
+          value:
+            requests: {cpu: 1, memory: 512Mi, ephemeral-storage: 50Mi}
+            limits: {cpu: 1, memory: 1Gi, ephemeral-storage: 2Gi}
+
+  - it: full override uses the user values
+    template: templates/api-deployment.yaml
+    set:
+      components.api.resources:
+        requests: {cpu: 250m, memory: 128Mi, ephemeral-storage: 10Mi}
+        limits: {cpu: 750m, memory: 2Gi, ephemeral-storage: 3Gi}
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources
+          value:
+            requests: {cpu: 250m, memory: 128Mi, ephemeral-storage: 10Mi}
+            limits: {cpu: 750m, memory: 2Gi, ephemeral-storage: 3Gi}
+
+  - it: memory request above the preset limit raises the limit across units
+    template: templates/api-deployment.yaml
+    set:
+      components.api.resources.requests.memory: 2Gi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 2Gi
+
+  - it: memory request below the preset limit in another unit keeps the limit
+    template: templates/api-deployment.yaml
+    set:
+      components.api.resources.requests.memory: 1000Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 1Gi
+
+  - it: limit-only override below the preset request lowers the request
+    template: templates/api-deployment.yaml
+    set:
+      components.api.resources.limits.memory: 256Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 256Mi
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 256Mi
+
+  - it: both set with request above limit passes through as given
+    template: templates/api-deployment.yaml
+    set:
+      components.api.resources.requests.cpu: 3
+      components.api.resources.limits.cpu: 1
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 3
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: 1
+
+  - it: both set with valid values pass through as given
+    template: templates/api-deployment.yaml
+    set:
+      components.api.resources.requests.memory: 256Mi
+      components.api.resources.limits.memory: 512Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 256Mi
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 512Mi
+
+  - it: string cpu quantity above the limit raises the limit
+    template: templates/api-deployment.yaml
+    set:
+      components.api.resources.requests.cpu: "1.5"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: "1.5"
+
+  - it: db override merges over the db preset
+    template: templates/db-statefulset.yaml
+    set:
+      database.resources.requests.cpu: 2
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources
+          value:
+            requests: {cpu: 2, memory: 512Mi, ephemeral-storage: 50Mi}
+            limits: {cpu: 2, memory: 512Mi, ephemeral-storage: 2Gi}
+
+  - it: guac nginx sidecar override merges over the sidecar preset
+    template: templates/guac-statefulset.yaml
+    set:
+      components.guac.nginxSidecar.resources.requests.memory: 512Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].resources
+          value:
+            requests: {cpu: 500m, memory: 512Mi}
+            limits: {cpu: 500m, memory: 512Mi}
+
+  - it: rdp gateway nginx sidecar override merges over the sidecar preset
+    template: templates/rdp-gateway-deployment.yaml
+    set:
+      components.rdpGateway.nginxSidecar.resources.requests.cpu: 1
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].resources
+          value:
+            requests: {cpu: 1, memory: 256Mi}
+            limits: {cpu: 1, memory: 256Mi}
+
+  - it: rdp https gateway override merges over the preset
+    template: templates/rdp-https-gateway-statefulset.yaml
+    set:
+      components.rdpHttpsGateway.resources.requests.memory: 1Gi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 1Gi
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 500m
+
+  - it: invalid quantity fails the render
+    template: templates/api-deployment.yaml
+    set:
+      components.api.resources.requests.memory: lots
+    asserts:
+      - failedTemplate:
+          errorMessage: "ERROR: invalid resource quantity 'lots'"
+
+  - it: nano and micro suffixes are valid quantities
+    template: templates/api-deployment.yaml
+    set:
+      components.api.resources.requests.cpu: 500000u
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 500000u
+
+  - it: nano suffix limit above the preset request keeps the request
+    template: templates/api-deployment.yaml
+    set:
+      components.api.resources.limits.cpu: 900000000n
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 500m
+
+  - it: leading plus is a valid quantity and raises the limit
+    template: templates/api-deployment.yaml
+    set:
+      components.api.resources.requests.cpu: "+2"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: "+2"
+
+  - it: trailing dot is a valid quantity
+    template: templates/api-deployment.yaml
+    set:
+      components.api.resources.requests.cpu: "1."
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: "1."
+
+  - it: empty limits removes the limits section and keeps preset requests
+    template: templates/api-deployment.yaml
+    set:
+      components.api.resources.limits: {}
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources
+          value:
+            requests: {cpu: 500m, memory: 512Mi, ephemeral-storage: 50Mi}
+
+  - it: empty requests removes the requests section and keeps preset limits
+    template: templates/api-deployment.yaml
+    set:
+      components.api.resources.requests: {}
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources
+          value:
+            limits: {cpu: 500m, memory: 1Gi, ephemeral-storage: 2Gi}
+
+  - it: empty requests with a limit override keeps only limits with that value
+    template: templates/api-deployment.yaml
+    set:
+      components.api.resources.requests: {}
+      components.api.resources.limits.cpu: 2
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources
+          value:
+            limits: {cpu: 2, memory: 1Gi, ephemeral-storage: 2Gi}
+
+  - it: empty limits works on the db path
+    template: templates/db-statefulset.yaml
+    set:
+      database.resources.limits: {}
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources
+          value:
+            requests: {cpu: 750m, memory: 512Mi, ephemeral-storage: 50Mi}
+
+  - it: empty limits works on a nginx sidecar path
+    template: templates/guac-statefulset.yaml
+    set:
+      components.guac.nginxSidecar.resources.limits: {}
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].resources
+          value:
+            requests: {cpu: 500m, memory: 256Mi}
+
+  - it: null limits.cpu removes only that key
+    template: templates/api-deployment.yaml
+    set:
+      components.api.resources.limits.cpu: null
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources
+          value:
+            requests: {cpu: 500m, memory: 512Mi, ephemeral-storage: 50Mi}
+            limits: {memory: 1Gi, ephemeral-storage: 2Gi}
+
+  - it: empty string requests.memory removes only that key
+    template: templates/api-deployment.yaml
+    set:
+      components.api.resources.requests.memory: ""
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources
+          value:
+            requests: {cpu: 500m, ephemeral-storage: 50Mi}
+            limits: {cpu: 500m, memory: 1Gi, ephemeral-storage: 2Gi}
+
+  - it: removing the last key of a section omits the section
+    template: templates/guac-statefulset.yaml
+    set:
+      components.guac.nginxSidecar.resources.limits.cpu: null
+      components.guac.nginxSidecar.resources.limits.memory: ""
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].resources
+          value:
+            requests: {cpu: 500m, memory: 256Mi}
+
+  - it: null on a key the preset lacks is not an error and adds no key
+    template: templates/guac-statefulset.yaml
+    set:
+      components.guac.nginxSidecar.resources.limits.ephemeral-storage: null
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].resources
+          value:
+            requests: {cpu: 500m, memory: 256Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+
+  - it: db cpu request equals cpu limit for small
+    template: templates/db-statefulset.yaml
+    set:
+      deploymentSize: small
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 750m
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: 750m
+
+  - it: db cpu and memory request equal limit for medium
+    template: templates/db-statefulset.yaml
+    set:
+      deploymentSize: medium
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 2000m
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: 2000m
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 2048Mi
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 2048Mi
+
+  - it: db cpu and memory request equal limit for large
+    template: templates/db-statefulset.yaml
+    set:
+      deploymentSize: large
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 4000m
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: 4000m
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 8192Mi
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 8192Mi
+
+  - it: manager partial override keeps the other preset keys
+    template: templates/manager-deployment.yaml
+    set:
+      components.manager.resources.limits.memory: 2Gi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources
+          value:
+            requests: {cpu: 500m, memory: 512Mi, ephemeral-storage: 50Mi}
+            limits: {cpu: 500m, memory: 2Gi, ephemeral-storage: 2Gi}
+
+  - it: proxy partial override keeps the other preset keys
+    template: templates/proxy-deployment.yaml
+    set:
+      components.proxy.resources.limits.memory: 2Gi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources
+          value:
+            requests: {cpu: 500m, memory: 512Mi, ephemeral-storage: 50Mi}
+            limits: {cpu: 500m, memory: 2Gi, ephemeral-storage: 2Gi}

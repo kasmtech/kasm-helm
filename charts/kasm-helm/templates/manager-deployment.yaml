@@ -106,11 +106,7 @@ spec:
           readinessProbe:
             {{- include "health.probe" (dict "root" $ "component" "manager" "probeType" "readinessProbe" "type" "http" "path" "/__healthcheck" "portName" (printf "zn%s-%s" ($idx | toString) $constants.manager.portName)) | nindent 12 }}
           {{- end }}
-          {{- if $.Values.components.manager.resources }}
-          resources: {{- toYaml $.Values.components.manager.resources | nindent 12 }}
-          {{- else }}
-          resources: {{- include "resources.preset" (dict "node" $constants.manager.component "size" $.Values.deploymentSize) | nindent 12 }}
-          {{- end }}
+          resources: {{- include "resources.preset" (dict "node" $constants.manager.component "size" $.Values.deploymentSize "override" $.Values.components.manager.resources) | nindent 12 }}
           {{- include "kasm.securityContext" (list $ 1000 "container") | nindent 10 }}
           volumeMounts:
             - name: tmp-data

@@ -2,6 +2,21 @@
 
 All notable changes to the kasm-helm chart are documented here.
 
+## [1.1190.9] - 2026-10-21
+
+### Fixed
+
+- Chart-owned init containers now use fixed resources in two tiers instead of component presets. The `db-is-ready` init container in the API and Manager pods, which runs alembic, previously used the api `small` preset (requests `500m` CPU and `512Mi` memory); it now requests `50m` CPU and `128Mi` memory, with limits of `500m` CPU and `256Mi` memory. Every other chart-owned init container (wait containers, `db-is-ready-for-backup`, `db-major-version-is-ready`, `trusted-ca-init`, `prepare-db-preseed`) now requests `10m` CPU and `64Mi` memory, with limits of `500m` CPU and `128Mi` memory; the wait containers previously requested and were limited to `200m` CPU and `128Mi` memory. The `trusted-ca-init`, `prepare-db-preseed`, and `init` and `backup` database wait containers had no resources before and now have them. Init containers no longer set ephemeral-storage requests or limits. <!-- hash:5456eee9665970dfb4da0c5950e5e5bedde13d28 -->
+- Component `resources` overrides now merge with the `deploymentSize` preset one key at a time instead of replacing it. Setting one value, such as `requests.cpu`, keeps the preset for every other request and limit. If an override sets only a request or only a limit and it conflicts with the preset, the preset value changes to match: the limit rises to the request, or the request falls to the limit. **Upgrade note:** an override that set no limits now keeps the preset limits. To remove a preset section, set it to an empty map: `limits: {}` or `requests: {}`. Overrides that set only cpu or memory now also get the preset ephemeral-storage request and limit. For example, `database.resources.requests.memory: 4Gi` on medium previously had no memory limit and now gets a 4Gi limit. To keep a key unlimited, set it to null or "". <!-- hash:b6d7542cda0bb2a2228737ae06438cb6a339ad2c -->
+- Medium and large deployments now start as many Guacamole processes as the guac nginx sidecar routes to. When `components.guac.guacClusterSize` is 0, `CLUSTER_SIZE` previously fell back to 4 while nginx used the `deploymentSize` preset (6 for medium, 8 for large), so requests to the extra ports failed. Both now use the preset.
+- A `components.guac.guacClusterSize` of 10 or more now routes to the correct Guacamole ports. The guac nginx sidecar built backend ports by appending the process number to "300", so the 10th process was configured as port 30010 instead of 3010 and that process never received traffic.
+
+### Changed
+
+- Adjusted the `deploymentSize` CPU presets based on live deployment experience. Memory presets are unchanged. `api` and `manager` CPU limits rise from `500m` to `1000m` on medium and `2000m` on large, and the `api` large CPU request rises from `500m` to `1000m`. The `proxy` large CPU limit rises from `500m` to `1000m`. `rdp-gateway` and `rdp-https-gateway` CPU requests drop to `500m` on medium (from `1000m`) and `1000m` on large (from `1500m`), with limits unchanged, so idle gateway pods reserve less CPU. <!-- hash:b6d7542cda0bb2a2228737ae06438cb6a339ad2c -->
+- The `db` medium CPU preset rises from `1.5` to `2000m` for both request and limit. The `db` large preset stays at 4 CPU, now written as `4000m`. Request still equals limit, so the database pod keeps Guaranteed QoS.
+- Egress policies now allow DNS on port 5353 in addition to port 53, so pods on OpenShift can resolve names through the cluster DNS service when network policies are enabled. <!-- hash:a4319de79fe2393fee61cff951199565034e92a8 -->
+
 ## [1.1190.8] - 2026-10-02
 
 ### Fixed
