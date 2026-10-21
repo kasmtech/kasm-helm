@@ -110,11 +110,7 @@ spec:
           readinessProbe:
             {{- include "health.probe" (dict "root" $ "component" "rdpGateway" "probeType" "readinessProbe" "type" "http" "path" "/__healthcheck" "portName" $constants.rdpGateway.portName) | nindent 12 }}
           {{- end }}
-          {{- if $.Values.components.rdpGateway.resources }}
-          resources: {{- toYaml $.Values.components.rdpGateway.resources | nindent 12 }}
-          {{- else }}
-          resources: {{- include "resources.preset" (dict "node" $constants.rdpGateway.component "size" $.Values.deploymentSize) | nindent 12 }}
-          {{- end }}
+          resources: {{- include "resources.preset" (dict "node" $constants.rdpGateway.component "size" $.Values.deploymentSize "override" $.Values.components.rdpGateway.resources) | nindent 12 }}
           {{- include "kasm.securityContext" (list $ 1000 "container") | nindent 10 }}
           volumeMounts:
             - name: kasm-rdp-gateway-cert
@@ -189,11 +185,7 @@ spec:
           readinessProbe:
             {{- include "health.probe" (dict "root" $ "component" "rdpGateway" "timingScope" "nginxSidecar" "probeType" "readinessProbe" "type" "https" "path" "/__healthcheck" "portName" "rdp-gw-nginx-pt") | nindent 12 }}
           {{- end }}
-          {{- if $.Values.components.rdpGateway.nginxSidecar.resources }}
-          resources: {{- toYaml $.Values.components.rdpGateway.nginxSidecar.resources | nindent 12 }}
-          {{- else }}
-          resources: {{- include "resources.preset" (dict "node" "nginx-sidecar" "size" $.Values.deploymentSize) | nindent 12 }}
-          {{- end }}
+          resources: {{- include "resources.preset" (dict "node" "nginx-sidecar" "size" $.Values.deploymentSize "override" $.Values.components.rdpGateway.nginxSidecar.resources) | nindent 12 }}
           {{- include "kasm.securityContext" (list $ 1000 "container") | nindent 10 }}
         {{- with $merged.extraContainers }}
           {{- toYaml . | nindent 8 }}

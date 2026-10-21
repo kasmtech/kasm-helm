@@ -82,11 +82,7 @@ spec:
           readinessProbe:
             {{- include "health.probe" (dict "root" $ "component" "db" "probeType" "readinessProbe" "type" "command" "command" "psql -d ${POSTGRES_DB} -U ${POSTGRES_USER} -c 'SELECT 1' || exit 1") | nindent 12 }}
           {{- end }}
-          {{- if .Values.database.resources }}
-          resources: {{- toYaml .Values.database.resources | nindent 12 }}
-          {{- else }}
-          resources: {{- include "resources.preset" (dict "node" $constants.db.component "size" .Values.deploymentSize) | nindent 12 }}
-          {{- end }}
+          resources: {{- include "resources.preset" (dict "node" $constants.db.component "size" .Values.deploymentSize "override" .Values.database.resources) | nindent 12 }}
           {{- if .Values.applySecurity }}
             {{- include "kasm.securityContext" (list . 70 "container") | nindent 10 }}
           {{- end }}

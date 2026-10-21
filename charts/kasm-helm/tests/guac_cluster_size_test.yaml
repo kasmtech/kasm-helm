@@ -1,0 +1,103 @@
+suite: guac cluster size
+# CLUSTER_SIZE env and the nginx upstream port count come from one value:
+# guacClusterSize when > 0, else the guac-processes preset (small 4, medium 6, large 8).
+templates:
+  - templates/guac-statefulset.yaml
+  - templates/guac-nginx-configmap.yaml
+
+tests:
+  - it: small preset gives 4
+    set:
+      deploymentSize: small
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: CLUSTER_SIZE, value: "4"}
+        template: templates/guac-statefulset.yaml
+      - matchRegex:
+          path: data["upstream_kasm_guac.conf"]
+          pattern: "server 127.0.0.1:3004;"
+        template: templates/guac-nginx-configmap.yaml
+        documentIndex: 0
+      - notMatchRegex:
+          path: data["upstream_kasm_guac.conf"]
+          pattern: "server 127.0.0.1:3005;"
+        template: templates/guac-nginx-configmap.yaml
+        documentIndex: 0
+
+  - it: medium preset gives 6
+    set:
+      deploymentSize: medium
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: CLUSTER_SIZE, value: "6"}
+        template: templates/guac-statefulset.yaml
+      - matchRegex:
+          path: data["upstream_kasm_guac.conf"]
+          pattern: "server 127.0.0.1:3006;"
+        template: templates/guac-nginx-configmap.yaml
+        documentIndex: 0
+      - notMatchRegex:
+          path: data["upstream_kasm_guac.conf"]
+          pattern: "server 127.0.0.1:3007;"
+        template: templates/guac-nginx-configmap.yaml
+        documentIndex: 0
+
+  - it: large preset gives 8
+    set:
+      deploymentSize: large
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: CLUSTER_SIZE, value: "8"}
+        template: templates/guac-statefulset.yaml
+      - matchRegex:
+          path: data["upstream_kasm_guac.conf"]
+          pattern: "server 127.0.0.1:3008;"
+        template: templates/guac-nginx-configmap.yaml
+        documentIndex: 0
+      - notMatchRegex:
+          path: data["upstream_kasm_guac.conf"]
+          pattern: "server 127.0.0.1:3009;"
+        template: templates/guac-nginx-configmap.yaml
+        documentIndex: 0
+
+  - it: guacClusterSize overrides the preset
+    set:
+      deploymentSize: large
+      components.guac.guacClusterSize: 3
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: CLUSTER_SIZE, value: "3"}
+        template: templates/guac-statefulset.yaml
+      - matchRegex:
+          path: data["upstream_kasm_guac.conf"]
+          pattern: "server 127.0.0.1:3003;"
+        template: templates/guac-nginx-configmap.yaml
+        documentIndex: 0
+      - notMatchRegex:
+          path: data["upstream_kasm_guac.conf"]
+          pattern: "server 127.0.0.1:3004;"
+        template: templates/guac-nginx-configmap.yaml
+        documentIndex: 0
+
+  - it: guacClusterSize 12 numbers ports 3001-3012
+    set:
+      components.guac.guacClusterSize: 12
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: CLUSTER_SIZE, value: "12"}
+        template: templates/guac-statefulset.yaml
+      - matchRegex:
+          path: data["upstream_kasm_guac.conf"]
+          pattern: "server 127.0.0.1:3010;[\\s\\S]*server 127.0.0.1:3012;"
+        template: templates/guac-nginx-configmap.yaml
+        documentIndex: 0
+      - notMatchRegex:
+          path: data["upstream_kasm_guac.conf"]
+          pattern: "server 127.0.0.1:(30010|3013);"
+        template: templates/guac-nginx-configmap.yaml
+        documentIndex: 0

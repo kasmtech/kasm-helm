@@ -101,11 +101,7 @@ spec:
           readinessProbe:
             {{- include "health.probe" (dict "root" $ "component" "rdpHttpsGateway" "probeType" "readinessProbe" "type" "https" "path" "/rdp-https-gateway/__healthcheck" "port" $constants.rdpHttpsGateway.port) | nindent 12 }}
           {{- end }}
-          {{- if $.Values.components.rdpHttpsGateway.resources }}
-          resources: {{- toYaml $.Values.components.rdpHttpsGateway.resources | nindent 12 }}
-          {{- else }}
-          resources: {{- include "resources.preset" (dict "node" $constants.rdpHttpsGateway.component "size" $.Values.deploymentSize) | nindent 12 }}
-          {{- end }}
+          resources: {{- include "resources.preset" (dict "node" $constants.rdpHttpsGateway.component "size" $.Values.deploymentSize "override" $.Values.components.rdpHttpsGateway.resources) | nindent 12 }}
           {{- include "kasm.securityContext" (list $ 1000 "container") | nindent 10 }}
           volumeMounts:
             - name: kasm-rdp-https-gateway-cert
@@ -175,11 +171,7 @@ spec:
           readinessProbe:
             {{- include "health.probe" (dict "root" $ "component" "rdpHttpsGateway" "probeType" "readinessProbe" "type" "https" "path" "/rdp-https-gateway/__healthcheck" "port" $constants.rdpHttpsGateway.port) | nindent 12 }}
           {{- end }}
-          {{- if $.Values.components.rdpHttpsGateway.nginxSidecar.resources }}
-          resources: {{- toYaml $.Values.components.rdpHttpsGateway.nginxSidecar.resources | nindent 12 }}
-          {{- else }}
-          resources: {{- include "resources.preset" (dict "node" "nginx-sidecar" "size" $.Values.deploymentSize) | nindent 12 }}
-          {{- end }}
+          resources: {{- include "resources.preset" (dict "node" "nginx-sidecar" "size" $.Values.deploymentSize "override" $.Values.components.rdpHttpsGateway.nginxSidecar.resources) | nindent 12 }}
           {{- include "kasm.securityContext" (list $ 1000 "container") | nindent 10 }}
         {{- with $merged.extraContainers }}
           {{- toYaml . | nindent 8 }}

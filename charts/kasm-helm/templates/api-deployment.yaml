@@ -118,11 +118,7 @@ spec:
           readinessProbe:
             {{- include "health.probe" (dict "root" $ "component" "api" "probeType" "readinessProbe" "type" "http" "path" "/api/__healthcheck" "portName" $constants.api.portName) | nindent 12 }}
           {{- end }}
-          {{- if $.Values.components.api.resources }}
-          resources: {{- toYaml $.Values.components.api.resources | nindent 12 }}
-          {{- else }}
-          resources: {{- include "resources.preset" (dict "node" $constants.api.component "size" $.Values.deploymentSize) | nindent 12 }}
-          {{- end }}
+          resources: {{- include "resources.preset" (dict "node" $constants.api.component "size" $.Values.deploymentSize "override" $.Values.components.api.resources) | nindent 12 }}
           {{- include "kasm.securityContext" (list $ 1000 "container") | nindent 10 }}
         {{- with $merged.extraContainers }}
           {{- toYaml . | nindent 8 }}

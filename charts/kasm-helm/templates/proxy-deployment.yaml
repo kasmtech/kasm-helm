@@ -47,11 +47,7 @@ spec:
         - name: {{ include "kasm.name" (list $ "proxy" "container" $zone.name) }}
           image: {{ $constants.proxy.image }}
           imagePullPolicy: {{ $.Values.imagePullPolicy }}
-          {{- if $.Values.components.proxy.resources }}
-          resources: {{- toYaml $.Values.components.proxy.resources | nindent 12 }}
-          {{- else }}
-          resources: {{- include "resources.preset" (dict "node" $constants.proxy.component "size" $.Values.deploymentSize) | nindent 12 }}
-          {{- end }}
+          resources: {{- include "resources.preset" (dict "node" $constants.proxy.component "size" $.Values.deploymentSize "override" $.Values.components.proxy.resources) | nindent 12 }}
           {{- include "kasm.securityContext" (list $ 1000 "container") | nindent 10 }}
           volumeMounts:
             - name: kasm-proxy-cert
