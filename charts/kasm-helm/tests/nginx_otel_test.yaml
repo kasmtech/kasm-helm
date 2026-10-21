@@ -115,7 +115,7 @@ tests:
           pattern: "otel_trace  off;"
       - matchRegex:
           path: data["upstream_proxy.conf"]
-          pattern: 'otel_span_attr          kasm\.kasm_id            "\$connect_kasm_id";'
+          pattern: 'otel_span_attr          kasm\.kasm_id            "\$connect_session_id";'
       - matchRegex:
           path: data["upstream_proxy.conf"]
           pattern: 'otel_span_attr          kasm\.kasm_user_name     "\$cookie_username";'

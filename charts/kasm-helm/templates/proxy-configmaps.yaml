@@ -234,7 +234,11 @@ data:
       # otel_trace          off;
       {{- end }}
       internal;
-      proxy_pass              {{ printf "http://%s/api/kasm_connect/" $constants.api.svc }};
+      set $auth_session_id "";
+      if ($request_uri ~ "^/desktop/([^/?]+)/") {
+        set $auth_session_id $1;
+      }
+      proxy_pass              {{ printf "http://%s/api/session/sessions/$auth_session_id/connection" $constants.api.svc }};
       proxy_pass_request_body off;
       proxy_set_header        Content-Length '';
       proxy_set_header        X-Original-URI $request_uri;
@@ -258,7 +262,7 @@ data:
       auth_request_set        $connect_port         $upstream_http_connect_port;
       auth_request_set        $connect_path         $upstream_http_connect_path;
       auth_request_set        $connect_auth         $upstream_http_connect_auth;
-      auth_request_set        $connect_kasm_id      $upstream_http_connect_kasm_id;
+      auth_request_set        $connect_session_id   $upstream_http_connect_session_id;
       auth_request_set        $connect_schema       $upstream_http_connect_schema;
       proxy_http_version      1.1;
       proxy_set_header        Host $host;
@@ -268,10 +272,10 @@ data:
       proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
       proxy_set_header        X-Forwarded-Proto $scheme;
       proxy_set_header        Authorization "${connect_auth}";
-      proxy_set_header        X-Kasm-ID "${connect_kasm_id}";
+      proxy_set_header        X-Kasm-ID "${connect_session_id}";
       proxy_set_header        Cookie "username=$cookie_username; session_token=$cookie_session_token; kasm_client_key=$cookie_kasm_client_key";
       {{- if $.Values.observability.enabled }}
-      otel_span_attr          kasm.kasm_id            "$connect_kasm_id";
+      otel_span_attr          kasm.kasm_id            "$connect_session_id";
       otel_span_attr          kasm.kasm_user_name     "$cookie_username";
       {{- end }}
       rewrite                 ^/desktop/(.*) /$1 break;

@@ -167,7 +167,7 @@ data:
       add_header              Cache-Control "private";
       {{- if .Values.observability.enabled }}
       # kasm.kasm_id is dropped here: unlike the backend's single-nginx /kasm_connect flow,
-      # this location has no auth_request_set that populates $connect_kasm_id.
+      # this location has no auth_request_set that populates $connect_session_id.
       otel_span_attr          kasm.kasm_user_name   "$cookie_username";
       {{- end }}
     }
@@ -195,7 +195,7 @@ data:
       add_header              X-Content-Type-Options 'nosniff';
       {{- if .Values.observability.enabled }}
       # kasm.kasm_id is dropped here: unlike the backend's single-nginx /kasm_connect flow,
-      # this location has no auth_request_set that populates $connect_kasm_id.
+      # this location has no auth_request_set that populates $connect_session_id.
       otel_span_attr          kasm.kasm_user_name   "$cookie_username";
       {{- end }}
     }

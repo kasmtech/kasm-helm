@@ -112,6 +112,8 @@ See [Migrating to connection-proxy](./README.md#migrating-to-connection-proxy) f
 
 - An upgrade that would replace the database while `dbManagement.initialize` is still set now fails to render instead of silently initializing an empty database over a live deployment. `dbManagement.initialize` is for a new deployment; upgrading an existing one needs `dbManagement.initialize=false` with `dbManagement.upgrade.enable=true`, which dumps the current database before the switch and restores it after. Previously this combination produced no error, no rollback and no data. The check reads the deployed StatefulSet, so it applies to `helm upgrade` and `--dry-run=server`, and stays quiet during `helm template`.
 
+- Sessions connect again. The Kasm Proxy's `/desktop/` auth subrequest called `/api/kasm_connect/`, which the API no longer serves, so every `/desktop/<id>/...` request returned 500 and no session websocket opened. The `/kasm_connect` location now takes the session id from `/desktop/<id>/` and calls `GET /api/session/sessions/<id>/connection`, and `/desktop/` reads the renamed `connect_session_id` response header (still forwarded upstream as `X-Kasm-ID`).
+
 ## [1.1190.6] - 2026-07-28
 
 ### Fixed

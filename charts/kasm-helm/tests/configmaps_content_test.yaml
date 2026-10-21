@@ -251,3 +251,25 @@ tests:
       - notMatchRegex:
           path: data["health.conf"]
           pattern: 'kasm_agent_draining'
+
+  # The /desktop/ auth_request resolves the session through the API's session
+  # connection route and reads its connect_session_id header.
+  - it: upstream_proxy.conf resolves desktop sessions through the session connection route
+    template: templates/proxy-configmaps.yaml
+    documentIndex: 1
+    asserts:
+      - matchRegex:
+          path: data["upstream_proxy.conf"]
+          pattern: 'if \(\$request_uri ~ "\^/desktop/\(\[\^/\?\]\+\)/"\) \{\s+set \$auth_session_id \$1;'
+      - matchRegex:
+          path: data["upstream_proxy.conf"]
+          pattern: 'proxy_pass\s+http://RELEASE-NAME-api/api/session/sessions/\$auth_session_id/connection;'
+      - matchRegex:
+          path: data["upstream_proxy.conf"]
+          pattern: 'auth_request_set\s+\$connect_session_id\s+\$upstream_http_connect_session_id;'
+      - matchRegex:
+          path: data["upstream_proxy.conf"]
+          pattern: 'X-Kasm-ID "\$\{connect_session_id\}"'
+      - notMatchRegex:
+          path: data["upstream_proxy.conf"]
+          pattern: 'kasm_connect/|connect_kasm_id'
