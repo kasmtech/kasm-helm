@@ -1,0 +1,163 @@
+{{/*
+Kasm OTel Collector gateway Deployment — cluster-wide, not zone-scoped.
+
+Owns tail_sampling and is the only writer to ClickHouse. tail_sampling needs to see every span of
+a trace in one process, and every sender now exports here directly (no forwarder tier partitions
+traces by ID in front of it) — Collector sidecars over gRPC :4317, Kasm app services over
+HTTP :4318, both authenticated — so this Deployment is pinned to a single replica.
+kasm.observabilityValidate fails the render if components.otelGateway.replicas is set above 1 —
+see that helper for the reasoning this used to live here.
+
+The rollout uses maxSurge: 0 so the single pod is replaced in place rather than briefly running
+two. Traces spanning a rollout can still split, bounded by tail_sampling's decision_wait; that is
+the accepted cost of being able to update at all.
+*/}}
+{{- $obs := .Values.observability -}}
+{{- $ch := $obs.clickhouse -}}
+{{- $useClickhouse := or $ch.enabled $ch.standalone -}}
+{{- $forwardEnabled := ne $obs.collector.gateway.forward.endpoint "" -}}
+{{- if and $obs.enabled (or $obs.collector.gateway.existingConfigMap $useClickhouse $forwardEnabled) }}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $merged := fromYaml (include "kasm.mergedValues" (dict "root" . "componentName" "otelGateway")) -}}
+{{- $gatewayReplicas := ternary .Values.components.otelGateway.replicas (include "replicas.preset" (dict "node" "otel-gateway" "size" .Values.deploymentSize)) (gt (int .Values.components.otelGateway.replicas) 0) -}}
+{{- $resourcesObj := .Values.components.otelGateway.resources -}}
+{{- if not (gt (len $resourcesObj) 0) -}}
+  {{- $resourcesObj = (include "resources.preset" (dict "node" "otel-gateway" "size" .Values.deploymentSize) | fromYaml) -}}
+{{- end -}}
+{{- $memLimit := dig "limits" "memory" "512Mi" $resourcesObj -}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  {{- include "kasm.common.metadata" (dict "context" $ "component" "otel-gateway" "resource" "deployment" "include" "all") | indent 2 }}
+spec:
+  replicas: {{ $gatewayReplicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 0
+  selector:
+    matchLabels:
+      {{- include "kasm.common.metadata" (dict "context" $ "component" "otel-gateway" "resource" "deployment" "include" "match") | indent 6 }}
+  template:
+    metadata:
+      {{- $checksumAnn := dict -}}
+      {{- if not $obs.collector.gateway.existingConfigMap -}}
+        {{- $checksumAnn = dict "checksum/config" (include (print $.Template.BasePath "/otel-gateway-configmap.yaml") $ | sha256sum) -}}
+      {{- end -}}
+      {{- include "kasm.common.metadata" (dict "context" $ "component" "otel-gateway" "resource" "pod" "include" "la" "extraAnnotations" $checksumAnn) | indent 6 }}
+    spec:
+      restartPolicy: {{ $.Values.restartPolicy }}
+      {{- if $.Values.imagePullSecrets.enabled }}
+      imagePullSecrets:
+        - name: {{ $.Values.imagePullSecrets.name | default (printf "%s-image-pull-secret" $.Release.Name) }}
+      {{- end }}
+      {{- include "kasm.common.securityContext" (list $ 10001 "pod") | nindent 6 }}
+      {{- with $.Values.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $.Values.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- /* The ClickHouse exporter runs CREATE DATABASE at startup and the Collector exits if it
+             fails, so wait rather than crash-loop. /ping is unauthenticated. */}}
+      {{- if or $obs.clickhouse.enabled $obs.clickhouse.standalone }}
+      initContainers:
+        - name: {{ include "kasm.common.name" (list $ "otel-gateway-wait-clickhouse" "container") }}
+          image: {{ $constants.clickhouse.image }}
+          imagePullPolicy: {{ $.Values.imagePullPolicy }}
+          {{- include "kasm.common.securityContext" (list $ 101 "container") | nindent 10 }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              url="{{ include "kasm.clickhouseHttpEndpoint" (dict "context" $) }}/ping"
+              i=0
+              until wget -q -O- --no-check-certificate --timeout=5 "${url}" 2>/dev/null | grep -q "Ok."; do
+                i=$((i+1))
+                if [ "${i}" -ge 120 ]; then
+                  echo "ClickHouse did not answer ${url} after $((i*5))s" >&2
+                  exit 1
+                fi
+                sleep 5
+              done
+          resources:
+            {{- toYaml (include "resources.preset" (dict "node" "otel-sidecar" "size" $.Values.deploymentSize) | fromYaml) | nindent 12 }}
+      {{- end }}
+      containers:
+        - name: {{ include "kasm.common.name" (list $ "otel-gateway" "container") }}
+          image: {{ $constants.otel.gatewayImage }}
+          imagePullPolicy: {{ $.Values.imagePullPolicy }}
+          env:
+            - name: OTEL_BEARER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $constants.secrets.name }}
+                  key: otel-bearer-token
+            {{- if $useClickhouse }}
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ default $constants.secrets.name $ch.existingSecret.name }}
+                  key: {{ default "clickhouse-password" $ch.existingSecret.key }}
+            {{- end }}
+            {{- if $forwardEnabled }}
+            - name: OTEL_FORWARD_TOKEN
+            {{- if $obs.collector.gateway.forward.existingSecret.name }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $obs.collector.gateway.forward.existingSecret.name }}
+                  key: {{ $obs.collector.gateway.forward.existingSecret.key }}
+            {{- else }}
+              value: {{ $obs.collector.gateway.forward.token | quote }}
+            {{- end }}
+            {{- end }}
+            # ~80% of the resolved memory limit, so the Go runtime cooperates with memory_limiter
+            # instead of waiting for it to intervene.
+            - name: GOMEMLIMIT
+              value: {{ include "kasm.gomemlimit" $memLimit | quote }}
+            {{- with $merged.extraEnv }}
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - name: otlp-grpc
+              containerPort: {{ $constants.otel.otlpGrpc }}
+              protocol: TCP
+            - name: otlp-http
+              containerPort: {{ $constants.otel.otlpHttp }}
+              protocol: TCP
+            - name: health
+              containerPort: {{ $constants.otel.health }}
+              protocol: TCP
+            - name: self-metrics
+              containerPort: {{ $constants.otel.selfMetrics }}
+              protocol: TCP
+          volumeMounts:
+            # NOTE: a customer-provided existingConfigMap must use the key `config.yaml`.
+            - name: config
+              mountPath: /etc/otelcol-contrib/config.yaml
+              subPath: config.yaml
+            - name: tmp
+              mountPath: /tmp
+          {{- if $.Values.applyHealthChecks }}
+          livenessProbe:
+            {{- include "health.common.http" (dict "root" $ "component" "otel-gateway" "probeType" "livenessProbe" "path" "/" "port" 13133) | nindent 12 }}
+          readinessProbe:
+            {{- include "health.common.http" (dict "root" $ "component" "otel-gateway" "probeType" "readinessProbe" "path" "/" "port" 13133) | nindent 12 }}
+          {{- end }}
+          {{- if .Values.components.otelGateway.resources }}
+          resources: {{- toYaml .Values.components.otelGateway.resources | nindent 12 }}
+          {{- else }}
+          resources: {{- include "resources.preset" (dict "node" "otel-gateway" "size" $.Values.deploymentSize) | nindent 12 }}
+          {{- end }}
+          {{- include "kasm.common.securityContext" (list $ 10001 "container") | nindent 10 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ default (include "kasm.common.name" (list $ "otel-gateway" "configmap")) $obs.collector.gateway.existingConfigMap }}
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+{{- end }}

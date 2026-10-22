@@ -10,10 +10,6 @@ connection-proxy-services — mounted at /etc/nginx/conf.d/services.d/ — conta
   connection_proxy.conf with all guac/rdp-gateway/rdp-https-gateway location blocks
 
 connection-proxy-rdp-gateway-app-config — the rdp-gateway app's own config.
-
-connection-proxy-rdp-https-gateway-app-config — the rdp-https-gateway app's own config,
-  only rendered when logFormat is "json" (matches existing rdp-https-gateway-app-configmap
-  behavior).
 */}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
 {{- $serviceKeepalive := 16 -}}
@@ -55,6 +51,37 @@ data:
       server 127.0.0.1:{{ $constants.connectionProxy.rdpHttpsGateway.port }};
     }
     {{- end }}
+
+  {{- if .Values.observability.enabled }}
+  otel.conf: |
+    # ngx_otel_module requires an otel_exporter block wherever otel_trace/otel_span_attr are
+    # used (verified: nginx -t fails with "otel_exporter block is missing" without this), so
+    # connection_proxy.conf's directives need this even though not all of guac/rdp-gateway/
+    # rdp-https-gateway traffic is otherwise instrumented.
+    #
+    # Exports to the Collector sidecar in this pod over loopback, so this ConfigMap no longer has
+    # to pick a zone's gateway. That removes the cross-zone hop non-primary-zone pods used to
+    # take.
+    otel_exporter {
+      endpoint 127.0.0.1:{{ $constants.otel.otlpNginx }};
+    }
+
+    otel_service_name  kasm-connection-proxy;
+    otel_trace          off;
+    otel_trace_context  propagate;
+
+  stub_status.conf: |
+    # nginx connection metrics, scraped by this pod's Collector sidecar over loopback.
+    server {
+      listen 127.0.0.1:{{ $constants.proxyStubStatus }};
+      location = /stub_status {
+        otel_trace off;
+        stub_status;
+        allow 127.0.0.1;
+        deny  all;
+      }
+    }
+  {{- end }}
 
   connection-proxy.conf: |
     server {
@@ -117,6 +144,11 @@ data:
     {{- if $cp.guac.enabled }}
 
     location /guac_connect/vnc/ {
+      {{- if .Values.observability.enabled }}
+      # long-lived WebSocket tunnel — traces stay open for the entire session
+      # duration, matching the backend's commented state pending validation.
+      # otel_trace  off;
+      {{- end }}
       proxy_http_version      1.1;
       proxy_set_header        Host $host;
       proxy_set_header        Upgrade $http_upgrade;
@@ -133,9 +165,17 @@ data:
       expires                 4h;
       add_header              Strict-Transport-Security "max-age=63072000" always;
       add_header              Cache-Control "private";
+      {{- if .Values.observability.enabled }}
+      # kasm.kasm_id is dropped here: unlike the backend's single-nginx /kasm_connect flow,
+      # this location has no auth_request_set that populates $connect_kasm_id.
+      otel_span_attr          kasm.kasm_user_name   "$cookie_username";
+      {{- end }}
     }
 
     location /guac_connect/vnc/vnc.htmlguaclite {
+      {{- if .Values.observability.enabled }}
+      # otel_trace  off;
+      {{- end }}
       proxy_http_version      1.1;
       proxy_set_header        Host $host;
       proxy_set_header        Upgrade $http_upgrade;
@@ -153,9 +193,17 @@ data:
       add_header              Cache-Control "private";
       add_header              Strict-Transport-Security "max-age=63072000" always;
       add_header              X-Content-Type-Options 'nosniff';
+      {{- if .Values.observability.enabled }}
+      # kasm.kasm_id is dropped here: unlike the backend's single-nginx /kasm_connect flow,
+      # this location has no auth_request_set that populates $connect_kasm_id.
+      otel_span_attr          kasm.kasm_user_name   "$cookie_username";
+      {{- end }}
     }
 
     location /vm_connect {
+      {{- if .Values.observability.enabled }}
+      otel_trace          off;
+      {{- end }}
       internal;
       proxy_pass              http://kasm_guac/vm_connect;
       proxy_pass_request_body off;
@@ -247,7 +295,7 @@ data:
       proxy_pass http://kasm_guac/guac_login;
     }
 
-    # Wildcard for control-plane calls the manager makes to the guac app under
+    # Wildcard for control-plane calls the API makes to the guac app under
     # the /guac/ prefix (e.g. /guac/__healthcheck, /guac/vm_disconnect, and the
     # support-bundle collect endpoint /guac/api/v1/support_bundle_request). The
     # trailing slash on proxy_pass strips the /guac/ prefix so the app sees the
@@ -372,7 +420,7 @@ data:
             maxBytes: 10485760
           stream:
             class: logging.StreamHandler
-            formatter: {{ ternary "pythonjsonlogger" "standard" (eq .Values.logFormat "json") }}
+            formatter: standard
             level: DEBUG
           syslog:
             class: logging.handlers.SysLogHandler
@@ -389,47 +437,5 @@ data:
             level: INFO
         version: 1
 {{- end }}
----
-{{- $zoneName := "default" -}}
-{{- if .Values.kasmZones }}
-  {{- $zoneName = (index .Values.kasmZones 0).name -}}
-{{- end }}
-{{- if and $cp.rdpHttpsGateway.enabled (eq .Values.logFormat "json") }}
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  {{- include "kasm.metadata" (dict "context" . "component" "cpx-rdp-https-gw-app-config" "resource" "configMap" "include" "all") | indent 2 }}
-data:
-  rdp_https_gateway.app.config.yaml: |
-    api:
-      auth_token: JWTTOKEN
-      public_jwt_cert: PUBLICCERT
-      hostnames: [ {{ printf "%s-%s" $constants.proxy.svc $zoneName | quote }} ]
-      port: {{ $constants.proxy.http }}
-      hostname_refresh_interval: 30
-      schema: http
-    rdp-gateway:
-      id: auto
-      registration_token: REGISTRATION_TOKEN
-      server_address: {{ .Values.publicAddr }}
-      server_port: {{ $constants.connectionProxy.rdpHttpsGateway.port }}
-      zone: {{ $zoneName }}
-      keepalive_loop_interval: 30
-      ephemeral: true
-      kasm_delete_session_watch_interval: 60
-    logging:
-      console_level: "ERROR"
-      file_logging:
-        filename: "/dev/null"
-        level: "DEBUG"
-        backupCount: 20
-        maxMegaBytes: 10
-      json_file_logging:
-        filename: "/dev/stdout"
-        level: "DEBUG"
-        backupCount: 20
-        maxMegaBytes: 10
-      network_logging:
-        level: "DEBUG"
-{{- end }}
+
 {{- end }}

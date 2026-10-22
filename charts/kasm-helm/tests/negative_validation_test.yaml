@@ -3,6 +3,7 @@ suite: negative path / explicit fail messages
 templates:
   - templates/proxy-service-external.yaml
   - templates/route.yaml
+  - templates/otel-gateway-configmap.yaml
   - templates/connection-proxy-services.yaml
 
 tests:
@@ -195,3 +196,173 @@ tests:
     asserts:
       - failedTemplate:
           errorMessage: "directRdpService.enabled is true but only 1 entr(y/ies) are configured for zone \"zonea\" while components.connectionProxy has 2 replica(s). Each connection-proxy replica needs its own externally reachable RDP address: add more directRdpService.perServiceSettings entries with zone: zonea."
+
+  # ---------- kasm.observabilityValidate ----------
+  - it: standalone=true with one endpoint missing fails
+    template: templates/otel-gateway-configmap.yaml
+    set:
+      observability.clickhouse.standalone: true
+      observability.clickhouse.nativeEndpoint: "tcp://ch.example.test:9440"
+      observability.clickhouse.httpEndpoint: ""
+    asserts:
+      - failedTemplate:
+          errorMessage: "observability.clickhouse.standalone requires both observability.clickhouse.nativeEndpoint and observability.clickhouse.httpEndpoint to be set."
+
+  - it: standalone=true with clickhouse.enabled=false fails (mutually exclusive)
+    template: templates/otel-gateway-configmap.yaml
+    set:
+      observability.clickhouse.standalone: true
+      observability.clickhouse.enabled: false
+      observability.clickhouse.nativeEndpoint: "tcp://ch.example.test:9440"
+      observability.clickhouse.httpEndpoint: "https://ch.example.test:8443"
+    asserts:
+      - failedTemplate:
+          errorMessage: "observability.clickhouse.standalone and observability.clickhouse.enabled=false are mutually exclusive: standalone already means 'use an external ClickHouse', while enabled=false means 'no ClickHouse store at all'."
+
+  - it: caCert and caCertConfigMap both set fails
+    template: templates/otel-gateway-configmap.yaml
+    set:
+      observability.clickhouse.caCert: "-----BEGIN CERTIFICATE-----\nabc\n-----END CERTIFICATE-----"
+      observability.clickhouse.caCertConfigMap: my-ca-configmap
+    asserts:
+      - failedTemplate:
+          errorMessage: "observability.clickhouse.caCert and observability.clickhouse.caCertConfigMap are mutually exclusive: caCert has the chart render a ConfigMap from literal PEM text, caCertConfigMap points at one you already manage."
+
+  - it: forward.existingSecret half-set (name only) fails
+    template: templates/otel-gateway-configmap.yaml
+    set:
+      observability.collector.gateway.forward.existingSecret.name: my-forward-secret
+    asserts:
+      - failedTemplate:
+          errorMessage: "observability.collector.gateway.forward.existingSecret requires both 'name' and 'key' to be set."
+
+  - it: forward.existingSecret half-set (key only) fails
+    template: templates/otel-gateway-configmap.yaml
+    set:
+      observability.collector.gateway.forward.existingSecret.key: token
+    asserts:
+      - failedTemplate:
+          errorMessage: "observability.collector.gateway.forward.existingSecret requires both 'name' and 'key' to be set."
+
+  - it: clickhouse.existingSecret half-set (name only) fails
+    template: templates/otel-gateway-configmap.yaml
+    set:
+      observability.clickhouse.existingSecret.name: my-clickhouse-secret
+    asserts:
+      - failedTemplate:
+          errorMessage: "observability.clickhouse.existingSecret requires both 'name' and 'key' to be set."
+
+  - it: clickhouse.existingSecret half-set (key only) fails
+    template: templates/otel-gateway-configmap.yaml
+    set:
+      observability.clickhouse.existingSecret.key: password
+    asserts:
+      - failedTemplate:
+          errorMessage: "observability.clickhouse.existingSecret requires both 'name' and 'key' to be set."
+
+  - it: clickhouse.existingSecret.readKey set without name fails
+    template: templates/otel-gateway-configmap.yaml
+    set:
+      observability.clickhouse.existingSecret.readKey: ro-password
+    asserts:
+      - failedTemplate:
+          errorMessage: "observability.clickhouse.existingSecret.readKey requires observability.clickhouse.existingSecret.name to also be set: readKey names a key inside that same Secret."
+
+  - it: components.otelGateway.replicas above 1 fails
+    template: templates/otel-gateway-configmap.yaml
+    set:
+      components.otelGateway.replicas: 2
+    asserts:
+      - failedTemplate:
+          errorMessage: "components.otelGateway.replicas (2) must be 0 (use the deploymentSize preset, always 1) or 1: every sender exports straight to the gateway, and nothing partitions traces by ID in front of it, so a second replica would make tail_sampling decide on partial traces and silently drop spans."
+
+  - it: readUsername equal to username fails (bd kasm-helm-hvx)
+    template: templates/otel-gateway-configmap.yaml
+    set:
+      observability.clickhouse.readUsername: kasm_otel
+    asserts:
+      - failedTemplate:
+          errorMessage: "observability.clickhouse.readUsername (\"kasm_otel\") must differ from observability.clickhouse.username (\"kasm_otel\"): ClickHouse's users.xml cannot define two users with the same name, and the second definition silently discards the read-only password."
+
+  - it: readUsername defaulting to kasm_otel_ro equal to a custom username fails (bd kasm-helm-hvx)
+    template: templates/otel-gateway-configmap.yaml
+    set:
+      observability.clickhouse.username: kasm_otel_ro
+    asserts:
+      - failedTemplate:
+          errorMessage: "observability.clickhouse.readUsername (\"kasm_otel_ro\") must differ from observability.clickhouse.username (\"kasm_otel_ro\"): ClickHouse's users.xml cannot define two users with the same name, and the second definition silently discards the read-only password."
+
+  - it: tailSamplePercentage above 100 fails
+    template: templates/otel-gateway-configmap.yaml
+    set:
+      observability.collector.gateway.tailSamplePercentage: 101
+    asserts:
+      - failedTemplate:
+          errorMessage: "observability.collector.gateway.tailSamplePercentage must be between 0 and 100, got 101."
+
+  - it: tailSamplePercentage below 0 fails
+    template: templates/otel-gateway-configmap.yaml
+    set:
+      observability.collector.gateway.tailSamplePercentage: -1
+    asserts:
+      - failedTemplate:
+          errorMessage: "observability.collector.gateway.tailSamplePercentage must be between 0 and 100, got -1."
+
+  # D004: these keys were removed from the OTel restructure (H5's DaemonSet/nginx sidecar
+  # replaced fileLogs/hostLogs/nginxLogs, and logFormat no longer exists). The schema's
+  # additionalProperties: false on observability rejects them at the values interface.
+  # Unlike the template `fail` calls above, this is a values-schema validation error raised
+  # before any template renders; helm-unittest's failedTemplate.errorMessage exact-match
+  # does not attribute it to a template, so only failure (not message text) is asserted here.
+  - it: observability.fileLogs is rejected as an unknown key
+    template: templates/otel-gateway-configmap.yaml
+    set:
+      observability.fileLogs.enabled: true
+    asserts:
+      - failedTemplate: {}
+
+  - it: observability.hostLogs is rejected as an unknown key
+    template: templates/otel-gateway-configmap.yaml
+    set:
+      observability.hostLogs.enabled: true
+    asserts:
+      - failedTemplate: {}
+
+  - it: observability.nginxLogs is rejected as an unknown key
+    template: templates/otel-gateway-configmap.yaml
+    set:
+      observability.nginxLogs.enabled: true
+    asserts:
+      - failedTemplate: {}
+
+  - it: observability.logFormat is rejected as an unknown key
+    template: templates/otel-gateway-configmap.yaml
+    set:
+      observability.logFormat: json
+    asserts:
+      - failedTemplate: {}
+
+  # D005: components.manager was hard-removed (manager-deployment.yaml/manager-service.yaml
+  # deleted, /manager_api/ retargeted to the api service). The schema's
+  # additionalProperties: false on components rejects the old key at the values interface,
+  # same shape as the observability keys above.
+  - it: components.manager is rejected as an unknown key
+    template: templates/connection-proxy-services.yaml
+    set:
+      components.manager.image.tag: "1.2.3"
+    asserts:
+      - failedTemplate: {}
+
+  # kasm-helm-37c's apiWorkerMode/components.apiWorker shape was replaced by
+  # components.api.workerPool before ever shipping (see CHANGELOG). components.apiWorker is
+  # hard-removed: the schema's additionalProperties: false on components rejects it at the
+  # values interface, same shape as components.manager above. apiWorkerMode itself is a
+  # top-level key and the root schema allows unknown top-level keys, so it is not rejected --
+  # it is simply unused now (see the "inert no-op" case in api_worker_test.yaml).
+  - it: components.apiWorker is rejected as an unknown key
+    template: templates/connection-proxy-services.yaml
+    set:
+      components.apiWorker.pools:
+        - name: default
+    asserts:
+      - failedTemplate: {}

@@ -1,0 +1,111 @@
+{{/*
+Collector config for the nginx pods' sidecar. Rendered once per consumer (Kasm Proxy Deployment,
+Kasm Connection Proxy StatefulSet) because each needs its own resource["service.name"] baked
+into the syslog receiver operator chains (kasm.otelNginxAccessLogOperators,
+kasm.otelNginxErrorLogOperators) so their logs are distinguishable in ClickHouse. Everything else is
+identical between the two; the gateway endpoint is supplied per-pod through
+OTEL_EXPORTER_OTLP_ENDPOINT by kasm.otelSidecar.
+
+The sidecar is the pod's single egress point. It:
+  - receives nginx's access and error logs over loopback syslog UDP (a sidecar cannot read another
+    container's stdout, which is why nginx sends them out-of-band at all)
+  - scrapes nginx connection metrics from stub_status over the pod's loopback interface
+  - receives OTLP/gRPC from ngx_otel_module on 127.0.0.1:4316 (the module is gRPC-only and cannot
+    present a bearer token, so it gets an unauthenticated receiver; binding loopback keeps it
+    unreachable from outside the pod)
+  - receives OTLP/HTTP from the co-located Kasm services on 127.0.0.1:4318 (Connection Proxy only;
+    the listener is idle in the Proxy pod)
+
+None of these listeners is published as a containerPort or a Service. Syslog/UDP is fire-and-forget:
+a sidecar restart drops in-flight datagrams instead of replaying or losing checkpointed offsets (see
+observability.md's transport caveat).
+*/}}
+{{- $obs := .Values.observability -}}
+{{- if $obs.enabled }}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $variants := list (dict "component" "otel-nginx-sidecar" "serviceName" "kasm-proxy") (dict "component" "otel-nginx-sidecar-connection-proxy" "serviceName" "kasm-connection-proxy") -}}
+{{- range $i, $v := $variants }}
+{{- if $i }}
+---
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  {{- include "kasm.common.metadata" (dict "context" $ "component" $v.component "resource" "configMap" "include" "all") | indent 2 }}
+data:
+  config.yaml: |
+    extensions:
+      {{- include "kasm.common.otelHealthCheckExtension" (dict "port" $constants.otel.health) | nindent 6 }}
+
+    receivers:
+      nginx/metrics:
+        endpoint: "http://localhost:{{ $constants.proxyStubStatus }}/stub_status"
+        collection_interval: 30s
+
+      syslog/nginx_access:
+        protocol: rfc3164
+        udp:
+          listen_address: "127.0.0.1:{{ $constants.otel.syslogAccess }}"
+        operators:
+          {{- include "kasm.common.otelNginxAccessLogOperators" (dict "context" $ "serviceName" $v.serviceName) | nindent 10 }}
+
+      syslog/nginx_error:
+        protocol: rfc3164
+        udp:
+          listen_address: "127.0.0.1:{{ $constants.otel.syslogError }}"
+        operators:
+          {{- include "kasm.common.otelNginxErrorLogOperators" (dict "context" $ "serviceName" $v.serviceName) | nindent 10 }}
+
+      # ngx_otel_module traces. Loopback only.
+      otlp/nginx:
+        protocols:
+          grpc:
+            endpoint: "127.0.0.1:{{ $constants.otel.otlpNginx }}"
+
+      # Co-located Kasm services (guac, rdp-gateway, rdp-https-gateway). Loopback only.
+      otlp/local:
+        protocols:
+          http:
+            endpoint: "127.0.0.1:{{ $constants.otel.otlpHttp }}"
+
+    processors:
+      {{- include "kasm.common.otelResourceProcessor" (dict "context" $ "zone" true) | nindent 6 }}
+
+      {{- include "kasm.common.otelBatchProcessor" . | nindent 6 }}
+
+{{ include "kasm.common.otelMemoryLimiter" (dict "limitMib" 96 "spikeLimitMib" 32) | indent 6 }}
+
+    exporters:
+      {{- include "kasm.common.otelOtlpExporterToGateway" . | nindent 6 }}
+
+    service:
+      extensions: [health_check]
+
+      pipelines:
+        logs:
+          receivers: [syslog/nginx_access, syslog/nginx_error, otlp/local]
+          processors: [memory_limiter, resource, batch]
+          exporters: [otlp]
+
+        traces:
+          receivers: [otlp/nginx, otlp/local]
+          processors: [memory_limiter, resource, batch]
+          exporters: [otlp]
+
+        metrics:
+          receivers: [nginx/metrics, otlp/local]
+          processors: [memory_limiter, resource, batch]
+          exporters: [otlp]
+
+      telemetry:
+        logs:
+          level: info
+        metrics:
+          readers:
+            - pull:
+                exporter:
+                  prometheus:
+                    host: "0.0.0.0"
+                    port: {{ $constants.otel.selfMetrics }}
+{{- end }}
+{{- end }}

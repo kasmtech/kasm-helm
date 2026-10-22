@@ -1,0 +1,225 @@
+# Apply with:  kubectl apply -n <namespace> -f examples/otel-collector-splunk.yaml
+# Then set:    observability.collector.gateway.existingConfigMap: kasm-otel-gateway-splunk
+#
+# Same base as otel-collector-custom.yaml (see that file's header for what you're taking
+# ownership of and why), plus a `splunk_hec/logs` exporter and a parallel `logs/splunk`
+# pipeline that forwards every log line to Splunk HTTP Event Collector alongside ClickHouse.
+# Ported from the commented-out SPLUNK_HEC_EXPORTER block in the Docker install's
+# `install/conf/otel/otel-collector-local.yaml`.
+#
+# Upgrading from Kasm 1.19 or earlier: if your Splunk HEC settings previously lived in the
+# Kasm database (Admin UI -> Server Settings), that path is gone. Copy the token/endpoint you
+# had configured there into the REPLACE_ME placeholders below.
+#
+# REPLACE_ME: token and endpoint are obvious placeholders below. Do not commit a real HEC
+# token to source control -- create a Secret and reference it, e.g.:
+#
+#   kubectl create secret generic kasm-splunk-hec -n <namespace> \
+#     --from-literal=token=<your-real-token>
+#
+# then change `token: "REPLACE_ME_SPLUNK_HEC_TOKEN"` below to `token: "${env:SPLUNK_HEC_TOKEN}"`
+# and add `env: [{name: SPLUNK_HEC_TOKEN, valueFrom: {secretKeyRef: {name: kasm-splunk-hec, key:
+# token}}}]` to the gateway Deployment (via extraEnv, or a values-based container override --
+# this ConfigMap alone cannot inject container env vars).
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kasm-otel-gateway-splunk
+data:
+  config.yaml: |
+    extensions:
+      bearertokenauth/server:
+        token: "${env:OTEL_BEARER_TOKEN}"
+
+      health_check:
+        endpoint: "0.0.0.0:13133"
+
+    receivers:
+      otlp/remote:
+        protocols:
+          grpc:
+            endpoint: "0.0.0.0:4317"
+            auth:
+              authenticator: bearertokenauth/server
+          # Kasm's api service exports over OTLP/HTTP, the Collector sidecars over
+          # gRPC. Both protocols must stay enabled or that service's telemetry is silently
+          # dropped — the chart sends it to :4318.
+          http:
+            endpoint: "0.0.0.0:4318"
+            auth:
+              authenticator: bearertokenauth/server
+
+    processors:
+      batch:
+        send_batch_size: 5000
+        timeout: 10s
+
+      memory_limiter:
+        check_interval: 5s
+        limit_mib: 512
+        spike_limit_mib: 128
+
+      # Emitters disagree on severity spelling: Python logs WARNING, Go logs lowercase, the nginx
+      # access parser passes a raw status through when it has no mapping. The Admin UI's level
+      # cascade compares the Python names, so normalise here.
+      transform/severity:
+        log_statements:
+          - context: log
+            statements:
+              - set(severity_text, ConvertCase(severity_text, "upper")) where severity_text != nil
+              - set(severity_text, "WARNING") where severity_text == "WARN"
+              - set(severity_text, "CRITICAL") where severity_text == "FATAL"
+              - set(severity_text, "ERROR") where IsMatch(severity_text, "^5[0-9][0-9]$")
+              - set(severity_text, "WARNING") where IsMatch(severity_text, "^4[0-9][0-9]$")
+              - set(severity_text, "INFO") where IsMatch(severity_text, "^[0-9]+$")
+
+      # Successful readiness polls are a large share of log volume on an idle cluster and never
+      # useful in a search. Failed probes stay: a 502 on the healthcheck is the clearest sign the
+      # API was down. Both the nginx access row and the API's own access log line are covered.
+      filter/healthcheck:
+        error_mode: ignore
+        logs:
+          log_record:
+            - 'attributes["url.path"] == "/api/__healthcheck" and attributes["http.response.status_code"] == "200"'
+            - 'resource.attributes["service.name"] == "kasm-api" and IsMatch(body, "/api/__healthcheck HTTP/1\\.[01]. 200 ")'
+
+      # ngx_otel_module's http.target/http.url span attributes carry the raw query string (JWTs and
+      # session passwords have been observed in it). Strip it before tail sampling buffers the span.
+      transform/nginx_scrub:
+        trace_statements:
+          - context: span
+            statements:
+              - replace_pattern(attributes["http.target"], "\\?.*$", "") where resource.attributes["service.name"] == "kasm-proxy" and attributes["http.target"] != nil
+              - replace_pattern(attributes["http.url"], "\\?.*$", "") where resource.attributes["service.name"] == "kasm-proxy" and attributes["http.url"] != nil
+
+      tail_sampling:
+        decision_wait: 30s
+        num_traces: 50000
+        expected_new_traces_per_sec: 100
+        policies:
+          - name: keep-errors
+            type: status_code
+            status_code:
+              status_codes: [ERROR]
+          - name: keep-slow
+            type: latency
+            latency:
+              threshold_ms: 1000
+          - name: probabilistic-sample
+            type: probabilistic
+            probabilistic:
+              sampling_percentage: 10
+
+    exporters:
+      clickhouse/logs:
+        endpoint: "tcp://kasm-clickhouse:9440?secure=true&skip_verify=true&dial_timeout=10s"
+        database: kasm_otel
+        username: kasm_otel
+        password: "${env:CLICKHOUSE_PASSWORD}"
+        logs_table_name: otel_logs
+        ttl: 720h
+        create_schema: true
+        retry_on_failure:
+          enabled: true
+          initial_interval: 5s
+          max_interval: 30s
+          max_elapsed_time: 300s
+        sending_queue:
+          enabled: true
+          num_consumers: 4
+          queue_size: 1000
+
+      clickhouse/traces:
+        endpoint: "tcp://kasm-clickhouse:9440?secure=true&skip_verify=true&dial_timeout=10s"
+        database: kasm_otel
+        username: kasm_otel
+        password: "${env:CLICKHOUSE_PASSWORD}"
+        traces_table_name: otel_traces
+        ttl: 168h
+        create_schema: true
+        retry_on_failure:
+          enabled: true
+          initial_interval: 5s
+          max_interval: 30s
+          max_elapsed_time: 300s
+        sending_queue:
+          enabled: true
+          num_consumers: 4
+          queue_size: 1000
+
+      clickhouse/metrics:
+        endpoint: "tcp://kasm-clickhouse:9440?secure=true&skip_verify=true&dial_timeout=10s"
+        database: kasm_otel
+        username: kasm_otel
+        password: "${env:CLICKHOUSE_PASSWORD}"
+        metrics_table_name: otel_metrics
+        ttl: 2160h
+        create_schema: true
+        retry_on_failure:
+          enabled: true
+          initial_interval: 5s
+          max_interval: 30s
+          max_elapsed_time: 300s
+        sending_queue:
+          enabled: true
+          num_consumers: 4
+          queue_size: 1000
+
+      # Splunk HTTP Event Collector. REPLACE_ME values below are obvious placeholders -- see
+      # this file's header comment for how to source the token from a Secret instead.
+      splunk_hec/logs:
+        token: "REPLACE_ME_SPLUNK_HEC_TOKEN"
+        endpoint: "https://REPLACE_ME_SPLUNK_HOST:8088/services/collector"
+        source: "kasm"
+        sourcetype: "kasm:otel"
+        index: ""
+        tls:
+          insecure_skip_verify: false
+        log_data_enabled: true
+        profiling_data_enabled: false
+        retry_on_failure:
+          enabled: true
+          initial_interval: 5s
+          max_interval: 30s
+          max_elapsed_time: 300s
+        sending_queue:
+          enabled: true
+          num_consumers: 4
+          queue_size: 1000
+
+    service:
+      extensions: [bearertokenauth/server, health_check]
+
+      pipelines:
+        logs:
+          receivers: [otlp/remote]
+          processors: [memory_limiter, transform/severity, filter/healthcheck, batch]
+          exporters: [clickhouse/logs]
+
+        # Parallel pipeline: the same incoming logs, forwarded to Splunk as well as ClickHouse.
+        logs/splunk:
+          receivers: [otlp/remote]
+          processors: [memory_limiter, transform/severity, filter/healthcheck, batch]
+          exporters: [splunk_hec/logs]
+
+        traces:
+          receivers: [otlp/remote]
+          processors: [memory_limiter, transform/nginx_scrub, tail_sampling, batch]
+          exporters: [clickhouse/traces]
+
+        metrics:
+          receivers: [otlp/remote]
+          processors: [memory_limiter, batch]
+          exporters: [clickhouse/metrics]
+
+      telemetry:
+        logs:
+          level: info
+        metrics:
+          readers:
+            - pull:
+                exporter:
+                  prometheus:
+                    host: "0.0.0.0"
+                    port: 8888

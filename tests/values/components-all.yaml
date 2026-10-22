@@ -1,3 +1,7 @@
+extraEnv:
+  - name: SCENARIO_GLOBAL_VAR
+    value: "global"
+
 components:
   connectionProxy:
     guac:
@@ -6,3 +10,9 @@ components:
       enabled: true
     rdpHttpsGateway:
       enabled: true
+    extraEnv:
+      - name: SCENARIO_COMPONENT_VAR
+        valueFrom:
+          secretKeyRef:
+            name: scenario-secret
+            key: scenario-key

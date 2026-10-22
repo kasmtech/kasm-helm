@@ -45,17 +45,17 @@ spec:
         - name: {{ include "kasm.name" (list . "db" "container") }}
           image: {{ $constants.db.image }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
-          {{- if eq .Values.logFormat "json" }}
+          # PostgreSQL's logging collector captures stderr into files, so without this the
+          # container console would be empty. postgresql.log (the text copy) is symlinked to
+          # stdout for humans; postgresql.json stays a real file for the Collector sidecar.
           command:
             - "/bin/bash"
             - "-c"
           args:
             - |
               mkdir -p /tmp/postgres
-              touch /tmp/postgres/postgresql.json
-              ln -sf /dev/stdout /tmp/postgres/postgresql.json
+              ln -sf /dev/stdout /tmp/postgres/postgresql.log
               exec docker-entrypoint.sh postgres -c config_file=/var/lib/postgresql/conf/postgresql.conf -c hba_file=/var/lib/postgresql/conf/pg_hba.conf
-          {{- end }}
           env:
             - name: POSTGRES_DB
               value: {{ .Values.database.kasmDbName }}
@@ -72,6 +72,9 @@ spec:
                   name: {{ $constants.secrets.name }}
                   key: "db-password"
                 {{- end }}
+            {{- with $merged.extraEnv }}
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
           ports:
             - name: {{ $constants.db.portName }}
               containerPort: {{ $constants.db.port }}
@@ -120,6 +123,13 @@ spec:
               subPath: run
             {{- end }}
             {{- include "kasm.trustedCaVolumeMounts" . | nindent 12 }}
+        {{- if and .Values.observability.enabled (not .Values.database.standalone) }}
+        {{- /*
+          uid 70 (postgres), not the collector image's 10001: PostgreSQL writes its log files 0600
+          owned by the postgres user, so no other uid can read them.
+        */}}
+        {{- include "kasm.otelSidecar" (dict "context" . "uid" 70 "serviceName" "kasm-db" "configMap" (include "kasm.name" (list . "otel-db-sidecar" "configmap")) "volumeName" (include "kasm.name" (list . "database" "data" .Chart.AppVersion)) "mountPath" "/var/log/postgres" "subPath" "log/postgres" "extraVolumeMounts" (list (dict "name" (include "kasm.name" (list . "database" "data" .Chart.AppVersion)) "mountPath" "/var/lib/otelcol/checkpoints" "subPath" "otel-checkpoints"))) | nindent 8 }}
+        {{- end }}
         {{- with $merged.extraContainers }}
           {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -131,6 +141,14 @@ spec:
           secret:
             secretName: {{ .Values.certificate.secretName | default (include "kasm.name" (list . "cert-manager" "secret")) }}
             defaultMode: 0o600
+        {{- if and .Values.observability.enabled (not .Values.database.standalone) }}
+        - name: otel-sidecar-config
+          configMap:
+            name: {{ include "kasm.name" (list . "otel-db-sidecar" "configmap") }}
+        - name: otel-sidecar-tmp
+          emptyDir:
+            sizeLimit: 64Mi
+        {{- end }}
         {{- with $merged.volumes }}
           {{- toYaml . | nindent 8 }}
         {{- end }}

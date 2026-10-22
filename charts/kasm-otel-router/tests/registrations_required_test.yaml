@@ -1,0 +1,20 @@
+suite: kasm-otel-router — registrations required to render
+# Kept in its own suite file listing only configmap.yaml: helm-unittest v1.0.3 does not surface
+# this template's `fail` when the suite's top-level `templates:` list also contains
+# deployment.yaml (reproduced in isolation -- the failedTemplate assertion silently reports "No
+# failed document" even though `helm template ... -s configmap.yaml -s deployment.yaml` with the
+# same values fails on the CLI). Splitting the file sidesteps the plugin quirk without touching
+# any template logic.
+
+templates:
+  - templates/configmap.yaml
+
+tests:
+  - it: fails to render with no registrations
+    set:
+      ingestAuth.existingSecret.name: kasm-otel-router-secrets
+      ingestAuth.existingSecret.key: otel-bearer-token
+      registrations: []
+    asserts:
+      - failedTemplate:
+          errorMessage: "kasm-otel-router: registrations is empty -- add at least one entry (namespace, endpoint, tokenSecret) or this router has nowhere to send telemetry."

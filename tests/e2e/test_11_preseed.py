@@ -79,7 +79,6 @@ preseed_values = {
     },
     "components": {
         "api": {"resources": {"requests": {"cpu": "50m", "memory": "256Mi"}}},
-        "manager": {"resources": {"requests": {"cpu": "50m", "memory": "256Mi"}}},
         "proxy": {"resources": {"requests": {"cpu": "50m", "memory": "128Mi"}}},
         "connectionProxy": {
             "guac": {"resources": {"requests": {"cpu": "50m", "memory": "256Mi"}}},

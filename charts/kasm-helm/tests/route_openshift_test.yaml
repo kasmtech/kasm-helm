@@ -3,7 +3,6 @@ templates:
   - templates/route.yaml
   - templates/api-deployment.yaml
   - templates/proxy-deployment.yaml
-  - templates/manager-deployment.yaml
   - templates/db-statefulset.yaml
   - templates/connection-proxy-statefulset.yaml
 tests:
@@ -157,7 +156,6 @@ tests:
     templates:
       - templates/api-deployment.yaml
       - templates/proxy-deployment.yaml
-      - templates/manager-deployment.yaml
       - templates/db-statefulset.yaml
       - templates/connection-proxy-statefulset.yaml
     values:

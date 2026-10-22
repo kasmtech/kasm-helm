@@ -1,0 +1,88 @@
+suite: isOpenshift — the observability stack needs no special handling
+
+# Log collection used to require a hostPath + runAsUser:0 DaemonSet, which OpenShift can only run
+# with a SecurityContextConstraint this chart does not ship, and which the baseline/restricted Pod
+# Security Standards forbid outright. Collecting logs with in-pod sidecars removes that whole
+# problem: there is one code path, and it is PSS-restricted-clean and OpenShift-clean.
+
+templates:
+  - templates/otel-gateway-configmap.yaml
+  - templates/otel-gateway-deployment.yaml
+  - templates/proxy-deployment.yaml
+  - templates/db-statefulset.yaml
+  - templates/clickhouse-statefulset.yaml
+  - templates/clickhouse-configmap.yaml
+
+tests:
+  - it: isOpenshift=true renders the full observability stack without failing
+    set:
+      isOpenshift: true
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/otel-gateway-configmap.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/otel-gateway-deployment.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/clickhouse-statefulset.yaml
+
+  - it: isOpenshift=true still gives the proxy and DB pods their sidecars
+    set:
+      isOpenshift: true
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 2
+        template: templates/proxy-deployment.yaml
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: otel-sidecar
+        template: templates/proxy-deployment.yaml
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: otel-sidecar
+        template: templates/db-statefulset.yaml
+
+  # OpenShift assigns its own uids, so the chart must not pin them.
+  - it: isOpenshift=true suppresses the numeric uid on the sidecars
+    set:
+      isOpenshift: true
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[1].securityContext.runAsUser
+        template: templates/proxy-deployment.yaml
+        documentIndex: 0
+      - notExists:
+          path: spec.template.spec.containers[1].securityContext.runAsUser
+        template: templates/db-statefulset.yaml
+
+  - it: the route-openshift scenario needs no observability overrides at all
+    values:
+      - ../../../tests/values/route-openshift.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/otel-gateway-deployment.yaml
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 2
+        template: templates/proxy-deployment.yaml
+        documentIndex: 0
+
+  # No workload in the chart mounts a hostPath any more, on OpenShift or anywhere else.
+  - it: no hostPath volume anywhere in the observability path
+    asserts:
+      - notExists:
+          path: spec.template.spec.volumes[?(@.hostPath)]
+        template: templates/proxy-deployment.yaml
+        documentIndex: 0
+      - notExists:
+          path: spec.template.spec.volumes[?(@.hostPath)]
+        template: templates/db-statefulset.yaml
+      - notExists:
+          path: spec.template.spec.volumes[?(@.hostPath)]
+        template: templates/otel-gateway-deployment.yaml

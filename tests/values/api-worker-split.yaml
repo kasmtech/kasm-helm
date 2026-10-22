@@ -1,0 +1,22 @@
+proxyService:
+  type: ClusterIP
+ingress:
+  enabled: true
+kasmZones:
+  - name: zonea
+    proxyAddress: zonea.kasm.example.com
+    primary: true
+  - name: zoneb
+    proxyAddress: zoneb.kasm.example.com
+components:
+  api:
+    workerPool:
+      - name: sessions
+        queues: "session,heartbeat"
+        replicas: 1
+        queueConcurrency:
+          session: 5
+          heartbeat: 2
+      - name: housekeeping
+        queues: "monitoring,maintenance"
+        replicas: 1

@@ -2,6 +2,32 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "additionalProperties": true,
   "type": "object",
+  "definitions": {
+    "envVar": {
+      "title": "envVar",
+      "description": "A raw Kubernetes EnvVar object: name/value, or name/valueFrom.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "title": "name",
+          "type": "string"
+        },
+        "value": {
+          "title": "value",
+          "type": "string"
+        },
+        "valueFrom": {
+          "title": "valueFrom",
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    }
+  },
   "properties": {
     "affinity": {
       "additionalProperties": true,
@@ -68,6 +94,12 @@
           "title": "cronPod",
           "type": "object"
         },
+        "daemonSet": {
+          "additionalProperties": true,
+          "description": "Additional daemonSet annotations to apply to resources created by this chart",
+          "title": "daemonSet",
+          "type": "object"
+        },
         "deployment": {
           "additionalProperties": true,
           "description": "Additional deployment annotations to apply to resources created by this chart",
@@ -117,6 +149,7 @@
         "configMap",
         "cronJob",
         "cronPod",
+        "daemonSet",
         "deployment",
         "job",
         "pod",
@@ -242,6 +275,14 @@
               "description": "Additional sidecar containers to run in the pod\nExample\n - name: sidecar-example\n   image: busybox\n   command: [/bin/sh, -c, 'echo \"Hello world\"']",
               "title": "extraContainers",
               "type": "array"
+            },
+            "extraEnv": {
+              "description": "A list of raw Kubernetes EnvVar objects (name/value or name/valueFrom) appended to the end of this component's main container env list. Rendered through `tpl`. The component-scoped entry wins over a top-level extraEnv entry with the same name.",
+              "title": "extraEnv",
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/envVar"
+              }
             },
             "extraInitContainers": {
               "description": "Additional sidecar containers to run in the pod\nExample\n - name: init-example\n   image: busybox\n   command: [/bin/sh, -c, 'echo \"Hello world\"']",
@@ -372,6 +413,66 @@
               "title": "threadPoolLogInterval",
               "type": "integer",
               "default": 0
+            },
+            "queues": {
+              "description": "KASM_WORKER_QUEUES value used when workerPool is empty: a comma-separated queue list, or \"all\".",
+              "title": "queues",
+              "type": "string",
+              "default": "all"
+            },
+            "queueConcurrency": {
+              "description": "KASM_WORKER_QUEUE_CONCURRENCY when workerPool is empty: an integer for every queue, or an object keyed by queue name.",
+              "title": "queueConcurrency",
+              "anyOf": [
+                { "type": "null" },
+                { "type": "integer", "minimum": 1 },
+                { "type": "object", "additionalProperties": { "type": "integer", "minimum": 1 } }
+              ]
+            },
+            "workerPool": {
+              "default": [],
+              "description": "One Deployment is rendered per pool per zone, named <release>-api-<pool-name>[-<zone>], when non-empty. Non-empty also switches the api Deployment itself to publish-only (KASM_PROCESS=FALSE).",
+              "title": "workerPool",
+              "type": "array",
+              "items": {
+                "additionalProperties": false,
+                "type": "object",
+                "title": "workerPoolItem",
+                "properties": {
+                  "name": {
+                    "description": "Pool name; normalized (like a zone name) into the Deployment name.",
+                    "title": "name",
+                    "type": "string"
+                  },
+                  "queues": {
+                    "description": "KASM_WORKER_QUEUES value: a comma-separated queue list, or \"all\".",
+                    "title": "queues",
+                    "type": "string"
+                  },
+                  "replicas": {
+                    "description": "Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset.",
+                    "title": "replicas",
+                    "type": "integer"
+                  },
+                  "queueConcurrency": {
+                    "description": "KASM_WORKER_QUEUE_CONCURRENCY: an integer for every queue, or an object keyed by queue name.",
+                    "title": "queueConcurrency",
+                    "anyOf": [
+                      { "type": "integer", "minimum": 1 },
+                      { "type": "object", "additionalProperties": { "type": "integer", "minimum": 1 } }
+                    ]
+                  },
+                  "resources": {
+                    "additionalProperties": true,
+                    "description": "Per-pool resources override (wins over components.api.resources).",
+                    "title": "resources",
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              }
             }
           },
           "title": "api",
@@ -385,6 +486,7 @@
             "extraVolumes",
             "extraVolumeMounts",
             "extraContainers",
+            "extraEnv",
             "extraInitContainers"
           ]
         },
@@ -907,6 +1009,14 @@
               "title": "extraContainers",
               "type": "array"
             },
+            "extraEnv": {
+              "description": "A list of raw Kubernetes EnvVar objects (name/value or name/valueFrom) appended to the end of this component's main container env list. Rendered through `tpl`. The component-scoped entry wins over a top-level extraEnv entry with the same name.",
+              "title": "extraEnv",
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/envVar"
+              }
+            },
             "extraInitContainers": {
               "description": "Additional sidecar containers to run in the pod\nExample\n - name: init-example\n   image: busybox\n   command: [/bin/sh, -c, 'echo \"Hello world\"']",
               "title": "extraInitContainers",
@@ -926,166 +1036,7 @@
             "extraVolumes",
             "extraVolumeMounts",
             "extraContainers",
-            "extraInitContainers"
-          ]
-        },
-        "manager": {
-          "additionalProperties": false,
-          "description": " ",
-          "properties": {
-            "annotations": {
-              "additionalProperties": true,
-              "description": "Custom annotations to add to the Kasm Manager Deployment",
-              "title": "annotations",
-              "type": "object"
-            },
-            "extraContainers": {
-              "description": "Additional sidecar containers to run in the pod\nExample\n - name: sidecar-example\n   image: busybox\n   command: [/bin/sh, -c, 'echo \"Hello world\"']",
-              "title": "extraContainers",
-              "type": "array"
-            },
-            "extraInitContainers": {
-              "description": "Additional sidecar containers to run in the pod\nExample\n - name: init-example\n   image: busybox\n   command: [/bin/sh, -c, 'echo \"Hello world\"']",
-              "title": "extraInitContainers",
-              "type": "array"
-            },
-            "extraVolumeMounts": {
-              "description": "A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things\n like custom SSL certificates, config files, or data volumes Kasm Manager container\nExample: \n  extraVolumeMounts:\n    - mountPath: /etc/ssl/certs/ca-certificates.crt\n      name: pkichain\n      readOnly: true\n      subPath: ca.crt",
-              "title": "extraVolumeMounts",
-              "type": "array"
-            },
-            "extraVolumes": {
-              "description": "A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things\n like custom SSL certificates, config files, or data volumes to the Kasm Manager container\nExample:\n  extraVolumes:\n    - secret:\n        defaultMode: 420\n        secretName: kasm-custom-tls\n      name: pkichain",
-              "title": "extraVolumes",
-              "type": "array"
-            },
-            "healthCheckTiming": {
-              "description": "Override the pod's default healthcheck timing values for liveness and/or readiness probes.\n Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only\n the timeoutSeconds value of the livenessProbe.",
-              "title": "healthCheckTiming",
-              "type": "object",
-              "properties": {
-                "livenessProbe": {
-                  "title": "livenessProbe",
-                  "type": "object",
-                  "properties": {
-                    "timeoutSeconds": {
-                      "title": "timeoutSeconds",
-                      "type": "integer"
-                    },
-                    "initialDelaySeconds": {
-                      "title": "initialDelaySeconds",
-                      "type": "integer"
-                    },
-                    "periodSeconds": {
-                      "title": "periodSeconds",
-                      "type": "integer"
-                    },
-                    "failureThreshold": {
-                      "title": "failureThreshold",
-                      "type": "integer"
-                    },
-                    "successThreshold": {
-                      "title": "successThreshold",
-                      "type": "integer"
-                    }
-                  }
-                },
-                "readinessProbe": {
-                  "title": "livenessProbe",
-                  "type": "object",
-                  "properties": {
-                    "timeoutSeconds": {
-                      "title": "timeoutSeconds",
-                      "type": "integer"
-                    },
-                    "initialDelaySeconds": {
-                      "title": "initialDelaySeconds",
-                      "type": "integer"
-                    },
-                    "periodSeconds": {
-                      "title": "periodSeconds",
-                      "type": "integer"
-                    },
-                    "failureThreshold": {
-                      "title": "failureThreshold",
-                      "type": "integer"
-                    },
-                    "successThreshold": {
-                      "title": "successThreshold",
-                      "type": "integer"
-                    }
-                  }
-                }
-              }
-            },
-            "image": {
-              "additionalProperties": false,
-              "description": "Configure the image repository where the image is stored. Use this to point to an private hosted container registry instead of our public DockerHub hosted one.",
-              "properties": {
-                "registry": {
-                  "default": "docker.io",
-                  "title": "registry",
-                  "type": "string"
-                },
-                "repository": {
-                  "default": "kasmweb/manager",
-                  "title": "repository",
-                  "type": "string"
-                },
-                "tag": {
-                  "title": "tag",
-                  "type": "string"
-                }
-              },
-              "title": "image",
-              "type": "object",
-              "required": [
-                "registry",
-                "repository",
-                "tag"
-              ]
-            },
-            "labels": {
-              "additionalProperties": true,
-              "description": "Custom labels to add to the Kasm Manager Deployment",
-              "title": "labels",
-              "type": "object"
-            },
-            "replicas": {
-              "description": "Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset.",
-              "title": "replicas",
-              "type": "integer"
-            },
-            "resources": {
-              "additionalProperties": true,
-              "description": "Manually configure the Kasm Manager Deployment resources. This overrides the pre-defined `deploymentSize` values.",
-              "title": "resources",
-              "type": "object"
-            },
-            "updateTimer": {
-              "description": "Configures the delay (in seconds) between checking for updates, when automatic updates are enabled. Default value is 86400s, which equals 24 hours.",
-              "title": "updateTimer",
-              "type": "integer",
-              "default": 86400
-            },
-            "supportBundleTimer": {
-              "description": "Configures the batching interval (in seconds) for generating support bundles. This value determines how often the system checks for support bundle completion and expiration. Default value is 60s.",
-              "title": "supportBundleTimer",
-              "type": "integer",
-              "default": 60
-            }
-          },
-          "title": "manager",
-          "type": "object",
-          "required": [
-            "image",
-            "annotations",
-            "resources",
-            "labels",
-            "healthCheckTiming",
-            "extraVolumes",
-            "extraVolumeMounts",
-            "extraContainers",
+            "extraEnv",
             "extraInitContainers"
           ]
         },
@@ -1103,6 +1054,14 @@
               "description": "components.proxy.extraContainers Additional sidecar containers to run in the pod\nExample\n - name: sidecar-example\n   image: busybox\n   command: [/bin/sh, -c, 'echo \"Hello world\"']",
               "title": "extraContainers",
               "type": "array"
+            },
+            "extraEnv": {
+              "description": "A list of raw Kubernetes EnvVar objects (name/value or name/valueFrom) appended to the end of this component's main container env list. Rendered through `tpl`. The component-scoped entry wins over a top-level extraEnv entry with the same name.",
+              "title": "extraEnv",
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/envVar"
+              }
             },
             "extraInitContainers": {
               "description": "components.proxy.extraInitContainers Additional sidecar containers to run in the pod\nExample\n - name: init-example\n   image: busybox\n   command: [/bin/sh, -c, 'echo \"Hello world\"']",
@@ -1234,18 +1193,608 @@
             "extraVolumes",
             "extraVolumeMounts",
             "extraContainers",
+            "extraEnv",
             "extraInitContainers"
           ]
+        },
+        "otelGateway": {
+          "additionalProperties": false,
+          "description": "Configuration settings for the OpenTelemetry gateway Collector, which makes the trace-sampling decision and is the only writer to ClickHouse. Behaviour is configured under `observability.collector.gateway`.",
+          "title": "otelGateway",
+          "type": "object",
+          "properties": {
+            "image": {
+              "additionalProperties": false,
+              "description": "Configure the image repository where the image is stored. Use this to point to a private hosted container registry instead of our public DockerHub hosted one. The gateway and sidecars each carry their own image reference on purpose, so a deployment can replace one tier without touching the others.",
+              "title": "image",
+              "type": "object",
+              "properties": {
+                "registry": {
+                  "default": "docker.io",
+                  "title": "registry",
+                  "type": "string"
+                },
+                "repository": {
+                  "default": "otel/opentelemetry-collector-contrib",
+                  "title": "repository",
+                  "type": "string"
+                },
+                "tag": {
+                  "default": "0.156.0",
+                  "description": "Tag for this component's image. Pinned by the chart rather than falling back to the chart-wide `useImageTags`, because this image is versioned independently of Kasm.",
+                  "title": "tag",
+                  "type": "string"
+                }
+              }
+            },
+            "replicas": {
+              "default": 0,
+              "description": "Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset (default, which is 1 at every size). Pinned to 1: every sender exports straight to the gateway, and nothing in front of it partitions traces by ID, so a second replica would make tail_sampling decide on partial traces and silently drop spans. The chart fails at render time if this is set above 1.",
+              "title": "replicas",
+              "type": "integer"
+            },
+            "annotations": {
+              "additionalProperties": true,
+              "description": "Custom annotations to add to the gateway Collector Deployment",
+              "title": "annotations",
+              "type": "object"
+            },
+            "resources": {
+              "additionalProperties": true,
+              "description": "Manually configure the gateway Collector Deployment resources. This overrides the pre-defined `deploymentSize` values.",
+              "title": "resources",
+              "type": "object"
+            },
+            "labels": {
+              "additionalProperties": true,
+              "description": "Custom labels to add to the gateway Collector Deployment",
+              "title": "labels",
+              "type": "object"
+            },
+            "extraVolumes": {
+              "description": "A list of objects for additional secrets, configmaps, or volume mounts for the gateway Collector container",
+              "items": {
+                "type": "object"
+              },
+              "title": "extraVolumes",
+              "type": "array"
+            },
+            "extraVolumeMounts": {
+              "description": "A list of objects for additional volume mounts for the gateway Collector container",
+              "items": {
+                "type": "object"
+              },
+              "title": "extraVolumeMounts",
+              "type": "array"
+            },
+            "extraContainers": {
+              "description": "Additional sidecar containers to run in the pod",
+              "items": {
+                "type": "object"
+              },
+              "title": "extraContainers",
+              "type": "array"
+            },
+            "extraEnv": {
+              "description": "A list of raw Kubernetes EnvVar objects (name/value or name/valueFrom) appended to the end of this component's main container env list. Rendered through `tpl`. The component-scoped entry wins over a top-level extraEnv entry with the same name.",
+              "title": "extraEnv",
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/envVar"
+              }
+            },
+            "extraInitContainers": {
+              "description": "Additional init containers to run in the pod",
+              "items": {
+                "type": "object"
+              },
+              "title": "extraInitContainers",
+              "type": "array"
+            }
+          }
+        },
+        "otelSidecar": {
+          "additionalProperties": false,
+          "description": "Configuration settings for the OpenTelemetry Collector sidecar, which runs in every pod that produces telemetry only readable from inside the pod: the Kasm Proxy and Connection Proxy (nginx logs and connection metrics) and the Kasm DB (PostgreSQL logs). This is not a workload of its own, so it has no replicas.",
+          "title": "otelSidecar",
+          "type": "object",
+          "properties": {
+            "image": {
+              "additionalProperties": false,
+              "description": "Configure the image repository where the image is stored. Use this to point to a private hosted container registry instead of our public DockerHub hosted one. The gateway and sidecars each carry their own image reference on purpose, so a deployment can replace one tier without touching the others.",
+              "title": "image",
+              "type": "object",
+              "properties": {
+                "registry": {
+                  "default": "docker.io",
+                  "title": "registry",
+                  "type": "string"
+                },
+                "repository": {
+                  "default": "otel/opentelemetry-collector-contrib",
+                  "title": "repository",
+                  "type": "string"
+                },
+                "tag": {
+                  "default": "0.156.0",
+                  "description": "Tag for this component's image. Pinned by the chart rather than falling back to the chart-wide `useImageTags`, because this image is versioned independently of Kasm.",
+                  "title": "tag",
+                  "type": "string"
+                }
+              }
+            },
+            "resources": {
+              "additionalProperties": true,
+              "description": "Manually configure the Collector sidecar resources. This overrides the pre-defined `deploymentSize` values. Applied to every sidecar.",
+              "title": "resources",
+              "type": "object"
+            }
+          }
+        },
+        "clickhouse": {
+          "additionalProperties": false,
+          "description": "Configuration settings for ClickHouse, the telemetry store that backs Kasm reporting. Behaviour, including database identity and retention windows, is configured under `observability.clickhouse`.",
+          "title": "clickhouse",
+          "type": "object",
+          "properties": {
+            "image": {
+              "additionalProperties": false,
+              "description": "Configure the image repository where the image is stored. Use this to point to a private hosted container registry instead of our public DockerHub hosted one. The forwarder, gateway, and sidecars each carry their own image reference on purpose, so a deployment can replace one tier without touching the others.",
+              "title": "image",
+              "type": "object",
+              "properties": {
+                "registry": {
+                  "default": "docker.io",
+                  "title": "registry",
+                  "type": "string"
+                },
+                "repository": {
+                  "default": "clickhouse/clickhouse-server",
+                  "title": "repository",
+                  "type": "string"
+                },
+                "tag": {
+                  "default": "24.12-alpine",
+                  "description": "Tag for this component's image. Pinned by the chart rather than falling back to the chart-wide `useImageTags`, because this image is versioned independently of Kasm.",
+                  "title": "tag",
+                  "type": "string"
+                }
+              }
+            },
+            "annotations": {
+              "additionalProperties": true,
+              "description": "Custom annotations to add to the ClickHouse StatefulSet",
+              "title": "annotations",
+              "type": "object"
+            },
+            "resources": {
+              "additionalProperties": true,
+              "description": "Manually configure the ClickHouse StatefulSet resources. This overrides the pre-defined `deploymentSize` values.",
+              "title": "resources",
+              "type": "object"
+            },
+            "labels": {
+              "additionalProperties": true,
+              "description": "Custom labels to add to the ClickHouse StatefulSet",
+              "title": "labels",
+              "type": "object"
+            },
+            "healthCheckTiming": {
+              "description": "Override the pod's default healthcheck timing values for liveness and/or readiness probes. Values provided individually override their respective timing value.",
+              "title": "healthCheckTiming",
+              "type": "object",
+              "properties": {
+                "livenessProbe": {
+                  "title": "livenessProbe",
+                  "type": "object",
+                  "properties": {
+                    "timeoutSeconds": {
+                      "title": "timeoutSeconds",
+                      "type": "integer"
+                    },
+                    "initialDelaySeconds": {
+                      "title": "initialDelaySeconds",
+                      "type": "integer"
+                    },
+                    "periodSeconds": {
+                      "title": "periodSeconds",
+                      "type": "integer"
+                    },
+                    "failureThreshold": {
+                      "title": "failureThreshold",
+                      "type": "integer"
+                    },
+                    "successThreshold": {
+                      "title": "successThreshold",
+                      "type": "integer"
+                    }
+                  }
+                },
+                "readinessProbe": {
+                  "title": "readinessProbe",
+                  "type": "object",
+                  "properties": {
+                    "timeoutSeconds": {
+                      "title": "timeoutSeconds",
+                      "type": "integer"
+                    },
+                    "initialDelaySeconds": {
+                      "title": "initialDelaySeconds",
+                      "type": "integer"
+                    },
+                    "periodSeconds": {
+                      "title": "periodSeconds",
+                      "type": "integer"
+                    },
+                    "failureThreshold": {
+                      "title": "failureThreshold",
+                      "type": "integer"
+                    },
+                    "successThreshold": {
+                      "title": "successThreshold",
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            },
+            "storage": {
+              "additionalProperties": false,
+              "description": "Configure the storage for the ClickHouse StatefulSet.",
+              "title": "storage",
+              "type": "object",
+              "properties": {
+                "storageClassName": {
+                  "default": "",
+                  "description": "Set the storage class to attach to ClickHouse for storage. Leaving this blank will use the cluster-default storage class.",
+                  "title": "storageClassName",
+                  "type": "string"
+                },
+                "pvcSize": {
+                  "default": 20,
+                  "description": "Size of the PVC backing ClickHouse, in GiB. Telemetry volume scales with session count and retention; see the observability documentation for sizing guidance.",
+                  "title": "pvcSize",
+                  "type": "integer"
+                },
+                "retentionPolicy": {
+                  "additionalProperties": false,
+                  "description": "Configure how the ClickHouse volume should be retained or deleted throughout the StatefulSet's lifecycle. Defaults to Retain so telemetry history survives an uninstall.",
+                  "title": "retentionPolicy",
+                  "type": "object",
+                  "properties": {
+                    "whenDeleted": {
+                      "default": "Retain",
+                      "title": "whenDeleted",
+                      "type": "string",
+                      "enum": [
+                        "Retain",
+                        "Delete"
+                      ]
+                    },
+                    "whenScaled": {
+                      "default": "Retain",
+                      "title": "whenScaled",
+                      "type": "string",
+                      "enum": [
+                        "Retain",
+                        "Delete"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "extraVolumes": {
+              "description": "A list of objects for additional secrets, configmaps, or volume mounts for the ClickHouse container",
+              "items": {
+                "type": "object"
+              },
+              "title": "extraVolumes",
+              "type": "array"
+            },
+            "extraVolumeMounts": {
+              "description": "A list of objects for additional volume mounts for the ClickHouse container",
+              "items": {
+                "type": "object"
+              },
+              "title": "extraVolumeMounts",
+              "type": "array"
+            },
+            "extraContainers": {
+              "description": "Additional sidecar containers to run in the pod",
+              "items": {
+                "type": "object"
+              },
+              "title": "extraContainers",
+              "type": "array"
+            },
+            "extraEnv": {
+              "description": "A list of raw Kubernetes EnvVar objects (name/value or name/valueFrom) appended to the end of this component's main container env list. Rendered through `tpl`. The component-scoped entry wins over a top-level extraEnv entry with the same name.",
+              "title": "extraEnv",
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/envVar"
+              }
+            },
+            "extraInitContainers": {
+              "description": "Additional init containers to run in the pod",
+              "items": {
+                "type": "object"
+              },
+              "title": "extraInitContainers",
+              "type": "array"
+            }
+          }
         }
       },
       "required": [
         "proxy",
         "api",
-        "manager",
         "connectionProxy"
       ],
       "title": "components",
       "type": "object"
+    },
+    "observability": {
+      "additionalProperties": false,
+      "description": "Configure the Kasm observability stack (OpenTelemetry Collector + ClickHouse). Kasm services emit logs, traces, and metrics over OTLP to a Collector, which stores them in ClickHouse where they back the reporting UI. See Observability (./docs/observability.md) for architecture and sizing guidance.",
+      "title": "observability",
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "description": "Master switch for the whole observability stack. Set to false to deploy no Collector and no ClickHouse, disable the OpenTelemetry SDKs in every Kasm service, and serve a disabled browser-telemetry stub. Reporting features that read telemetry will return empty results.",
+          "title": "enabled",
+          "type": "boolean"
+        },
+        "collector": {
+          "additionalProperties": false,
+          "description": "Configure the behaviour of the OpenTelemetry Collector tiers. Deployment settings for each tier live under `components.otelGateway` and `components.otelSidecar`.",
+          "title": "collector",
+          "type": "object",
+          "properties": {
+            "gateway": {
+              "additionalProperties": false,
+              "description": "Configure the single cluster-wide gateway Collector, which makes the trace-sampling decision and writes all telemetry to ClickHouse.",
+              "title": "gateway",
+              "type": "object",
+              "properties": {
+                "existingConfigMap": {
+                  "default": "",
+                  "description": "Name of a user-created ConfigMap holding a complete configuration for the gateway Collector, under the key `config.yaml`. Set this to take full ownership of the gateway config: the chart renders none of its own, and the values that only shape that config (`tailSamplePercentage`, `forward`, and `clickhouse.retention`) are ignored.",
+                  "title": "existingConfigMap",
+                  "type": "string"
+                },
+                "tailSamplePercentage": {
+                  "default": 10,
+                  "description": "Percentage (0-100) of traces to keep after the always-keep rules. Traces containing an error, and traces slower than one second, are always kept regardless of this value. Applied at the gateway, which is the only tier that sees a whole trace.",
+                  "title": "tailSamplePercentage",
+                  "type": "integer"
+                },
+                "forward": {
+                  "additionalProperties": false,
+                  "description": "Forward a copy of all telemetry to an external OTLP/HTTP endpoint in addition to storing it in ClickHouse. Useful for shipping to a vendor or a central Collector. Applied at the gateway, so a forwarded copy reflects the sampling decision.",
+                  "title": "forward",
+                  "type": "object",
+                  "properties": {
+                    "endpoint": {
+                      "default": "",
+                      "description": "OTLP/HTTP endpoint to forward to (e.g. `https://otlp-gateway.example.com/otlp`). Leave empty to disable forwarding.",
+                      "title": "endpoint",
+                      "type": "string"
+                    },
+                    "token": {
+                      "default": "",
+                      "description": "Bearer token for the forwarding endpoint. Prefer `existingSecret` over putting a credential in values.",
+                      "title": "token",
+                      "type": "string"
+                    },
+                    "existingSecret": {
+                      "additionalProperties": false,
+                      "description": "Read the forwarding bearer token from an existing Secret instead of `token`. Both `name` and `key` are required when used.",
+                      "title": "existingSecret",
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "default": "",
+                          "title": "name",
+                          "type": "string"
+                        },
+                        "key": {
+                          "default": "",
+                          "title": "key",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "upstream": {
+              "additionalProperties": false,
+              "description": "Redirect the Kasm app services that export straight to the local gateway (currently API and the API worker pools; see kasm.otelEnv) to an external OTLP/HTTP collector instead -- e.g. a router in front of several Kasm releases. Collector sidecars (Proxy nginx, Connection Proxy, DB Postgres) are unaffected: they always export to this release's own gateway and are not rerouted by this setting. Leave empty to keep today's default (local gateway for everyone).",
+              "title": "upstream",
+              "type": "object",
+              "properties": {
+                "endpoint": {
+                  "default": "",
+                  "description": "OTLP/HTTP endpoint the API/API-worker exporters should send to instead of the local gateway (e.g. `http://otel-router.otel-router.svc.cluster.local:4318`). Leave empty to keep exporting to the local gateway.",
+                  "title": "endpoint",
+                  "type": "string"
+                },
+                "token": {
+                  "default": "",
+                  "description": "Bearer token for the upstream endpoint. Prefer `existingSecret` over putting a credential in values.",
+                  "title": "token",
+                  "type": "string"
+                },
+                "existingSecret": {
+                  "additionalProperties": false,
+                  "description": "Read the upstream bearer token from an existing Secret instead of `token`. Both `name` and `key` are required when used.",
+                  "title": "existingSecret",
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "default": "",
+                      "title": "name",
+                      "type": "string"
+                    },
+                    "key": {
+                      "default": "",
+                      "title": "key",
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "clickhouse": {
+          "additionalProperties": false,
+          "description": "Configure ClickHouse, the telemetry store that backs Kasm reporting.",
+          "title": "clickhouse",
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "default": true,
+              "description": "Deploy a ClickHouse StatefulSet to store telemetry. Set to false to run the Collector with no telemetry store at all: signals are received and discarded, and Kasm reporting features return empty results. To use a ClickHouse you already run, leave this true and set `standalone` instead.",
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "standalone": {
+              "default": false,
+              "description": "Setting standalone to true will prevent the deployment of the ClickHouse StatefulSet and requires you to have a ClickHouse server already set up and awaiting connections. Use the endpoint values below to connect to your external instance.",
+              "title": "standalone",
+              "type": "boolean"
+            },
+            "nativeEndpoint": {
+              "default": "",
+              "description": "DSN for ClickHouse's native interface, used by the Collector to write telemetry (e.g. `tcp://clickhouse.example.com:9440?secure=true&skip_verify=true`). A bare `host:port` is wrapped with the chart's defaults. Only used when `standalone` is true, and required together with `httpEndpoint`.",
+              "title": "nativeEndpoint",
+              "type": "string"
+            },
+            "httpEndpoint": {
+              "default": "",
+              "description": "URL for ClickHouse's HTTP interface, used by Kasm to read reports and logs (e.g. `https://clickhouse.example.com:8443`). Only used when `standalone` is true, and required together with `nativeEndpoint`.",
+              "title": "httpEndpoint",
+              "type": "string"
+            },
+            "database": {
+              "default": "kasm_otel",
+              "description": "Name of the ClickHouse database holding Kasm telemetry.",
+              "title": "database",
+              "type": "string"
+            },
+            "username": {
+              "default": "kasm_otel",
+              "description": "ClickHouse user Kasm connects as. Also the writer credential used by the gateway Collector and the retention Job.",
+              "title": "username",
+              "type": "string"
+            },
+            "readUsername": {
+              "default": "",
+              "description": "ClickHouse user api uses to read reports, holding only GRANT SELECT ON <db>.* instead of `username`'s full access. When the chart manages ClickHouse (`enabled: true`, `standalone: false`), leaving this empty still gets you a read-only user: it defaults to `kasm_otel_ro`. For a `standalone` external ClickHouse, leaving this empty instead keeps api on `username` (no read-only user is rendered) unless you set this to a read-only user you have provisioned there yourself.",
+              "title": "readUsername",
+              "type": "string"
+            },
+            "existingSecret": {
+              "additionalProperties": false,
+              "description": "Read the ClickHouse password(s) from an existing Secret instead of the chart-generated `clickhouse-password`/`clickhouse-ro-password` keys. `name` and `key` (for `username`) are required together when used; `readKey` (for `readUsername`) is optional and falls back to `key` when unset, matching `readUsername`'s own fallback to `username`.",
+              "title": "existingSecret",
+              "type": "object",
+              "properties": {
+                "name": {
+                  "default": "",
+                  "title": "name",
+                  "type": "string"
+                },
+                "key": {
+                  "default": "",
+                  "title": "key",
+                  "type": "string"
+                },
+                "readKey": {
+                  "default": "",
+                  "title": "readKey",
+                  "type": "string"
+                }
+              }
+            },
+            "tls": {
+              "default": true,
+              "description": "Enable TLS on the bundled ClickHouse's 8443 (HTTPS) and 9440 (native) ports using the same certificate as the rest of Kasm, mirroring how the bundled Kasm DB is configured. Requires `certificate.secretName` or cert-manager. Has no effect when `standalone` is true.",
+              "title": "tls",
+              "type": "boolean"
+            },
+            "caCert": {
+              "default": "",
+              "description": "PEM-encoded CA certificate trusted when connecting to a standalone ClickHouse over TLS (e.g. `httpEndpoint: https://...` behind a private or self-signed CA). Ignored for the bundled ClickHouse, which already uses the shared Kasm certificate. clickhouse_connect (the Python client Kasm's api uses) requires an explicit CA file - it does not consult SSL_CERT_FILE/REQUESTS_CA_BUNDLE or this chart's trustedCaBundle mechanism - so setting this renders a dedicated ConfigMap and mounts it into the api container. Leave empty to use the system trust store, or set `tlsVerify: false` to skip verification instead. Mutually exclusive with `caCertConfigMap`.",
+              "title": "caCert",
+              "type": "string"
+            },
+            "caCertConfigMap": {
+              "default": "",
+              "description": "Name of an existing ConfigMap containing the CA certificate for a standalone ClickHouse, under the key `ca.crt`. Use this instead of `caCert` if you already manage the certificate as a ConfigMap. Ignored for the bundled ClickHouse.",
+              "title": "caCertConfigMap",
+              "type": "string"
+            },
+            "tlsVerify": {
+              "default": true,
+              "description": "Whether the api container verifies a standalone ClickHouse's TLS certificate at all. Set to false to skip verification (not recommended). Ignored when `caCert` or `caCertConfigMap` is set (an explicit CA always wins), and for the bundled ClickHouse, whose certificate is always verified.",
+              "title": "tlsVerify",
+              "type": "boolean"
+            },
+            "retention": {
+              "additionalProperties": false,
+              "description": "How long each class of telemetry is kept before ClickHouse deletes it. Applied to the schema at install time and re-applied by a post-upgrade Job when these values change.",
+              "title": "retention",
+              "type": "object",
+              "properties": {
+                "logsDays": {
+                  "default": 30,
+                  "description": "Retention in days for general application logs.",
+                  "title": "logsDays",
+                  "type": "integer"
+                },
+                "auditLogsDays": {
+                  "default": 365,
+                  "description": "Retention in days for security-relevant audit logs (login and logout events). Usually longer than general logs to satisfy audit requirements.",
+                  "title": "auditLogsDays",
+                  "type": "integer"
+                },
+                "tracesDays": {
+                  "default": 7,
+                  "description": "Retention in days for distributed traces.",
+                  "title": "tracesDays",
+                  "type": "integer"
+                },
+                "metricsDays": {
+                  "default": 90,
+                  "description": "Retention in days for metrics.",
+                  "title": "metricsDays",
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "browser": {
+          "additionalProperties": false,
+          "description": "Collect real-user telemetry from the Kasm web UI in the user's browser.",
+          "title": "browser",
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "default": false,
+              "description": "Serve the browser telemetry runtime configuration so the Kasm web UI reports page loads and user interactions. When false (the default), a stub is served that disables the browser SDK without producing console errors.",
+              "title": "enabled",
+              "type": "boolean"
+            }
+          }
+        }
+      }
     },
     "database": {
       "additionalProperties": false,
@@ -1261,6 +1810,14 @@
           "description": "Additional sidecar containers to run in the pod\nExample\n - name: sidecar-example\n   image: busybox\n   command: [/bin/sh, -c, 'echo \"Hello world\"']",
           "title": "extraContainers",
           "type": "array"
+        },
+        "extraEnv": {
+          "description": "A list of raw Kubernetes EnvVar objects (name/value or name/valueFrom) appended to the end of this component's main container env list. Rendered through `tpl`. The component-scoped entry wins over a top-level extraEnv entry with the same name.",
+          "title": "extraEnv",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/envVar"
+          }
         },
         "extraInitContainers": {
           "description": "Additional sidecar containers to run in the pod\nExample\n - name: init-example\n   image: busybox\n   command: [/bin/sh, -c, 'echo \"Hello world\"']",
@@ -1511,6 +2068,7 @@
         "extraVolumes",
         "extraVolumeMounts",
         "extraContainers",
+        "extraEnv",
         "extraInitContainers"
       ]
     },
@@ -1576,10 +2134,10 @@
           "type": "boolean"
         },
         "initJobTTLSecondsAfterFinished": {
-            "default": 300,
-            "description": "The number of seconds to retain the DB backup job pod after it has finished. The default is 300 seconds (5 minutes).",
-            "title": "initJobTTLSecondsAfterFinished",
-            "type": "integer"
+          "default": 300,
+          "description": "The number of seconds to retain the DB backup job pod after it has finished. The default is 300 seconds (5 minutes).",
+          "title": "initJobTTLSecondsAfterFinished",
+          "type": "integer"
         },
         "dbConnectionTimeout": {
           "default": 10,
@@ -1774,6 +2332,14 @@
       "title": "extraContainers",
       "type": "array"
     },
+    "extraEnv": {
+      "description": "A list of raw Kubernetes EnvVar objects (name/value or name/valueFrom) appended to the end of this component's main container env list. Rendered through `tpl`. The component-scoped entry wins over a top-level extraEnv entry with the same name.",
+      "title": "extraEnv",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/envVar"
+      }
+    },
     "extraInitContainers": {
       "description": "Additional sidecar containers to run in every pod\nExample\n - name: init-example\n   image: busybox\n   command: [/bin/sh, -c, 'echo \"Hello world\"']",
       "title": "extraInitContainers",
@@ -1804,6 +2370,12 @@
           "additionalProperties": true,
           "description": "Additional labels to apply to the pod template inside CronJobs created by this chart",
           "title": "cronPod",
+          "type": "object"
+        },
+        "daemonSet": {
+          "additionalProperties": true,
+          "description": "Additional daemonSet labels to apply to resources created by this chart",
+          "title": "daemonSet",
           "type": "object"
         },
         "deployment": {
@@ -1853,6 +2425,7 @@
       "type": "object",
       "required": [
         "configMap",
+        "daemonSet",
         "deployment",
         "pod",
         "secret",
@@ -1891,13 +2464,6 @@
       "description": "Configure global image pull policy ",
       "title": "imagePullPolicy",
       "type": "string"
-    },
-    "logFormat": {
-      "default": "log",
-      "description": "Kasm log format written to console. 'log' emits human-readable text; 'json' emits structured JSON suitable for log aggregation pipelines.",
-      "title": "logFormat",
-      "type": "string",
-      "enum": ["log", "json"]
     },
     "kasmSecrets": {
       "additionalProperties": false,
@@ -1952,6 +2518,24 @@
               "description": "Pin the user-password credential to a specific value instead of random generation.",
               "title": "user-password",
               "type": "string"
+            },
+            "clickhouse-password": {
+              "default": "",
+              "description": "Pin the clickhouse-password credential to a specific value instead of random generation.",
+              "title": "clickhouse-password",
+              "type": "string"
+            },
+            "clickhouse-ro-password": {
+              "default": "",
+              "description": "Pin the clickhouse-ro-password credential to a specific value instead of random generation.",
+              "title": "clickhouse-ro-password",
+              "type": "string"
+            },
+            "otel-bearer-token": {
+              "default": "",
+              "description": "Pin the otel-bearer-token credential to a specific value instead of random generation.",
+              "title": "otel-bearer-token",
+              "type": "string"
             }
           }
         },
@@ -1968,7 +2552,13 @@
           "type": "object"
         }
       },
-      "required": ["create", "name", "passwords", "annotations", "labels"]
+      "required": [
+        "create",
+        "name",
+        "passwords",
+        "annotations",
+        "labels"
+      ]
     },
     "imagePullSecrets": {
       "additionalProperties": false,

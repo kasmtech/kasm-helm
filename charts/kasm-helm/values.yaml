@@ -46,10 +46,6 @@ kasmZones: []
 # set them in accordance with [OpenShift UIDs](https://www.redhat.com/en/blog/a-guide-to-openshift-and-uids) documentation.
 isOpenshift: false
 
-# logFormat -- Kasm Log format to write to console. Valid options are: json, log
-#
-logFormat: log
-
 # nginxResolver -- The IP address used by the `resolver` directive in the Kasm nginx configs (proxy and
 # connection-proxy) for dynamic upstream DNS resolution.
 #
@@ -284,6 +280,9 @@ kasmSecrets:
     db-password: ""
     admin-password: ""
     user-password: ""
+    clickhouse-password: ""
+    clickhouse-ro-password: ""
+    otel-bearer-token: ""
   # Example additional custom secret value:
   #   my-custom-secret: "some-value"
   # kasmSecrets.annotations -- Custom annotations to add to the Kasm Password secret
@@ -423,6 +422,21 @@ database:
   #    image: busybox
   #    command: [/bin/sh, -c, 'echo "Hello world"']
   extraInitContainers: []
+  # database.extraEnv -- A list of raw Kubernetes EnvVar objects (name/value or name/valueFrom) appended to the
+  #  end of the Kasm Database container's env list (and the db-backup/db-init/db-upgrade Job containers, which
+  #  share this same field). Values are rendered through `tpl`, so chart values/functions (e.g. {{ .Release.Name }})
+  #  are available. Kubernetes uses the last-declared entry for a given name, and extraEnv is always appended last,
+  #  so a name here that collides with a chart-set var overrides it.
+  # Example:
+  #   extraEnv:
+  #     - name: MY_CUSTOM_VAR
+  #       value: "hello"
+  #     - name: MY_SECRET_VAR
+  #       valueFrom:
+  #         secretKeyRef:
+  #           name: my-secret
+  #           key: my-key
+  extraEnv: []
 
 # Configure the Kasm Database management functions
 #
@@ -575,6 +589,21 @@ components:
     #    image: busybox
     #    command: [/bin/sh, -c, 'echo "Hello world"']
     extraInitContainers: []
+    # components.proxy.extraEnv -- A list of raw Kubernetes EnvVar objects (name/value or name/valueFrom)
+    #  appended to the end of the Kasm Proxy container's env list. Values are rendered through `tpl`, so
+    #  chart values/functions (e.g. {{ .Release.Name }}) are available. Kubernetes uses the last-declared
+    #  entry for a given name, and extraEnv is always appended last, so a name here that collides with a
+    #  chart-set var overrides it.
+    # Example:
+    #   extraEnv:
+    #     - name: MY_CUSTOM_VAR
+    #       value: "hello"
+    #     - name: MY_SECRET_VAR
+    #       valueFrom:
+    #         secretKeyRef:
+    #           name: my-secret
+    #           key: my-key
+    extraEnv: []
 
   # Configuration settings for the Kasm API service
   #
@@ -589,17 +618,11 @@ components:
       tag: ""
     # components.api.replicas -- Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset (default).
     replicas: 0
-    # components.api.healthCheckTiming -- Override the pod's default healthcheck timing values for startup, liveness, and/or
-    #  readiness probes. Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10
-    #  will override only the timeoutSeconds value of the livenessProbe. Migrations run before this pod's main container ever
-    #  starts (a separate initContainer blocks until the DB is at head), so the startupProbe only needs to cover the api
-    #  process's own boot (a bounded DB connectivity retry plus imports/settings load); its failureThreshold * periodSeconds
-    #  is a safety margin, not a migration budget.
+    # components.api.healthCheckTiming -- Override the pod's default healthcheck timing values for liveness and/or readiness probes.
+    #  Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only
+    #  the timeoutSeconds value of the livenessProbe.
     #  Example:
     #    healthCheckTiming:
-    #      startupProbe:
-    #        periodSeconds: 10
-    #        failureThreshold: 60
     #      livenessProbe:
     #        timeoutSeconds: 10
     #        initialDelaySeconds: 20
@@ -609,11 +632,7 @@ components:
     #        periodSeconds: 60
     #        successThreshold: 3
     healthCheckTiming:
-      startupProbe:
-        periodSeconds: 10
-        failureThreshold: 18
-      livenessProbe:
-        periodSeconds: 10
+      livenessProbe: {}
       readinessProbe: {}
     # components.api.annotations -- Custom annotations to add to the Kasm api Deployment
     annotations: {}
@@ -651,85 +670,46 @@ components:
     #    image: busybox
     #    command: [/bin/sh, -c, 'echo "Hello world"']
     extraInitContainers: []
+    # components.api.extraEnv -- A list of raw Kubernetes EnvVar objects (name/value or name/valueFrom)
+    #  appended to the end of the Kasm API container's env list. Values are rendered through `tpl`, so
+    #  chart values/functions (e.g. {{ .Release.Name }}) are available. Kubernetes uses the last-declared
+    #  entry for a given name, and extraEnv is always appended last, so a name here that collides with a
+    #  chart-set var overrides it.
+    # Example:
+    #   extraEnv:
+    #     - name: MY_CUSTOM_VAR
+    #       value: "hello"
+    #     - name: MY_SECRET_VAR
+    #       valueFrom:
+    #         secretKeyRef:
+    #           name: my-secret
+    #           key: my-key
+    extraEnv: []
     # components.api.threadPool -- Number of CherryPy worker threads for the API server.
     #  Increase under high concurrency. Default is 20.
     threadPool: 20
     # components.api.threadPoolLogInterval -- Seconds between background logs of CherryPy thread-pool usage
     #  (Threads/Active/Idle/Queue). Set to 0 to disable. Default is 0.
     threadPoolLogInterval: 0
-
-  # Configuration settings for the Kasm Manager service
-  #
-  manager:
-    # components.manager.image -- Configure the image repository where the image is stored. Use this to point to an private hosted
-    # container registry instead of our public DockerHub hosted one.
-    #
-    image:
-      registry: docker.io
-      repository: kasmweb/manager
-      # components.manager.image.tag -- Tag for this component's image. Leave empty to fall back to the chart-wide `useImageTags`.
-      tag: ""
-    # components.manager.replicas -- Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset (default).
-    replicas: 0
-    # components.manager.healthCheckTiming -- Override the pod's default healthcheck timing values for liveness and/or readiness probes.
-    #  Values provided individually override their respective timing value, e.g. livenessProbe.timeoutSeconds: 10 will override only
-    #  the timeoutSeconds value of the livenessProbe.
-    #  Example:
-    #    healthCheckTiming:
-    #      livenessProbe:
-    #        timeoutSeconds: 10
-    #        initialDelaySeconds: 20
-    #        periodSeconds: 60
-    #        failureThreshold: 5
-    #      readinessProbe:
-    #        periodSeconds: 60
-    #        successThreshold: 3
-    healthCheckTiming:
-      livenessProbe: {}
-      readinessProbe: {}
-    # components.manager.annotations -- Custom annotations to add to the Kasm Manager Deployment
-    annotations: {}
-    # components.manager.resources -- Manually configure the Kasm Manager Deployment resources. This overrides the pre-defined `deploymentSize` values.
-    resources: {}
-    # components.manager.labels -- Custom labels to add to the Kasm Manager Deployment
-    labels: {}
-    # components.manager.extraVolumes -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
-    #  like custom SSL certificates, config files, or data volumes to the Kasm Manager container
-    # Example:
-    #   extraVolumes:
-    #     - secret:
-    #         defaultMode: 420
-    #         secretName: kasm-custom-tls
-    #       name: pkichain
-    extraVolumes: []
-    # components.manager.extraVolumeMounts -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
-    #  like custom SSL certificates, config files, or data volumes Kasm Manager container
-    # Example: 
-    #   extraVolumeMounts:
-    #     - mountPath: /etc/ssl/certs/ca-certificates.crt
-    #       name: pkichain
-    #       readOnly: true
-    #       subPath: ca.crt
-    extraVolumeMounts: []
-    # components.manager.extraContainers -- Additional sidecar containers to run in the pod
-    # Example
-    #  - name: sidecar-example
-    #    image: busybox
-    #    command: [/bin/sh, -c, 'echo "Hello world"']
-    extraContainers: []
-    # components.manager.extraInitContainers -- Additional sidecar containers to run in the pod
-    # Example
-    #  - name: init-example
-    #    image: busybox
-    #    command: [/bin/sh, -c, 'echo "Hello world"']
-    extraInitContainers: []
-    # components.manager.updateTimer -- Configures the delay (in seconds) between checking for updates, when automatic updates are enabled.
-    #  Default value is 86400, which equals 24 hours.
-    updateTimer: 86400
-    # components.manager.supportBundleTimer -- Configures the batching interval (in seconds) for generating support bundles. 
-    #  This value determines how often the system checks for support bundle completion and expiration.
-    #  Default value is 60s.
-    supportBundleTimer: 60
+    # components.api.queues -- KASM_WORKER_QUEUES value used when workerPool is empty (every API replica also
+    #  consumes BullMQ queues itself): a comma-separated queue list, or "all". Default "all".
+    queues: all
+    # components.api.queueConcurrency -- (int or object) Optional KASM_WORKER_QUEUE_CONCURRENCY: how many jobs of each queue
+    #  an API replica runs at once. An integer applies to every queue (e.g. 3); an object sets named queues
+    #  (e.g. {heartbeat: 10}) and leaves the rest at the image default of 5. Used when workerPool is empty;
+    #  ignored (each pool has its own) once workerPool is non-empty. Null (default) keeps the image default.
+    queueConcurrency: null
+    # components.api.workerPool -- One Deployment is rendered per pool per zone, named
+    #  <release>-api-<pool-name>[-<zone>], when this list is non-empty. In that case the api Deployment
+    #  itself stops consuming queues (KASM_PROCESS=FALSE, publish-only) and these dedicated worker
+    #  deployments consume them instead (KASM_PROCESS=TRUE). Leave empty (default) for every API replica
+    #  to consume queues itself instead (KASM_PROCESS=TRUE, no separate workload). Each entry:
+    #    name             -- (required) pool name; normalized (like a zone name) into the Deployment name.
+    #    queues           -- KASM_WORKER_QUEUES value: a comma-separated queue list, or "all". Default "all".
+    #    replicas         -- Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset (default).
+    #    queueConcurrency -- Optional KASM_WORKER_QUEUE_CONCURRENCY: an integer for every queue, or an object per queue.
+    #    resources        -- Optional per-pool resources override (wins over components.api.resources).
+    workerPool: []
 
   # Configuration settings for the consolidated Kasm Connection Proxy service. This StatefulSet fronts
   # the Kasm Guac, RDP Gateway, and RDP HTTPS Gateway service containers behind a single nginx container.
@@ -925,6 +905,331 @@ components:
     #    image: busybox
     #    command: [/bin/sh, -c, 'echo "Hello world"']
     extraInitContainers: []
+    # components.connectionProxy.extraEnv -- A list of raw Kubernetes EnvVar objects (name/value or name/valueFrom)
+    #  appended to the end of the Kasm Guac, RDP Gateway, and RDP HTTPS Gateway containers' env lists (not the
+    #  nginx container, which has no env of its own). Values are rendered through `tpl`, so chart values/functions
+    #  (e.g. {{ .Release.Name }}) are available. Kubernetes uses the last-declared entry for a given name, and
+    #  extraEnv is always appended last, so a name here that collides with a chart-set var overrides it.
+    # Example:
+    #   extraEnv:
+    #     - name: MY_CUSTOM_VAR
+    #       value: "hello"
+    #     - name: MY_SECRET_VAR
+    #       valueFrom:
+    #         secretKeyRef:
+    #           name: my-secret
+    #           key: my-key
+    extraEnv: []
+
+  # Configuration settings for the OpenTelemetry gateway Collector. This is the only OTel Collector
+  # tier in the chart: every Kasm service, every Collector sidecar, and any out-of-cluster senders
+  # export straight to it. It makes the trace-sampling decision and is the only writer to
+  # ClickHouse. Behaviour is configured under `observability.collector.gateway`.
+  #
+  otelGateway:
+    # components.otelGateway.image -- Configure the image repository where the image is stored. Use this to point to an private hosted
+    # container registry instead of our public DockerHub hosted one.
+    #
+    image:
+      registry: docker.io
+      repository: otel/opentelemetry-collector-contrib
+      # components.otelGateway.image.tag -- Tag for this component's image. Pinned by the chart rather than
+      # falling back to the chart-wide `useImageTags`, because the Collector is versioned independently of Kasm.
+      tag: "0.156.0"
+    # components.otelGateway.replicas -- Override the replica count set by deploymentSize. Set to 0 to use the
+    # deploymentSize preset (default, which is 1 at every size).
+    #
+    # Pinned to 1: every sender exports straight to the gateway, and nothing in front of it
+    # partitions traces by ID, so a second replica would make tail_sampling decide on partial
+    # traces and silently drop spans. The chart fails at render time if this is set above 1.
+    replicas: 0
+    # components.otelGateway.annotations -- Custom annotations to add to the gateway Collector Deployment
+    annotations: {}
+    # components.otelGateway.resources -- Manually configure the gateway Collector Deployment resources. This overrides the pre-defined `deploymentSize` values.
+    # The memory_limiter and num_traces settings baked into the gateway config are sized from the
+    # deploymentSize preset, not from this value, so a manual memory limit set below the preset can
+    # let the container OOM before memory_limiter has a chance to shed load.
+    resources: {}
+    # components.otelGateway.labels -- Custom labels to add to the gateway Collector Deployment
+    labels: {}
+    # components.otelGateway.extraVolumes -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
+    #  like custom SSL certificates, config files, or data volumes to the gateway Collector container
+    extraVolumes: []
+    # components.otelGateway.extraVolumeMounts -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
+    #  like custom SSL certificates, config files, or data volumes to the gateway Collector container
+    extraVolumeMounts: []
+    # components.otelGateway.extraContainers -- Additional sidecar containers to run in the pod
+    extraContainers: []
+    # components.otelGateway.extraInitContainers -- Additional init containers to run in the pod
+    extraInitContainers: []
+    # components.otelGateway.extraEnv -- A list of raw Kubernetes EnvVar objects (name/value or name/valueFrom)
+    #  appended to the end of the gateway Collector container's env list. Values are rendered through `tpl`, so
+    #  chart values/functions (e.g. {{ .Release.Name }}) are available. Kubernetes uses the last-declared entry
+    #  for a given name, and extraEnv is always appended last, so a name here that collides with a chart-set var
+    #  overrides it.
+    extraEnv: []
+
+  # Configuration settings for the OpenTelemetry Collector sidecar. A sidecar runs in every pod that
+  # produces telemetry only readable from inside the pod: the Kasm Proxy and Connection Proxy (nginx
+  # log files and connection metrics) and the Kasm DB (PostgreSQL log files). In pods that have one,
+  # the other containers export OTLP to it over loopback and the sidecar is the pod's single egress
+  # point to the gateway. This is not a workload of its own, so it has no replicas.
+  #
+  otelSidecar:
+    # components.otelSidecar.image -- Configure the image repository where the image is stored. Use this to point to an private hosted
+    # container registry instead of our public DockerHub hosted one.
+    #
+    image:
+      registry: docker.io
+      repository: otel/opentelemetry-collector-contrib
+      # components.otelSidecar.image.tag -- Tag for this component's image. Pinned by the chart rather than
+      # falling back to the chart-wide `useImageTags`, because the Collector is versioned independently of Kasm.
+      tag: "0.156.0"
+    # components.otelSidecar.resources -- Manually configure the Collector sidecar resources. This overrides the pre-defined
+    # `deploymentSize` values. Applied to every sidecar; note that a large deployment runs one per Proxy replica, one per
+    # Connection Proxy replica, and one in the DB pod.
+    resources: {}
+
+  # Configuration settings for ClickHouse, the telemetry store that backs Kasm reporting. Behaviour,
+  # including the database identity and retention windows, is configured under
+  # `observability.clickhouse`.
+  #
+  clickhouse:
+    # components.clickhouse.image -- Configure the image repository where the image is stored. Use this to point to an private hosted
+    # container registry instead of our public DockerHub hosted one.
+    #
+    image:
+      registry: docker.io
+      repository: clickhouse/clickhouse-server
+      # components.clickhouse.image.tag -- Tag for this component's image. Pinned by the chart rather than
+      # falling back to the chart-wide `useImageTags`, because ClickHouse is versioned independently of Kasm.
+      tag: "24.12-alpine"
+    # components.clickhouse.annotations -- Custom annotations to add to the ClickHouse StatefulSet
+    annotations: {}
+    # components.clickhouse.resources -- Manually configure the ClickHouse StatefulSet resources. This overrides the pre-defined `deploymentSize` values.
+    resources: {}
+    # components.clickhouse.labels -- Custom labels to add to the ClickHouse StatefulSet
+    labels: {}
+    # components.clickhouse.healthCheckTiming -- Override the pod's default healthcheck timing values for
+    # liveness and/or readiness probes. Values provided individually override their respective timing value.
+    healthCheckTiming:
+      livenessProbe: {}
+      readinessProbe: {}
+    # Configure the storage for the ClickHouse StatefulSet.
+    #
+    storage:
+      # components.clickhouse.storage.storageClassName -- Set the storage class to attach to ClickHouse for
+      # storage. Leaving this blank will use the cluster-default storage class.
+      #
+      storageClassName: ""
+      # components.clickhouse.storage.pvcSize -- Size of the PVC backing ClickHouse, in GiB. Telemetry volume
+      # scales with session count and retention; see the observability documentation for sizing guidance.
+      #
+      pvcSize: 20
+      # components.clickhouse.storage.retentionPolicy -- Configure how the ClickHouse volume should be retained
+      # or deleted throughout the StatefulSet's lifecycle. Defaults to Retain so telemetry history survives an
+      # uninstall.
+      #
+      retentionPolicy:
+        whenDeleted: Retain
+        whenScaled: Retain
+    # components.clickhouse.extraVolumes -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
+    #  like custom SSL certificates, config files, or data volumes to the ClickHouse container
+    extraVolumes: []
+    # components.clickhouse.extraVolumeMounts -- A list of objects for additional secrets, configmaps, or volume mounts. Useful for adding things
+    #  like custom SSL certificates, config files, or data volumes to the ClickHouse container
+    extraVolumeMounts: []
+    # components.clickhouse.extraContainers -- Additional sidecar containers to run in the pod
+    extraContainers: []
+    # components.clickhouse.extraInitContainers -- Additional init containers to run in the pod
+    extraInitContainers: []
+    # components.clickhouse.extraEnv -- A list of raw Kubernetes EnvVar objects (name/value or name/valueFrom)
+    #  appended to the end of the ClickHouse container's env list. Values are rendered through `tpl`, so chart
+    #  values/functions (e.g. {{ .Release.Name }}) are available. Kubernetes uses the last-declared entry for a
+    #  given name, and extraEnv is always appended last, so a name here that collides with a chart-set var
+    #  overrides it.
+    extraEnv: []
+
+# Configure the Kasm observability stack (OpenTelemetry Collector + ClickHouse). Kasm services emit
+# logs, traces, and metrics over OTLP to a Collector, which stores them in ClickHouse where they back
+# the reporting UI. See [Observability](./docs/observability.md) for architecture and sizing guidance.
+#
+observability:
+  # observability.enabled -- Master switch for the whole observability stack. Set to false to deploy
+  # no Collector and no ClickHouse, disable the OpenTelemetry SDKs in every Kasm service, and serve a
+  # disabled browser-telemetry stub. Reporting features that read telemetry will return empty results.
+  #
+  enabled: true
+
+  # Configure the behaviour of the OpenTelemetry Collector tiers. Deployment settings for each tier
+  # (image, replicas, resources) live under `components.otelGateway` and `components.otelSidecar`.
+  #
+  # Telemetry flows through two hops. A Collector *sidecar* runs in every pod that produces telemetry
+  # only readable from inside the pod (the Kasm Proxy and Connection Proxy nginx logs, and the Kasm DB
+  # PostgreSQL logs) and is that pod's single egress point. Every sidecar, and every Kasm service that
+  # exports directly, sends straight to the single cluster-wide *gateway*, which makes the
+  # trace-sampling decision and is the only writer to ClickHouse.
+  #
+  collector:
+    # observability.collector.gateway -- Configure the single cluster-wide gateway Collector, which makes
+    # the trace-sampling decision and is the only writer to ClickHouse.
+    #
+    gateway:
+      # observability.collector.gateway.existingConfigMap -- Name of a user-created ConfigMap holding a
+      # complete configuration for the gateway Collector, under the key `config.yaml`. Set this to take
+      # full ownership of the gateway config: the chart renders none of its own, and the sibling values that
+      # only shape that config (`tailSamplePercentage` and `forward`, plus `clickhouse.retention`) are
+      # ignored.
+      #
+      existingConfigMap: ""
+      # observability.collector.gateway.tailSamplePercentage -- Percentage (0-100) of traces to keep after the
+      # always-keep rules. Traces containing an error, and traces slower than one second, are always kept
+      # regardless of this value. Applied at the gateway, which is the only tier that sees a whole trace.
+      #
+      tailSamplePercentage: 10
+      # observability.collector.gateway.forward -- Forward a copy of all telemetry to an external OTLP/HTTP
+      # endpoint in addition to storing it in ClickHouse. Useful for shipping to a vendor or a central
+      # Collector. Applied at the gateway, so a forwarded copy reflects the sampling decision.
+      #
+      forward:
+        # observability.collector.gateway.forward.endpoint -- OTLP/HTTP endpoint to forward to (e.g.
+        # `https://otlp-gateway.example.com/otlp`). Leave empty to disable forwarding.
+        endpoint: ""
+        # observability.collector.gateway.forward.token -- Bearer token for the forwarding endpoint. Prefer
+        # `existingSecret` over putting a credential in values.
+        token: ""
+        # observability.collector.gateway.forward.existingSecret -- Read the forwarding bearer token from an
+        # existing Secret instead of `token`. Both `name` and `key` are required when used.
+        existingSecret:
+          name: ""
+          key: ""
+
+    # observability.collector.upstream -- Redirect the Kasm app services that export straight to the local
+    # gateway (currently API and the API worker pools; see kasm.otelEnv) to an external OTLP/HTTP collector
+    # instead -- e.g. a router in front of several Kasm releases. Collector sidecars (Proxy nginx,
+    # Connection Proxy, DB Postgres) are unaffected: they always export to this release's own gateway
+    # (kasm.otelSidecar hardcodes that endpoint) and are not rerouted by this setting. Leave empty to keep
+    # today's default (local gateway for everyone).
+    #
+    upstream:
+      # observability.collector.upstream.endpoint -- OTLP/HTTP endpoint the API/API-worker exporters should
+      # send to instead of the local gateway (e.g. `http://otel-router.otel-router.svc.cluster.local:4318`).
+      # Leave empty to keep exporting to the local gateway.
+      endpoint: ""
+      # observability.collector.upstream.token -- Bearer token for the upstream endpoint. Prefer
+      # `existingSecret` over putting a credential in values.
+      token: ""
+      # observability.collector.upstream.existingSecret -- Read the upstream bearer token from an existing
+      # Secret instead of `token`. Both `name` and `key` are required when used.
+      existingSecret:
+        name: ""
+        key: ""
+
+  # Configure ClickHouse, the telemetry store that backs Kasm reporting.
+  #
+  clickhouse:
+    # observability.clickhouse.enabled -- Deploy a ClickHouse StatefulSet to store telemetry. To use a
+    # ClickHouse you already run, leave this true and set `standalone` instead. Setting this to false is
+    # only valid when the gateway has somewhere else to send telemetry: set
+    # `observability.collector.gateway.forward.endpoint` to an external OTLP/HTTP backend, or the render
+    # fails rather than deploying a Collector that would discard every signal. Kasm reporting features
+    # read from ClickHouse, so they return empty results whenever no ClickHouse is configured.
+    #
+    enabled: true
+    # observability.clickhouse.standalone -- Setting standalone to true will prevent the deployment of the
+    # ClickHouse StatefulSet and requires you to have a ClickHouse server already set up and awaiting
+    # connections. Use the endpoint values below to connect to your external instance.
+    #
+    standalone: false
+    # observability.clickhouse.nativeEndpoint -- DSN for ClickHouse's native interface, used by the
+    # Collector to write telemetry (e.g. `tcp://clickhouse.example.com:9440?secure=true&skip_verify=true`).
+    # A bare `host:port` is wrapped with the chart's defaults. Only used when `standalone` is true, and
+    # required together with `httpEndpoint`.
+    #
+    nativeEndpoint: ""
+    # observability.clickhouse.httpEndpoint -- URL for ClickHouse's HTTP interface, used by Kasm to read
+    # reports and logs (e.g. `https://clickhouse.example.com:8443`). Only used when `standalone` is true,
+    # and required together with `nativeEndpoint`.
+    #
+    httpEndpoint: ""
+    # observability.clickhouse.database -- Name of the ClickHouse database holding Kasm telemetry.
+    #
+    # Changing this on an existing deployment requires starting from an empty ClickHouse volume.
+    # The audit-log retention tier depends on a column created by the initial schema, which only runs
+    # when the data directory is empty; pointing an existing volume at a new database name silently
+    # drops audit logs to the shorter `retention.logsDays` window. See
+    # [Observability](./docs/observability.md) for the procedure and a way to check an existing
+    # deployment.
+    #
+    database: kasm_otel
+    # observability.clickhouse.username -- ClickHouse user Kasm connects as. Also the writer credential
+    # used by the gateway Collector and the retention Job.
+    #
+    username: kasm_otel
+    # observability.clickhouse.readUsername -- ClickHouse user api uses to read reports, holding
+    # only GRANT SELECT ON <db>.* instead of `username`'s full access. When the chart manages
+    # ClickHouse (`enabled: true`, `standalone: false`), leaving this empty still gets you a
+    # read-only user: it defaults to `kasm_otel_ro`. For a `standalone` external ClickHouse, leaving
+    # this empty instead keeps api on `username` (no read-only user is rendered) unless you
+    # set this to a read-only user you have provisioned there yourself.
+    #
+    readUsername: ""
+    # observability.clickhouse.existingSecret -- Read the ClickHouse password(s) from an existing Secret
+    # instead of the chart-generated `clickhouse-password`/`clickhouse-ro-password` keys. `name` and `key`
+    # (for `username`) are required together when used; `readKey` (for `readUsername`) is optional and
+    # falls back to `key` when unset, matching `readUsername`'s own fallback to `username`.
+    #
+    existingSecret:
+      name: ""
+      key: ""
+      readKey: ""
+    # observability.clickhouse.tls -- Enable TLS on the bundled ClickHouse's 8443 (HTTPS) and 9440 (native)
+    # ports using the same certificate as the rest of Kasm, mirroring how the bundled Kasm DB is configured.
+    # Requires `certificate.secretName` or cert-manager. Has no effect when `standalone` is true.
+    #
+    tls: true
+    # observability.clickhouse.caCert -- PEM-encoded CA certificate trusted when connecting to a
+    # *standalone* ClickHouse over TLS (e.g. `httpEndpoint: https://...` behind a private or self-signed
+    # CA). Ignored for the bundled ClickHouse, which already uses the shared Kasm certificate.
+    # `clickhouse_connect` (the Python client Kasm's api uses) requires an explicit CA file — it does
+    # not consult `SSL_CERT_FILE`/`REQUESTS_CA_BUNDLE` or this chart's `trustedCaBundle` mechanism — so
+    # setting this renders a dedicated ConfigMap and mounts it into the api container. Leave empty
+    # to use the system trust store, or set `tlsVerify: false` to skip verification instead. Mutually
+    # exclusive with `caCertConfigMap`.
+    #
+    caCert: ""
+    # observability.clickhouse.caCertConfigMap -- Name of an existing ConfigMap containing the CA
+    # certificate for a standalone ClickHouse, under the key `ca.crt`. Use this instead of `caCert` if you
+    # already manage the certificate as a ConfigMap. Ignored for the bundled ClickHouse.
+    #
+    caCertConfigMap: ""
+    # observability.clickhouse.tlsVerify -- Whether the api container verifies a standalone
+    # ClickHouse's TLS certificate at all. Set to false to skip verification (not recommended). Ignored
+    # when `caCert` or `caCertConfigMap` is set (an explicit CA always wins), and for the bundled
+    # ClickHouse, whose certificate is always verified.
+    #
+    tlsVerify: true
+    # observability.clickhouse.retention -- How long each class of telemetry is kept before ClickHouse deletes it.
+    # Applied to the schema at install time and re-applied by a post-upgrade Job when these values change.
+    #
+    retention:
+      # observability.clickhouse.retention.logsDays -- Retention in days for general application logs.
+      logsDays: 30
+      # observability.clickhouse.retention.auditLogsDays -- Retention in days for security-relevant audit logs
+      # (login and logout events). Usually longer than general logs to satisfy audit requirements.
+      auditLogsDays: 365
+      # observability.clickhouse.retention.tracesDays -- Retention in days for distributed traces.
+      tracesDays: 7
+      # observability.clickhouse.retention.metricsDays -- Retention in days for metrics.
+      metricsDays: 90
+
+  # observability.browser -- Collect real-user telemetry from the Kasm web UI in the user's browser.
+  #
+  browser:
+    # observability.browser.enabled -- Serve the browser telemetry runtime configuration so the Kasm web UI
+    # reports page loads and user interactions. When false (the default), a stub is served that disables
+    # the browser SDK without producing console errors.
+    enabled: false
 
 ####################################
 # Extra Kubernetes config settings #
@@ -1005,6 +1310,8 @@ extraAnnotations:
   cronJob: {}
   # extraAnnotations.cronPod -- Additional annotations to apply to the pod template inside CronJobs created by this chart
   cronPod: {}
+  # extraAnnotations.daemonSet -- Additional daemonSet annotations to apply to resources created by this chart
+  daemonSet: {}
   # extraAnnotations.deployment -- Additional deployment annotations to apply to resources created by this chart
   deployment: {}
   # extraAnnotations.job -- Additional job annotations to apply to resources created by this chart
@@ -1027,6 +1334,8 @@ extraAnnotations:
 extraLabels:
   # extraLabels.configMap -- Additional configMap labels to apply to resources created by this chart
   configMap: {}
+  # extraLabels.daemonSet -- Additional daemonSet labels to apply to resources created by this chart
+  daemonSet: {}
   # extraLabels.deployment -- Additional deployment labels to apply to resources created by this chart
   deployment: {}
   # extraLabels.pod -- Additional pod labels to apply to resources created by this chart
@@ -1089,6 +1398,27 @@ extraContainers: []
 #    image: busybox
 #    command: [/bin/sh, -c, 'echo "Hello world"']
 extraInitContainers: []
+
+# extraEnv -- A list of raw Kubernetes EnvVar objects (name/value or name/valueFrom) appended to the end of
+#  every main container's env list across every component (api, proxy, connectionProxy's guac/rdp-gateway/
+#  rdp-https-gateway, db, clickhouse, otel gateway, and the db backup/init/upgrade Jobs). Values are rendered
+#  through `tpl`, so chart values/functions (e.g. {{ .Release.Name }}) are available; a literal `{{` in a
+#  value must be escaped, e.g. `{{ "{{" }}` or a backtick-quoted string, or the render fails. Merges with the
+#  matching components.<name>.extraEnv (or database.extraEnv), keyed by name; the component-scoped entry wins
+#  on a name collision. Kubernetes uses the last-declared entry for a given name, and extraEnv is always
+#  appended last, so a name here that collides with a chart-set var overrides it. Output order is
+#  deterministic: global entries keep their values-order position unless overridden by a component entry of
+#  the same name, in which case that entry is emitted at its component-list position instead.
+# Example:
+#   extraEnv:
+#     - name: MY_CUSTOM_VAR
+#       value: "hello"
+#     - name: MY_SECRET_VAR
+#       valueFrom:
+#         secretKeyRef:
+#           name: my-secret
+#           key: my-key
+extraEnv: []
 
 # extraObjects -- Deploy additional Kubernetes manifests.
 # This field is expected to be either a multi-line string, a list of strings, or a list of objects.

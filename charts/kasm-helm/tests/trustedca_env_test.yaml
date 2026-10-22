@@ -2,11 +2,10 @@ suite: Trusted CA Python env vars (SSL_CERT_FILE / REQUESTS_CA_BUNDLE)
 # The KASM-8567 fix injects SSL_CERT_FILE + REQUESTS_CA_BUNDLE (via the
 # kasm.trustedCaEnv helper) so Python (urllib/requests/certifi) honors the
 # system trust store the trusted-ca-init container builds. These guard that the
-# env lands on every Python workload that gets it — api, manager, and the db
-# jobs — not just api (the dbSslEnv removal churned this helper area).
+# env lands on every Python workload that gets it — api and the db jobs — not
+# just api (the dbSslEnv removal churned this helper area).
 templates:
   - templates/api-deployment.yaml
-  - templates/manager-deployment.yaml
   - templates/db-init-job.yaml
   - templates/db-upgrade-job.yaml
   - templates/db-upgrade-backup-job.yaml
@@ -41,36 +40,6 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: SSL_CERT_FILE
-            value: /etc/ssl/certs/ca-certificates.crt
-
-  - it: manager sets SSL_CERT_FILE and REQUESTS_CA_BUNDLE when trustedCaBundle enabled
-    template: templates/manager-deployment.yaml
-    set:
-      trustedCaBundle:
-        enabled: true
-        configMapName: kasm-trusted-ca-test
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: SSL_CERT_FILE
-            value: /etc/ssl/certs/ca-certificates.crt
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: REQUESTS_CA_BUNDLE
-            value: /etc/ssl/certs/ca-certificates.crt
-
-  - it: manager omits the trusted CA env when disabled
-    template: templates/manager-deployment.yaml
-    set:
-      trustedCaBundle:
-        enabled: false
-    asserts:
-      - notContains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: REQUESTS_CA_BUNDLE
             value: /etc/ssl/certs/ca-certificates.crt
 
   - it: db-init job sets the trusted CA env when enabled

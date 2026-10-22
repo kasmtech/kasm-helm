@@ -87,25 +87,6 @@ def helm(command_args: list[str], *, check: bool = True) -> CommandResult:
     return run_command(["helm"] + command_args, timeout_seconds=900, check=check)
 
 
-def api_image_override_args() -> list[str]:
-    """--set args overriding the api component's image, if KASM_API_IMAGE is set.
-
-    Mirrors the split kind-load-images uses (Makefile's `${KASM_API_IMAGE%:*}`
-    / `${KASM_API_IMAGE##*:}`) so the same image reference resolves to the
-    same repository/tag for both the images kind pulls and the chart install.
-    """
-    image = os.environ.get("KASM_API_IMAGE")
-    if not image:
-        return []
-    repository, _, tag = image.rpartition(":")
-    if not repository:
-        repository, tag = tag, ""
-    args = ["--set", f"components.api.image.repository={repository}"]
-    if tag:
-        args += ["--set", f"components.api.image.tag={tag}"]
-    return args
-
-
 def get_api_image() -> str:
     image = os.environ.get("KASM_API_IMAGE")
     if image:
@@ -115,14 +96,27 @@ def get_api_image() -> str:
     try:
         with open(values_path) as f:
             v = yaml.safe_load(f)
-        api = v["components"]["api"]
+        api_image = dict(v["components"]["api"]["image"])
+        # Mirror what helm_install layers onto every scenario install: the
+        # E2E_IMAGE_VALUES overlay (tests/values/pubsub-images.yaml by default,
+        # D021) replaces components.api.image wholesale. Without this, the
+        # dns-check helper pod below resolves to the released :develop tag,
+        # which was never preloaded into kind once every scenario switched to
+        # the branch-build overlay -- ErrImageNeverPull.
+        image_values = os.environ.get("E2E_IMAGE_VALUES", "").strip()
+        if image_values and os.path.isfile(image_values):
+            with open(image_values) as f:
+                overlay = yaml.safe_load(f) or {}
+            overlay_api_image = overlay.get("components", {}).get("api", {}).get("image")
+            if overlay_api_image:
+                api_image.update(overlay_api_image)
         # Mirror the chart's helper precedence: per-component image.tag wins
         # if set; otherwise fall back to the chart-wide useImageTags. If both
         # are empty fall through to the env-var/default fallback below.
-        tag = api["image"].get("tag") or v.get("useImageTags") or ""
+        tag = api_image.get("tag") or v.get("useImageTags") or ""
         if not tag:
             raise ValueError("api.image.tag and useImageTags are both empty")
-        return f"{api['image']['repository']}:{tag}"
+        return f"{api_image['repository']}:{tag}"
     except Exception:
         tag = os.environ.get("KASM_TAG", "develop")
         return f"kasmweb/api:{tag}"
@@ -497,10 +491,57 @@ def wait_for_pod_ready_by_selector(
     return get_first_pod_by_selector(namespace, label_selector)
 
 
+def _describe_namespace_blockers(namespace: str) -> str:
+    """Best-effort summary of what is keeping a namespace Terminating.
+
+    Lists remaining namespaced resources and any finalizers on the namespace
+    object itself or on those resources (e.g. a PVC held by
+    kubernetes.io/pvc-protection).
+    """
+    lines: list[str] = []
+    ns_result = kubectl(["get", "namespace", namespace, "-o", "json"], namespace=None, check=False)
+    if ns_result.returncode == 0:
+        ns = json.loads(ns_result.stdout)
+        ns_finalizers = ns.get("spec", {}).get("finalizers", [])
+        if ns_finalizers:
+            lines.append(f"namespace finalizers: {ns_finalizers}")
+        conditions = ns.get("status", {}).get("conditions", [])
+        for cond in conditions:
+            lines.append(f"condition {cond.get('type')}: {cond.get('reason')} {cond.get('message')}")
+
+    api_resources = kubectl(
+        ["api-resources", "--verbs=list", "--namespaced", "-o", "name"], namespace=None, check=False
+    )
+    resource_types = [r for r in api_resources.stdout.splitlines() if r.strip()] if api_resources.returncode == 0 else []
+    for resource_type in resource_types:
+        result = kubectl(["get", resource_type, "-o", "json"], namespace=namespace, check=False)
+        if result.returncode != 0:
+            continue
+        try:
+            items = json.loads(result.stdout).get("items", [])
+        except json.JSONDecodeError:
+            continue
+        for item in items:
+            name = item.get("metadata", {}).get("name", "<unknown>")
+            finalizers = item.get("metadata", {}).get("finalizers", [])
+            lines.append(f"{resource_type}/{name} finalizers={finalizers}")
+
+    return "\n".join(lines) if lines else "no remaining resources found (namespace object itself may be stuck)"
+
+
 def reset_namespace(namespace: str) -> None:
     kubectl(["delete", "namespace", namespace, "--ignore-not-found"], namespace=None)
-    kubectl(["wait", "--for=delete", f"namespace/{namespace}", "--timeout=300s"], namespace=None, check=False)
-    kubectl(["create", "namespace", namespace], namespace=None, check=False)
+    wait_result = kubectl(
+        ["wait", "--for=delete", f"namespace/{namespace}", "--timeout=300s"], namespace=None, check=False
+    )
+    still_present = kubectl(["get", "namespace", namespace], namespace=None, check=False)
+    if wait_result.returncode != 0 or still_present.returncode == 0:
+        blockers = _describe_namespace_blockers(namespace)
+        raise AssertionError(
+            f"namespace {namespace} did not finish deleting within 300s; refusing to "
+            f"install into a Terminating namespace. Blocking resources/finalizers:\n{blockers}"
+        )
+    kubectl(["create", "namespace", namespace], namespace=None)
 
 
 def apply_restricted_pod_security(namespace: str) -> None:
@@ -659,7 +700,7 @@ def install_and_wait_with_retry(
                 values_file=values_file,
                 set_args=set_args,
             )
-            wait_for_job_succeeded(namespace, job_name=f"{e2e_config.release_name}-db-init", timeout_seconds=360)
+            wait_for_job_succeeded(namespace, job_name=f"{e2e_config.release_name}-db-init", timeout_seconds=600)
             wait_for_rollouts_complete(namespace, timeout_seconds=1200)
             wait_for_pods_ready(namespace, timeout_seconds=1200, progress=True)
             return
@@ -1058,6 +1099,9 @@ def exec_in_pod(
     return kubectl(cmd + exec_args, namespace=namespace)
 
 
+CURL_DEBUG_IMAGE = os.environ.get("E2E_CURL_IMAGE", "curlimages/curl:8.10.1")
+
+
 def curl_from_pod(
     namespace: str,
     pod_name: str,
@@ -1085,7 +1129,20 @@ def curl_from_pod(
     curl_args.append(url)
 
     try:
-        result = exec_in_pod(namespace, pod_name, curl_args)
+        # The app images ship no curl; run it from an ephemeral container sharing the pod netns.
+        result = kubectl(
+            [
+                "debug",
+                pod_name,
+                "--profile=restricted",
+                f"--image={CURL_DEBUG_IMAGE}",
+                "--attach",
+                "--quiet",
+                "--",
+            ]
+            + curl_args,
+            namespace=namespace,
+        )
     except CommandError as exc:
         stderr = exc.result.stderr.strip()
         stdout = exc.result.stdout.strip()

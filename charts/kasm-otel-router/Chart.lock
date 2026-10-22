@@ -1,0 +1,6 @@
+dependencies:
+- name: kasm-common
+  repository: file://../kasm-common
+  version: 0.1.0
+digest: sha256:1eef2ffc97cce06faaa834ac83bcb2838ed0d364e0d5ff94718027fe51736f32
+generated: "2026-09-16T15:06:41.719372197-04:00"
