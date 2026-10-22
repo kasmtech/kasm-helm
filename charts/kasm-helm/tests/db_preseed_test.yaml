@@ -925,6 +925,53 @@ tests:
           path: stringData["custom_properties.yaml"]
           pattern: "allow_kasm_ssh_agent_passthrough: false"
 
+  - it: renders cast_configs into the cast_links table
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.cast_configs:
+        - casting_config_name: "My Cast"
+          key: "cast-key-001"
+          image_id: "image-uuid-001"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: '(?m)^cast_links: *\n- cast_link_id: "\$\{uuid:cast_link_id:1\}"$'
+      - documentIndex: 1
+        notMatchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "cast_configs:|cast_config_id:"
+
+  - it: keeps a cast_configs entry's legacy cast_config_id as its cast_link_id
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.cast_configs:
+        - cast_config_id: "cast-uuid-001"
+          casting_config_name: "My Cast"
+          key: "cast-key-001"
+          image_id: "image-uuid-001"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: '(?m)^- cast_link_id: "cast-uuid-001"$'
+
   - it: renders staging_configs passthrough settings
     set:
       publicAddr: kasm.example.com
