@@ -1,0 +1,66 @@
+suite: nginx API upstream keepalive pool
+
+templates:
+  - templates/nginx-shared-configmap.yaml
+  - templates/proxy-configmaps.yaml
+  - templates/connection-proxy-configmaps.yaml
+
+tests:
+  - it: API upstream holds idle pooled connections for less time than the API's own keep-alive
+    template: templates/proxy-configmaps.yaml
+    documentIndex: 0
+    asserts:
+      - matchRegex:
+          path: data["upstream_api.conf"]
+          pattern: 'keepalive 16;\n\s+keepalive_timeout 30s;'
+
+  - it: shared orchestrator.conf maps Connection to upgrade only when the client asked for one
+    template: templates/nginx-shared-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["orchestrator.conf"]
+          pattern: "map \\$http_upgrade \\$connection_upgrade \\{\\n\\s+default upgrade;\\n\\s+''\\s+\"\";"
+
+  # An unconditional Connection "upgrade" tells the API to close after every response, which
+  # defeats the pool; the map sends an empty Connection for ordinary requests instead.
+  - it: every API location sends Connection via the map, never a hardcoded upgrade
+    template: templates/proxy-configmaps.yaml
+    documentIndex: 1
+    asserts:
+      - matchRegex:
+          path: data["admin_api.conf"]
+          pattern: 'Connection \$connection_upgrade;'
+      - matchRegex:
+          path: data["client_api.conf"]
+          pattern: 'Connection \$connection_upgrade;'
+      - matchRegex:
+          path: data["internal_agents.conf"]
+          pattern: 'Connection \$connection_upgrade;'
+      - matchRegex:
+          path: data["subscription_api.conf"]
+          pattern: 'Connection \$connection_upgrade;'
+      - notMatchRegex:
+          path: data["admin_api.conf"]
+          pattern: 'Connection "upgrade"'
+      - notMatchRegex:
+          path: data["client_api.conf"]
+          pattern: 'Connection "upgrade"'
+      - notMatchRegex:
+          path: data["internal_agents.conf"]
+          pattern: 'Connection "upgrade"'
+      - notMatchRegex:
+          path: data["subscription_api.conf"]
+          pattern: 'Connection "upgrade"'
+
+  - it: connection-proxy websocket locations keep the hardcoded upgrade
+    template: templates/connection-proxy-configmaps.yaml
+    documentIndex: 1
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - matchRegex:
+          path: data["connection_proxy.conf"]
+          pattern: 'Connection "upgrade";'
+      - notMatchRegex:
+          path: data["connection_proxy.conf"]
+          pattern: 'connection_upgrade'

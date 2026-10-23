@@ -2,6 +2,7 @@
 Initialize the DB
 */}}
 {{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $merged := fromYaml (include "kasm.mergedValues" (dict "root" . "componentName" "database")) -}}
 {{- if .Values.dbManagement.backupCron.enabled }}
 apiVersion: batch/v1
 kind: CronJob
@@ -58,6 +59,9 @@ spec:
                       name: {{ $constants.secrets.name }}
                       key: "db-password"
                     {{- end }}
+                {{- with $merged.extraEnv }}
+                  {{- toYaml . | nindent 16 }}
+                {{- end }}
               {{- include "kasm.securityContext" (list . 1000 "container") | nindent 14 }}
               resources:
                 {{- include "resources.preset" (dict "node" "api" "size" "small") | nindent 16 }}

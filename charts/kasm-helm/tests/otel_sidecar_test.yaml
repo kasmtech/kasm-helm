@@ -1,0 +1,395 @@
+suite: otel-sidecar — Collector sidecars in the nginx and DB pods
+
+templates:
+  - templates/proxy-deployment.yaml
+  - templates/api-deployment.yaml
+  - templates/connection-proxy-statefulset.yaml
+  - templates/db-statefulset.yaml
+  - templates/otel-nginx-sidecar-configmap.yaml
+  - templates/otel-db-sidecar-configmap.yaml
+
+tests:
+  # ---------- where sidecars go, and where they deliberately do not ----------
+  # A sidecar exists only where telemetry can be read solely from inside the pod: nginx log files
+  # and PostgreSQL log files. API exports OTLP itself and gets none.
+  - it: proxy pod gets a sidecar by default
+    template: templates/proxy-deployment.yaml
+    documentIndex: 0
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 2
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: otel-sidecar
+
+  - it: connection-proxy pod gets exactly one sidecar for all its containers
+    template: templates/connection-proxy-statefulset.yaml
+    documentIndex: 0
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 5
+      - equal:
+          path: spec.template.spec.containers[4].name
+          value: otel-sidecar
+
+  - it: db pod gets a sidecar
+    template: templates/db-statefulset.yaml
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 2
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: otel-sidecar
+
+  - it: api gets no sidecar, because it exports OTLP directly
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 1
+        template: templates/api-deployment.yaml
+
+  # ---------- uid: the DB sidecar cannot use the collector image's user ----------
+  # PostgreSQL writes its log files 0600 owned by uid 70, so a sidecar running as 10001 would
+  # silently read nothing.
+  - it: nginx sidecars run as 10001 and the DB sidecar runs as 70
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].securityContext.runAsUser
+          value: 10001
+        template: templates/proxy-deployment.yaml
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[1].securityContext.runAsUser
+          value: 70
+        template: templates/db-statefulset.yaml
+
+  - it: sidecars keep the chart's container hardening
+    template: templates/proxy-deployment.yaml
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.containers[1].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[1].securityContext.allowPrivilegeEscalation
+          value: false
+
+  # ---------- egress ----------
+  - it: sidecars export straight to the gateway, authenticated
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].env[?(@.name=="OTEL_EXPORTER_OTLP_ENDPOINT")].value
+          value: RELEASE-NAME-otel-gateway:4317
+        template: templates/proxy-deployment.yaml
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[1].env[?(@.name=="OTEL_BEARER_TOKEN")].valueFrom.secretKeyRef.key
+          value: otel-bearer-token
+        template: templates/proxy-deployment.yaml
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[1].env[?(@.name=="OTEL_EXPORTER_OTLP_ENDPOINT")].value
+          value: RELEASE-NAME-otel-gateway:4317
+        template: templates/db-statefulset.yaml
+      - equal:
+          path: spec.template.spec.containers[1].env[?(@.name=="OTEL_BEARER_TOKEN")].valueFrom.secretKeyRef.key
+          value: otel-bearer-token
+        template: templates/db-statefulset.yaml
+
+  # ---------- sidecar config: loopback only ----------
+  # These receivers must never be reachable from outside the pod. They are bound to 127.0.0.1 and
+  # are deliberately absent from containerPorts and from every Service.
+  - it: nginx sidecar OTLP receivers bind loopback only
+    template: templates/otel-nginx-sidecar-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'endpoint: "127.0.0.1:4316"'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'endpoint: "127.0.0.1:4318"'
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: '0\.0\.0\.0:431'
+
+  - it: nginx sidecar's exporter is otlp/gRPC to the gateway with bearer auth
+    template: templates/otel-nginx-sidecar-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'otlp:\s+endpoint: "\$\{env:OTEL_EXPORTER_OTLP_ENDPOINT\}"\s+headers:\s+Authorization: "Bearer \$\{env:OTEL_BEARER_TOKEN\}"'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "exporters: \\[otlp\\]"
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "otlphttp"
+
+  - it: sidecar listeners are not published as containerPorts
+    template: templates/proxy-deployment.yaml
+    documentIndex: 0
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[1].ports
+
+  - it: nginx sidecar receives both logs over loopback syslog and scrapes stub_status
+    template: templates/otel-nginx-sidecar-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'syslog/nginx_access:\s+protocol: rfc3164\s+udp:\s+listen_address: "127\.0\.0\.1:5140"'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'syslog/nginx_error:\s+protocol: rfc3164\s+udp:\s+listen_address: "127\.0\.0\.1:5141"'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "http://localhost:8090/stub_status"
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "filelog/nginx"
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "file_storage/checkpoints"
+
+  # ---------- per-consumer service name ----------
+  # Proxy and Connection Proxy share the nginx sidecar's collector config, but each gets its own
+  # rendered ConfigMap so their logs land in ClickHouse under distinct service names rather than
+  # both as kasm-proxy.
+  - it: proxy nginx sidecar config carries service.name kasm-proxy
+    template: templates/otel-nginx-sidecar-configmap.yaml
+    documentIndex: 0
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'field: resource\["service\.name"\]\s+value: kasm-proxy'
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: 'attributes\["application"\]'
+      # Attribute keys are stored flat (bracket notation); a dotted `to:` would nest them and
+      # ClickHouse would never populate LogAttributes['url.path'].
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'to:\s+attributes\["url\.path"\]'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'to:\s+attributes\["http\.request\.method"\]'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'to:\s+attributes\["http\.response\.status_code"\]'
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: 'to:\s+attributes\.(url|http)\.'
+      # Query strings are dropped at ingest and the request line rebuilt without them.
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'type: remove\n\s+field: attributes\.query_string'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'request_line_path'
+      # The request-line regex_parser is send_quiet, so on a non-matching request the temp
+      # fields never exist; each remove must be guarded or stanza logs an error per record.
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'type: remove\n\s+if: ''attributes\["request_line_method"\] != nil''\n\s+field: attributes\.request_line_method'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'type: remove\n\s+if: ''attributes\["request_line_path"\] != nil''\n\s+field: attributes\.request_line_path'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'type: remove\n\s+if: ''attributes\["request_line_protocol"\] != nil''\n\s+field: attributes\.request_line_protocol'
+      # The websocket close row is tagged as the client-detached lifecycle record.
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'value: kasm\.session\.client_detached'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'field: attributes\["kasm\.kasm\.transition_ms"\]'
+
+  - it: connection-proxy nginx sidecar config carries service.name kasm-connection-proxy
+    template: templates/otel-nginx-sidecar-configmap.yaml
+    documentIndex: 1
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'field: resource\["service\.name"\]\s+value: kasm-connection-proxy'
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: 'attributes\["application"\]'
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: 'value: kasm-proxy'
+
+  # The DB's log files outlive the pod, so its offsets go on the PVC rather than an emptyDir.
+  - it: db sidecar tails the JSON log and checkpoints onto the data volume
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "/var/log/postgres/postgresql.json"
+        template: templates/otel-db-sidecar-configmap.yaml
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "directory: /var/lib/otelcol/checkpoints"
+        template: templates/otel-db-sidecar-configmap.yaml
+      - exists:
+          path: spec.template.spec.containers[1].volumeMounts[?(@.mountPath=="/var/lib/otelcol/checkpoints")]
+        template: templates/db-statefulset.yaml
+
+  # ---------- kasm.zone / k8s.pod.name / host.name / service.namespace / deployment.environment ----------
+  # These identity attributes are stamped by a resource processor in the sidecar's own Collector
+  # config (kasm.common.otelResourceProcessor), not by OTEL_RESOURCE_ATTRIBUTES: that SDK env var
+  # is inert on a Collector container (see DECISIONS.md D4) and has been removed from the sidecar.
+  # The sidecar container only carries the processor's inputs: POD_NAME (fieldRef) and, for
+  # zone-scoped sidecars, OTEL_KASM_ZONE.
+  - it: proxy sidecar carries OTEL_KASM_ZONE in a multi-zone install, no dead OTEL_RESOURCE_ATTRIBUTES
+    template: templates/proxy-deployment.yaml
+    values:
+      - ../../../tests/values/multizone-config.yaml
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].env[?(@.name=="POD_NAME")].valueFrom.fieldRef.fieldPath
+          value: metadata.name
+      - equal:
+          path: spec.template.spec.containers[1].env[?(@.name=="OTEL_KASM_ZONE")].value
+          value: zonea
+      - notExists:
+          path: spec.template.spec.containers[1].env[?(@.name=="OTEL_RESOURCE_ATTRIBUTES")]
+
+  - it: connection-proxy sidecar carries OTEL_KASM_ZONE in a multi-zone install, no dead OTEL_RESOURCE_ATTRIBUTES
+    template: templates/connection-proxy-statefulset.yaml
+    values:
+      - ../../../tests/values/multizone-config.yaml
+      - ../../../tests/values/components-all.yaml
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[4].env[?(@.name=="POD_NAME")].valueFrom.fieldRef.fieldPath
+          value: metadata.name
+      - equal:
+          path: spec.template.spec.containers[4].env[?(@.name=="OTEL_KASM_ZONE")].value
+          value: zonea
+      - notExists:
+          path: spec.template.spec.containers[4].env[?(@.name=="OTEL_RESOURCE_ATTRIBUTES")]
+
+  - it: db sidecar carries no OTEL_KASM_ZONE (DB has no zone dimension) and no dead OTEL_RESOURCE_ATTRIBUTES
+    template: templates/db-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].env[?(@.name=="POD_NAME")].valueFrom.fieldRef.fieldPath
+          value: metadata.name
+      - notExists:
+          path: spec.template.spec.containers[1].env[?(@.name=="OTEL_KASM_ZONE")]
+      - notExists:
+          path: spec.template.spec.containers[1].env[?(@.name=="OTEL_RESOURCE_ATTRIBUTES")]
+
+  # ---------- resource processor: what actually reaches emitted data ----------
+  # Unlike the env-string assertions above, these bind to the mechanism the Collector actually
+  # applies to pipeline data (refuter-03 proved the env var does not).
+  - it: nginx sidecar config stamps identity attributes via a resource processor, wired into every pipeline
+    template: templates/otel-nginx-sidecar-configmap.yaml
+    documentIndex: 0
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'key: k8s\.pod\.name\n\s+value: "\$\{env:POD_NAME:-unknown\}"'
+      # host.name is what the Admin UI's Server filter reads; the pod name matches what the
+      # SDKs in the app containers report as their hostname.
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'key: host\.name\n\s+value: "\$\{env:POD_NAME:-unknown\}"'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'key: kasm\.zone\n\s+value: "\$\{env:OTEL_KASM_ZONE:-unknown\}"'
+      # Assert per pipeline, not as a bare substring: a single `processors: [...]` match is
+      # satisfied by any one pipeline, so a `resource` dropped from traces or metrics alone
+      # would still pass while those signals ship unattributable to a pod or zone.
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'logs:\n\s+receivers: \[syslog/nginx_access, syslog/nginx_error, otlp/local\]\n\s+processors: \[memory_limiter, resource, batch\]'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'traces:\n\s+receivers: \[otlp/nginx, otlp/local\]\n\s+processors: \[memory_limiter, resource, batch\]'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'metrics:\n\s+receivers: \[nginx/metrics, otlp/local\]\n\s+processors: \[memory_limiter, resource, batch\]'
+
+  - it: db sidecar config stamps k8s.pod.name via a resource processor, with no kasm.zone attribute
+    template: templates/otel-db-sidecar-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'key: k8s\.pod\.name\n\s+value: "\$\{env:POD_NAME:-unknown\}"'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'key: host\.name\n\s+value: "\$\{env:POD_NAME:-unknown\}"'
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: "kasm\\.zone"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "processors: \\[memory_limiter, resource, batch\\]"
+
+  - it: sidecar resources honour components.otelSidecar.resources
+    template: templates/proxy-deployment.yaml
+    documentIndex: 0
+    set:
+      components.otelSidecar.resources:
+        limits:
+          cpu: 500m
+          memory: 256Mi
+        requests:
+          cpu: 100m
+          memory: 128Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].resources.limits.memory
+          value: 256Mi
+
+  - it: proxy pod has no nginx log emptyDir, because logs go out over loopback syslog
+    template: templates/proxy-deployment.yaml
+    documentIndex: 0
+    asserts:
+      - notExists:
+          path: spec.template.spec.volumes[?(@.name=="kasm-proxy-otel-logs")]
+      - notExists:
+          path: spec.template.spec.containers[0].volumeMounts[?(@.mountPath=="/var/log/nginx/otel")]
+
+  - it: connection-proxy pod has no nginx log emptyDir, because logs go out over loopback syslog
+    template: templates/connection-proxy-statefulset.yaml
+    documentIndex: 0
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.volumes[?(@.name=="kasm-connection-proxy-otel-logs")]
+      - notExists:
+          path: spec.template.spec.containers[0].volumeMounts[?(@.mountPath=="/var/log/nginx/otel")]
+
+  # ---------- disabled ----------
+  - it: observability.enabled=false removes every sidecar and its config
+    values:
+      - ../../../tests/values/observability-disabled.yaml
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 1
+        template: templates/proxy-deployment.yaml
+        documentIndex: 0
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 1
+        template: templates/db-statefulset.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/otel-nginx-sidecar-configmap.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/otel-db-sidecar-configmap.yaml

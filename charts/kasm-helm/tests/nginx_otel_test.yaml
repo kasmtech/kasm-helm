@@ -1,0 +1,182 @@
+suite: nginx OTel tracing — otel.conf, stub_status, span attrs, log destinations
+
+templates:
+  - templates/nginx-shared-configmap.yaml
+  - templates/proxy-configmaps.yaml
+
+tests:
+  # ---------- load_module is the first line, present even when disabled is asserted in
+  # nginx_load_module_test.yaml; here we only assert it via the proxy-settings ConfigMap's
+  # otel.conf presence/absence, since load_module itself lives in nginx-shared-configmap.yaml. ----------
+
+  # ---------- otel.conf ----------
+  - it: otel.conf present in the proxy-settings ConfigMap when observability.enabled=true
+    template: templates/proxy-configmaps.yaml
+    documentIndex: 0
+    asserts:
+      - matchRegex:
+          path: data["otel.conf"]
+          pattern: "otel_exporter \\{"
+      - matchRegex:
+          path: data["otel.conf"]
+          pattern: "endpoint 127\\.0\\.0\\.1:4316;"
+      - matchRegex:
+          path: data["otel.conf"]
+          pattern: "otel_service_name  kasm-proxy;"
+
+  - it: otel.conf absent from the proxy-settings ConfigMap when observability.enabled=false
+    template: templates/proxy-configmaps.yaml
+    documentIndex: 0
+    set:
+      observability.enabled: false
+    asserts:
+      - notExists:
+          path: data["otel.conf"]
+
+  # ---------- stub_status.conf ----------
+  - it: stub_status server block present, loopback-only, when observability.enabled=true
+    template: templates/proxy-configmaps.yaml
+    documentIndex: 0
+    asserts:
+      - matchRegex:
+          path: data["stub_status.conf"]
+          pattern: "listen 127\\.0\\.0\\.1:8090;"
+      - matchRegex:
+          path: data["stub_status.conf"]
+          pattern: "stub_status;"
+      - matchRegex:
+          path: data["stub_status.conf"]
+          pattern: "allow 127\\.0\\.0\\.1;"
+      - matchRegex:
+          path: data["stub_status.conf"]
+          pattern: "deny  all;"
+
+  - it: stub_status.conf absent when observability.enabled=false
+    template: templates/proxy-configmaps.yaml
+    documentIndex: 0
+    set:
+      observability.enabled: false
+    asserts:
+      - notExists:
+          path: data["stub_status.conf"]
+
+  # ---------- span attrs on the API locations ----------
+  - it: admin_api/client_api/internal_agents locations get otel_span_name and otel_span_attr when enabled
+    template: templates/proxy-configmaps.yaml
+    documentIndex: 1
+    asserts:
+      - matchRegex:
+          path: data["admin_api.conf"]
+          pattern: 'otel_span_name "\$request_method /api/admin/";'
+      - matchRegex:
+          path: data["client_api.conf"]
+          pattern: 'otel_span_name "\$request_method /api/";'
+      - matchRegex:
+          path: data["internal_agents.conf"]
+          pattern: 'otel_span_name "\$request_method /api/internal/agent-vm/";'
+      - matchRegex:
+          path: data["internal_agents.conf"]
+          pattern: 'otel_span_name "\$request_method /api/internal/agent-k8s/";'
+
+  - it: admin_api/client_api/internal_agents locations have no span directives when disabled
+    template: templates/proxy-configmaps.yaml
+    documentIndex: 1
+    set:
+      observability.enabled: false
+    asserts:
+      - notMatchRegex:
+          path: data["admin_api.conf"]
+          pattern: "otel_span_name"
+      - notMatchRegex:
+          path: data["client_api.conf"]
+          pattern: "otel_span_name"
+      - notMatchRegex:
+          path: data["internal_agents.conf"]
+          pattern: "otel_span_name"
+
+  # ---------- otel_trace off on health/checkvalid/internal locations ----------
+  - it: otel_trace off present on health.conf and closest.conf when enabled
+    template: templates/proxy-configmaps.yaml
+    documentIndex: 1
+    asserts:
+      - matchRegex:
+          path: data["health.conf"]
+          pattern: "otel_trace off;"
+      - matchRegex:
+          path: data["closest.conf"]
+          pattern: "otel_trace off;"
+
+  - it: /desktop/ internal location gets otel_trace off and kasm span attrs when enabled
+    template: templates/proxy-configmaps.yaml
+    documentIndex: 1
+    asserts:
+      - matchRegex:
+          path: data["upstream_proxy.conf"]
+          pattern: "otel_trace  off;"
+      - matchRegex:
+          path: data["upstream_proxy.conf"]
+          pattern: 'otel_span_attr          kasm\.kasm_id            "\$connect_kasm_id";'
+      - matchRegex:
+          path: data["upstream_proxy.conf"]
+          pattern: 'otel_span_attr          kasm\.kasm_user_name     "\$cookie_username";'
+
+  # ---------- stdout access_log format ----------
+  # The stdout access_log is json_combined whenever observability.enabled is true (the
+  # default) — the sidecar collector parses it as JSON — and main otherwise. See
+  # nginx_stdout_log_format_test.yaml for the dedicated suite covering both nginx blocks.
+  - it: stdout access_log is json_combined when telemetry is on
+    template: templates/nginx-shared-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["logging.conf"]
+          pattern: "access_log /dev/stdout json_combined;"
+      - notMatchRegex:
+          path: data["logging.conf"]
+          pattern: "access_log /dev/stdout main;"
+
+  - it: stdout access_log stays human-readable when telemetry is off
+    template: templates/nginx-shared-configmap.yaml
+    values:
+      - ../../../tests/values/observability-disabled.yaml
+    asserts:
+      - matchRegex:
+          path: data["logging.conf"]
+          pattern: "access_log /dev/stdout main;"
+
+  - it: error_log goes to stderr for the console
+    template: templates/nginx-shared-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["logging.conf"]
+          pattern: "error_log  /dev/stderr warn;"
+
+  - it: JSON access log and error log go to the sidecar over loopback syslog when telemetry is on
+    template: templates/nginx-shared-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["logging.conf"]
+          pattern: "access_log syslog:server=127\\.0\\.0\\.1:5140,tag=nginx json_combined;"
+      - matchRegex:
+          path: data["logging.conf"]
+          pattern: "error_log  syslog:server=127\\.0\\.0\\.1:5141 warn;"
+
+  - it: no syslog destinations when telemetry is off
+    template: templates/nginx-shared-configmap.yaml
+    values:
+      - ../../../tests/values/observability-disabled.yaml
+    asserts:
+      - notMatchRegex:
+          path: data["logging.conf"]
+          pattern: "syslog:server="
+
+  - it: zero otel_ directives (not counting load_module's filename) when observability.enabled=false
+    template: templates/nginx-shared-configmap.yaml
+    set:
+      observability.enabled: false
+    asserts:
+      - notMatchRegex:
+          path: data["nginx.conf"]
+          pattern: "otel_(trace|exporter|span_name|span_attr|service_name|trace_context)"
+      - notMatchRegex:
+          path: data["logging.conf"]
+          pattern: "otel_(trace|exporter|span_name|span_attr|service_name|trace_context)"

@@ -1,0 +1,5 @@
+observability:
+  clickhouse:
+    standalone: true
+    nativeEndpoint: "tcp://ch.example.test:9440?secure=true&skip_verify=true"
+    httpEndpoint: "https://ch.example.test:8443"

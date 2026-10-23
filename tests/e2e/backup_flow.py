@@ -40,7 +40,7 @@ def run_backup_upgrade_and_cron_flow(
     manual_job_name = f"{release_name}-db-backup-manual"
     backup_mount_path = "/backups"
 
-    # Lower per-component resource requests so all pods (api, manager, proxy,
+    # Lower per-component resource requests so all pods (api, proxy,
     # bundled db, db-init job, manual db-backup job) fit on the single-node
     # kind cluster in gitlab runner. The connection-proxy StatefulSet (guac /
     # rdpGateway / rdpHttpsGateway) is disabled below so it doesn't render and
@@ -64,7 +64,6 @@ def run_backup_upgrade_and_cron_flow(
         },
         "components": {
             "api": {"resources": low_resources},
-            "manager": {"resources": low_resources},
             "proxy": {"resources": low_resources_proxy},
             "connectionProxy": {
                 "guac": {

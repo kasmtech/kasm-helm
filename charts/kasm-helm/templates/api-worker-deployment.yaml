@@ -1,0 +1,156 @@
+{{/*
+Kasm API Worker Deployment definitions (components.api.workerPool non-empty only).
+
+One Deployment per pool per zone. Each worker pod clones the api-deployment pod structure
+(same init containers, security context, POSTGRES_ and SERVER_ env, image) but always sets
+KASM_PROCESS=TRUE and adds the KASM_WORKER_* queue-consumption env vars. There is no Service:
+workers only consume BullMQ queues, they are never addressed directly.
+
+Resource names are shortened to <release>-api-<pool>[-<zone>] (D002); the selector/pod labels
+still carry the "apiWorker" component (kebab: api-worker) so they stay distinct from the api
+Deployment's own pods.
+*/}}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $merged := fromYaml (include "kasm.mergedValues" (dict "root" . "componentName" "api")) -}}
+{{- $pools := (include "kasm.apiWorkerPools" .Values | fromYamlArray) -}}
+{{- range $pool := $pools }}
+{{- range $idx, $zone := (include "kasm.zones" $ | fromYamlArray) }}
+{{- $poolZone := printf "%s-%s" $pool.slug $zone.name }}
+{{- $workerName := include "kasm.name" (list $ "api" "" $poolZone) }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  {{- include "kasm.metadata" (dict "context" $ "component" "apiWorker" "resource" "deployment" "zone" $poolZone "include" "all" "name" $workerName) | indent 2 }}
+spec:
+  replicas: {{ $pool.replicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: {{ add1 $pool.replicas }}
+  selector:
+    matchLabels:
+      {{- include "kasm.metadata" (dict "context" $ "component" "apiWorker" "resource" "deployment" "zone" $poolZone "include" "match") | indent 6 }}
+  template:
+    metadata:
+      {{- include "kasm.metadata" (dict "context" $ "component" "apiWorker" "resource" "pod" "zone" $poolZone "include" "la") | indent 6 }}
+    spec:
+      restartPolicy: {{ $.Values.restartPolicy }}
+      terminationGracePeriodSeconds: 80
+      {{- if $.Values.imagePullSecrets.enabled }}
+      imagePullSecrets:
+        - name: {{ $.Values.imagePullSecrets.name | default (printf "%s-image-pull-secret" $.Release.Name) }}
+      {{- end }}
+      {{- include "kasm.securityContext" (list $ 1000 "pod") | nindent 6 }}
+      {{- with $.Values.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $.Values.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        {{- include "kasm.trustedCaInit" (list $ "apiWorker") | nindent 8 }}
+        {{- include "kasm.dbIsReady" (dict "context" $ "function" "ready") | nindent 8 }}
+        {{- with $merged.extraInitContainers }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      containers:
+        - name: {{ include "kasm.name" (list $ "apiWorker" "container" $poolZone) }}
+          image: {{ $constants.api.image }}
+          imagePullPolicy: {{ $.Values.imagePullPolicy }}
+          env:
+            - name: PYTHONWARNINGS
+              value: "ignore:datetime.datetime.utcnow:DeprecationWarning"
+            - name: POSTGRES_HOST
+              value: {{ $constants.db.svc | quote }}
+            - name: POSTGRES_PORT
+              value: {{ $constants.db.port | quote }}
+            - name: POSTGRES_DB
+              value: {{ $.Values.database.kasmDbName }}
+            - name: POSTGRES_USER
+              value: {{ $.Values.database.kasmDbUser }}
+            - name: POSTGRES_POOL_SIZE
+              value: "10"
+            - name: POSTGRES_MAX_OVERFLOW
+              value: "20"
+            - name: KASM_DB_SSL
+              value: "true"
+            {{- include "kasm.trustedCaEnv" $ | indent 12 }}
+            - name: "SERVER_ZONE_NAME"
+              value: {{ $zone.name | quote }}
+            - name: "KASM_EPHEMERAL"
+              value: "true"
+            - name: "SERVER_ID"
+              value: "auto"
+            - name: SERVER_HOSTNAME
+              value: {{ include "kasm.name" (list $ "apiWorker" "" $poolZone) | quote }}
+            - name: SERVER_INTERNAL_SCHEMA
+              value: "https"
+            - name: KASM_PROCESS
+              value: "TRUE"
+            - name: KASM_WORKER_QUEUES
+              value: {{ $pool.queues | quote }}
+            {{- if $pool.queueConcurrency }}
+            - name: KASM_WORKER_QUEUE_CONCURRENCY
+              value: {{ include "kasm.queueConcurrency" $pool.queueConcurrency | quote }}
+            {{- end }}
+            - name: KASM_WORKER_SHUTDOWN_TIMEOUT
+              value: "60"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                {{- if $.Values.database.kasmDbSecret -}}
+                {{ $.Values.database.kasmDbSecret | toYaml | nindent 18 }}
+                {{- else }}
+                  name: {{ $constants.secrets.name }}
+                  key: "db-password"
+                {{- end }}
+            {{- include "kasm.otelEnv" (dict "context" $ "serviceName" "kasm-api-worker" "zone" $zone.name "python" true) | nindent 12 }}
+            {{- include "kasm.clickhouseEnv" (dict "context" $) | nindent 12 }}
+            {{- with $merged.extraEnv }}
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - name: {{ $constants.api.portName }}
+              containerPort: {{ $constants.api.port }}
+              protocol: TCP
+            - name: {{ $constants.api.livenessPortName }}
+              containerPort: {{ $constants.api.livenessPort }}
+              protocol: TCP
+          volumeMounts:
+            - name: tmp-data
+              mountPath: /tmp
+            {{- with $merged.containerMounts }}
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- include "kasm.trustedCaVolumeMounts" $ | nindent 12 }}
+            {{- include "kasm.clickhouseCaVolumeMount" $ | nindent 12 }}
+          {{- if $.Values.applyHealthChecks }}
+          livenessProbe:
+            {{- include "health.probe" (dict "root" $ "component" "api" "probeType" "livenessProbe" "type" "http" "path" "/livez" "portName" $constants.api.livenessPortName) | nindent 12 }}
+          readinessProbe:
+            {{- include "health.probe" (dict "root" $ "component" "api" "probeType" "readinessProbe" "type" "http" "path" "/api/__healthcheck" "portName" $constants.api.portName) | nindent 12 }}
+          {{- end }}
+          {{- if $pool.resources }}
+          resources: {{- toYaml $pool.resources | nindent 12 }}
+          {{- else if $.Values.components.api.resources }}
+          resources: {{- toYaml $.Values.components.api.resources | nindent 12 }}
+          {{- else }}
+          resources: {{- include "resources.preset" (dict "node" $constants.api.component "size" $.Values.deploymentSize) | nindent 12 }}
+          {{- end }}
+          {{- include "kasm.securityContext" (list $ 1000 "container") | nindent 10 }}
+        {{- with $merged.extraContainers }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      volumes:
+        - name: tmp-data
+          emptyDir:
+            sizeLimit: 256Mi
+      {{- with $merged.volumes }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- include "kasm.trustedCaVolumes" $ | nindent 8 }}
+      {{- include "kasm.clickhouseCaVolume" $ | nindent 8 }}
+{{- end }}
+{{- end }}

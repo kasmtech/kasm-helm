@@ -91,6 +91,135 @@ tests:
           path: stringData["custom_properties.yaml"]
           pattern: "zone_name: my-zone"
 
+  - it: does not render primary_manager_id (removed from the Zone model with the Manager component; the API rejects it during preseed import)
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: my-zone
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+    asserts:
+      - documentIndex: 1
+        notMatchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "primary_manager_id"
+
+  - it: does not render aggressive_scaling or hooks on autoscale_configs (removed from the AutoScaleConfig model; the API rejects them during preseed import)
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: my-zone
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.server_pools:
+        - name: my-pool
+          server_pool_type: Docker
+      kasmConfig.config.autoscale:
+        - autoscale_config_name: my-autoscale
+          pool_name: my-pool
+          zone_name: my-zone
+    asserts:
+      - documentIndex: 1
+        notMatchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "aggressive_scaling"
+      - documentIndex: 1
+        notMatchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "\\bhooks:"
+
+  - it: does not render vsphere_datastore or vsphere_datastore_cluster_name (not columns on VsphereVMConfig; the API rejects them during preseed import)
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: my-zone
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.vsphere_vm_configs:
+        - config_name: my-vsphere
+          max_instances: 5
+          vsphere_datacenter_name: dc1
+          vsphere_installed_OS_type: windows
+          vsphere_os_username: admin
+          vsphere_os_password: os-secret
+          vsphere_template_name: template1
+          vsphere_vcenter_address: vcenter.example.com
+          vsphere_vcenter_port: 443
+          vsphere_vcenter_username: vcadmin
+          vsphere_vcenter_password: vcenter-secret
+          vsphere_datastore_name: datastore1
+          vsphere_use_datastore_cluster: true
+          vsphere_memory_bytes: 4294967296
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "vsphere_memory_bytes: 4294967296"
+      - documentIndex: 1
+        notMatchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "vsphere_datastore:"
+      - documentIndex: 1
+        notMatchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "vsphere_datastore_cluster_name"
+      - documentIndex: 1
+        notMatchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "vsphere_memoryMB"
+
+  - it: renders vsphere_datastore_name and vsphere_use_datastore_cluster from vsphere_vm_configs
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: my-zone
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.vsphere_vm_configs:
+        - config_name: my-vsphere
+          max_instances: 5
+          vsphere_datacenter_name: dc1
+          vsphere_installed_OS_type: windows
+          vsphere_os_username: admin
+          vsphere_os_password: os-secret
+          vsphere_template_name: template1
+          vsphere_vcenter_address: vcenter.example.com
+          vsphere_vcenter_port: 443
+          vsphere_vcenter_username: vcadmin
+          vsphere_vcenter_password: vcenter-secret
+          vsphere_datastore_name: datastore1
+          vsphere_use_datastore_cluster: true
+          vsphere_memory_bytes: 4294967296
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "vsphere_memory_bytes: 4294967296"
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "vsphere_datastore_name: \"datastore1\""
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "vsphere_use_datastore_cluster: true"
+
   - it: prefers proxy_hostname when a zone sets both proxyAddress and proxy_hostname
     set:
       publicAddr: kasm.example.com
@@ -239,6 +368,55 @@ tests:
         notMatchRegex:
           path: stringData["custom_properties.yaml"]
           pattern: "uncompressed_size_mb:"
+
+  - it: docker_token and docker_user quote the {iam} sentinel so it renders as a string, not a mapping
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.images:
+        - name: "kasmweb/ubuntu-focal-desktop"
+          docker_registry: "123456789012.dkr.ecr.us-east-1.amazonaws.com"
+          docker_user: "{iam}"
+          docker_token: "{iam:us-east-1}"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'docker_user: "\{iam\}"'
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: 'docker_token: "\{iam:us-east-1\}"'
+
+  - it: docker_token and docker_user still render as YAML null when unset
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.images:
+        - name: "kasmweb/ubuntu-focal-desktop"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "docker_token: null"
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "docker_user: null"
 
   - it: zones include enable_rdp_direct_login
     set:
@@ -685,3 +863,174 @@ tests:
         equal:
           path: metadata.labels["my-label"]
           value: my-value
+
+  - it: renders cast_configs passthrough settings
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.cast_configs:
+        - casting_config_name: "My Cast"
+          key: "cast-key-001"
+          image_id: "image-uuid-001"
+          allow_kasm_smart_card_passthrough: true
+          allow_kasm_webauthn_passthrough: true
+          allow_kasm_ssh_agent_passthrough: true
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "allow_kasm_smart_card_passthrough: true"
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "allow_kasm_webauthn_passthrough: true"
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "allow_kasm_ssh_agent_passthrough: true"
+
+  - it: defaults cast_configs passthrough settings to false
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.cast_configs:
+        - casting_config_name: "My Cast"
+          key: "cast-key-001"
+          image_id: "image-uuid-001"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "allow_kasm_smart_card_passthrough: false"
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "allow_kasm_webauthn_passthrough: false"
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "allow_kasm_ssh_agent_passthrough: false"
+
+  - it: renders cast_configs into the cast_links table
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.cast_configs:
+        - casting_config_name: "My Cast"
+          key: "cast-key-001"
+          image_id: "image-uuid-001"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: '(?m)^cast_links: *\n- cast_link_id: "\$\{uuid:cast_link_id:1\}"$'
+      - documentIndex: 1
+        notMatchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "cast_configs:|cast_config_id:"
+
+  - it: keeps a cast_configs entry's legacy cast_config_id as its cast_link_id
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.cast_configs:
+        - cast_config_id: "cast-uuid-001"
+          casting_config_name: "My Cast"
+          key: "cast-key-001"
+          image_id: "image-uuid-001"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: '(?m)^- cast_link_id: "cast-uuid-001"$'
+
+  - it: renders staging_configs passthrough settings
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.staging_configs:
+        - image_id: "image-uuid-001"
+          zone_id: "zone-uuid-001"
+          num_sessions: 1
+          expiration: 1
+          allow_kasm_smart_card_passthrough: true
+          allow_kasm_webauthn_passthrough: true
+          allow_kasm_ssh_agent_passthrough: true
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "allow_kasm_smart_card_passthrough: true"
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "allow_kasm_webauthn_passthrough: true"
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "allow_kasm_ssh_agent_passthrough: true"
+
+  - it: defaults staging_configs passthrough settings to false
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.staging_configs:
+        - image_id: "image-uuid-001"
+          zone_id: "zone-uuid-001"
+          num_sessions: 1
+          expiration: 1
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "allow_kasm_smart_card_passthrough: false"
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "allow_kasm_webauthn_passthrough: false"
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "allow_kasm_ssh_agent_passthrough: false"

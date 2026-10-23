@@ -1,0 +1,5 @@
+apiVersion: v2
+name: kasm-common
+description: Shared Helm library templates for Kasm charts (naming, metadata, security, health checks, and OTel Collector config fragments). Not deployable on its own.
+type: library
+version: 0.1.0

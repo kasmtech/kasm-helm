@@ -316,13 +316,13 @@ tests:
         documentIndex: 1
 
   # ---------------------------------------------------------------------------
-  # Proxy init containers — always just api-wait + manager-wait, regardless of
-  # region/primary status. Proxy no longer waits for guac/rdp-gateway readiness:
-  # since guac/rdp-gateway now reach the API through the proxy (and gate their
-  # own readiness on it), proxy waiting on them back would deadlock.
+  # Proxy init containers — always just api-wait, regardless of region/primary
+  # status. Proxy no longer waits for guac/rdp-gateway readiness: since
+  # guac/rdp-gateway now reach the API through the proxy (and gate their own
+  # readiness on it), proxy waiting on them back would deadlock.
   # ---------------------------------------------------------------------------
 
-  - it: primary-region proxy has only api-wait and manager-wait init containers
+  - it: primary-region proxy has only an api-wait init container
     template: templates/proxy-deployment.yaml
     set:
       proxyService.type: ClusterIP
@@ -338,7 +338,7 @@ tests:
     asserts:
       - lengthEqual:
           path: spec.template.spec.initContainers
-          count: 2
+          count: 1
         documentIndex: 0
 
   - it: non-primary-region proxy has no guac or rdp-gateway init containers
@@ -357,10 +357,10 @@ tests:
     asserts:
       - lengthEqual:
           path: spec.template.spec.initContainers
-          count: 2
+          count: 1
         documentIndex: 1
 
-  - it: primary-zone proxy has only api-wait and manager-wait init containers when no region_name set
+  - it: primary-zone proxy has only an api-wait init container when no region_name set
     template: templates/proxy-deployment.yaml
     set:
       proxyService.type: ClusterIP
@@ -374,7 +374,7 @@ tests:
     asserts:
       - lengthEqual:
           path: spec.template.spec.initContainers
-          count: 2
+          count: 1
         documentIndex: 0
 
   - it: non-primary-zone proxy has no guac or rdp-gateway init containers when no region_name set
@@ -391,7 +391,7 @@ tests:
     asserts:
       - lengthEqual:
           path: spec.template.spec.initContainers
-          count: 2
+          count: 1
         documentIndex: 1
 
   # ---------------------------------------------------------------------------
@@ -470,6 +470,3 @@ tests:
       - equal:
           path: spec.template.spec.initContainers[0].name
           value: kasm-e2e-15341393551-api-is-ready
-      - equal:
-          path: spec.template.spec.initContainers[1].name
-          value: kasm-e2e-15341393551-manager-is-ready

@@ -1,0 +1,31 @@
+suite: manager component absence (D005 regression guard)
+# components.manager was hard-removed: manager-deployment.yaml/manager-service.yaml are
+# deleted and the schema rejects the values key (see negative_validation_test.yaml). This
+# suite has no `templates:` list, so helm-unittest renders the whole chart and every
+# assertion below scans every document from every template (the "full-render scan"
+# pattern also used in default_image_tags_test.yaml) — it does not depend on any
+# particular filename, so it still catches a manager Deployment/Service re-added under a
+# different template name.
+
+tests:
+  - it: no rendered document anywhere carries the manager component label, default install
+    asserts:
+      - notEqual:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: manager
+
+  - it: no rendered document anywhere carries the manager component label, multizone install
+    values:
+      - ../../../tests/values/multizone-config.yaml
+    asserts:
+      - notEqual:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: manager
+
+  - it: no rendered document anywhere carries the manager component label, all-components install
+    values:
+      - ../../../tests/values/components-all.yaml
+    asserts:
+      - notEqual:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: manager

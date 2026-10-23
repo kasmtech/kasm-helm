@@ -1,0 +1,334 @@
+suite: ClickHouse — bundled StatefulSet/Service/ConfigMap/retention Job
+
+templates:
+  - templates/clickhouse-statefulset.yaml
+  - templates/clickhouse-service.yaml
+  - templates/clickhouse-configmap.yaml
+  - templates/clickhouse-retention-job.yaml
+
+tests:
+  - it: StatefulSet/Service/ConfigMap/Job render by default
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/clickhouse-statefulset.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/clickhouse-service.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/clickhouse-configmap.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/clickhouse-retention-job.yaml
+
+  - it: none of the four render when clickhouse.enabled=false
+    set:
+      observability.clickhouse.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/clickhouse-statefulset.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/clickhouse-service.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/clickhouse-configmap.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/clickhouse-retention-job.yaml
+
+  - it: none of the four render when observability.enabled=false
+    set:
+      observability.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/clickhouse-statefulset.yaml
+
+  - it: none of the four render when standalone=true (external ClickHouse in use)
+    values:
+      - ../../../tests/values/observability-external-ch.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/clickhouse-statefulset.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/clickhouse-service.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/clickhouse-configmap.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/clickhouse-retention-job.yaml
+
+  # ---------- PVC size / storageClass ----------
+  - it: PVC size honours storage.pvcSize
+    template: templates/clickhouse-statefulset.yaml
+    set:
+      components.clickhouse.storage.pvcSize: 100
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
+          value: 100Gi
+
+  - it: PVC storageClass honoured
+    template: templates/clickhouse-statefulset.yaml
+    set:
+      components.clickhouse.storage.storageClassName: fast-ssd
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.storageClassName
+          value: fast-ssd
+
+  - it: PVC has no storageClassName key when unset
+    template: templates/clickhouse-statefulset.yaml
+    asserts:
+      - notExists:
+          path: spec.volumeClaimTemplates[0].spec.storageClassName
+
+  # ---------- retention days substituted into init-schema.sql ----------
+  - it: retention days substituted into init-schema.sql for both TTL arms
+    template: templates/clickhouse-configmap.yaml
+    set:
+      observability.clickhouse.retention.logsDays: 45
+      observability.clickhouse.retention.auditLogsDays: 500
+    asserts:
+      - matchRegex:
+          path: data["init-schema.sql"]
+          pattern: "INTERVAL 45 DAY DELETE WHERE IsAudit = 0"
+      - matchRegex:
+          path: data["init-schema.sql"]
+          pattern: "INTERVAL 500 DAY DELETE WHERE IsAudit = 1"
+
+  # ---------- TLS ports and cert mounts ----------
+  - it: TLS ports and cert mounts present when tls=true (default)
+    template: templates/clickhouse-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            name: ch-https
+            containerPort: 8443
+            protocol: TCP
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            name: ch-native-tls
+            containerPort: 9440
+            protocol: TCP
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: kasm-clickhouse-cert
+            mountPath: /etc/clickhouse-server/certs/tls.crt
+            subPath: tls.crt
+
+  - it: TLS ports and cert mounts absent when tls=false
+    template: templates/clickhouse-statefulset.yaml
+    set:
+      observability.clickhouse.tls: false
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            name: ch-https
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: kasm-clickhouse-cert
+
+  - it: TLS Service ports absent when tls=false
+    template: templates/clickhouse-service.yaml
+    set:
+      observability.clickhouse.tls: false
+    asserts:
+      - lengthEqual:
+          path: spec.ports
+          count: 2
+
+  - it: TLS Service ports present when tls=true
+    template: templates/clickhouse-service.yaml
+    asserts:
+      - lengthEqual:
+          path: spec.ports
+          count: 4
+
+  # ---------- CLICKHOUSE_PASSWORD from secretKeyRef ----------
+  - it: CLICKHOUSE_PASSWORD comes from a secretKeyRef, never a literal
+    template: templates/clickhouse-statefulset.yaml
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="CLICKHOUSE_PASSWORD")].valueFrom.secretKeyRef
+
+  # ---------- no password string in any ConfigMap ----------
+  - it: no password string in the clickhouse ConfigMap; users.xml uses from_env
+    template: templates/clickhouse-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["users.xml"]
+          pattern: 'from_env="KASM_CLICKHOUSE_PASSWORD"'
+      - notMatchRegex:
+          path: data["users.xml"]
+          pattern: '<password>[^<]'
+
+  # ---------- uid 101 ----------
+  - it: pod and container security context run as uid 101
+    template: templates/clickhouse-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 101
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsUser
+          value: 101
+
+  # ---------- probes on /ping ----------
+  - it: liveness and readiness probes target /ping
+    template: templates/clickhouse-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /ping
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /ping
+
+  # ---------- stable PVC name, no chart version in it ----------
+  # NOTE: PROGRESS.md's H3 entry describes this as "<release>-clickhouse-data", but
+  # `kasm.name (list . "clickhouse" "data")` does not actually append the third ("data") argument
+  # to the rendered name — that helper only appends its zone/extra (4th/5th) arguments. The
+  # rendered name is "RELEASE-NAME-clickhouse", stable and version-free either way; asserting
+  # against what actually renders per the "code wins" rule. Flagged in PROGRESS.md.
+  - it: PVC name is stable and does not include the chart AppVersion
+    template: templates/clickhouse-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].metadata.name
+          value: RELEASE-NAME-clickhouse
+
+  # ---------- H0b: non-default database threaded through all sites ----------
+  - it: non-default database used in init-schema.sql CREATE DATABASE and CREATE TABLE
+    template: templates/clickhouse-configmap.yaml
+    set:
+      observability.clickhouse.database: kasm_tenant_a
+    asserts:
+      - matchRegex:
+          path: data["init-schema.sql"]
+          pattern: "CREATE DATABASE IF NOT EXISTS kasm_tenant_a"
+      - matchRegex:
+          path: data["init-schema.sql"]
+          pattern: "CREATE TABLE IF NOT EXISTS kasm_tenant_a\\.otel_logs"
+
+  - it: non-default database used in users.xml GRANT ALL ON (not kasm_otel.*)
+    template: templates/clickhouse-configmap.yaml
+    set:
+      observability.clickhouse.database: kasm_tenant_a
+    asserts:
+      - matchRegex:
+          path: data["users.xml"]
+          pattern: "GRANT ALL ON kasm_tenant_a\\.\\*"
+      - notMatchRegex:
+          path: data["users.xml"]
+          pattern: "GRANT ALL ON kasm_otel\\.\\*"
+
+  - it: non-default database used in the retention Job's ALTER TABLE statements
+    template: templates/clickhouse-retention-job.yaml
+    set:
+      observability.clickhouse.database: kasm_tenant_a
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="CLICKHOUSE_DATABASE" && @.value=="kasm_tenant_a")]
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: '\$\{CLICKHOUSE_DATABASE\}\.otel_logs'
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: '\$\{CLICKHOUSE_DATABASE\}\.otel_traces'
+
+  # ---------- read-only user (bd kasm-helm-hvx) ----------
+  - it: bundled default renders the kasm_otel_ro read-only user when readUsername is unset (D4)
+    template: templates/clickhouse-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["users.xml"]
+          pattern: "<kasm_otel_ro>"
+      - matchRegex:
+          path: data["users.xml"]
+          pattern: "GRANT SELECT ON kasm_otel\\.\\*"
+
+  - it: read-only user rendered with GRANT SELECT (not ALL) when readUsername is set
+    template: templates/clickhouse-configmap.yaml
+    set:
+      observability.clickhouse.readUsername: kasm_otel_ro
+    asserts:
+      - matchRegex:
+          path: data["users.xml"]
+          pattern: "<kasm_otel_ro>"
+      - matchRegex:
+          path: data["users.xml"]
+          pattern: "GRANT SELECT ON kasm_otel\\.\\*"
+      - matchRegex:
+          path: data["users.xml"]
+          pattern: 'from_env="KASM_CLICKHOUSE_READ_PASSWORD"'
+      # mutation check: the writer user's own grant is untouched (still ALL, not narrowed to SELECT)
+      - matchRegex:
+          path: data["users.xml"]
+          pattern: "GRANT ALL ON kasm_otel\\.\\*"
+
+  - it: ClickHouse StatefulSet carries KASM_CLICKHOUSE_READ_PASSWORD when readUsername is set
+    template: templates/clickhouse-statefulset.yaml
+    set:
+      observability.clickhouse.readUsername: kasm_otel_ro
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_READ_PASSWORD")].valueFrom.secretKeyRef
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_READ_PASSWORD")].valueFrom.secretKeyRef.key
+          value: clickhouse-ro-password
+
+  - it: ClickHouse StatefulSet carries KASM_CLICKHOUSE_READ_PASSWORD by default (bundled RO user, D4)
+    template: templates/clickhouse-statefulset.yaml
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_READ_PASSWORD")].valueFrom.secretKeyRef
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_READ_PASSWORD")].valueFrom.secretKeyRef.key
+          value: clickhouse-ro-password
+
+  - it: ClickHouse StatefulSet RO secret key follows existingSecret.readKey wiring
+    template: templates/clickhouse-statefulset.yaml
+    set:
+      observability.clickhouse.existingSecret.name: my-ch-secret
+      observability.clickhouse.existingSecret.key: ch-pass
+      observability.clickhouse.readUsername: kasm_otel_ro
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_READ_PASSWORD")].valueFrom.secretKeyRef.name
+          value: my-ch-secret
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_READ_PASSWORD")].valueFrom.secretKeyRef.key
+          value: ch-pass
+
+  - it: ClickHouse StatefulSet RO secret key uses readKey when set alongside existingSecret
+    template: templates/clickhouse-statefulset.yaml
+    set:
+      observability.clickhouse.existingSecret.name: my-ch-secret
+      observability.clickhouse.existingSecret.key: ch-pass
+      observability.clickhouse.existingSecret.readKey: ch-ro-pass
+      observability.clickhouse.readUsername: kasm_otel_ro
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_CLICKHOUSE_READ_PASSWORD")].valueFrom.secretKeyRef.key
+          value: ch-ro-pass
+
+  - it: retention Job stays on the writer secret key when readUsername is set
+    template: templates/clickhouse-retention-job.yaml
+    set:
+      observability.clickhouse.readUsername: kasm_otel_ro
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="CLICKHOUSE_PASSWORD")].valueFrom.secretKeyRef.key
+          value: clickhouse-password

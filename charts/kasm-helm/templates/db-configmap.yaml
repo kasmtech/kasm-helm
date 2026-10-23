@@ -67,17 +67,20 @@ data:
     dynamic_shared_memory_type = posix
     max_wal_size = 1GB
     min_wal_size = 80MB
-    log_destination = 'stderr,{{ ternary "jsonlog" "syslog" (eq .Values.logFormat "json") }}'
+    # Two destinations from one collector: postgresql.log is symlinked to /dev/stdout by the
+    # StatefulSet's entrypoint so the container console stays human-readable, while postgresql.json
+    # is a real file on the data volume that the Collector sidecar tails. A sidecar cannot read
+    # another container's stdout, which is why the JSON copy has to be a file.
+    log_destination = 'stderr,jsonlog'
     logging_collector = on
     log_directory = '/tmp/postgres'
-    log_filename = '{{ ternary "postgresql" "postgresql-%m-%d.log" (eq .Values.logFormat "json") }}'
+    log_filename = 'postgresql'
     log_file_mode = 0600
-    {{- if eq .Values.logFormat "log" }}
+    # A static filename plus truncate-on-rotation bounds the on-disk copy to one day. Without this
+    # the log files grow on the data PVC for the life of the volume; telemetry durability is
+    # ClickHouse's job, not the pod's.
     log_rotation_age = 1d
-    log_truncate_on_rotation = off
-    {{- end }}
-    syslog_facility = 'LOCAL0'
-    syslog_ident = 'postgres'
+    log_truncate_on_rotation = on
     log_connections = on
     log_disconnections = on
     log_hostname = on

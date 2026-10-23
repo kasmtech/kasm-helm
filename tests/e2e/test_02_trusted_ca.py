@@ -147,7 +147,7 @@ spec:
     apply_nginx_trust()
 
     # Install Kasm with trusted CA enabled and CA injected as configmap data.
-    # Lower per-component resource requests so all pods (api, manager, proxy,
+    # Lower per-component resource requests so all pods (api, proxy,
     # the consolidated connection-proxy StatefulSet — one nginx plus the
     # guac, rdp-gateway, and rdp-https-gateway service containers — and the
     # bundled db) fit on the single-node kind cluster in gitlab runner.
@@ -169,7 +169,6 @@ spec:
         },
         "components": {
             "api": {"resources": low_resources},
-            "manager": {"resources": low_resources},
             "proxy": {"resources": low_resources_proxy},
             "connectionProxy": {
                 "nginx": {"resources": low_resources_proxy},
@@ -205,7 +204,7 @@ spec:
     # shared by the guac, rdp-gateway, and rdp-https-gateway service
     # containers (kasm.trustedCaInit is invoked once for the whole pod), so
     # it only needs to be checked once, not once per service.
-    for component in ("proxy", "api", "manager", "connection-proxy"):
+    for component in ("proxy", "api", "connection-proxy"):
         pod = get_first_pod_by_selector(namespace, f"app.kubernetes.io/component={component}")
         status = kubectl(
             [
@@ -241,15 +240,33 @@ spec:
     ]
     for component, container in openssl_curl_targets:
         pod = get_first_pod_by_selector(namespace, f"app.kubernetes.io/component={component}")
-        result = exec_in_pod(
-            namespace,
-            pod,
-            ["curl", "-sS", "--max-time", "20", f"https://{server_dns_name}:443/"],
-            container=container,
-        )
-        assert result.returncode == 0 and "ok" in result.stdout, (
+        if component == "proxy":
+            # The proxy image ships no curl; verify with its own OpenSSL + system store.
+            check = "openssl"
+            result = exec_in_pod(
+                namespace,
+                pod,
+                [
+                    "sh",
+                    "-c",
+                    f"openssl s_client -connect {server_dns_name}:443 -servername {server_dns_name} "
+                    "-verify_return_error -CAfile /etc/ssl/certs/ca-certificates.crt </dev/null 2>&1",
+                ],
+                container=container,
+            )
+            trusted = result.returncode == 0 and "Verify return code: 0 (ok)" in result.stdout
+        else:
+            check = "curl"
+            result = exec_in_pod(
+                namespace,
+                pod,
+                ["curl", "-sS", "--max-time", "20", f"https://{server_dns_name}:443/"],
+                container=container,
+            )
+            trusted = result.returncode == 0 and "ok" in result.stdout
+        assert trusted, (
             f"{component} (container={container or 'default'}) CA trust check "
-            f"(curl) failed.\n"
+            f"({check}) failed.\n"
             f"stdout: {result.stdout}\n"
             f"stderr: {result.stderr}"
         )
@@ -257,9 +274,9 @@ spec:
     # Python trust: the original customer bug was requests/certifi not honoring
     # the OS trust store. trustedCaEnv sets SSL_CERT_FILE (read by urllib via
     # ssl.create_default_context) AND REQUESTS_CA_BUNDLE (read by requests) — so
-    # exercise BOTH, and on api AND manager (both get the env; the prior test
-    # only covered api+urllib).
-    for component in ("api", "manager"):
+    # exercise BOTH on api (manager's role was absorbed into api; the prior
+    # test only covered api+urllib).
+    for component in ("api",):
         pod = get_first_pod_by_selector(namespace, f"app.kubernetes.io/component={component}")
         urllib_result = exec_in_pod(
             namespace,

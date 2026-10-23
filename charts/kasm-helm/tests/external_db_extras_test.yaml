@@ -7,7 +7,6 @@ templates:
   - templates/db-backup-cron.yaml
   - templates/db-backup-pvc.yaml
   - templates/api-deployment.yaml
-  - templates/manager-deployment.yaml
 
 tests:
   - it: db statefulset, configmap, and backup resources are not rendered with external db
@@ -47,8 +46,8 @@ tests:
             name: POSTGRES_PORT
             value: "6543"
 
-  - it: manager deployment uses external kasmDbSecret when set
-    template: templates/manager-deployment.yaml
+  - it: api deployment uses external kasmDbSecret when set
+    template: templates/api-deployment.yaml
     values:
       - ../../../tests/values/external-db.yaml
     set:

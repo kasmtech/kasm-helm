@@ -1,0 +1,28 @@
+suite: "kasm-otel-router — k8sEvents rejects duplicate registration namespaces"
+# Kept in its own suite file listing only k8sevents-rbac.yaml -- see
+# registrations_required_test.yaml for the helm-unittest v1.0.3 quirk this sidesteps (a `fail`
+# is not surfaced when the suite's top-level `templates:` list also contains another template).
+
+templates:
+  - templates/k8sevents-rbac.yaml
+
+tests:
+  - it: fails to render when two registrations share a namespace (defect F-R25 -- would collide on Role/RoleBinding names)
+    set:
+      ingestAuth.existingSecret.name: kasm-otel-router-secrets
+      ingestAuth.existingSecret.key: otel-bearer-token
+      k8sEvents.enabled: true
+      registrations:
+        - namespace: kasm-prod
+          endpoint: "otel-gateway.kasm-prod.svc.cluster.local:4317"
+          tokenSecret:
+            name: kasm-prod-secrets
+            key: otel-bearer-token
+        - namespace: kasm-prod
+          endpoint: "otel-gateway.kasm-prod-2.svc.cluster.local:4317"
+          tokenSecret:
+            name: kasm-prod-2-secrets
+            key: otel-bearer-token
+    asserts:
+      - failedTemplate:
+          errorMessage: 'kasm-otel-router: registrations contains more than one entry for namespace "kasm-prod" -- k8sEvents would render a duplicate Role/RoleBinding name in that namespace.'

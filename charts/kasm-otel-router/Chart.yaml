@@ -1,0 +1,20 @@
+annotations:
+  category: Observability
+apiVersion: v2
+appVersion: develop
+name: kasm-otel-router
+description: Single-Deployment OTLP router. Receives OTLP from several Kasm installs and routes each namespace's telemetry to that namespace's own Kasm otel-gateway, optionally teeing a copy elsewhere.
+icon: https://kasm-static-content.s3.amazonaws.com/icons/kasm-logo-small.png
+home: https://kasm.com
+keywords:
+  - kasm
+  - otel
+  - observability
+maintainers:
+  - name: Kasm Technologies, Inc.
+    url: https://github.com/kasmtech/kasm-helm
+version: 0.1.0
+dependencies:
+  - name: kasm-common
+    version: "0.1.0"
+    repository: "file://../kasm-common"

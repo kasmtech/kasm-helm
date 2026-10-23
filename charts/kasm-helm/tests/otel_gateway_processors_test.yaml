@@ -1,0 +1,66 @@
+suite: otel gateway processors — severity normalisation, healthcheck filter, span scrub
+
+templates:
+  - templates/otel-gateway-configmap.yaml
+
+tests:
+  - it: gateway defines transform/severity, filter/healthcheck and transform/nginx_scrub
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'transform/severity:\n\s+log_statements:'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'set\(severity_text, "WARNING"\) where severity_text == "WARN"'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'filter/healthcheck:\n\s+error_mode: ignore'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'attributes\["url\.path"\] == "/api/__healthcheck" and attributes\["http\.response\.status_code"\] == "200"'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'transform/nginx_scrub:\n\s+trace_statements:'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'replace_pattern\(attributes\["http\.target"\], "\\\\\?\.\*\$", ""\) where resource\.attributes\["service\.name"\] == "kasm-proxy"'
+
+  # Assert per pipeline: the log processors belong on logs only and the span scrub on traces
+  # only, ahead of tail_sampling so buffered spans never hold the raw query string.
+  - it: logs pipeline runs severity normalisation and the healthcheck filter between memory_limiter and batch
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'logs:\n\s+receivers: \[otlp/remote\]\n\s+processors: \[memory_limiter, transform/severity, filter/healthcheck, batch\]'
+
+  - it: traces pipeline scrubs nginx spans before tail sampling
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'traces:\n\s+receivers: \[otlp/remote\]\n\s+processors: \[memory_limiter, transform/nginx_scrub, tail_sampling, batch\]'
+
+  - it: metrics pipeline carries none of the log or span processors
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'metrics:\n\s+receivers: \[otlp/remote\]\n\s+processors: \[memory_limiter, batch\]'
+
+  - it: processors survive the forward-only (no ClickHouse) gateway variant
+    values:
+      - ../../../tests/values/observability-forward-only.yaml
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'processors: \[memory_limiter, transform/severity, filter/healthcheck, batch\]'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'processors: \[memory_limiter, transform/nginx_scrub, tail_sampling, batch\]'
+
+  # A BYO gateway config replaces this ConfigMap wholesale, so it inherits none of the above;
+  # docs/observability.md tells operators to carry the processors over.
+  - it: existingConfigMap renders no gateway ConfigMap, so BYO configs must carry the processors themselves
+    values:
+      - ../../../tests/values/observability-byo-config.yaml
+    asserts:
+      - hasDocuments:
+          count: 0

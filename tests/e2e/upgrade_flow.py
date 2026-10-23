@@ -11,7 +11,6 @@ import yaml
 
 from .conftest import E2EConfig
 from .helpers import (
-    api_image_override_args,
     assert_login_page,
     curl_from_pod,
     get_chart_app_version,
@@ -26,11 +25,11 @@ from .helpers import (
 
 LOGGER = logging.getLogger("e2e")
 
-# Lower bound on tables in the ``public`` schema for a healthy 1.18.1
-# db-init.  Healthy installs produce dozens; silent-failure leaves 0 or
-# a handful.  Counting tables (vs. rows in a specific table) keeps the
-# check version-agnostic.
-_MIN_PUBLIC_TABLE_COUNT = 5
+# Lower bound on rows in the ``zones`` table for a healthy 1.18.1
+# db-init.  Schema creation alone (tables present, no seed data) is the
+# silent-failure mode, so we require the seed to have inserted the
+# default zone.
+_MIN_ZONES_ROW_COUNT = 1
 
 # Short polling window to absorb a race between Job-Completed and our
 # query catching up.  If tables are still empty after this window, the
@@ -259,15 +258,15 @@ def _external_db_values(host: str) -> dict:
 # Core upgrade flow
 # ---------------------------------------------------------------------------
 
-def _count_public_tables(namespace: str, db_pod: str) -> int:
-    """Count tables in the ``public`` schema, or return ``-1`` if the
-    query fails (DB not reachable yet — vs. ``0`` which means the
-    schema is definitively empty).
+def _count_zones_rows(namespace: str, db_pod: str) -> int:
+    """Count rows in the ``zones`` table, or return ``-1`` if the query
+    fails (DB not reachable yet, or ``zones`` not created yet — vs. ``0``
+    which means the table exists but was never seeded).
     """
     result = kubectl(
         ["exec", db_pod, "--",
          "psql", "-U", "kasmapp", "-d", "kasm", "-tAc",
-         "SELECT count(*) FROM pg_tables WHERE schemaname='public';"],
+         "SELECT count(*) FROM zones;"],
         namespace=namespace,
         check=False,
     )
@@ -286,7 +285,7 @@ def _verify_db_init(
     job_name: str,
     work_dir: Path,
 ) -> None:
-    """Assert the 1.18.1 db-init Job actually populated the schema.
+    """Assert the 1.18.1 db-init Job actually seeded the database.
 
     1.18.1's ``startup.sh`` swallows transient sqlalchemy errors
     (typically ``EAI_AGAIN`` from CoreDNS under CPU pressure) and
@@ -307,21 +306,21 @@ def _verify_db_init(
     attempt = 0
     while time.monotonic() < deadline:
         attempt += 1
-        last_count = _count_public_tables(namespace, db_pod)
+        last_count = _count_zones_rows(namespace, db_pod)
         LOGGER.info(
-            "[upgrade] db-init verification attempt %d: public table count=%d "
+            "[upgrade] db-init verification attempt %d: zones row count=%d "
             "(threshold=%d)",
-            attempt, last_count, _MIN_PUBLIC_TABLE_COUNT,
+            attempt, last_count, _MIN_ZONES_ROW_COUNT,
         )
-        if last_count >= _MIN_PUBLIC_TABLE_COUNT:
+        if last_count >= _MIN_ZONES_ROW_COUNT:
             return
         time.sleep(_VERIFY_POLL_SECONDS)
 
     raise AssertionError(
         f"1.18.1 db-init Job {job_name!r} reported success but the DB "
-        f"seed never ran (public table count={last_count} after "
+        f"seed never ran (zones row count={last_count} after "
         f"{attempt} polls over {_VERIFY_TIMEOUT_SECONDS}s, expected >= "
-        f"{_MIN_PUBLIC_TABLE_COUNT}). Known silent-failure mode of "
+        f"{_MIN_ZONES_ROW_COUNT}). Known silent-failure mode of "
         f"kasmweb/api:1.18.1 startup.sh under CPU pressure; re-run "
         f"the pipeline. See _verify_db_init docstring for context."
     )
@@ -400,7 +399,6 @@ def run_upgrade_flow(
     current_chart_component_values: dict = {
         "components": {
             "api": {"resources": low_resources},
-            "manager": {"resources": low_resources},
             "proxy": {"resources": low_resources_proxy},
             "connectionProxy": {
                 "guac": {"resources": low_resources},
@@ -541,16 +539,27 @@ def run_upgrade_flow(
     # Strict ``helm upgrade`` (no ``--install``).  The release was created by
     # Phase 1; if it isn't there, we want this command to fail loudly rather
     # than silently fall through to a fresh install.
-    helm([
+    phase2_args = [
         "upgrade",
         release_name,
         e2e_config.chart_dir,
         "-n", namespace,
         "--timeout", "15m",
         "--set", "imagePullPolicy=Never",
-        *api_image_override_args(),
         "-f", str(upgrade_values_path),
-    ])
+    ]
+    # Layered last so it wins: branch-build image overrides (see helm_install's
+    # matching comment). Phase 1 (the old 1.18.1 chart) deliberately never
+    # receives this — only the current chart understands these component tags.
+    image_values = os.environ.get("E2E_IMAGE_VALUES", "").strip()
+    if image_values:
+        if not Path(image_values).is_file():
+            raise AssertionError(
+                f"E2E_IMAGE_VALUES={image_values} does not exist inside the test container; "
+                "tests/values is mounted at /e2e-values by the pytest-docker target"
+            )
+        phase2_args.extend(["-f", image_values])
+    helm(phase2_args)
 
     # -----------------------------------------------------------------------
     # Phase 3: Verify pre-upgrade backup job wrote a non-empty file to PVC
@@ -628,4 +637,18 @@ def run_upgrade_flow(
     )
     assert status_code == 200, f"Expected 200 after upgrade, got {status_code}"
     assert_login_page(body)
+
+    # The 1.18.1 chart installed a manager Deployment; the current chart no
+    # longer templates one (api absorbed its role). Helm's 3-way merge must
+    # prune it on upgrade.
+    release = e2e_config.release_name
+    remaining_manager = kubectl(
+        ["get", "deployment", "-l", "app.kubernetes.io/component=manager", "-o", "name"],
+        namespace=namespace,
+    )
+    assert remaining_manager.stdout.strip() == "", (
+        f"Expected the 1.18.1 manager Deployment for release {release} to be pruned "
+        f"by helm upgrade, but found: {remaining_manager.stdout.strip()}"
+    )
+
     LOGGER.info("[upgrade] upgrade flow complete — system healthy after upgrade")

@@ -1,0 +1,30 @@
+# Several registrations plus a tee, exercising the multi-route/multi-exporter path.
+ingestAuth:
+  existingSecret:
+    name: kasm-otel-router-secrets
+    key: otel-bearer-token
+
+registrations:
+  - namespace: kasm-prod
+    endpoint: "otel-gateway.kasm-prod.svc.cluster.local:4317"
+    tokenSecret:
+      name: kasm-prod-secrets
+      key: otel-bearer-token
+  - namespace: kasm-staging
+    endpoint: "otel-gateway.kasm-staging.svc.cluster.local:4317"
+    tokenSecret:
+      name: kasm-staging-secrets
+      key: otel-bearer-token
+  - namespace: kasm-dev
+    endpoint: "otel-gateway.kasm-dev.svc.cluster.local:4317"
+    tokenSecret:
+      name: kasm-dev-secrets
+      key: otel-bearer-token
+
+tee:
+  enabled: true
+  endpoint: "siem-collector.example.com:4317"
+  insecure: false
+  tokenSecret:
+    name: siem-tee-secret
+    key: token

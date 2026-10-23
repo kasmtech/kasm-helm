@@ -1,0 +1,87 @@
+{{/*
+Collector config for the Kasm DB pod's sidecar.
+
+PostgreSQL writes JSON log lines to postgresql.json on the data volume (see db-configmap.yaml);
+this tails them, parses each line, and forwards to the gateway. The text copy of the same log goes
+to the container console and is not collected, so nothing is stored twice.
+
+There are no metrics here yet. A postgresql receiver would need database credentials in this pod, so
+it is deliberately left out until there is a reason to add one.
+
+Offsets are checkpointed onto the data PVC rather than an emptyDir: the log files outlive the pod,
+so in-memory offsets would silently lose everything written while the pod was down.
+*/}}
+{{- $obs := .Values.observability -}}
+{{- if and $obs.enabled (not .Values.database.standalone) }}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  {{- include "kasm.common.metadata" (dict "context" . "component" "otel-db-sidecar" "resource" "configMap" "include" "all") | indent 2 }}
+data:
+  config.yaml: |
+    extensions:
+      {{- include "kasm.common.otelHealthCheckExtension" (dict "port" $constants.otel.health) | nindent 6 }}
+
+      file_storage/checkpoints:
+        directory: /var/lib/otelcol/checkpoints
+        create_directory: true
+
+    receivers:
+      filelog/postgres:
+        include: [/var/log/postgres/postgresql.json]
+        start_at: end
+        storage: file_storage/checkpoints
+        operators:
+          - type: json_parser
+            parse_from: body
+            timestamp:
+              parse_from: attributes.timestamp
+              layout: "%Y-%m-%d %H:%M:%S.%L %Z"
+            severity:
+              parse_from: attributes.error_severity
+              overwrite_text: true
+              mapping:
+                fatal: [PANIC, FATAL]
+                error: ERROR
+                warn: [WARNING, NOTICE]
+                info: [INFO, LOG]
+                debug: [DEBUG1, DEBUG2, DEBUG3, DEBUG4, DEBUG5]
+          - type: move
+            from: attributes.message
+            to: body
+            on_error: send
+          - type: add
+            field: resource["service.name"]
+            value: kasm-db
+
+    processors:
+      {{- include "kasm.common.otelResourceProcessor" (dict "context" .) | nindent 6 }}
+
+      {{- include "kasm.common.otelBatchProcessor" . | nindent 6 }}
+
+{{ include "kasm.common.otelMemoryLimiter" (dict "limitMib" 96 "spikeLimitMib" 32) | indent 6 }}
+
+    exporters:
+      {{- include "kasm.common.otelOtlpExporterToGateway" . | nindent 6 }}
+
+    service:
+      extensions: [health_check, file_storage/checkpoints]
+
+      pipelines:
+        logs:
+          receivers: [filelog/postgres]
+          processors: [memory_limiter, resource, batch]
+          exporters: [otlp]
+
+      telemetry:
+        logs:
+          level: info
+        metrics:
+          readers:
+            - pull:
+                exporter:
+                  prometheus:
+                    host: "0.0.0.0"
+                    port: {{ $constants.otel.selfMetrics }}
+{{- end }}

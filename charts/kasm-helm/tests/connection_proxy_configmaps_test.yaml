@@ -13,15 +13,16 @@ tests:
       - hasDocuments:
           count: 3
 
-  - it: renders a 4th ConfigMap (rdp-https-gateway app config) when logFormat is json
+  # The rdp-https-gateway app config ConfigMap existed only to switch that service's console output
+  # to JSON. Console output is always human-readable now and structured logs go out over OTLP, so
+  # the ConfigMap is gone and this template renders three documents, never four.
+  - it: renders exactly three ConfigMaps with all connection-proxy services enabled
     template: templates/connection-proxy-configmaps.yaml
     values:
       - ../../../tests/values/components-all.yaml
-    set:
-      logFormat: json
     asserts:
       - hasDocuments:
-          count: 4
+          count: 3
 
   - it: first document is the nginx-settings ConfigMap
     template: templates/connection-proxy-configmaps.yaml
@@ -197,18 +198,16 @@ tests:
   # app.kubernetes.io/name label value has a 63-char Kubernetes limit. Short
   # local release names mask this; CI's long "kasm-e2e-<job-id>" release names
   # do not. The rdp-https-gateway-app-config ConfigMap's component name was
-  # the longest of the four and broke first under CI's release name length.
+  # the longest of the remaining three and broke first under CI's release name length.
   # ---------------------------------------------------------------------------
 
-  - it: rdp-https-gateway app config label stays within 63 chars under a long CI release name
+  - it: rdp-gateway app config label stays within 63 chars under a long CI release name
     template: templates/connection-proxy-configmaps.yaml
-    documentIndex: 3
+    documentIndex: 2
     release:
       name: kasm-e2e-15864505241
     values:
       - ../../../tests/values/components-all.yaml
-    set:
-      logFormat: json
     asserts:
       - matchRegex:
           path: metadata.labels["app.kubernetes.io/name"]

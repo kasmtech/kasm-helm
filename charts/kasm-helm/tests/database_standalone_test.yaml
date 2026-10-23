@@ -3,7 +3,6 @@ templates:
   - templates/db-statefulset.yaml
   - templates/db-service.yaml
   - templates/api-deployment.yaml
-  - templates/manager-deployment.yaml
 tests:
   - it: renders DB StatefulSet by default
     template: templates/db-statefulset.yaml
@@ -36,7 +35,6 @@ tests:
       - ../../../tests/values/external-db.yaml
     templates:
       - templates/api-deployment.yaml
-      - templates/manager-deployment.yaml
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env

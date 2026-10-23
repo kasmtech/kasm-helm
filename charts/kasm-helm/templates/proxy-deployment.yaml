@@ -39,7 +39,6 @@ spec:
       initContainers:
         {{- include "kasm.trustedCaInit" (list $ "proxy") | nindent 8 }}
         {{- include "kasm.initContainer" (dict "context" $ "serviceName" (printf "%s-%s" $constants.api.svc (include "kasm.zoneName" $zone.name)) "servicePort" $constants.api.port "path" "/api/__healthcheck" "schema" "http" "image" $constants.api.image "component" "api") | nindent 8 }}
-        {{- include "kasm.initContainer" (dict "context" $ "serviceName" (printf "%s-%s" $constants.manager.svc (include "kasm.zoneName" $zone.name)) "servicePort" $constants.manager.port "path" "/__healthcheck" "schema" "http" "image" $constants.api.image "component" "manager") | nindent 8 }}
         {{- with $merged.extraInitContainers }}
           {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -47,6 +46,10 @@ spec:
         - name: {{ include "kasm.name" (list $ "proxy" "container" $zone.name) }}
           image: {{ $constants.proxy.image }}
           imagePullPolicy: {{ $.Values.imagePullPolicy }}
+          {{- with $merged.extraEnv }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           {{- if $.Values.components.proxy.resources }}
           resources: {{- toYaml $.Values.components.proxy.resources | nindent 12 }}
           {{- else }}
@@ -93,12 +96,20 @@ spec:
             - name: {{ $constants.proxy.portName }}-https
               containerPort: {{ $constants.proxy.https }}
               protocol: TCP
+            {{- if $.Values.observability.enabled }}
+            - name: stub-status
+              containerPort: 8090
+              protocol: TCP
+            {{- end }}
           {{- if $.Values.applyHealthChecks }}
           livenessProbe:
             {{- include "health.probe" (dict "root" $ "component" "proxy" "probeType" "livenessProbe" "type" "tcp" "portName" (printf "%s-http" $constants.proxy.portName)) | nindent 12 }}
           readinessProbe:
             {{- include "health.probe" (dict "root" $ "component" "proxy" "probeType" "readinessProbe" "type" "command" "command" "nginx -t") | nindent 12 }}
           {{- end }}
+        {{- if $.Values.observability.enabled }}
+        {{- include "kasm.otelSidecar" (dict "context" $ "zone" $zone.name "configMap" (include "kasm.name" (list $ "otel-nginx-sidecar" "configmap"))) | nindent 8 }}
+        {{- end }}
         {{- with $merged.extraContainers }}
           {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -121,6 +132,14 @@ spec:
         - name: kasm-proxy-log-tmp
           emptyDir:
             sizeLimit: 1Gi
+        {{- if $.Values.observability.enabled }}
+        - name: otel-sidecar-config
+          configMap:
+            name: {{ include "kasm.name" (list $ "otel-nginx-sidecar" "configmap") }}
+        - name: otel-sidecar-tmp
+          emptyDir:
+            sizeLimit: 64Mi
+        {{- end }}
         {{- with $merged.volumes }}
           {{- toYaml . | nindent 8 }}
         {{- end }}

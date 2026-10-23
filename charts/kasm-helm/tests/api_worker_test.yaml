@@ -1,0 +1,499 @@
+suite: components.api.workerPool (kasm-helm-37c)
+# workerPool empty (default): every API replica keeps consuming BullMQ queues itself
+# (KASM_PROCESS=TRUE), no separate worker Deployment. workerPool non-empty: API replicas stop
+# consuming (KASM_PROCESS=FALSE) and templates/api-worker-deployment.yaml renders one
+# Deployment per pool per zone instead.
+
+templates:
+  - templates/api-deployment.yaml
+  - templates/api-worker-deployment.yaml
+
+tests:
+  # ---------- empty workerPool (default) ----------
+  - it: empty workerPool sets KASM_PROCESS=TRUE on the api container
+    template: templates/api-deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KASM_PROCESS
+            value: "TRUE"
+
+  - it: empty workerPool sets KASM_WORKER_QUEUES from components.api.queues and shutdown timeout
+    template: templates/api-deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KASM_WORKER_QUEUES
+            value: "all"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KASM_WORKER_SHUTDOWN_TIMEOUT
+            value: "60"
+
+  - it: empty workerPool renders no api-worker deployments
+    template: templates/api-worker-deployment.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # ---------- D018: terminationGracePeriodSeconds follows KASM_PROCESS ----------
+  - it: empty workerPool api deployment sets terminationGracePeriodSeconds 80 (consumes queues)
+    template: templates/api-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 80
+
+  - it: non-empty workerPool api deployment has no terminationGracePeriodSeconds override (publish-only, keeps k8s default)
+    template: templates/api-deployment.yaml
+    set:
+      components.api.workerPool:
+        - name: default
+    asserts:
+      - notExists:
+          path: spec.template.spec.terminationGracePeriodSeconds
+
+  # ---------- non-empty workerPool ----------
+  - it: non-empty workerPool sets KASM_PROCESS=FALSE and no worker envs on the api container
+    template: templates/api-deployment.yaml
+    set:
+      components.api.workerPool:
+        - name: default
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KASM_PROCESS
+            value: "FALSE"
+      - notExists:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_WORKER_QUEUES")]
+
+  - it: non-empty workerPool renders one worker deployment for the pool, named with the pool slug
+    template: templates/api-worker-deployment.yaml
+    set:
+      components.api.workerPool:
+        - name: default
+    asserts:
+      - hasDocuments:
+          count: 1
+      - matchRegex:
+          path: metadata.name
+          pattern: "^.*-api-default-default$"
+
+  - it: worker container sets KASM_PROCESS=TRUE, KASM_WORKER_QUEUES, and shutdown timeout
+    template: templates/api-worker-deployment.yaml
+    set:
+      components:
+        api:
+          workerPool:
+            - name: media
+              queues: "media,thumbnails"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KASM_PROCESS
+            value: "TRUE"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KASM_WORKER_QUEUES
+            value: "media,thumbnails"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KASM_WORKER_SHUTDOWN_TIMEOUT
+            value: "60"
+
+  - it: worker renders KASM_WORKER_QUEUE_CONCURRENCY as JSON when set
+    template: templates/api-worker-deployment.yaml
+    set:
+      components:
+        api:
+          workerPool:
+            - name: default
+              queueConcurrency:
+                sessions: 5
+                thumbnails: 2
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KASM_WORKER_QUEUE_CONCURRENCY
+            value: '{"sessions":5,"thumbnails":2}'
+
+  - it: worker renders an integer KASM_WORKER_QUEUE_CONCURRENCY for every queue
+    template: templates/api-worker-deployment.yaml
+    set:
+      components:
+        api:
+          workerPool:
+            - name: default
+              queueConcurrency: 8
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KASM_WORKER_QUEUE_CONCURRENCY
+            value: "8"
+
+  - it: empty workerPool renders components.api.queueConcurrency on the api container
+    template: templates/api-deployment.yaml
+    set:
+      components.api.queueConcurrency: 3
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KASM_WORKER_QUEUE_CONCURRENCY
+            value: "3"
+
+  - it: empty workerPool omits KASM_WORKER_QUEUE_CONCURRENCY by default
+    template: templates/api-deployment.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_WORKER_QUEUE_CONCURRENCY")]
+
+  - it: worker omits KASM_WORKER_QUEUE_CONCURRENCY when not set
+    template: templates/api-worker-deployment.yaml
+    set:
+      components.api.workerPool:
+        - name: default
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].env[?(@.name=="KASM_WORKER_QUEUE_CONCURRENCY")]
+
+  - it: worker sets terminationGracePeriodSeconds 80
+    template: templates/api-worker-deployment.yaml
+    set:
+      components.api.workerPool:
+        - name: default
+    asserts:
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 80
+
+  # ---------- probes ----------
+  - it: api liveness probe uses /livez on the new liveness port; readiness stays on the api port
+    template: templates/api-deployment.yaml
+    set:
+      applyHealthChecks: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: "/livez"
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.port
+          value: api-live-pt
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: "/api/__healthcheck"
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.port
+          value: api-pt
+
+  - it: worker liveness probe uses /livez; readiness uses /api/__healthcheck (workers run the full API)
+    template: templates/api-worker-deployment.yaml
+    set:
+      applyHealthChecks: true
+      components.api.workerPool:
+        - name: default
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: "/livez"
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.port
+          value: api-live-pt
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: "/api/__healthcheck"
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.port
+          value: api-pt
+
+  - it: worker liveness probe honors components.api.healthCheckTiming overrides
+    template: templates/api-worker-deployment.yaml
+    set:
+      applyHealthChecks: true
+      components:
+        api:
+          healthCheckTiming:
+            livenessProbe:
+              timeoutSeconds: 42
+          workerPool:
+            - name: default
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.timeoutSeconds
+          value: 42
+
+  # ---------- replicas / resources ----------
+  - it: pool.replicas 0 falls back to the deploymentSize (api) preset
+    template: templates/api-worker-deployment.yaml
+    set:
+      deploymentSize: large
+      components.api.workerPool:
+        - name: default
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 3
+
+  - it: pool.replicas explicit value overrides the preset
+    template: templates/api-worker-deployment.yaml
+    set:
+      components:
+        api:
+          workerPool:
+            - name: default
+              replicas: 7
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 7
+
+  - it: pool.resources overrides components.api.resources and the api preset
+    template: templates/api-worker-deployment.yaml
+    set:
+      components:
+        api:
+          resources:
+            requests:
+              cpu: "111m"
+          workerPool:
+            - name: default
+              resources:
+                requests:
+                  cpu: "999m"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: "999m"
+
+  - it: components.api.resources overrides the api preset when no pool override is set
+    template: templates/api-worker-deployment.yaml
+    set:
+      components:
+        api:
+          resources:
+            requests:
+              cpu: "111m"
+          workerPool:
+            - name: default
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: "111m"
+
+  # ---------- multi-zone x multi-pool fan-out ----------
+  - it: two pools x two zones renders four worker deployments, one per (pool, zone) pair
+    template: templates/api-worker-deployment.yaml
+    values:
+      - ../../../tests/values/multizone-config.yaml
+    set:
+      proxyService:
+        type: ClusterIP
+      ingress:
+        enabled: true
+      components:
+        api:
+          workerPool:
+            - name: sessions
+              replicas: 1
+            - name: media
+              replicas: 1
+    asserts:
+      - hasDocuments:
+          count: 4
+
+  # Selector/pod-label agreement is load-bearing (D013): a Deployment whose selector doesn't
+  # match its own pods' labels never becomes ready, and if two pool-zone Deployments share a
+  # selector each adopts the other's pods. documentIndex order follows the template's range
+  # nesting: pools (sessions, media) outer, zones (zonea, zoneb) inner, per multizone-config.yaml.
+  # One `it:` per document is required: helm-unittest's documentIndex scopes an entire test to
+  # one rendered document, not individual asserts within it.
+  - it: worker deployment 0 (sessions/zonea) selector matches its own pod labels, distinct name
+    template: templates/api-worker-deployment.yaml
+    documentIndex: 0
+    values:
+      - ../../../tests/values/multizone-config.yaml
+    set:
+      proxyService:
+        type: ClusterIP
+      ingress:
+        enabled: true
+      components:
+        api:
+          workerPool:
+            - name: sessions
+              replicas: 1
+            - name: media
+              replicas: 1
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/name"]
+          value: RELEASE-NAME-api-worker-sessions-zonea
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/name"]
+          value: RELEASE-NAME-api-worker-sessions-zonea
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/component"]
+          value: api-worker
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/component"]
+          value: api-worker
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-api-sessions-zonea
+
+  - it: worker deployment 1 (sessions/zoneb) selector matches its own pod labels, distinct name
+    template: templates/api-worker-deployment.yaml
+    documentIndex: 1
+    values:
+      - ../../../tests/values/multizone-config.yaml
+    set:
+      proxyService:
+        type: ClusterIP
+      ingress:
+        enabled: true
+      components:
+        api:
+          workerPool:
+            - name: sessions
+              replicas: 1
+            - name: media
+              replicas: 1
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/name"]
+          value: RELEASE-NAME-api-worker-sessions-zoneb
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/name"]
+          value: RELEASE-NAME-api-worker-sessions-zoneb
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-api-sessions-zoneb
+
+  - it: worker deployment 2 (media/zonea) selector matches its own pod labels, distinct name
+    template: templates/api-worker-deployment.yaml
+    documentIndex: 2
+    values:
+      - ../../../tests/values/multizone-config.yaml
+    set:
+      proxyService:
+        type: ClusterIP
+      ingress:
+        enabled: true
+      components:
+        api:
+          workerPool:
+            - name: sessions
+              replicas: 1
+            - name: media
+              replicas: 1
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/name"]
+          value: RELEASE-NAME-api-worker-media-zonea
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/name"]
+          value: RELEASE-NAME-api-worker-media-zonea
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-api-media-zonea
+
+  - it: worker deployment 3 (media/zoneb) selector matches its own pod labels, distinct name
+    template: templates/api-worker-deployment.yaml
+    documentIndex: 3
+    values:
+      - ../../../tests/values/multizone-config.yaml
+    set:
+      proxyService:
+        type: ClusterIP
+      ingress:
+        enabled: true
+      components:
+        api:
+          workerPool:
+            - name: sessions
+              replicas: 1
+            - name: media
+              replicas: 1
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/name"]
+          value: RELEASE-NAME-api-worker-media-zoneb
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/name"]
+          value: RELEASE-NAME-api-worker-media-zoneb
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-api-media-zoneb
+
+  # ---------- extras merge reaches the worker ----------
+  - it: components.api.extraEnv lands on both the api and worker containers
+    template: templates/api-worker-deployment.yaml
+    set:
+      components:
+        api:
+          extraEnv:
+            - name: SHARED_ONLY
+              value: "shared"
+          workerPool:
+            - name: default
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SHARED_ONLY
+            value: "shared"
+
+  # ---------- schema negatives ----------
+  - it: the removed top-level apiWorkerMode key is now an inert no-op (root schema allows unknown keys)
+    template: templates/api-deployment.yaml
+    set:
+      apiWorkerMode: split
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KASM_PROCESS
+            value: "TRUE"
+
+  - it: an empty pool name fails render with a clear message
+    template: templates/api-worker-deployment.yaml
+    set:
+      components:
+        api:
+          workerPool:
+            - name: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "components\\.api\\.workerPool\\[0\\] is missing required field 'name'"
+
+  - it: duplicate normalized pool names fail render with a clear message
+    template: templates/api-worker-deployment.yaml
+    set:
+      components:
+        api:
+          workerPool:
+            - name: sessions
+            - name: "Sessions"
+    asserts:
+      - failedTemplate:
+          errorPattern: 'components\.api\.workerPool has duplicate normalized name "sessions" \(pool "Sessions" collides with an earlier pool\)'
+
+  - it: schema rejects a pool missing name
+    template: templates/api-worker-deployment.yaml
+    set:
+      components:
+        api:
+          workerPool:
+            - queues: "all"
+    asserts:
+      - failedTemplate:
+          errorPattern: "missing property 'name'"

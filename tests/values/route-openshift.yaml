@@ -4,6 +4,9 @@ publicAddr: kasm.apps.example.test
 
 isOpenshift: true
 
+# Nginx and PostgreSQL logs are collected by in-pod Collector sidecars, which need no hostPath and
+# no root, so OpenShift needs no special observability configuration and no SCC.
+
 proxyService:
   type: ClusterIP
 

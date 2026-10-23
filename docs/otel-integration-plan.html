@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kasm Helm Chart — OpenTelemetry Integration Plan</title>
+<style>
+  :root {
+    --bg:        #ffffff;
+    --bg-alt:    #f6f8fa;
+    --bg-sunken: #eef1f5;
+    --ink:       #1c2024;
+    --ink-mute:  #5b636b;
+    --line:      #d8dee4;
+    --accent:    #0b6bcb;
+    --accent-bg: #e8f1fc;
+    --warn:      #9a5b00;
+    --warn-bg:   #fdf3e3;
+    --danger:    #a8352c;
+    --danger-bg: #fdeeec;
+    --ok:        #1f6f47;
+    --ok-bg:     #e9f5ee;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:        #14171a;
+      --bg-alt:    #1b1f23;
+      --bg-sunken: #22272b;
+      --ink:       #e6e9ec;
+      --ink-mute:  #9aa4ae;
+      --line:      #30363d;
+      --accent:    #62aaf5;
+      --accent-bg: #16283d;
+      --warn:      #e0a33c;
+      --warn-bg:   #2f2513;
+      --danger:    #f08b81;
+      --danger-bg: #331d1b;
+      --ok:        #6cc48f;
+      --ok-bg:     #14291e;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 32px 96px; }
+
+  header.hero {
+    border-bottom: 1px solid var(--line);
+    background: var(--bg-alt);
+    padding: 48px 0 36px;
+    margin-bottom: 40px;
+  }
+  header.hero .wrap { padding-bottom: 0; }
+  .eyebrow {
+    font-size: 12px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--ink-mute); font-weight: 600; margin: 0 0 10px;
+  }
+  h1 { font-size: 34px; line-height: 1.2; margin: 0 0 14px; letter-spacing: -.02em; }
+  .lede { font-size: 18px; color: var(--ink-mute); max-width: 76ch; margin: 0; }
+  .meta { margin-top: 22px; display: flex; flex-wrap: wrap; gap: 10px; }
+  .chip {
+    font-size: 12.5px; font-weight: 600; padding: 4px 11px; border-radius: 999px;
+    background: var(--bg-sunken); color: var(--ink-mute); border: 1px solid var(--line);
+  }
+  .chip.accent { background: var(--accent-bg); color: var(--accent); border-color: transparent; }
+
+  nav.toc {
+    background: var(--bg-alt); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px 22px; margin: 0 0 44px;
+  }
+  nav.toc p { margin: 0 0 10px; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-mute); font-weight: 600; }
+  nav.toc ol { margin: 0; padding-left: 20px; columns: 2; column-gap: 40px; font-size: 15px; }
+  nav.toc li { margin: 3px 0; break-inside: avoid; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  section { margin: 0 0 56px; scroll-margin-top: 20px; }
+  h2 {
+    font-size: 24px; letter-spacing: -.01em; margin: 0 0 6px;
+    padding-bottom: 10px; border-bottom: 2px solid var(--line);
+  }
+  h2 .num { color: var(--ink-mute); font-weight: 500; margin-right: 10px; }
+  h3 { font-size: 17.5px; margin: 32px 0 8px; }
+  h4 { font-size: 15px; margin: 22px 0 6px; color: var(--ink-mute); text-transform: uppercase; letter-spacing: .06em; }
+  p { margin: 12px 0; }
+  ul, ol { margin: 12px 0; padding-left: 24px; }
+  li { margin: 6px 0; }
+  code {
+    font-family: var(--mono); font-size: .875em;
+    background: var(--bg-sunken); padding: 1.5px 5px; border-radius: 4px;
+    border: 1px solid var(--line);
+  }
+  pre {
+    font-family: var(--mono); font-size: 13px; line-height: 1.55;
+    background: var(--bg-alt); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px 20px; overflow-x: auto; margin: 16px 0;
+  }
+  pre code { background: none; border: 0; padding: 0; font-size: inherit; }
+  .cmt { color: var(--ink-mute); }
+
+  table { width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th {
+    font-size: 12px; letter-spacing: .07em; text-transform: uppercase;
+    color: var(--ink-mute); border-bottom: 2px solid var(--line); white-space: nowrap;
+  }
+  tbody tr:hover { background: var(--bg-alt); }
+  td code { white-space: nowrap; }
+  table.tight td:first-child { white-space: nowrap; }
+
+  .callout {
+    border: 1px solid var(--line); border-left: 4px solid var(--ink-mute);
+    border-radius: 8px; padding: 16px 20px; margin: 20px 0; background: var(--bg-alt);
+  }
+  .callout > :first-child { margin-top: 0; }
+  .callout > :last-child { margin-bottom: 0; }
+  .callout .label {
+    display: block; font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase;
+    font-weight: 700; margin-bottom: 6px; color: var(--ink-mute);
+  }
+  .callout.danger { border-left-color: var(--danger); background: var(--danger-bg); }
+  .callout.danger .label { color: var(--danger); }
+  .callout.warn { border-left-color: var(--warn); background: var(--warn-bg); }
+  .callout.warn .label { color: var(--warn); }
+  .callout.ok { border-left-color: var(--ok); background: var(--ok-bg); }
+  .callout.ok .label { color: var(--ok); }
+  .callout.info { border-left-color: var(--accent); background: var(--accent-bg); }
+  .callout.info .label { color: var(--accent); }
+
+  .tag {
+    display: inline-block; font-size: 11.5px; font-weight: 700; letter-spacing: .04em;
+    padding: 2px 8px; border-radius: 5px; text-transform: uppercase; white-space: nowrap;
+  }
+  .tag.rec  { background: var(--ok-bg);     color: var(--ok); }
+  .tag.opt  { background: var(--bg-sunken); color: var(--ink-mute); }
+  .tag.no   { background: var(--warn-bg);   color: var(--warn); }
+  .tag.new  { background: var(--accent-bg); color: var(--accent); }
+  .tag.del  { background: var(--danger-bg); color: var(--danger); }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; margin: 20px 0; }
+  .card { border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; background: var(--bg-alt); }
+  .card h5 { margin: 0 0 6px; font-size: 15px; }
+  .card p { margin: 0; font-size: 14px; color: var(--ink-mute); }
+
+  .diagram {
+    border: 1px solid var(--line); border-radius: 12px; background: var(--bg-alt);
+    padding: 24px; margin: 22px 0; display: flex; flex-wrap: wrap; gap: 22px; align-items: stretch;
+  }
+  .dcol { flex: 1 1 240px; display: flex; flex-direction: column; gap: 12px; min-width: 220px; }
+  .dbox {
+    border: 1px solid var(--line); border-radius: 8px; background: var(--bg);
+    padding: 12px 14px; font-size: 13.5px;
+  }
+  .dbox strong { display: block; font-size: 14px; margin-bottom: 4px; }
+  .dbox .ports { font-family: var(--mono); font-size: 12px; color: var(--ink-mute); line-height: 1.7; }
+  .dbox.hi { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .dlabel { font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-mute); font-weight: 700; }
+  .arrow { align-self: center; color: var(--ink-mute); font-family: var(--mono); font-size: 13px; text-align: center; }
+
+  .phase { display: flex; gap: 14px; align-items: baseline; }
+  .phase .id {
+    font-family: var(--mono); font-weight: 700; color: var(--accent);
+    background: var(--accent-bg); border-radius: 6px; padding: 2px 8px; font-size: 13px;
+  }
+  footer {
+    border-top: 1px solid var(--line); margin-top: 60px; padding-top: 20px;
+    font-size: 13.5px; color: var(--ink-mute);
+  }
+  @media print {
+    body { font-size: 11pt; }
+    nav.toc, .meta { display: none; }
+    section { page-break-inside: avoid; }
+    header.hero { background: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <p class="eyebrow">Kasm Workspaces &middot; Platform Engineering</p>
+    <h1>Bringing OpenTelemetry to the Kasm Helm Chart</h1>
+    <p class="lede">
+      The <code>feature/DEV-31</code> branch gave the Docker installer a full observability stack:
+      an OpenTelemetry Collector, a bundled ClickHouse store, distributed tracing through nginx,
+      and browser-side telemetry. This is the plan to bring the same capability to Kubernetes
+      customers through the <code>kasm-helm</code> chart.
+    </p>
+    <div class="meta">
+      <span class="chip accent">Status: plan approved, not yet implemented</span>
+      <span class="chip">Source branch: feature/DEV-31</span>
+      <span class="chip">Target: kasm-helm</span>
+      <span class="chip">7 implementation phases</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+<nav class="toc">
+  <p>Contents</p>
+  <ol>
+    <li><a href="#summary">Executive summary</a></li>
+    <li><a href="#decisions">Design decisions</a></li>
+    <li><a href="#parity">What we are mirroring</a></li>
+    <li><a href="#logging">Logging: going OTel-native</a></li>
+    <li><a href="#topology">Collector topology</a></li>
+    <li><a href="#gotchas">Two things that break existing behaviour</a></li>
+    <li><a href="#values">Configuration surface</a></li>
+    <li><a href="#files">Chart changes</a></li>
+    <li><a href="#testing">Testing</a></li>
+    <li><a href="#plan">Sequencing</a></li>
+    <li><a href="#risks">Open risks &amp; dependencies</a></li>
+  </ol>
+</nav>
+
+<section id="summary">
+  <h2><span class="num">1</span>Executive summary</h2>
+
+  <p>
+    Kasm's Docker installs now ship telemetry by default: every service exports logs, traces and
+    metrics over OTLP to a local OpenTelemetry Collector, which writes them to a bundled ClickHouse
+    database that backs the reporting UI. nginx participates as the root of each trace, and the
+    browser contributes real user timings. None of that exists in the Helm chart today.
+  </p>
+
+  <div class="cards">
+    <div class="card">
+      <h5>Feature parity</h5>
+      <p>Kubernetes customers get the same telemetry, reporting and retention behaviour as Docker
+         customers, configured the Kubernetes way rather than by porting bind mounts.</p>
+    </div>
+    <div class="card">
+      <h5>On by default</h5>
+      <p>ClickHouse and the Collector are part of Kasm, not an add-on. Customers opt out or point at
+         their own infrastructure; they don't opt in.</p>
+    </div>
+    <div class="card">
+      <h5>Standards-first</h5>
+      <p>Plain OTLP and standard <code>OTEL_*</code> environment variables throughout, so customers
+         can drop in their own collector or observability vendor.</p>
+    </div>
+    <div class="card">
+      <h5>Thin configuration</h5>
+      <p>A small set of Helm values for endpoints, credentials and retention. Anything deeper is a
+         Collector ConfigMap the customer can replace outright.</p>
+    </div>
+  </div>
+
+  <p><strong>Scope at a glance:</strong> eleven new chart templates, roughly fifteen touched, two
+    templates deleted, a new <code>observability.*</code> values tree, nine new unit-test suites,
+    three new end-to-end scenarios, and one new customer-facing documentation page. The backend
+    prerequisite this depended on has already landed (see <a href="#risks">§11</a>).</p>
+</section>
+
+<section id="decisions">
+  <h2><span class="num">2</span>Design decisions</h2>
+
+  <p>These were the open questions; all are now settled and drive the rest of the plan.</p>
+
+  <table>
+    <thead>
+      <tr><th>Question</th><th>Decision</th><th>Why</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>How do logs leave the pods?</strong></td>
+        <td>OTLP to the Collector is the default and recommended path. File-based JSON remains
+            available via a shared volume plus a sidecar. Printing collected logs to a pod's stdout
+            is supported but not recommended.</td>
+        <td>As OTel-native as possible, while keeping today's "scrape the pod logs" workflow
+            available for customers who depend on it.</td>
+      </tr>
+      <tr>
+        <td><strong>How are nginx logs collected?</strong></td>
+        <td>A Collector DaemonSet on every node reads the container runtime's log files from
+            <code>/var/log/pods</code>, scoped to this release's proxy pods only.</td>
+        <td>The standard Kubernetes centralized-logging pattern. Nothing is added to the proxy pod.
+            Because the file-path glob already selects our own pods, pod metadata comes from the path and
+            the chart needs no ServiceAccount and no cluster permissions.</td>
+      </tr>
+      <tr>
+        <td><strong>Is ClickHouse bundled?</strong></td>
+        <td>Yes, deployed and enabled by default; disable or externalise through values.</td>
+        <td>ClickHouse is part of Kasm, the same way the bundled Postgres is.</td>
+      </tr>
+      <tr>
+        <td><strong>Multi-zone deployments?</strong></td>
+        <td>Two tiers: a lightweight <em>forwarder</em> Collector per zone, and a single cluster-wide
+            <em>gateway</em> Collector that samples traces and writes to ClickHouse.</td>
+        <td>Mirrors how the chart already renders per-zone workloads, <em>and</em> how the Docker
+            install already splits its own Collectors. A single tier per zone cannot sample traces
+            correctly &mdash; see <a href="#topology">§5</a>.</td>
+      </tr>
+      <tr>
+        <td><strong>ClickHouse TLS?</strong></td>
+        <td>Follow the bundled Postgres shape: mount the shared Kasm certificate and enable the
+            TLS ports.</td>
+        <td>Consistency with an existing, understood pattern in the chart. Needs one small backend
+            change first — see <a href="#risks">§11</a>.</td>
+      </tr>
+      <tr>
+        <td><strong>Collector config: values or ConfigMap?</strong></td>
+        <td>A ConfigMap per tier, each with its own <code>existingConfigMap</code> escape hatch, plus
+            worked examples. Only endpoints, credentials and retention numbers stay in values.</td>
+        <td>Dozens of values that all collapse into one YAML file is worse than letting customers
+            copy and modify that file directly.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="parity">
+  <h2><span class="num">3</span>What we are mirroring</h2>
+
+  <p>Each piece of the Docker installer's observability stack maps to a Kubernetes equivalent.</p>
+
+  <table>
+    <thead>
+      <tr><th>Area</th><th>Docker / installer today</th><th>Helm equivalent</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Collector runtime</td><td><code>kasm_otel_collector</code> container on every node</td><td>Deployment + Service per zone, plus a node-level DaemonSet</td></tr>
+      <tr><td>Collector config</td><td>YAML on disk, placeholders substituted by <code>install.sh</code></td><td>ConfigMap, replaceable wholesale by the customer</td></tr>
+      <tr><td>Telemetry store</td><td><code>kasm_clickhouse</code> container + named volume</td><td>StatefulSet + PersistentVolumeClaim, on by default</td></tr>
+      <tr><td>Store schema &amp; users</td><td><code>config.xml</code>, <code>users.xml</code>, <code>init-schema.sql</code></td><td>ConfigMap, password from the Kasm secret</td></tr>
+      <tr><td>Retention</td><td>TTLs written at install; <code>ALTER TABLE</code> on upgrade</td><td>Init ConfigMap + a post-upgrade Job</td></tr>
+      <tr><td>Service instrumentation</td><td><code>OTEL_*</code> env per container in compose files</td><td>Shared env helper applied to every workload</td></tr>
+      <tr><td>Reporting read path</td><td><code>KASM_CLICKHOUSE_*</code> env on API and Manager</td><td>Same env, sourced from values + secret</td></tr>
+      <tr><td>nginx tracing</td><td><code>otel.conf</code> plus span attributes in service configs</td><td>Inlined into the chart's nginx ConfigMaps</td></tr>
+      <tr><td>nginx metrics</td><td>Collector scrapes <code>stub_status</code> on port 8090</td><td>Not collected by default — known gap, see <a href="#risks">&sect;11</a></td></tr>
+      <tr><td>nginx logs</td><td>Collector tails the host log directory</td><td>DaemonSet tails <code>/var/log/pods</code> on each node</td></tr>
+      <tr><td>Browser telemetry</td><td><code>/otel-config.js</code>, <code>/otel-time</code>, API ingest endpoints</td><td>Same locations in the proxy ConfigMap</td></tr>
+      <tr><td>Splunk forwarding</td><td>A migration script rewrites the Collector config</td><td>Documented example ConfigMap (see <a href="#values">§7</a>)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Fixed technical facts</h3>
+  <ul>
+    <li><strong>Collector ports:</strong> <code>4318</code> OTLP/HTTP for local services,
+      <code>4317</code> OTLP/gRPC with bearer auth for out-of-cluster senders, <code>4316</code>
+      OTLP/gRPC unauthenticated for nginx (its module cannot present a bearer token),
+      <code>13133</code> health, <code>8888</code> Collector self-metrics.</li>
+    <li><strong>ClickHouse:</strong> <code>8123</code> HTTP, <code>9000</code> native,
+      <code>8443</code> HTTPS, <code>9440</code> native TLS. Database and user
+      <code>kasm_otel</code>.</li>
+    <li><strong>Retention defaults:</strong> application logs 30 days, audit logs 365 days, traces
+      7 days, metrics 90 days. Audit classification happens at insert time inside ClickHouse.</li>
+    <li><strong>Trace sampling:</strong> tail-based; all errors and all requests slower than one
+      second are always kept, plus 10&nbsp;% of everything else.</li>
+  </ul>
+</section>
+
+<section id="logging">
+  <h2><span class="num">4</span>Logging: going OTel-native</h2>
+
+  <p>
+    The backend refactor replaced Kasm's hand-rolled logging configuration with the shared
+    <code>kasm_telemetry</code> library. Console output is now always human-readable text; the
+    machine-readable copy goes out over OTLP, and optionally to a JSON file. There is deliberately
+    no "JSON to console" mode.
+  </p>
+
+  <p>That gives customers three ways to get logs into their own tooling:</p>
+
+  <table>
+    <thead>
+      <tr><th>Path</th><th>How it works</th><th>Guidance</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>1. OTLP to the Collector</strong></td>
+        <td>Services export directly to the Collector Service. From there, ClickHouse, a forwarding
+            endpoint of the customer's choosing, or both.</td>
+        <td><span class="tag rec">Default &amp; recommended</span></td>
+      </tr>
+      <tr>
+        <td><strong>2. JSON file + sidecar</strong></td>
+        <td>Services write JSON log files to a shared <code>emptyDir</code>; a Collector sidecar
+            tails them.</td>
+        <td><span class="tag opt">Supported</span> For customers who want file-shaped JSON.</td>
+      </tr>
+      <tr>
+        <td><strong>3. Collector debug output</strong></td>
+        <td>The Collector prints what it received to its own stdout, where an existing cluster log
+            scraper can pick it up from a single pod.</td>
+        <td><span class="tag no">Not recommended</span> Closest to today's behaviour; documented as a
+            fallback only.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout warn">
+    <span class="label">Customer-visible change</span>
+    <p><code>logFormat: json</code> narrows in meaning. It continues to control the nginx access-log
+      format and the Postgres JSON log, but it no longer affects API or Manager console output, which
+      is always text. Customers who rely on scraping JSON from API/Manager pod logs need to move to
+      path 1 (recommended) or path 2. This needs to be called out in the release notes.</p>
+  </div>
+
+  <p>Two consequences inside the chart:</p>
+  <ul>
+    <li>The <code>api-app-configmap</code> and <code>manager-app-configmap</code> templates —
+      roughly 570 lines of logging configuration — are no longer read by the application and get
+      <span class="tag del">deleted</span>. Their remaining keys duplicate the container image's own
+      defaults and are already overridden by environment variables.</li>
+    <li>File logging must be explicitly disabled unless path 2 is in use, because the chart runs
+      containers with a read-only root filesystem and no log volume.</li>
+  </ul>
+</section>
+
+<section id="topology">
+  <h2><span class="num">5</span>Collector topology</h2>
+
+  <p>
+    Telemetry moves through <strong>two Collector tiers</strong>. A <strong>forwarder</strong> Deployment
+    in each zone receives everything the Kasm services and nginx emit, batches it, and passes it on. A
+    single <strong>gateway</strong> Deployment then makes the trace-sampling decision and is the only
+    writer to ClickHouse. This is not an extra layer for its own sake &mdash; it is the same split the
+    Docker install already ships, and the reason is in the callout below.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Why sampling must live in exactly one place</span>
+    <p>
+      Trace sampling is a decision about a <em>whole trace</em>: keep it if any span errored, or if the
+      request was slow, otherwise keep a set percentage. To make that call, one process has to see every
+      span in the trace.
+    </p>
+    <p>
+      A single Collector tier cannot guarantee that. A request that crosses zones sends its spans to two
+      different zone Collectors, and even inside one zone the deployment presets run <strong>two
+      replicas</strong> at medium and large, with a Service spreading spans across them. Each instance
+      would then vote on a fragment of the trace, and traces would arrive with spans missing while the
+      sampling percentage quietly stopped meaning what it says. Nothing errors; the data is simply wrong.
+    </p>
+    <p>
+      Hence the split. Forwarders hold no state and scale freely; the gateway runs as a single instance
+      and owns sampling alone. Concentrating the ClickHouse writes there is a bonus &mdash; ClickHouse
+      degrades under many small concurrent inserts, and one writer keeps batches consolidated.
+    </p>
+  </div>
+
+  <p>
+    nginx logs need one more piece. Docker runs one Collector per host and bind-mounts the nginx log
+    directory into it. The Kubernetes
+    equivalent of &ldquo;one collector per node reading local log files&rdquo; is a <strong>DaemonSet that
+    mounts <code>/var/log/pods</code></strong>. nginx writes to stdout and stderr, the container runtime
+    persists that to the node's filesystem, and the node-local Collector tails it &mdash; the standard
+    centralized-logging pattern, and nothing at all is added to the proxy pod.
+  </p>
+  <p>
+    Crucially, the chart knows its own release name and namespace when it renders, so the DaemonSet reads
+    only <code>/var/log/pods/&lt;namespace&gt;_&lt;release&gt;-proxy-*/*/*.log</code>. That is narrower
+    than the usual &ldquo;collect everything, then filter&rdquo; recipe and it buys three things: it never
+    reads another workload's logs, it does far less file I/O per node, and pod metadata can be derived
+    from the file path &mdash; so <strong>no ServiceAccount and no RBAC are needed at all</strong>. The
+    chart creates zero RBAC objects today, and this keeps it that way.
+  </p>
+
+  <div class="diagram">
+    <div class="dcol">
+      <span class="dlabel">Kasm services</span>
+      <div class="dbox"><strong>API &middot; Manager</strong><span class="ports">OTLP/HTTP &rarr; :4318</span></div>
+      <div class="dbox"><strong>Guac &middot; RDP gateways</strong><span class="ports">OTLP/HTTP &rarr; :4318</span></div>
+      <div class="dbox"><strong>Browser (kasm-web)</strong><span class="ports">via API ingest endpoints</span></div>
+    </div>
+    <div class="arrow">&rarr;</div>
+    <div class="dcol">
+      <span class="dlabel">One per zone</span>
+      <div class="dbox hi">
+        <strong>Forwarder Collector</strong>
+        <span class="ports">
+          otlp/local&nbsp;&nbsp;:4318<br>
+          otlp/remote :4317 (bearer)<br>
+          otlp/nginx&nbsp;&nbsp;:4316 (no auth)<br>
+          health&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:13133
+        </span>
+        <span class="ports">memory limiter &middot; batching<br>no sampling &middot; no ClickHouse</span>
+        <span class="ports">scales with deployment size</span>
+      </div>
+    </div>
+    <div class="arrow">:4317<br>bearer<br>&rarr;</div>
+    <div class="dcol">
+      <span class="dlabel">One per cluster</span>
+      <div class="dbox hi">
+        <strong>Gateway Collector</strong>
+        <span class="ports">
+          otlp/remote :4317 (bearer)<br>
+          health&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:13133
+        </span>
+        <span class="ports"><strong>tail sampling</strong> &middot; memory limiter &middot; batching</span>
+        <span class="ports">single replica, by design</span>
+      </div>
+    </div>
+    <div class="arrow">&rarr;</div>
+    <div class="dcol">
+      <span class="dlabel">Storage</span>
+      <div class="dbox"><strong>ClickHouse StatefulSet</strong><span class="ports">8123 / 9000<br>8443 / 9440 (TLS)<br>PersistentVolumeClaim</span></div>
+      <div class="dbox"><strong>or external ClickHouse</strong><span class="ports">customer-managed</span></div>
+      <div class="dbox"><strong>or forwarding endpoint</strong><span class="ports">customer's OTLP backend</span></div>
+    </div>
+  </div>
+
+  <div class="diagram">
+    <div class="dcol">
+      <span class="dlabel">Proxy pod</span>
+      <div class="dbox">
+        <strong>nginx container</strong>
+        <span class="ports">
+          spans &rarr; zone forwarder :4316<br>
+          access log &rarr; stdout (JSON)<br>
+          error log &rarr; stderr
+        </span>
+      </div>
+    </div>
+    <div class="arrow">container<br>runtime<br>&darr;</div>
+    <div class="dcol">
+      <span class="dlabel">On the node</span>
+      <div class="dbox">
+        <strong><code>/var/log/pods/&hellip;</code></strong>
+        <span class="ports">one directory per pod, written by containerd / CRI-O</span>
+      </div>
+    </div>
+    <div class="arrow">&rarr;</div>
+    <div class="dcol">
+      <span class="dlabel">Every node</span>
+      <div class="dbox hi">
+        <strong>Collector DaemonSet</strong>
+        <span class="ports">
+          hostPath <code>/var/log/pods</code> (read-only)<br>
+          glob-scoped to this release's proxy pods<br>
+          stdout &rarr; JSON parser, stderr &rarr; error parser<br>
+          &rarr; gateway Collector :4317
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <p>
+    The container runtime records which stream each line came from, so one receiver handles both: the
+    JSON access log from stdout and nginx's plain-text error log from stderr are routed to different
+    parsers. <code>kubectl logs</code> behaviour is unchanged, and there is one collection path instead
+    of two. Log-file read offsets are checkpointed on the node, so restarting the DaemonSet neither loses
+    nor repeats lines.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The Pod Security trade-off &mdash; and why a sidecar still exists</span>
+    <p>
+      <code>hostPath</code> volumes are forbidden by <strong>both</strong> the <code>baseline</code> and
+      <code>restricted</code> Pod Security Standards, and reading <code>/var/log/pods</code> requires
+      running as root, which <code>restricted</code> also forbids. This chart advertises &mdash; and
+      end-to-end tests &mdash; restricted-namespace support.
+    </p>
+    <p>
+      So the DaemonSet <strong>cannot run in a namespace that enforces either profile</strong>. For those
+      customers the original sidecar mechanism is retained as a documented, default-off alternative: a
+      shared volume and a Collector sidecar in the proxy pod. It is the only way to collect nginx logs
+      under restricted pod security, and it costs almost nothing to keep because the same sidecar helper
+      already serves optional file-based logging. Enabling both mechanisms at once is a configuration
+      error and fails the install.
+    </p>
+    <p>
+      nginx <em>traces</em> are unaffected in every case &mdash; the module talks to the Collector over
+      the network and needs neither mechanism.
+    </p>
+  </div>
+</section>
+
+<section id="gotchas">
+  <h2><span class="num">6</span>Two things that break existing behaviour</h2>
+
+  <p>Both were found while reading the two codebases side by side. Neither is optional.</p>
+
+  <div class="callout danger">
+    <span class="label">Blocker 1 &mdash; the chart overwrites the file that loads the nginx OTel module</span>
+    <p>
+      The Kasm nginx image ships the OpenTelemetry module and injects a <code>load_module</code>
+      directive as the first line of its <code>nginx.conf</code>. The chart mounts <em>its own</em>
+      <code>nginx.conf</code> over that path, so the module would never load — and every
+      <code>otel_*</code> directive would become a fatal "unknown directive" error that stops nginx
+      from starting at all.
+    </p>
+    <p><strong>Fix:</strong> the chart must emit the <code>load_module</code> line itself, as the
+      first line of the config it renders. The module is inert when tracing is switched off, so this
+      is safe unconditionally. The same applies to the Guac and RDP gateway nginx sidecars.</p>
+  </div>
+
+  <div class="callout danger">
+    <span class="label">Blocker 2 &mdash; the chart's JSON logging configuration is now dead code</span>
+    <p>
+      The API server no longer loads the logging section of its application config file, so the two
+      large ConfigMaps the chart maintains for JSON logging are mounted and ignored. The existing
+      end-to-end test asserting JSON output from every pod will fail for API and Manager.
+    </p>
+    <p><strong>Fix:</strong> delete both ConfigMaps, adopt the logging paths in
+      <a href="#logging">§4</a>, and re-scope that test to cover nginx and Postgres stdout plus the
+      new sidecar path.</p>
+  </div>
+</section>
+
+<section id="values">
+  <h2><span class="num">7</span>Configuration surface</h2>
+
+  <p>
+    Deliberately small. A value earns its place only if it is an endpoint, a credential, or a number
+    the chart needs in more than one place — retention days, for example, are written both into the
+    ClickHouse schema and into the Collector's exporters. Everything else lives in the Collector
+    ConfigMap, which customers can replace in full.
+  </p>
+
+  <pre><code>observability:
+  enabled: true                    <span class="cmt"># master switch for the whole stack</span>
+
+  collector:
+    externalEndpoint: ""           <span class="cmt"># use an existing Collector; deploys neither tier</span>
+    image: {...}                   <span class="cmt"># both tiers run the same image</span>
+
+    forwarder:                     <span class="cmt"># one per zone — what services export to</span>
+      existingConfigMap: ""        <span class="cmt"># bring your own forwarder config</span>
+      replicas: 0                  <span class="cmt"># 0 = size preset</span>
+      resources: {}
+      externalService:             <span class="cmt"># expose :4317 to out-of-cluster agents/zones</span>
+        {enabled: false, type: LoadBalancer, annotations: {}}
+    gateway:                       <span class="cmt"># one per cluster — samples and writes</span>
+      existingConfigMap: ""        <span class="cmt"># bring your own gateway config</span>
+      replicas: 0                  <span class="cmt"># 0 = size preset, which is 1 at every size</span>
+      resources: {}
+
+    tailSamplePercentage: 10       <span class="cmt"># pipeline behaviour: applied at the gateway</span>
+    forward:                       <span class="cmt"># ship a copy to any OTLP backend, post-sampling</span>
+      endpoint: ""
+      token: ""
+      existingSecret: {name: "", key: ""}
+
+  fileLogs:                        <span class="cmt"># logging path 2 — off by default</span>
+    enabled: false
+    sizeLimit: 512Mi
+    components: [api, manager, guac]
+
+  hostLogs:                        <span class="cmt"># DaemonSet reading /var/log/pods (default path)</span>
+    enabled: true
+    persistOffsets: true           <span class="cmt"># checkpoint read offsets on the node</span>
+    extraSelectors: []             <span class="cmt"># e.g. kasm-db-* to also collect the database</span>
+    tolerations: []
+
+  nginxLogs:                       <span class="cmt"># sidecar alternative for restricted-PSS namespaces</span>
+    enabled: false                 <span class="cmt"># mutually exclusive with hostLogs</span>
+    sizeLimit: 512Mi
+
+  clickhouse:
+    enabled: true                  <span class="cmt"># false = no telemetry store at all</span>
+    standalone: false              <span class="cmt"># true = use an external ClickHouse</span>
+    nativeEndpoint: ""             <span class="cmt"># external: Collector write path</span>
+    httpEndpoint: ""               <span class="cmt"># external: Kasm reporting read path</span>
+    database: kasm_otel
+    username: kasm_otel
+    existingSecret: {name: "", key: ""}
+    tls: true
+    image: {...}
+    resources: {}
+    storage:
+      storageClassName: ""
+      pvcSize: 20
+      retentionPolicy: {whenDeleted: Retain, whenScaled: Retain}
+    retention:
+      {logsDays: 30, auditLogsDays: 365, tracesDays: 7, metricsDays: 90}
+
+  browser:
+    enabled: true                  <span class="cmt"># real-user telemetry from the Kasm web UI</span>
+</code></pre>
+
+  <div class="callout info">
+    <span class="label">The escape hatch</span>
+    <p>
+      Each tier has its own <code>existingConfigMap</code>, so a customer can take over the gateway's
+      config &mdash; where sampling and storage live &mdash; without also having to hand-maintain the
+      forwarder's, or vice versa. We ship worked examples to start from — a documented skeleton, a Splunk HEC
+      variant (replacing the migration script the Docker installer uses), and a debug-output variant
+      for logging path 3. The chart already uses this pattern for the RDP gateway's
+      <code>rdpproxy.ini</code> and for trusted CA bundles, so it is familiar territory.
+    </p>
+  </div>
+
+  <p>
+    The chart will refuse to render, or warn, on the same invalid combinations the installer rejects:
+    external ClickHouse endpoints must be supplied in pairs; an external store cannot be combined
+    with "no store"; a customer-supplied Collector config makes the config-shaping values inert.
+  </p>
+</section>
+
+<section id="files">
+  <h2><span class="num">8</span>Chart changes</h2>
+
+  <h3><span class="tag new">New</span> templates</h3>
+  <table class="tight">
+    <thead><tr><th>Template</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>otel-collector-configmap.yaml</code></td><td>Forwarder Collector config; skipped when the customer supplies their own</td></tr>
+      <tr><td><code>otel-gateway-configmap.yaml</code></td><td>Gateway Collector config: sampling plus the ClickHouse exporters</td></tr>
+      <tr><td><code>otel-gateway-deployment.yaml</code></td><td>Gateway Collector, one per cluster, single replica</td></tr>
+      <tr><td><code>otel-gateway-service.yaml</code></td><td>Gateway ClusterIP Service on :4317</td></tr>
+      <tr><td><code>otel-collector-daemonset.yaml</code></td><td>Node-level log collector, one pod per node</td></tr>
+      <tr><td><code>otel-collector-daemonset-configmap.yaml</code></td><td>Its config, with the include glob scoped to this release's proxy pods</td></tr>
+      <tr><td><code>otel-collector-sidecar-configmap.yaml</code></td><td>Log-tailing sidecar config, for optional file logging and the restricted-PSS fallback</td></tr>
+      <tr><td><code>otel-collector-deployment.yaml</code></td><td>Forwarder Collector, one per zone</td></tr>
+      <tr><td><code>otel-collector-service.yaml</code></td><td>Forwarder OTLP, health and self-metrics ports</td></tr>
+      <tr><td><code>clickhouse-statefulset.yaml</code></td><td>Telemetry store with its own volume, TLS in the bundled-Postgres shape</td></tr>
+      <tr><td><code>clickhouse-service.yaml</code></td><td>HTTP, native and TLS ports</td></tr>
+      <tr><td><code>clickhouse-configmap.yaml</code></td><td>Server config, users, and the initial schema with retention TTLs</td></tr>
+      <tr><td><code>clickhouse-retention-job.yaml</code></td><td>Post-upgrade hook that applies changed retention to an existing store</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Modified</h3>
+  <table class="tight">
+    <thead><tr><th>File</th><th>Change</th></tr></thead>
+    <tbody>
+      <tr><td><code>_helpers.tpl</code></td><td>Shared helpers: service constants, the common <code>OTEL_*</code> env block, the ClickHouse env block, and the log-tailing sidecar</td></tr>
+      <tr><td>API, Manager, Guac, RDP gateway workloads</td><td>Telemetry env, per-service names, log-file behaviour, optional sidecar</td></tr>
+      <tr><td><code>proxy-deployment.yaml</code></td><td>Metrics port; sidecar and shared volume only on the restricted-PSS path</td></tr>
+      <tr><td><code>nginx-shared-configmap.yaml</code></td><td>Module loading (Blocker 1), tracing directives, JSON access log to stdout</td></tr>
+      <tr><td><code>proxy-configmaps.yaml</code></td><td>Browser telemetry endpoints, status endpoint, span names and attributes, tracing exclusions for health checks and long-lived tunnels</td></tr>
+      <tr><td>Guac / RDP gateway nginx ConfigMaps</td><td>Module loading, tracing exclusions</td></tr>
+      <tr><td><code>kasm-password-secret.yaml</code></td><td>Two new generated credentials, preserved across upgrades like the existing ones</td></tr>
+      <tr><td><code>values.schema.json</code>, <code>images.txt</code>, <code>NOTES.txt</code></td><td>New values tree, two new images, post-install guidance</td></tr>
+      <tr><td><code>examples/</code></td><td>Three Collector config examples</td></tr>
+    </tbody>
+  </table>
+
+  <h3><span class="tag del">Deleted</span></h3>
+  <p><code>api-app-configmap.yaml</code> and <code>manager-app-configmap.yaml</code> — see
+    <a href="#logging">§4</a>. Verified against the container images' own defaults before removal.</p>
+</section>
+
+<section id="testing">
+  <h2><span class="num">9</span>Testing</h2>
+
+  <h4>Unit tests (rendered-template assertions)</h4>
+  <table>
+    <thead><tr><th>Suite</th><th>Covers</th></tr></thead>
+    <tbody>
+      <tr><td>Collector rendering</td><td>Objects appear when enabled and disappear when disabled or when an external Collector is configured; per-zone naming; the bring-your-own-config path</td></tr>
+      <tr><td>Service environment</td><td>Every workload gets the right service name and endpoint; log-file behaviour in each mode; SDK disabled when telemetry is off</td></tr>
+      <tr><td>Collector config content</td><td>Sampling percentage, retention TTLs, exporter selection, forwarding, secret references</td></tr>
+      <tr><td>Log collection DaemonSet</td><td>Renders by default; read-only host mount; glob contains the templated namespace and release; runs as root with everything else locked down; <strong>the chart still renders zero RBAC objects</strong></td></tr>
+      <tr><td>Sidecars</td><td>Absent by default; present on the restricted-PSS path and for optional file logging; enabling both log paths fails the install</td></tr>
+      <tr><td>ClickHouse</td><td>StatefulSet, volume, service, schema TTLs, TLS mounts and ports</td></tr>
+      <tr><td>External ClickHouse</td><td>Read path points outward; nothing bundled; retention Job suppressed</td></tr>
+      <tr><td>nginx</td><td>Module load line is first; tracing block present or absent; status endpoint; exclusions; dual log destinations</td></tr>
+      <tr><td>Browser telemetry</td><td>Enabled and disabled variants of the runtime config endpoint</td></tr>
+      <tr><td>Validation</td><td>Invalid combinations fail to render with a clear message</td></tr>
+    </tbody>
+  </table>
+  <p>Nine existing suites also need updating, along with several new test value files.</p>
+
+  <h4>End-to-end tests (real cluster)</h4>
+  <ul>
+    <li><strong>Default install</strong> — Collector and ClickHouse healthy; after driving a login,
+      telemetry rows for API, Manager, proxy and Guac are actually present in ClickHouse.</li>
+    <li><strong>Telemetry disabled</strong> — no observability objects, every pod healthy, browser
+      telemetry reports itself as off.</li>
+    <li><strong>File-based logging</strong> — JSON present in the shared volume and the same records
+      arriving in ClickHouse through the sidecar.</li>
+    <li><strong>Restricted pod security</strong> &mdash; the chart installs and runs in a
+      <code>restricted</code> namespace with the DaemonSet disabled and the sidecar path enabled,
+      keeping the chart's advertised support honest.</li>
+    <li><strong>Existing JSON logging test</strong> — re-scoped per <a href="#logging">§4</a>.</li>
+  </ul>
+  <p>Both new workloads must also satisfy the chart's existing Pod Security Standards and policy
+    checks, including required probes and resource limits.</p>
+</section>
+
+<section id="plan">
+  <h2><span class="num">10</span>Sequencing</h2>
+
+  <table>
+    <thead><tr><th>Phase</th><th>Work</th><th>Done when</th></tr></thead>
+    <tbody>
+      <tr><td><div class="phase"><span class="id">H0</span></div></td>
+          <td>Land the backend prerequisite for ClickHouse TLS (see <a href="#risks">§11</a>)</td>
+          <td>Backend change merged</td></tr>
+      <tr><td><div class="phase"><span class="id">H1</span></div></td>
+          <td>Values, schema, shared helpers, new secret keys — no new workloads yet</td>
+          <td>Lint and unit tests pass</td></tr>
+      <tr><td><div class="phase"><span class="id">H2</span></div></td>
+          <td>Instrument every service; delete the dead ConfigMaps; settle log-file behaviour</td>
+          <td>Environment and log-format suites pass</td></tr>
+      <tr><td><div class="phase"><span class="id">H3</span></div></td>
+          <td>ClickHouse: StatefulSet, service, schema, retention Job, TLS</td>
+          <td>ClickHouse suite and manifest validation pass</td></tr>
+      <tr><td><div class="phase"><span class="id">H4</span></div></td>
+          <td>Both Collector tiers: configs, Deployments, Services, bring-your-own paths, validation</td>
+          <td>Collector suites pass</td></tr>
+      <tr><td><div class="phase"><span class="id">H5</span></div></td>
+          <td>Log-collection DaemonSet and all nginx work, including module loading and browser telemetry</td>
+          <td>nginx, DaemonSet, sidecar and browser suites pass</td></tr>
+      <tr><td><div class="phase"><span class="id">H6</span></div></td>
+          <td>End-to-end scenarios and policy conformance</td>
+          <td>New e2e scenarios green in a real cluster</td></tr>
+      <tr><td><div class="phase"><span class="id">H7</span></div></td>
+          <td>Documentation, examples, image list, changelog</td>
+          <td>Documentation CI gates pass</td></tr>
+    </tbody>
+  </table>
+
+  <p>H1 through H5 are largely independent once H1 lands, so they can be parallelised across
+     reviewers if needed. H0 only gates H3.</p>
+</section>
+
+<section id="risks">
+  <h2><span class="num">11</span>Open risks &amp; dependencies</h2>
+
+  <div class="callout ok">
+    <span class="label">Backend prerequisite &mdash; now resolved</span>
+    <p>
+      Kasm's reporting code creates its ClickHouse client without specifying how to verify the
+      server's TLS certificate, so it falls back to full verification against the system trust
+      store. Kasm presents a self-signed certificate on that interface — both in this chart and on
+      the dedicated ClickHouse role that <strong>already ships in the Docker installer</strong>.
+      Report queries over HTTPS will therefore fail certificate verification.
+    </p>
+    <p>
+      <strong>Done.</strong> The reporting client can now be told which certificate to trust
+      (preferred, since verification then genuinely succeeds) or told to skip verification. Landed on the
+      backend, together with a second change making the ClickHouse <em>database name</em> configurable so
+      Kasm can share a multi-tenant ClickHouse &mdash; the reporting queries no longer hard-code it.
+    </p>
+    <p>
+      One follow-up remains, and it is a Docker-side gap rather than a Helm one: the installer does not
+      yet set either variable automatically for the dedicated ClickHouse role, so that topology still
+      needs them supplied by hand.
+    </p>
+  </div>
+
+  <h3>Other items to keep an eye on</h3>
+  <ul>
+    <li><strong>Storage sizing.</strong> ClickHouse adds a PersistentVolumeClaim, defaulting to
+      20&nbsp;GiB. We need sizing guidance in the documentation tied to the retention defaults, and
+      customers on clusters without a default storage class need a clear message.</li>
+    <li><strong>nginx connection metrics are not collected on the default path.</strong> A node-level
+      DaemonSet cannot reach a pod's loopback interface, and scraping the proxy Service round-robins
+      across replicas, which corrupts cumulative counters. Request rate, latency and status-code
+      distribution all still come from the access logs and traces; the one signal lost is the count of
+      currently-active connections. Two ways to recover it later: pod discovery in the DaemonSet, which
+      would add cluster permissions the chart does not currently need, or the sidecar path, which already
+      collects them.</li>
+    <li><strong>Restricted pod security needs a different setting.</strong> Customers enforcing the
+      <code>baseline</code> or <code>restricted</code> Pod Security Standards must disable the DaemonSet
+      and enable the sidecar instead. This is documented, tested, and called out in the release notes,
+      but it is a default that does not fit every cluster &mdash; worth saying out loud to customers
+      rather than letting them discover it through a failed install.</li>
+    <li><strong>Resource footprint.</strong> Three new workloads &mdash; a forwarder Collector per zone,
+      one gateway Collector, and ClickHouse &mdash; plus a DaemonSet pod on every node and, optionally, a
+      sidecar per proxy pod. These need sensible requests and limits per deployment size, and a mention in the
+      upgrade notes so existing clusters are not surprised.</li>
+    <li><strong>Splunk continuity.</strong> Customers upgrading from 1.19 or earlier whose Splunk
+      settings lived in the Kasm database must move them into a Collector config. This needs a
+      prominent release note, not just a documentation page.</li>
+    <li><strong>Trace sampling expectations.</strong> Only 10&nbsp;% of healthy traffic is retained by
+      default. Errors and slow requests are always kept, but this should be stated plainly so nobody
+      concludes that traces are missing.</li>
+    <li><strong>The gateway is a single instance, and scaling it needs real work.</strong> Correct
+      sampling requires one process to see a whole trace, so the gateway does not scale horizontally the
+      way the forwarders do. Very large deployments will eventually want trace-ID-aware load balancing in
+      front of a sampling tier; until then the gateway's ceiling is vertical. Worth stating in the sizing
+      guidance so nobody raises the replica count expecting more throughput and silently loses
+      spans.</li>
+    <li><strong>Documentation reach.</strong> Beyond the chart's own new page, the public
+      observability documentation needs a Kubernetes column throughout; that work is already tracked
+      on the backend side.</li>
+  </ul>
+</section>
+
+<footer>
+  <p>
+    Full technical plan, including exact file lists, template-level detail and the complete decision
+    record: <code>components/kasm-helm/docs/otel-integration-plan.md</code>.
+    Behavioural source of truth for the underlying feature: <code>docs/telemetry/</code> in
+    <code>kasm_backend</code>.
+  </p>
+</footer>
+
+</div>
+</body>
+</html>

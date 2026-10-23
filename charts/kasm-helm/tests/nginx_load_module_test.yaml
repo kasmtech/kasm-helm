@@ -1,0 +1,31 @@
+suite: nginx load_module gated on observability.enabled — deployability regression
+
+# H5 amendment regression test (see PROGRESS.md): an unknown load_module path is FATAL to nginx.
+# Gating load_module on observability.enabled means observability.enabled=false stays deployable
+# on any proxy image, including ones predating ngx_otel_module.
+
+templates:
+  - templates/nginx-shared-configmap.yaml
+
+tests:
+  - it: load_module is the first line of nginx.conf when observability.enabled=true
+    asserts:
+      - matchRegex:
+          path: data["nginx.conf"]
+          pattern: "^\\s*load_module modules/ngx_otel_module\\.so;"
+
+  - it: load_module is absent when observability.enabled=false
+    set:
+      observability.enabled: false
+    asserts:
+      - notMatchRegex:
+          path: data["nginx.conf"]
+          pattern: "load_module"
+
+  - it: first line is `user nginx;` when observability.enabled=false (no otel-dependent lines at all)
+    set:
+      observability.enabled: false
+    asserts:
+      - matchRegex:
+          path: data["nginx.conf"]
+          pattern: "^\\s*user\\s+nginx;"

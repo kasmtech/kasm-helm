@@ -3,6 +3,28 @@ SHELL := /usr/bin/env bash
 CHART_DIR := charts/kasm-helm
 TEST_VALUES_DIR := tests/values
 
+# CHARTS lists every deployable chart (directory name under charts/) that participates in the
+# full static build: chart-deps, lint, render, unittest, otel-validate. Appending a chart name
+# here is all a new chart needs to join those targets. charts/kasm-secondary-region is
+# known-broken (see project CLAUDE.md: do not run `make unittest`/`make test` against it) and
+# must never be added here or to any loop derived from it.
+CHARTS := kasm-helm kasm-otel-router
+
+# kasm-common is a library chart (type: library): no values.yaml, so render/kubeconform/
+# unittest/otel-validate are meaningless against it. It is still a real chart with a Chart.yaml,
+# so `lint` runs against it too -- kept as its own variable instead of folded into CHARTS so the
+# distinction is explicit rather than an accident of list membership.
+LINT_ONLY_CHARTS := kasm-common
+
+# Per-chart scenario values directory for `render`. Defaults every chart in CHARTS to
+# TEST_VALUES_DIR; a chart with scenarios of its own overrides by defining
+# `<chart>_VALUES_DIR` above this line (e.g. `kasm-otel-router_VALUES_DIR := tests/values-router`)
+# -- no edit to the render recipe itself required. Resolved here, at parse time, into
+# "chart=dir" pairs so the recipe only has to split on "=".
+kasm-otel-router_VALUES_DIR := tests/values-router
+
+CHART_VALUES_DIRS := $(foreach chart,$(CHARTS),$(chart)=$(or $($(chart)_VALUES_DIR),$(TEST_VALUES_DIR)))
+
 BIN_DIR := $(CURDIR)/bin
 HELM := $(BIN_DIR)/helm
 KUBECONFORM := $(BIN_DIR)/kubeconform
@@ -50,18 +72,21 @@ E2E_NAMESPACE ?= kasm-e2e
 E2E_RELEASE ?= kasm-e2e
 E2E_MARK ?= e2e
 E2E_CLUSTER_WARMUP_SECONDS ?= 10
+# E2E_KEEP=1 keeps the release installed after a run; =onfail keeps it only after a failure.
+E2E_KEEP ?=
+# Extra values file layered onto every install in a scenario, used for branch-build image overrides.
+# Path is as seen inside the pytest container (tests/values is mounted at /e2e-values).
+# Defaults to pubsub-images.yaml (D021) so every scenario installs the integ/otel-openapi-pubsub
+# private-registry app images (api/proxy/guac/rdp-gateway/rdp-https-gateway); database stays on the
+# chart's default released kasmweb/postgres tag. Override per-target only for a scenario that
+# genuinely needs a different overlay (none currently do).
+E2E_IMAGE_VALUES ?= /e2e-values/pubsub-images.yaml
+E2E_ARTIFACT_DIR ?= /e2e/artifacts
 E2E_DNS_RETRIES ?= 2
 E2E_DNS_BACKOFF_SECONDS ?= 10
 # Pause between scenarios in `make e2e` to let cluster state settle
 # (CoreDNS, kube-proxy, endpoints controller) before the next install.
 E2E_SCENARIO_SETTLE_SECONDS ?= 30
-
-# Override the kasm-api component's image (e.g. "myregistry/kasmweb/api:mytag")
-# for e2e runs, in place of the chart's values.yaml default. Applied to both
-# kind-load-images (so the image is pulled/loaded into kind) and the
-# helm install/upgrade calls (tests/e2e/helpers.py::api_image_override_args).
-# Leave empty to use the chart default.
-KASM_API_IMAGE ?=
 
 # Branch to source the "previous version" chart from for upgrade tests.
 # The pytest container has no access to the git repo, so the Makefile
@@ -88,7 +113,9 @@ KIND_LOAD_CHART_DIR ?= $(CHART_DIR)
 # Extra images required by e2e tests but not referenced by the chart itself:
 #   postgres:16        external-DB scenario (tests/e2e/start_external_postgres.sh)
 #   nginx:1.30-alpine  trusted-CA scenario (tests/e2e/test_02_trusted_ca.py)
-KIND_EXTRA_IMAGES ?= postgres:16 nginx:1.30-alpine
+#   curlimages/curl    ephemeral debug container for curl_from_pod (tests/e2e/helpers.py);
+#                      keep the tag in step with CURL_DEBUG_IMAGE
+KIND_EXTRA_IMAGES ?= postgres:16 nginx:1.30-alpine curlimages/curl:8.10.1
 
 
 UNAME_S := $(shell uname -s)
@@ -124,7 +151,7 @@ CRANE_ARCH := $(subst amd64,x86_64,$(ARCH))
 CLOUD_PROVIDER_KIND_PID_FILE ?= $(CURDIR)/.kind/cloud-provider-kind.pid
 CLOUD_PROVIDER_KIND_LOG ?= $(CURDIR)/.kind/cloud-provider-kind.log
 
-.PHONY: tools lint render kubeconform kyverno unittest readme readme-check changelog changelog-llm changelog-console changelog-console-llm changelog-check docs test build-pytest kind-up kind-down kind-recreate kind-ensure kind-load-images kind-load-old-images kind-clean-namespace kind-prep pytest-docker e2e e2e-basic e2e-trustedca e2e-multizone e2e-externaldb e2e-backup e2e-backup-pss e2e-pss e2e-json-logging e2e-upgrade e2e-upgrade-included e2e-upgrade-standalone e2e-settle e2e-preseed validate-preseed extract-old-chart clean
+.PHONY: tools lint render kubeconform kyverno unittest otel-validate readme readme-check changelog changelog-llm changelog-console changelog-console-llm changelog-check docs test build-pytest kind-up kind-down kind-recreate kind-ensure kind-load-images kind-load-old-images kind-clean-namespace kind-prep pytest-docker e2e e2e-basic e2e-split e2e-trustedca e2e-multizone e2e-externaldb e2e-backup e2e-backup-pss e2e-pss e2e-json-logging e2e-observability e2e-observability-off e2e-router e2e-otel-roundtrip e2e-otel-isolation e2e-upgrade e2e-upgrade-included e2e-upgrade-standalone e2e-settle e2e-preseed validate-preseed extract-old-chart clean
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*## "; printf "\nUsage: make \033[36m<target>\033[0m\n"} \
@@ -265,42 +292,117 @@ helm-unittest: $(HELM)
 
 ##@ Static Analysis
 
-lint: $(HELM) ## Lint the primary Helm chart
-	$(HELM) lint $(CHART_DIR)
+chart-deps: $(HELM) $(patsubst %,charts/%/Chart.yaml,$(CHARTS)) charts/kasm-common/Chart.yaml ## Vendor the kasm-common file:// dependency into each chart in CHARTS
+	@set -euo pipefail; \
+	  for chart in $(CHARTS); do \
+	    echo "chart-deps: charts/$$chart"; \
+	    $(HELM) dependency build charts/$$chart; \
+	  done
 
-render: $(HELM) ## Render all test scenario values to .rendered/
+lint: chart-deps ## Lint every chart in CHARTS, plus kasm-common (library chart, lint-only)
+	@set -euo pipefail; \
+	  for chart in $(CHARTS) $(LINT_ONLY_CHARTS); do \
+	    echo "lint: charts/$$chart"; \
+	    $(HELM) lint charts/$$chart; \
+	  done
+
+render: chart-deps ## Render all test scenario values for each chart in CHARTS to .rendered/<chart>/
+	@rm -rf .rendered
 	@mkdir -p .rendered
 	@set -euo pipefail; \
-	  for values_file in $(TEST_VALUES_DIR)/*.yaml; do \
-	    scenario=$$(basename $$values_file .yaml); \
-	    echo "Rendering $$scenario"; \
-	    $(HELM) template kasm-test $(CHART_DIR) -n kasm-test -f $$values_file > .rendered/$$scenario.yaml; \
+	  for pair in $(CHART_VALUES_DIRS); do \
+	    chart=$${pair%%=*}; \
+	    values_dir=$${pair#*=}; \
+	    mkdir -p .rendered/$$chart; \
+	    for values_file in $$values_dir/*.yaml; do \
+	      scenario=$$(basename $$values_file .yaml); \
+	      echo "Rendering $$chart/$$scenario"; \
+	      $(HELM) template kasm-test charts/$$chart -n kasm-test -f $$values_file > .rendered/$$chart/$$scenario.yaml; \
+	    done; \
 	  done
 
+# Rendered output is chart-scoped (.rendered/<chart>/<scenario>.yaml), so this walks the whole
+# tree rather than globbing .rendered/*.yaml -- a second chart's files live one level deeper and
+# must not be silently skipped. Manifests are collected into a file (not a `for f in $(find ...)`
+# word list) so a missing/empty .rendered/ or a failing `find` surfaces as a hard failure instead
+# of being swallowed by command substitution -- an empty result must never look like success.
 kubeconform: tools render ## Validate rendered manifests against Kubernetes schemas
 	@set -euo pipefail; \
-	  for rendered_manifest in .rendered/*.yaml; do \
+	  if [ ! -d .rendered ]; then \
+	    echo "kubeconform: .rendered/ does not exist -- run 'make render' first" >&2; \
+	    exit 1; \
+	  fi; \
+	  manifest_list=$$(mktemp); \
+	  trap 'rm -f "$$manifest_list"' EXIT; \
+	  find .rendered -type f -name '*.yaml' -print0 | sort -z > "$$manifest_list"; \
+	  manifest_count=0; \
+	  while IFS= read -r -d '' rendered_manifest; do \
 	    echo "kubeconform $$rendered_manifest"; \
-	    $(KUBECONFORM) -strict -ignore-missing-schemas -summary $$rendered_manifest; \
-	  done
+	    $(KUBECONFORM) -strict -ignore-missing-schemas -summary "$$rendered_manifest"; \
+	    manifest_count=$$((manifest_count + 1)); \
+	  done < "$$manifest_list"; \
+	  if [ "$$manifest_count" -eq 0 ]; then \
+	    echo "kubeconform: no rendered manifests found under .rendered/ -- run 'make render' first" >&2; \
+	    exit 1; \
+	  fi
 
 kyverno: tools render ## Apply Kyverno policies against rendered manifests
 	@set -euo pipefail; \
+	  if [ ! -d .rendered ]; then \
+	    echo "kyverno: .rendered/ does not exist -- run 'make render' first" >&2; \
+	    exit 1; \
+	  fi; \
 	  policies="$(KYN_POLICIES)"; \
-	  for rendered_manifest in .rendered/*.yaml; do \
+	  manifest_list=$$(mktemp); \
+	  trap 'rm -f "$$manifest_list"' EXIT; \
+	  find .rendered -type f -name '*.yaml' -print0 | sort -z > "$$manifest_list"; \
+	  manifest_count=0; \
+	  while IFS= read -r -d '' rendered_manifest; do \
 	    echo "kyverno $$rendered_manifest"; \
-	    $(KYVERNO) apply $$policies -r $$rendered_manifest; \
+	    $(KYVERNO) apply $$policies -r "$$rendered_manifest"; \
+	    manifest_count=$$((manifest_count + 1)); \
+	  done < "$$manifest_list"; \
+	  if [ "$$manifest_count" -eq 0 ]; then \
+	    echo "kyverno: no rendered manifests found under .rendered/ -- run 'make render' first" >&2; \
+	    exit 1; \
+	  fi
+
+unittest: tools chart-deps ## Run helm-unittest test suites for each chart in CHARTS
+	@set -euo pipefail; \
+	  for chart in $(CHARTS); do \
+	    echo "unittest: charts/$$chart"; \
+	    HELM_PLUGINS="$(HELM_PLUGINS_DIR)" $(HELM) unittest charts/$$chart; \
 	  done
 
-unittest: tools ## Run helm-unittest test suites
-	HELM_PLUGINS="$(HELM_PLUGINS_DIR)" $(HELM) unittest $(CHART_DIR)
+otel-validate: tools chart-deps $(HELM) ## Validate rendered OTel Collector configs with the collector's own `validate` command, for each chart in CHARTS
+	@set -euo pipefail; \
+	command -v docker >/dev/null 2>&1 || { echo "otel-validate: docker is required to run 'otelcol-contrib validate' and was not found in PATH" >&2; exit 1; }; \
+	tmp_root=$$(mktemp -d); \
+	trap 'rm -rf "$$tmp_root"' EXIT; \
+	for pair in $(CHART_VALUES_DIRS); do \
+	  chart=$${pair%%=*}; \
+	  values_dir=$${pair#*=}; \
+	  echo "otel-validate: charts/$$chart"; \
+	  tmp_dir=$$tmp_root/$$chart; \
+	  mkdir -p "$$tmp_dir"; \
+	  rendered=$$tmp_dir/rendered.yaml; \
+	  manifest=$$tmp_dir/manifest.txt; \
+	  $(HELM) template kasm-otel-validate charts/$$chart -n kasm-test -f $$values_dir/default.yaml > $$rendered; \
+	  python3 scripts/otel_validate_extract.py $$rendered $$tmp_dir $$manifest; \
+	  while IFS='|' read -r cfg_path image; do \
+	    echo "otel-validate: validating $$cfg_path against $$image"; \
+	    docker run --rm -i -e OTEL_BEARER_TOKEN=dummy -e CLICKHOUSE_PASSWORD=dummy \
+	      -e OTEL_FORWARD_TOKEN=dummy -e OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
+	      "$$image" validate --config=/dev/stdin < "$$cfg_path"; \
+	  done < "$$manifest"; \
+	done
 
-test: lint kubeconform kyverno unittest ## Run full static suite: lint + kubeconform + kyverno + unittest
+test: lint kubeconform kyverno unittest otel-validate ## Run full static suite: lint + kubeconform + kyverno + unittest + otel-validate
 
 validate-preseed: tools render ## Validate preseed output against the 1.19.0 schema
 	python3 tests/validate_preseed.py \
 	  --schema tests/schemas/1_19_0-schema.yaml \
-	  --rendered .rendered/preseed-validate.yaml
+	  --rendered .rendered/kasm-helm/preseed-validate.yaml
 
 ##@ Docs
 
@@ -366,12 +468,30 @@ changelog-check: ## Verify CHANGELOG.md has been updated relative to BASE_BRANCH
 	  exit 0; \
 	fi; \
 	base="$${BASE_BRANCH:-develop}"; \
-	git fetch origin "$$base" 2>/dev/null || true; \
-	if git diff --name-only "origin/$$base...HEAD" | grep -q "^charts/kasm-helm/CHANGELOG.md$$"; then \
-	  echo "CHANGELOG.md updated — check passed."; \
+	git fetch origin "+refs/heads/$$base:refs/remotes/origin/$$base" 2>/dev/null || true; \
+	if [ -f "$$(git rev-parse --git-dir)/shallow" ]; then \
+	  git fetch --unshallow origin "+refs/heads/$$base:refs/remotes/origin/$$base" 2>/dev/null || true; \
+	fi; \
+	if ! changed_files="$$(git diff --name-only "origin/$$base...HEAD")"; then \
+	  echo "ERROR: cannot diff against origin/$$base (missing ref or no merge base — shallow clone?)."; \
+	  exit 1; \
+	fi; \
+	touched_charts="$$(echo "$$changed_files" | grep -oE '^charts/[^/]+/' | sort -u || true)"; \
+	missing=""; \
+	for chart_path in $$touched_charts; do \
+	  chart_changelog="$${chart_path}CHANGELOG.md"; \
+	  if ! echo "$$changed_files" | grep -qxF "$$chart_changelog"; then \
+	    missing="$$missing $$chart_changelog"; \
+	  fi; \
+	done; \
+	if [[ -z "$$touched_charts" ]]; then \
+	  echo "No charts/ paths touched — check passed."; \
+	elif [[ -z "$$missing" ]]; then \
+	  echo "CHANGELOG.md updated for every touched chart — check passed."; \
 	else \
 	  echo ""; \
-	  echo "ERROR: charts/kasm-helm/CHANGELOG.md has not been updated."; \
+	  echo "ERROR: the following chart CHANGELOG.md files have not been updated:"; \
+	  for f in $$missing; do echo "  $$f"; done; \
 	  echo "Run 'make changelog' to generate a draft, edit it, then commit."; \
 	  echo ""; \
 	  exit 1; \
@@ -485,9 +605,11 @@ pytest-docker:
 	  -e KASM_RELEASE=$(E2E_RELEASE) \
 	  -e E2E_SCENARIO=$(E2E_SCENARIO) \
 	  -e KASM_TAG=$(KASM_TAG) \
-	  -e KASM_API_IMAGE=$(KASM_API_IMAGE) \
 	  -e HOME=/tmp \
 	  -e PYTHONDONTWRITEBYTECODE=1 \
+	  -e E2E_KEEP=$(E2E_KEEP) \
+	  -e E2E_IMAGE_VALUES=$(E2E_IMAGE_VALUES) \
+	  -e E2E_ARTIFACT_DIR=$(E2E_ARTIFACT_DIR) \
 	  -e E2E_CLUSTER_WARMUP_SECONDS=$(E2E_CLUSTER_WARMUP_SECONDS) \
 	  -e E2E_DNS_RETRIES=$(E2E_DNS_RETRIES) \
 	  -e E2E_DNS_BACKOFF_SECONDS=$(E2E_DNS_BACKOFF_SECONDS) \
@@ -497,6 +619,7 @@ pytest-docker:
 	  -v $(CURDIR)/charts:/charts:ro \
 	  -v $(CURDIR)/tests/e2e/pytest.ini:/e2e/pytest.ini:ro \
 	  -v $(CURDIR)/tests/e2e:/e2e \
+	  -v $(CURDIR)/tests/values:/e2e-values:ro \
 	  $(if $(E2E_OLD_CHART_HOST_DIR),-v $(E2E_OLD_CHART_HOST_DIR):/old-chart:ro -e E2E_OLD_CHART_DIR=/old-chart) \
 	  $$sock_args \
 	  $(PYTEST_IMAGE) $(PYTEST_ARGS) \
@@ -507,22 +630,31 @@ pytest-docker:
 	  -o log_cli_format='%(asctime)s %(levelname)s %(name)s: %(message)s' \
 	  -o log_cli_date_format='%H:%M:%S'
 
+# Every current-chart scenario now installs with the E2E_IMAGE_VALUES default (pubsub-images.yaml,
+# D021), so only its overlay renders need preloading -- a plain no-overlay render would just add
+# dead kasmweb/*:develop app images nothing installs. KIND_LOAD_CHART_DIR pointing at the old
+# 1.18.1 chart (the else branch below) still needs the plain render: Phase 1 keeps that chart's
+# own released images.
 kind-load-images: $(CRANE) $(HELM) ## Pull and load current chart images into kind (slow)
 	@$(MAKE) kind-fix-kubeconfig
 	@set -euo pipefail; \
-	api_image_args=""; \
-	api_image="$(KASM_API_IMAGE)"; \
-	if [ -n "$$api_image" ] && [ "$(KIND_LOAD_CHART_DIR)" = "$(CHART_DIR)" ]; then \
-		case "$$api_image" in \
-			*:*) api_image_args="--set components.api.image.repository=$${api_image%:*} --set components.api.image.tag=$${api_image##*:}" ;; \
-			*) api_image_args="--set components.api.image.repository=$$api_image" ;; \
-		esac; \
-	fi; \
-	chart_images=$$($(HELM) template kasm $(KIND_LOAD_CHART_DIR) \
-		--set publicAddr=kind.kasm.local \
-		--set certificate.secretName=kasm-tls \
-		$$api_image_args \
-		| awk '/^[[:space:]]*image:[[:space:]]/{print $$2}' \
+	chart_images=$$( { \
+	  if [ "$(KIND_LOAD_CHART_DIR)" = "$(CHART_DIR)" ]; then \
+	    $(HELM) template kasm $(KIND_LOAD_CHART_DIR) \
+		  --set publicAddr=kind.kasm.local \
+		  --set certificate.secretName=kasm-tls \
+		  -f tests/values/pubsub-images.yaml; \
+	    $(HELM) template kasm $(KIND_LOAD_CHART_DIR) \
+		  --set publicAddr=kind.kasm.local \
+		  --set certificate.secretName=kasm-tls \
+		  --set components.api.workerPool[0].name=default \
+		  -f tests/values/pubsub-images.yaml; \
+	  else \
+	    $(HELM) template kasm $(KIND_LOAD_CHART_DIR) \
+		  --set publicAddr=kind.kasm.local \
+		  --set certificate.secretName=kasm-tls; \
+	  fi; \
+	  } | awk '/^[[:space:]]*image:[[:space:]]/{print $$2}' \
 		| sort -u); \
 	images="$$chart_images $(KIND_EXTRA_IMAGES)"; \
 	load_image_archive() { \
@@ -570,7 +702,7 @@ kind-clean-namespace: ## Delete E2E_NAMESPACE from kind and wait for removal
 	$(KUBECTL) --kubeconfig $(KIND_KUBECONFIG) delete namespace $(E2E_NAMESPACE) --ignore-not-found
 	$(KUBECTL) --kubeconfig $(KIND_KUBECONFIG) wait --for=delete namespace/$(E2E_NAMESPACE) --timeout=300s || true
 
-kind-prep: kind-ensure kind-load-images kind-clean-namespace ## Prepare kind for a scenario: ensure cluster, load images, clean namespace
+kind-prep: chart-deps kind-ensure kind-load-images kind-clean-namespace ## Prepare kind for a scenario: ensure cluster, load images, clean namespace
 
 # Pause between scenarios in the umbrella target so the cluster has
 # time to clean up the previous namespace before the next install starts.
@@ -606,6 +738,18 @@ e2e: ## Run all e2e scenarios sequentially (requires kind cluster)
 	$(MAKE) e2e-json-logging E2E_NAMESPACE=kasm-e2e-json-logging
 	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-json-logging
 	$(MAKE) e2e-settle
+	$(MAKE) e2e-observability E2E_NAMESPACE=kasm-e2e-observability
+	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-observability
+	$(MAKE) e2e-settle
+	$(MAKE) e2e-observability-off E2E_NAMESPACE=kasm-e2e-observability-off
+	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-observability-off
+	$(MAKE) e2e-settle
+	$(MAKE) e2e-otel-roundtrip E2E_NAMESPACE=kasm-e2e-otel-roundtrip
+	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-otel-roundtrip
+	$(MAKE) e2e-settle
+	$(MAKE) e2e-otel-isolation E2E_NAMESPACE=kasm-e2e-otel-isolation
+	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-otel-isolation
+	$(MAKE) e2e-settle
 	$(MAKE) e2e-upgrade-included E2E_NAMESPACE=kasm-e2e-upgrade-included
 	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-upgrade-included
 	$(MAKE) e2e-settle
@@ -614,6 +758,9 @@ e2e: ## Run all e2e scenarios sequentially (requires kind cluster)
 	$(MAKE) e2e-settle
 	$(MAKE) e2e-preseed E2E_NAMESPACE=kasm-e2e-preseed
 	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-preseed
+	$(MAKE) e2e-settle
+	$(MAKE) e2e-split E2E_NAMESPACE=kasm-e2e-split
+	$(MAKE) kind-clean-namespace E2E_NAMESPACE=kasm-e2e-split
 	@# Final cleanup of host-side artefacts left behind by the
 	@# external-postgres-using tests (e2e-externaldb, e2e-upgrade-standalone)
 	@# and the chart-extraction step from e2e-upgrade-*.
@@ -622,6 +769,12 @@ e2e: ## Run all e2e scenarios sequentially (requires kind cluster)
 
 e2e-basic: kind-prep build-pytest ## Basic install and login page verification
 	$(MAKE) pytest-docker E2E_SCENARIO=e2e-basic PYTEST_ARGS="test_01_basic_deploy.py"
+
+# A non-empty components.api.workerPool depends on the pub/sub backend (API absorbing the
+# manager role, BullMQ-on-PostgreSQL) that only exists on integ/otel-openapi-pubsub — covered
+# by the E2E_IMAGE_VALUES default (tests/values/pubsub-images.yaml, D021, kasm-helm-tzy).
+e2e-split: kind-prep build-pytest ## components.api.workerPool — per-pool worker Deployments, no worker Service
+	$(MAKE) pytest-docker E2E_SCENARIO=e2e-split PYTEST_ARGS="-m e2e -q test_16_api_worker_split.py"
 
 e2e-trustedca: kind-prep build-pytest ## Install with custom CA bundle
 	$(MAKE) pytest-docker E2E_SCENARIO=e2e-trustedca PYTEST_ARGS="-m e2e -q test_02_trusted_ca.py"
@@ -660,8 +813,33 @@ e2e-pss: kind-prep build-pytest ## Pod Security Standards restricted namespace t
 e2e-preseed: kind-prep build-pytest ## Preseed verification: group, settings, and user seeded via custom_properties.yaml
 	$(MAKE) pytest-docker E2E_SCENARIO=e2e-preseed PYTEST_ARGS="-m e2e -q test_11_preseed.py"
 
-e2e-json-logging: kind-prep build-pytest ## Verify all non-Guac pods emit JSON logs when logFormat=json
+e2e-json-logging: kind-prep build-pytest ## Verify proxy stdout is JSON when observability is enabled (default)
 	$(MAKE) pytest-docker E2E_SCENARIO=e2e-json-logging PYTEST_ARGS="-m e2e -q test_10_json_logging.py"
+
+# The e2e-observability-* and e2e-router targets depend on the OTel instrumentation (ClickHouse
+# env vars, the ngx_otel_module-carrying proxy image) that ships in the integ/otel-openapi-pubsub
+# branch build — covered by the E2E_IMAGE_VALUES default (tests/values/pubsub-images.yaml, D021).
+e2e-observability: kind-prep build-pytest ## Default observability install: collector + ClickHouse end-to-end telemetry flow
+	$(MAKE) pytest-docker E2E_SCENARIO=e2e-observability PYTEST_ARGS="-m e2e -q test_12_observability.py"
+
+e2e-observability-off: kind-prep build-pytest ## observability.enabled=false stays deployable
+	$(MAKE) pytest-docker E2E_SCENARIO=e2e-observability-off PYTEST_ARGS="-m e2e -q test_13_observability_disabled.py"
+
+e2e-router: kind-prep build-pytest ## kasm-otel-router chart: routes OTLP and k8s events to a registered install's ClickHouse
+	$(MAKE) pytest-docker E2E_SCENARIO=e2e-router PYTEST_ARGS="-m e2e -q test_14_otel_router.py"
+
+# Round trip: a kasm-helm release's telemetry, routed through kasm-otel-router, lands back in
+# that SAME release's ClickHouse (kasm-helm-xc8). Covered by the E2E_IMAGE_VALUES default
+# (tests/values/pubsub-images.yaml, D021).
+e2e-otel-roundtrip: kind-prep build-pytest ## kasm-helm -> kasm-otel-router -> kasm-helm's own gateway -> its own ClickHouse
+	$(MAKE) pytest-docker E2E_SCENARIO=e2e-otel-roundtrip PYTEST_ARGS="-m e2e -q test_17_otel_roundtrip.py"
+
+# Multi-tenant isolation (kasm-helm-6a7): TWO kasm-helm releases (separate namespaces) both
+# export to ONE router; each release's telemetry must land only in that release's own
+# ClickHouse. Two full releases + a router on one kind node -- deploymentSize small,
+# tests/e2e/test_18_otel_router_isolation.py trims the same resource requests test_17 does.
+e2e-otel-isolation: kind-prep build-pytest ## Two kasm-helm releases + one router: telemetry stays isolated per release
+	$(MAKE) pytest-docker E2E_SCENARIO=e2e-otel-isolation PYTEST_ARGS="-m e2e -q test_18_otel_router_isolation.py"
 
 ##@ Upgrade Helpers
 
@@ -685,6 +863,10 @@ kind-load-old-images: extract-old-chart ## Load OLD_CHART_BRANCH images into kin
 	@$(MAKE) kind-load-images \
 	  KIND_LOAD_CHART_DIR="$(OLD_CHART_HOST_DIR)/charts/kasm"
 
+# Phase 1 (old 1.18.1 chart install) always uses that chart's own released images —
+# upgrade_flow.py's Phase 1 helper never applies E2E_IMAGE_VALUES. Phase 2 (the upgrade to the
+# current chart) does apply it, so it picks up the E2E_IMAGE_VALUES default like every other
+# scenario (D021).
 e2e-upgrade-included: kind-prep build-pytest kind-load-old-images ## Upgrade from 1.18.1 with included DB StatefulSet
 	$(MAKE) pytest-docker E2E_SCENARIO=e2e-upgrade-included \
 	  E2E_OLD_CHART_HOST_DIR=$(OLD_CHART_HOST_DIR) \

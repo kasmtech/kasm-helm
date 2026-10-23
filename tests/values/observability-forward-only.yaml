@@ -1,0 +1,7 @@
+observability:
+  clickhouse:
+    enabled: false
+  collector:
+    gateway:
+      forward:
+        endpoint: "https://otlp-gateway.example.com/otlp"

@@ -1,0 +1,61 @@
+{{/*
+ConfigMap holding a paste-ready OpenTelemetry Collector config fragment for a THIRD-PARTY
+collector that wants to forward telemetry INTO this release's gateway. It renders only when the
+gateway itself does (same condition as otel-gateway-service.yaml/otel-gateway-deployment.yaml) —
+there is no point advertising an endpoint that has no Service behind it, and existingConfigMap
+doesn't change that: the gateway Deployment/Service still exist even when its own config is BYO.
+
+No secret material lives here. The exported token value is an `${env:...}` placeholder the
+customer's own collector resolves at their end; the comment below tells the operator which Kasm
+secret/key it must match.
+*/}}
+{{- $obs := .Values.observability -}}
+{{- $ch := $obs.clickhouse -}}
+{{- $useClickhouse := or $ch.enabled $ch.standalone -}}
+{{- $forwardEnabled := ne $obs.collector.gateway.forward.endpoint "" -}}
+{{- if and $obs.enabled (or $obs.collector.gateway.existingConfigMap $useClickhouse $forwardEnabled) }}
+{{- $constants := (include "kasm.constants" . | fromYaml) -}}
+{{- $endpoint := printf "http://%s.%s.svc.%s:%v" $constants.otel.gatewaySvc .Release.Namespace (.Values.clusterDomain | default "cluster.local") $constants.otel.otlpHttp -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  {{- include "kasm.common.metadata" (dict "context" . "component" "otel-forward-snippet" "resource" "configMap" "include" "all") | indent 2 }}
+data:
+  forward-snippet.yaml: |
+    # Paste this fragment into your own OpenTelemetry Collector config to forward telemetry into
+    # this Kasm release's gateway. Merge the extensions/exporters entries and the pipeline
+    # `exporters:` lines below into your existing config rather than replacing it — this fragment
+    # intentionally has no `receivers:` block of its own.
+    #
+    # Endpoint: {{ $constants.otel.gatewaySvc }} is a cluster-local Service name. Your collector
+    # must run inside this cluster (or otherwise have network reachability to it); it is not
+    # reachable from outside. TLS is not terminated on this port — the endpoint is plain HTTP.
+    #
+    # Token: replace ${env:KASM_OTEL_GATEWAY_TOKEN} with this release's gateway INGEST token
+    # (the same secret value the chart injects into the gateway itself as OTEL_BEARER_TOKEN) —
+    # NOT the gateway's outbound forward.token/OTEL_FORWARD_TOKEN, which is a different credential
+    # for the gateway's own forwarding exporter. Retrieve it with:
+    #   kubectl get secret {{ $constants.secrets.name }} -n {{ .Release.Namespace }} -o jsonpath='{.data.otel-bearer-token}' | base64 -d
+    extensions:
+      bearertokenauth/kasm_gateway:
+        scheme: "Bearer"
+        token: "${env:KASM_OTEL_GATEWAY_TOKEN}"
+
+    exporters:
+      otlphttp/kasm_gateway:
+        endpoint: "{{ $endpoint }}"
+        auth:
+          authenticator: bearertokenauth/kasm_gateway
+        tls:
+          insecure: true
+
+    service:
+      extensions: [bearertokenauth/kasm_gateway]
+      pipelines:
+        logs:
+          exporters: [otlphttp/kasm_gateway]
+        traces:
+          exporters: [otlphttp/kasm_gateway]
+        metrics:
+          exporters: [otlphttp/kasm_gateway]
+{{- end }}

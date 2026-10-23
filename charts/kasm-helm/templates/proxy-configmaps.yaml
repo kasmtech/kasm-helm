@@ -65,13 +65,35 @@ data:
     upstream {{ $constants.api.svc }} {
       server {{ printf "%s:%s" (printf "%s-%s" $constants.api.svc (include "kasm.zoneName" $zone.name)) ($constants.api.port | toString) }};
       keepalive {{ $serviceKeepalive }};
+      keepalive_timeout 30s;
     }
 
-  upstream_manager.conf: |
-    upstream {{ printf $constants.manager.svc }} {
-      server {{ printf "%s:%s" (printf "%s-%s" $constants.manager.svc (include "kasm.zoneName" $zone.name)) ($constants.manager.port | toString) }};
-      keepalive {{ $serviceKeepalive }};
+  {{- if $.Values.observability.enabled }}
+  otel.conf: |
+    # http-context OTel tracing. Exports to the Collector sidecar in this pod over loopback:
+    # ngx_otel_module is gRPC-only and cannot present a bearer token, so it needs an
+    # unauthenticated receiver, and a loopback one is unreachable from anywhere else.
+    otel_exporter {
+      endpoint 127.0.0.1:{{ $constants.otel.otlpNginx }};
     }
+
+    otel_service_name  kasm-proxy;
+    otel_trace          on;
+    otel_trace_context  propagate;
+
+  stub_status.conf: |
+    server {
+      listen 127.0.0.1:{{ $constants.proxyStubStatus }};
+      location = /stub_status {
+        otel_trace off;
+        stub_status;
+        # loopback-only: the only consumer is the Collector sidecar, which shares this pod's
+        # network namespace. Anything else must be explicitly allowed by the operator.
+        allow 127.0.0.1;
+        deny  all;
+      }
+    }
+  {{- end }}
 
 {{- end }}
 ---
@@ -82,8 +104,14 @@ metadata:
 data:
   health.conf: |
     location = /health {
+      {{- if $.Values.observability.enabled }}
+      otel_trace off;
+      {{- end }}
       default_type application/json;
-      if (-f /opt/kasm/current/tmp/manager/kasm_manager_draining) {
+      # Zone-health flag: separate from the agent drain (internal_agents.conf) so an
+      # operator can shed agent traffic without pulling this node out of the
+      # LB/zone-health pool mid in-flight-request.
+      if (-f /opt/kasm/current/tmp/api/kasm_api_draining) {
         add_header Retry-After "30" always;
         add_header Cache-Control "no-store" always;
         return 503 '{"status": "disabled"}';
@@ -93,6 +121,9 @@ data:
 
   closest.conf: |
     location /checkvalid {
+      {{- if $.Values.observability.enabled }}
+      otel_trace off;
+      {{- end }}
       return 200 'ok';
       add_header Access-Control-Allow-Origin *;
       add_header Content-Type text/plain;
@@ -100,10 +131,16 @@ data:
 
   admin_api.conf: |
     location /api/admin/ {
+      {{- if $.Values.observability.enabled }}
+      otel_span_name "$request_method /api/admin/";
+      otel_span_attr http.method $request_method;
+      otel_span_attr http.target $request_uri;
+      otel_span_attr http.status $status;
+      {{- end }}
       proxy_http_version	    1.1;
       proxy_set_header	      Host $host;
       proxy_set_header	      Upgrade $http_upgrade;
-      proxy_set_header	      Connection "upgrade";
+      proxy_set_header	      Connection $connection_upgrade;
       proxy_set_header	      X-Real-IP $remote_addr;
       proxy_set_header	      X-Forwarded-For $proxy_add_x_forwarded_for;
       proxy_set_header	      X-Forwarded-Proto $x_forwarded_proto;
@@ -114,10 +151,16 @@ data:
 
   client_api.conf: |
     location /api/ {
+      {{- if $.Values.observability.enabled }}
+      otel_span_name "$request_method /api/";
+      otel_span_attr http.method $request_method;
+      otel_span_attr http.target $request_uri;
+      otel_span_attr http.status $status;
+      {{- end }}
       proxy_http_version	    1.1;
       proxy_set_header	      Host $host;
       proxy_set_header	      Upgrade $http_upgrade;
-      proxy_set_header	      Connection "upgrade";
+      proxy_set_header	      Connection $connection_upgrade;
       proxy_set_header	      X-Real-IP $remote_addr;
       proxy_set_header	      X-Forwarded-For $proxy_add_x_forwarded_for;
       proxy_set_header	      X-Forwarded-Proto $x_forwarded_proto;
@@ -126,17 +169,39 @@ data:
       proxy_pass	            {{ printf "http://%s" $constants.api.svc }};
     }
 
-  manager_api.conf: |
-    location /manager_api/ {
+  internal_agents.conf: |
+    # The agents' Internal prefixes. Everything else under /api/internal/ is served
+    # by the generic /api/ location; these two carry the agent drain, which lets a
+    # node being replaced shed its agents to a peer (they fail over across the API
+    # endpoints they were given) while it keeps serving users.
+    {{- range $prefix := list "/api/internal/agent-vm/" "/api/internal/agent-k8s/" }}
+    location {{ $prefix }} {
+      {{- if $.Values.observability.enabled }}
+      otel_span_name "$request_method {{ $prefix }}";
+      otel_span_attr http.method $request_method;
+      otel_span_attr http.target $request_uri;
+      otel_span_attr http.status $status;
+      {{- end }}
+
+      # Agent drain, withdrawn before /health: a node being replaced sheds
+      # agent traffic to a peer while its in-flight user requests finish.
+      if (-f /opt/kasm/current/tmp/api/kasm_agent_draining) {
+        add_header Retry-After "30" always;
+        add_header Cache-Control "no-store" always;
+        return 503;
+      }
+
       proxy_http_version	    1.1;
       proxy_set_header	      Host $host;
       proxy_set_header	      Upgrade $http_upgrade;
-      proxy_set_header	      Connection "upgrade";
+      proxy_set_header	      Connection $connection_upgrade;
       proxy_set_header	      X-Real-IP $remote_addr;
       proxy_set_header	      X-Forwarded-For $proxy_add_x_forwarded_for;
-      proxy_set_header	      X-Forwarded-Proto $scheme;
-      proxy_pass	            {{ printf "http://%s" $constants.manager.svc }}/;
+      proxy_set_header	      X-Forwarded-Proto $x_forwarded_proto;
+      proxy_set_header	      X-Forwarded-Port $x_forwarded_port;
+      proxy_pass	            {{ printf "http://%s" $constants.api.svc }};
     }
+    {{- end }}
 
   subscription_api.conf: |
     location /api/subscriptions/ {
@@ -152,7 +217,7 @@ data:
       proxy_http_version	    1.1;
       proxy_set_header	      Host $host;
       proxy_set_header	      Upgrade $http_upgrade;
-      proxy_set_header	      Connection "upgrade";
+      proxy_set_header	      Connection $connection_upgrade;
       proxy_set_header	      X-Real-IP $remote_addr;
       proxy_set_header	      X-Forwarded-For $proxy_add_x_forwarded_for;
       proxy_set_header	      X-Forwarded-Proto $scheme;
@@ -162,6 +227,12 @@ data:
 
   upstream_proxy.conf: |
     location /kasm_connect {
+      {{- if $.Values.observability.enabled }}
+      # auth_request gotcha: exclude this internal subrequest so the OTel module
+      # doesn't inject a stale traceparent into the auth call instead of the real
+      # upstream. Matches the backend's commented state pending validation.
+      # otel_trace          off;
+      {{- end }}
       internal;
       proxy_pass              {{ printf "http://%s/api/kasm_connect/" $constants.api.svc }};
       proxy_pass_request_body off;
@@ -173,6 +244,11 @@ data:
     }
 
     location /desktop/ {
+      {{- if $.Values.observability.enabled }}
+      # long-lived WebSocket tunnel — traces stay open for the entire session
+      # duration (potentially hours), so tracing is excluded here.
+      otel_trace  off;
+      {{- end }}
       if ($request_method = OPTIONS) {
         rewrite .* /_options_response last;
       }
@@ -194,6 +270,10 @@ data:
       proxy_set_header        Authorization "${connect_auth}";
       proxy_set_header        X-Kasm-ID "${connect_kasm_id}";
       proxy_set_header        Cookie "username=$cookie_username; session_token=$cookie_session_token; kasm_client_key=$cookie_kasm_client_key";
+      {{- if $.Values.observability.enabled }}
+      otel_span_attr          kasm.kasm_id            "$connect_kasm_id";
+      otel_span_attr          kasm.kasm_user_name     "$cookie_username";
+      {{- end }}
       rewrite                 ^/desktop/(.*) /$1 break;
       proxy_pass              $connect_schema://$connect_hostname:$connect_port/$connect_path;
       proxy_read_timeout      1800s;
@@ -229,6 +309,39 @@ data:
       add_header          Content-Length 0;
       return 204;
     }
+
+  otel_browser.conf: |
+    {{- if and $.Values.observability.enabled $.Values.observability.browser.enabled }}
+    location = /otel-config.js {
+        otel_trace     off;
+        default_type   application/javascript;
+        add_header     Cache-Control "no-store";
+        return 200     'window.__OTEL__={"enabled":true,"endpoint":"/api/telemetry","serviceName":"kasm-web"};';
+    }
+
+    # /otel-time — NTP-style time probe for browser clock-skew correction.
+    # $msec is request-arrival time in *seconds* with millisecond resolution;
+    # the browser parses it as float seconds and multiplies by 1000.
+    location = /otel-time {
+        otel_trace off;
+        default_type   application/json;
+        add_header     Cache-Control "no-store";
+        return 200     '{"server_time_ms":$msec}';
+    }
+    {{- else if $.Values.observability.enabled }}
+    location = /otel-config.js {
+        otel_trace     off;
+        default_type   application/javascript;
+        add_header     Cache-Control "no-store";
+        return 200     'window.__OTEL__={"enabled":false};';
+    }
+    {{- else }}
+    location = /otel-config.js {
+        default_type   application/javascript;
+        add_header     Cache-Control "no-store";
+        return 200     'window.__OTEL__={"enabled":false};';
+    }
+    {{- end }}
 
   website.conf: |
     location / {

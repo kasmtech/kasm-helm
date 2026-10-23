@@ -14,3 +14,7 @@ maintainers:
   - name: Kasm Technologies, Inc.
     url: https://github.com/kasmtech/kasm-helm
 version: 1.1200.0-develop
+dependencies:
+  - name: kasm-common
+    version: "0.1.0"
+    repository: "file://../kasm-common"

@@ -1,0 +1,51 @@
+{{/*
+Kasm OTel router k8sEvents RBAC — only rendered when .Values.k8sEvents.enabled.
+
+The router's own ServiceAccount lives in this chart's release namespace (Deployment binds to it
+via deployment.yaml). It has no permissions of its own; a per-namespace Role + RoleBinding pair
+is rendered into EACH registrations[].namespace, granting only the read verbs the k8s_objects
+receiver needs on core Events, and binding them to this ServiceAccount. No ClusterRole, no
+wildcard verb or apiGroup: this chart never needs to see events outside a namespace it already
+has a registration for.
+*/}}
+{{- if .Values.k8sEvents.enabled }}
+{{- $seenNamespaces := dict }}
+{{- range .Values.registrations }}
+{{- if hasKey $seenNamespaces .namespace }}
+{{- fail (printf "kasm-otel-router: registrations contains more than one entry for namespace %q -- k8sEvents would render a duplicate Role/RoleBinding name in that namespace." .namespace) }}
+{{- end }}
+{{- $_ := set $seenNamespaces .namespace true }}
+{{- end }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  {{- include "kasm.common.metadata" (dict "context" . "component" "otel-router" "resource" "serviceAccount" "include" "all") | indent 2 }}
+{{- range $reg := .Values.registrations }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "kasm.common.name" (list $ "otel-router-events") }}
+  namespace: {{ $reg.namespace }}
+  {{- (include "kasm.common.metadata" (dict "context" $ "component" "otel-router-events" "resource" "role" "include" "la") | trimPrefix "\n") | nindent 2 }}
+rules:
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "kasm.common.name" (list $ "otel-router-events") }}
+  namespace: {{ $reg.namespace }}
+  {{- (include "kasm.common.metadata" (dict "context" $ "component" "otel-router-events" "resource" "roleBinding" "include" "la") | trimPrefix "\n") | nindent 2 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "kasm.common.name" (list $ "otel-router") }}
+    namespace: {{ $.Release.Namespace }}
+roleRef:
+  kind: Role
+  name: {{ include "kasm.common.name" (list $ "otel-router-events") }}
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
+{{- end }}

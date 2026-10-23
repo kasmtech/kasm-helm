@@ -10,6 +10,7 @@ from .helpers import (
     curl_from_pod,
     get_first_pod_by_selector,
     install_and_wait_with_retry,
+    kubectl,
 )
 from .conftest import helm_install
 
@@ -19,7 +20,7 @@ def test_basic_deployment_pods_ready_and_login_page(installer, temp_workdir: Pat
     e2e_config = installer["config"]
     namespace = installer["namespace"]
 
-    # Lower per-component resource requests so all pods (api, manager, proxy,
+    # Lower per-component resource requests so all pods (api, proxy,
     # the consolidated connection-proxy StatefulSet — one nginx plus the
     # guac, rdp-gateway, and rdp-https-gateway service containers — and the
     # bundled db) fit on the single-node kind cluster in gitlab runner.
@@ -34,7 +35,6 @@ def test_basic_deployment_pods_ready_and_login_page(installer, temp_workdir: Pat
         },
         "components": {
             "api": {"resources": low_resources},
-            "manager": {"resources": low_resources},
             "proxy": {"resources": low_resources_proxy},
             "connectionProxy": {
                 "nginx": {"resources": low_resources_proxy},
@@ -59,3 +59,20 @@ def test_basic_deployment_pods_ready_and_login_page(installer, temp_workdir: Pat
 
     assert status_code == 200
     assert_login_page(body)
+
+    # Default components.api.workerPool is empty: api still consumes queues itself, so
+    # KASM_PROCESS must be explicitly TRUE (manager's absorbed role).
+    api_pod = get_first_pod_by_selector(namespace, "app.kubernetes.io/component=api")
+    kasm_process = kubectl(
+        [
+            "get",
+            "pod",
+            api_pod,
+            "-o",
+            "jsonpath={.spec.containers[0].env[?(@.name=='KASM_PROCESS')].value}",
+        ],
+        namespace=namespace,
+    )
+    assert kasm_process.stdout.strip() == "TRUE", (
+        f"Expected KASM_PROCESS=TRUE on combined-mode api pod, got {kasm_process.stdout.strip()!r}"
+    )

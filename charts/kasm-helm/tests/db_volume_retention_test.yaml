@@ -1,0 +1,36 @@
+suite: bundled database volume retention
+templates:
+  - templates/db-statefulset.yaml
+
+tests:
+  # The bundled database's StatefulSet is named per Kasm version, so a version upgrade replaces it
+  # rather than updating it in place. Retaining the claim leaves the previous version's volume behind
+  # as a fallback instead of deleting it along with the StatefulSet.
+  - it: retains the database volume when its StatefulSet is deleted, by default
+    asserts:
+      - equal:
+          path: spec.persistentVolumeClaimRetentionPolicy.whenDeleted
+          value: Retain
+      - equal:
+          path: spec.persistentVolumeClaimRetentionPolicy.whenScaled
+          value: Retain
+
+  - it: still honours an explicit whenDeleted override
+    set:
+      database:
+        storage:
+          retentionPolicy:
+            whenDeleted: Delete
+            whenScaled: Retain
+    asserts:
+      - equal:
+          path: spec.persistentVolumeClaimRetentionPolicy.whenDeleted
+          value: Delete
+
+  # The claim template carries the Kasm version, which is what makes an upgrade a replacement rather
+  # than an in-place update; kasm.validateDatabaseVersionChange exists because of it.
+  - it: names the claim template per Kasm version
+    asserts:
+      - matchRegex:
+          path: spec.volumeClaimTemplates[0].metadata.name
+          pattern: -database-develop$

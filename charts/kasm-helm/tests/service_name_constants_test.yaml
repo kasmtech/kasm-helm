@@ -4,7 +4,6 @@ templates:
   - templates/api-service.yaml
   - templates/db-init-job.yaml
   - templates/db-service.yaml
-  - templates/manager-service.yaml
   - templates/proxy-service.yaml
   - templates/connection-proxy-services.yaml
 
@@ -59,14 +58,6 @@ tests:
       - equal:
           path: metadata.name
           value: RELEASE-NAME-connection-proxy-default
-
-  - it: manager service uses constants svc name
-    template: templates/manager-service.yaml
-    documentIndex: 0
-    asserts:
-      - equal:
-          path: metadata.name
-          value: RELEASE-NAME-manager-default
 
   - it: proxy service uses constants svc name
     template: templates/proxy-service.yaml

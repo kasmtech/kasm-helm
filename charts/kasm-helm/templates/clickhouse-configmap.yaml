@@ -1,0 +1,161 @@
+{{/*
+ClickHouse configuration ConfigMap: config.xml, users.xml, init-schema.sql.
+Ported from kasm_backend/install/conf/clickhouse/{config.xml,users.xml,init-schema.sql}.
+
+Not zone-scoped: a single ClickHouse serves all zones.
+
+The password is NEVER templated into this ConfigMap. users.xml instead uses ClickHouse's
+generic `from_env` config-substitution attribute (verified against a live ClickHouse 24.12:
+`from_env` works on the <password> element, not just documented top-level params), and the
+StatefulSet supplies KASM_CLICKHOUSE_PASSWORD from the kasm-secrets Secret via secretKeyRef.
+*/}}
+{{- if and .Values.observability.enabled .Values.observability.clickhouse.enabled (not .Values.observability.clickhouse.standalone) }}
+{{- $ch := .Values.observability.clickhouse }}
+{{- /* Bundled ClickHouse: an unset readUsername defaults to the RO user below rather than the
+     writer-fallback external installs get (see kasm.clickhouseEnv), so a stock install ships
+     with api off the drop-capable writer credential without extra values. */ -}}
+{{- $readUsername := default "kasm_otel_ro" $ch.readUsername }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  {{- include "kasm.metadata" (dict "context" . "component" "clickhouse" "resource" "configMap" "include" "all") | indent 2 }}
+data:
+  config.xml: |
+    <?xml version="1.0"?>
+    <clickhouse>
+        <logger>
+            <level>warning</level>
+            <console>1</console>
+        </logger>
+        <max_server_memory_usage_to_ram_ratio>0.5</max_server_memory_usage_to_ram_ratio>
+    {{- if $ch.tls }}
+        <!--
+            TLS interfaces. Published on 8443 (HTTPS)/9440 (native TLS) using the same
+            certificate as the rest of Kasm. The plaintext http_port (8123) and tcp_port (9000)
+            from the base image stay enabled regardless, since in-cluster traffic (the retention
+            Job, and probes) never needs to deal with the self-signed cert.
+        -->
+        <https_port>8443</https_port>
+        <tcp_port_secure>9440</tcp_port_secure>
+        <openSSL>
+            <server>
+                <certificateFile>/etc/clickhouse-server/certs/tls.crt</certificateFile>
+                <privateKeyFile>/etc/clickhouse-server/certs/tls.key</privateKeyFile>
+                <verificationMode>none</verificationMode>
+                <cacheSessions>true</cacheSessions>
+                <disableProtocols>sslv2,sslv3</disableProtocols>
+                <preferServerCiphers>true</preferServerCiphers>
+            </server>
+        </openSSL>
+    {{- end }}
+    </clickhouse>
+
+  users.xml: |
+    <?xml version="1.0"?>
+    <!--
+      ClickHouse user configuration for Kasm observability.
+      Mounted at /etc/clickhouse-server/users.d/kasm.xml
+
+      The password is supplied by the from_env substitution below, from the
+      KASM_CLICKHOUSE_PASSWORD env var (a Secret, never a ConfigMap value).
+
+      Grants for an XML-defined user cannot be changed by SQL at runtime
+      (ACCESS_STORAGE_READONLY), so observability.clickhouse.database here MUST match the
+      database the Collector/API are configured to use, or telemetry silently fails end to
+      end with no way to repair it short of editing this ConfigMap and restarting ClickHouse.
+    -->
+    <clickhouse>
+        <users>
+            <{{ $ch.username }}>
+                <password from_env="KASM_CLICKHOUSE_PASSWORD"/>
+                <networks>
+                    <ip>::/0</ip>
+                </networks>
+                <profile>default</profile>
+                <quota>default</quota>
+                <access_management>0</access_management>
+
+                <!-- Grant full access to the configured database -->
+                <grants>
+                    <query>GRANT ALL ON {{ $ch.database }}.*</query>
+                </grants>
+            </{{ $ch.username }}>
+            <!--
+              Read-only user for api reporting queries. GRANT SELECT ON <db>.* is the ticket's
+              specified shape (bd kasm-helm-hvx). Whether Kasm's reporting queries also touch system.*
+              tables outside this grant is an open risk this chart cannot verify (the application query
+              text lives outside this repo) — an XML grant that's too narrow fails as empty reports, not
+              an error. The e2e suite exercises a real reporting-style query as this user to catch that
+              case; if it needs widening, add the specific system.* table(s) required, not a blanket grant.
+            -->
+            <{{ $readUsername }}>
+                <password from_env="KASM_CLICKHOUSE_READ_PASSWORD"/>
+                <networks>
+                    <ip>::/0</ip>
+                </networks>
+                <profile>default</profile>
+                <quota>default</quota>
+                <access_management>0</access_management>
+                <grants>
+                    <query>GRANT SELECT ON {{ $ch.database }}.*</query>
+                </grants>
+            </{{ $readUsername }}>
+        </users>
+    </clickhouse>
+
+  init-schema.sql: |
+    -- =============================================================================
+    -- ClickHouse initialization schema for Kasm observability.
+    -- Mounted at /docker-entrypoint-initdb.d/init.sql. ClickHouse's docker-entrypoint-initdb.d
+    -- semantics mean this only runs the first time the volume is initialized — retention
+    -- changes on an existing release are applied by the clickhouse-retention Job instead.
+    --
+    -- otel_traces and otel_metrics_* are created by the per-signal ClickHouse exporter
+    -- instances on first export (on the gateway Collector), each with their own configured TTL.
+    -- =============================================================================
+
+    CREATE DATABASE IF NOT EXISTS {{ $ch.database }};
+
+    -- otel_logs is pre-created here (not auto-created by the exporter) so we can
+    -- apply a two-tier conditional TTL that the exporter cannot express.
+    --
+    -- IsAudit is a MATERIALIZED column (stored, computed at INSERT time).
+    -- Audit classification covers security-relevant events identifiable from existing
+    -- log attributes; the kasm.retention_class='audit' arm future-proofs an explicit
+    -- SDK-emitted attribute without requiring Python changes today.
+    --
+    -- TTL rules (evaluated independently — a row is deleted when its rule fires):
+    --   IsAudit = 0  → deleted after {{ $ch.retention.logsDays }} days
+    --   IsAudit = 1  → deleted after {{ $ch.retention.auditLogsDays }} days
+    CREATE TABLE IF NOT EXISTS {{ $ch.database }}.otel_logs
+    (
+        Timestamp           DateTime64(9) CODEC(Delta, ZSTD(1)),
+        TimestampDate       Date DEFAULT toDate(Timestamp),
+        TimestampTime       DateTime DEFAULT toDateTime(Timestamp),
+        TraceId             String CODEC(ZSTD(1)),
+        SpanId              String CODEC(ZSTD(1)),
+        TraceFlags          UInt32 CODEC(ZSTD(1)),
+        SeverityText        LowCardinality(String) CODEC(ZSTD(1)),
+        SeverityNumber      Int32 CODEC(ZSTD(1)),
+        ServiceName         LowCardinality(String) CODEC(ZSTD(1)),
+        Body                String CODEC(ZSTD(1)),
+        ResourceSchemaUrl   String CODEC(ZSTD(1)),
+        ResourceAttributes  Map(LowCardinality(String), String) CODEC(ZSTD(1)),
+        ScopeSchemaUrl      String CODEC(ZSTD(1)),
+        ScopeName           String CODEC(ZSTD(1)),
+        ScopeVersion        String CODEC(ZSTD(1)),
+        ScopeAttributes     Map(LowCardinality(String), String) CODEC(ZSTD(1)),
+        LogAttributes       Map(LowCardinality(String), String) CODEC(ZSTD(1)),
+        IsAudit             UInt8 MATERIALIZED toUInt8(
+                                LogAttributes['metric_name'] LIKE 'account.login%'
+                                OR LogAttributes['metric_name'] LIKE 'account.logout%'
+                                OR LogAttributes['kasm.retention_class'] = 'audit'
+                            )
+    )
+    ENGINE = MergeTree()
+    PARTITION BY toDate(Timestamp)
+    ORDER BY (ServiceName, SeverityText, toUnixTimestamp(Timestamp), TraceId)
+    TTL toDateTime(Timestamp) + INTERVAL {{ $ch.retention.logsDays }} DAY DELETE WHERE IsAudit = 0,
+        toDateTime(Timestamp) + INTERVAL {{ $ch.retention.auditLogsDays }} DAY DELETE WHERE IsAudit = 1
+    SETTINGS index_granularity = 8192, ttl_only_drop_parts = 1;
+{{- end }}
