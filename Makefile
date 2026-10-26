@@ -77,8 +77,8 @@ E2E_KEEP ?=
 # Extra values file layered onto every install in a scenario, used for branch-build image overrides.
 # Path is as seen inside the pytest container (tests/values is mounted at /e2e-values).
 # Defaults to pubsub-images.yaml (D021) so every scenario installs the kasm_backend develop
-# private-registry app images (api/proxy/guac/rdp-gateway/rdp-https-gateway); database stays on the
-# chart's default released kasmweb/postgres tag. Override per-target only for a scenario that
+# app images (api/proxy/guac/rdp-gateway/rdp-https-gateway) from the public kasmweb repos.
+# Override per-target only for a scenario that
 # genuinely needs a different overlay (none currently do).
 E2E_IMAGE_VALUES ?= /e2e-values/pubsub-images.yaml
 E2E_ARTIFACT_DIR ?= /e2e/artifacts

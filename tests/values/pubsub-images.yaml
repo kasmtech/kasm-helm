@@ -1,36 +1,36 @@
-# Private-registry image overrides applied to every e2e scenario via the E2E_IMAGE_VALUES default
-# (Makefile). All app images (api, proxy, connectionProxy's nginx/guac/rdpGateway/
-# rdpHttpsGateway) come from kasm_backend's develop build: the backend/OTel rework (API absorbing
-# the manager role, BullMQ-on-PostgreSQL pub/sub, OTel instrumentation) is not in a released tag.
+# Image overrides applied to every e2e scenario via the E2E_IMAGE_VALUES default (Makefile). All app
+# images (api, proxy, connectionProxy's nginx/guac/rdpGateway/rdpHttpsGateway) come from
+# kasm_backend's develop build: the backend/OTel rework (API absorbing the manager role,
+# BullMQ-on-PostgreSQL pub/sub, OTel instrumentation) is not in a released tag.
 #
-# There is no postgres-private develop build, so `database.image` is deliberately left untouched
-# here — it stays on the chart's default released `kasmweb/postgres` tag (D021).
+# develop publishes only refresh the public kasmweb/<image>:develop tags; the -private develop tags
+# are stale. Feature-branch and candidate-* tags exist only in the -private repos, so switch the
+# repositories to kasmweb/<image>-private when pointing this overlay at a branch build.
 #
-# The develop tags are only refreshed when kasm_builder promotes a develop build, so they lag
-# develop until "build Kasm" has run on a kasm_backend develop pipeline.
+# `database.image` is deliberately left untouched here (D021).
 components:
   api:
     image:
-      repository: kasmweb/api-private
+      repository: kasmweb/api
       tag: "develop"
   proxy:
     image:
-      repository: kasmweb/proxy-private
+      repository: kasmweb/proxy
       tag: "develop"
   connectionProxy:
     nginx:
       image:
-        repository: kasmweb/proxy-private
+        repository: kasmweb/proxy
         tag: "develop"
     guac:
       image:
-        repository: kasmweb/kasm-guac-private
+        repository: kasmweb/kasm-guac
         tag: "develop"
     rdpGateway:
       image:
-        repository: kasmweb/rdp-gateway-private
+        repository: kasmweb/rdp-gateway
         tag: "develop"
     rdpHttpsGateway:
       image:
-        repository: kasmweb/rdp-https-gateway-private
+        repository: kasmweb/rdp-https-gateway
         tag: "develop"
