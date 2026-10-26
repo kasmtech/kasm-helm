@@ -115,10 +115,10 @@ tests:
           pattern: "otel_trace  off;"
       - matchRegex:
           path: data["upstream_proxy.conf"]
-          pattern: 'otel_span_attr          kasm\.kasm_id            "\$connect_session_id";'
+          pattern: 'otel_span_attr          kasm\.kasm\.id            "\$connect_session_id";'
       - matchRegex:
           path: data["upstream_proxy.conf"]
-          pattern: 'otel_span_attr          kasm\.kasm_user_name     "\$cookie_username";'
+          pattern: 'otel_span_attr          kasm\.kasm\.user_name     "\$cookie_username";'
 
   # ---------- stdout access_log format ----------
   # The stdout access_log is json_combined whenever observability.enabled is true (the

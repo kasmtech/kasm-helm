@@ -273,3 +273,14 @@ tests:
       - notMatchRegex:
           path: data["upstream_proxy.conf"]
           pattern: 'kasm_connect/|connect_kasm_id'
+
+  - it: upstream_proxy.conf serves vnc.html uncached through the session auth flow
+    template: templates/proxy-configmaps.yaml
+    documentIndex: 1
+    asserts:
+      - matchRegex:
+          path: data["upstream_proxy.conf"]
+          pattern: 'location ~ \^/desktop/\[\^/\]\+/vnc/vnc\\\.html\$ \{\s+if \(\$request_method = OPTIONS\) \{\s+rewrite \.\* /_options_response last;\s+\}\s+auth_request\s+/kasm_connect;'
+      - matchRegex:
+          path: data["upstream_proxy.conf"]
+          pattern: 'expires\s+off;\s+add_header\s+Cache-Control "no-store" always;'

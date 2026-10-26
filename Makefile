@@ -630,9 +630,8 @@ pytest-docker:
 	  -o log_cli_format='%(asctime)s %(levelname)s %(name)s: %(message)s' \
 	  -o log_cli_date_format='%H:%M:%S'
 
-# Every current-chart scenario now installs with the E2E_IMAGE_VALUES default (pubsub-images.yaml,
-# D021), so only its overlay renders need preloading -- a plain no-overlay render would just add
-# dead kasmweb/*:develop app images nothing installs. KIND_LOAD_CHART_DIR pointing at the old
+# Every current-chart scenario installs with the E2E_IMAGE_VALUES default (pubsub-images.yaml,
+# D021), so its overlay renders are what get preloaded. KIND_LOAD_CHART_DIR pointing at the old
 # 1.18.1 chart (the else branch below) still needs the plain render: Phase 1 keeps that chart's
 # own released images.
 kind-load-images: $(CRANE) $(HELM) ## Pull and load current chart images into kind (slow)

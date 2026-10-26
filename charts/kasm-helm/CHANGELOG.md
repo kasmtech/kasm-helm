@@ -20,6 +20,8 @@ See [Migrating to connection-proxy](./README.md#migrating-to-connection-proxy) f
 
 - **The Kasm Manager service is removed.** The API absorbs its functions. `templates/manager-deployment.yaml` and `templates/manager-service.yaml` are deleted, and `components.manager` is removed from `values.yaml` and `values.schema.json` (the schema now rejects it). nginx no longer serves `/manager_api/`: agents call the API's Internal surface at `/api/internal/agent-vm/` and `/api/internal/agent-k8s/`, which proxy to the API service and honour the agent drain flag (`kasm_agent_draining`). The `manager_api.conf` entry of the proxy services ConfigMap is replaced by `internal_agents.conf`. Agents still configured with `/manager_api/...` paths must be upgraded to the matching release. See [Manager removed](./README.md#manager-removed).
 
+- **The Kasm Proxy requires a Kasm 1.20 or later API image.** Its `/desktop/` auth subrequest calls `GET /api/session/sessions/<id>/connection` and reads the `connect_session_id` header, which earlier API images do not serve. Pinning `useImageTags` or `components.api.image.tag` to a 1.19 or earlier image leaves every session unable to connect.
+
 ### Added
 
 - The Kasm Proxy sidecar tags the access-log row written when a session websocket closes (`GET /desktop/<id>/vnc/websockify`, status 101) as the `kasm.session.client_detached` lifecycle record, carrying `kasm.kasm.id` and the attached duration in `kasm.kasm.transition_ms`.
@@ -65,6 +67,7 @@ See [Migrating to connection-proxy](./README.md#migrating-to-connection-proxy) f
 - Adds OpenTelemetry-based observability: distributed tracing and metrics/log collection for API, Manager, Guac, Proxy, RDP Gateway/HTTPS Gateway, and nginx, backed by a new ClickHouse store with configurable retention. Operators can enable this via new OTel collector, gateway, and ClickHouse values. <!-- hash:31e3bbba5fbdea28df316d826c3d0bda9c49f330 -->
 - The browser telemetry config served at `/otel-config.js` points the Kasm web UI's exporter at `/api/telemetry` instead of `/api/client/telemetry`, matching the API's telemetry ingest route. Pair this chart with an API image that serves `/api/telemetry`, or browser telemetry exports will fail (only relevant when `observability.browser` is enabled). <!-- hash:b2e97505de4083df3e83bae4c5ef7682a33379bd -->
 - `components.api.queueConcurrency` and `components.api.workerPool[].queueConcurrency` accept an integer, applied to every queue, as well as a per-queue object. `components.api.queueConcurrency` now defaults to `null` instead of `{}`, so an integer can override it without a Helm "cannot overwrite table" warning; leaving it unset uses the API image default, which is now 5 jobs per queue (previously 1).
+- Kasm Proxy and Connection Proxy nginx spans carry the session id and user name as `kasm.kasm.id` and `kasm.kasm.user_name` (previously `kasm.kasm_id` and `kasm.kasm_user_name`), matching the backend nginx config and the `kasm.kasm.id` attribute on `kasm.session.client_detached` records. Update any trace queries that filter on the old names.
 
 ### Removed
 
@@ -113,6 +116,8 @@ See [Migrating to connection-proxy](./README.md#migrating-to-connection-proxy) f
 - An upgrade that would replace the database while `dbManagement.initialize` is still set now fails to render instead of silently initializing an empty database over a live deployment. `dbManagement.initialize` is for a new deployment; upgrading an existing one needs `dbManagement.initialize=false` with `dbManagement.upgrade.enable=true`, which dumps the current database before the switch and restores it after. Previously this combination produced no error, no rollback and no data. The check reads the deployed StatefulSet, so it applies to `helm upgrade` and `--dry-run=server`, and stays quiet during `helm template`.
 
 - Sessions connect again. The Kasm Proxy's `/desktop/` auth subrequest called `/api/kasm_connect/`, which the API no longer serves, so every `/desktop/<id>/...` request returned 500 and no session websocket opened. The `/kasm_connect` location now takes the session id from `/desktop/<id>/` and calls `GET /api/session/sessions/<id>/connection`, and `/desktop/` reads the renamed `connect_session_id` response header (still forwarded upstream as `X-Kasm-ID`).
+
+- The Kasm Proxy serves `/desktop/<id>/vnc/vnc.html` with `Cache-Control: no-store`. It is rendered with per-connection settings, and the 4-hour `/desktop/` caching let a browser reuse a copy with stale connection settings after a reconnect. Matches the backend nginx config.
 
 ## [1.1190.6] - 2026-07-28
 

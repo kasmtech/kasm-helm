@@ -100,9 +100,8 @@ def get_api_image() -> str:
         # Mirror what helm_install layers onto every scenario install: the
         # E2E_IMAGE_VALUES overlay (tests/values/pubsub-images.yaml by default,
         # D021) replaces components.api.image wholesale. Without this, the
-        # dns-check helper pod below resolves to the released :develop tag,
-        # which was never preloaded into kind once every scenario switched to
-        # the branch-build overlay -- ErrImageNeverPull.
+        # dns-check helper pod below could resolve to an image other than the
+        # one preloaded into kind from the overlay -- ErrImageNeverPull.
         image_values = os.environ.get("E2E_IMAGE_VALUES", "").strip()
         if image_values and os.path.isfile(image_values):
             with open(image_values) as f:
