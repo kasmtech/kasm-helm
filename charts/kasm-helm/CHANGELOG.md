@@ -117,6 +117,8 @@ See [Migrating to connection-proxy](./README.md#migrating-to-connection-proxy) f
 
 - Sessions connect again. The Kasm Proxy's `/desktop/` auth subrequest called `/api/kasm_connect/`, which the API no longer serves, so every `/desktop/<id>/...` request returned 500 and no session websocket opened. The `/kasm_connect` location now takes the session id from `/desktop/<id>/` and calls `GET /api/session/sessions/<id>/connection`, and `/desktop/` reads the renamed `connect_session_id` response header (still forwarded upstream as `X-Kasm-ID`).
 
+- A database upgrade whose restore fails no longer finishes with an empty database. The upgrade job ignored `pg_restore` failures and then ran the schema upgrade anyway, which builds a fresh, empty schema: the job reported success, and every user, group, workspace and setting from the previous version was gone (connection proxies then failed to register, because the fresh `registration_token` no longer matched the chart secret). The job now stops if the backup is not a complete tar archive, if `pg_restore` fails, or if the restore leaves no `settings` table, and the restore runs in a single transaction so a container restart retries it from scratch. A truncated backup previously made `pg_restore` hang instead of failing.
+
 - The Kasm Proxy serves `/desktop/<id>/vnc/vnc.html` with `Cache-Control: no-store`. It is rendered with per-connection settings, and the 4-hour `/desktop/` caching let a browser reuse a copy with stale connection settings after a reconnect. Matches the backend nginx config.
 
 ## [1.1190.6] - 2026-07-28
