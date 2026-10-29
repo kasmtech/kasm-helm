@@ -6,7 +6,7 @@ ingress, so it fits the single-node kind cluster without also standing up
 ingress-nginx) with two workerPool entries (a full-queue "primary" pool and a
 restricted-queue "restricted" pool, layered here with kind-sized resource
 requests) and verifies the resulting Deployment fan-out: worker pods run
-KASM_SERVE_API=FALSE and KASM_PROCESS=TRUE with the pool's queue list, api itself
+KASM_SERVE_API=TRUE and KASM_PROCESS=TRUE with the pool's queue list, api itself
 serves HTTP and publishes only (KASM_SERVE_API=TRUE, KASM_PROCESS=FALSE), there is
 no worker Service, each worker pool's own
 /livez:8081 liveness endpoint responds 200, and the login page is reachable
@@ -90,11 +90,11 @@ def test_api_worker_split_mode(installer, temp_workdir: Path) -> None:
     release = e2e_config.release_name
 
     # install_and_wait_with_retry already blocked until every pod in the namespace
-    # (api, both worker pools, proxy, connection-proxy, db) is Running and Ready.
-    # For api that means its readinessProbe (/api/__healthcheck) passed. Workers
-    # serve no API so they have no readinessProbe, and Ready only means the
-    # container started. Per-pool worker Deployments exist and are Ready (single
-    # default zone, so no zone suffix beyond the pool name). D002: the Deployment's own name is shortened
+    # (api, both worker pools, proxy, connection-proxy, db) is Running and Ready —
+    # which for api/api-worker means their readinessProbe (/api/__healthcheck) and,
+    # transitively, their livenessProbe (/livez) both already passed. Per-pool
+    # worker Deployments exist and are Ready (single default zone, so no zone
+    # suffix beyond the pool name). D002: the Deployment's own name is shortened
     # to <release>-api-<pool>-default, but its pods still carry the
     # app.kubernetes.io/name selector label from the "apiWorker" component
     # (<release>-api-worker-<pool>-default) to stay distinct from the api pods.
@@ -108,8 +108,9 @@ def test_api_worker_split_mode(installer, temp_workdir: Path) -> None:
         assert status.stdout.strip() == "1", (
             f"Expected {deployment_name} readyReplicas=1, got {status.stdout.strip()!r}"
         )
-        # readyReplicas above proves nothing about worker health; hit the
-        # worker's own liveness endpoint (D008: /livez:8081) directly.
+        # readyReplicas above is transitive on the readinessProbe only; hit the
+        # worker's own liveness endpoint (D008: /livez:8081) directly so the
+        # docstring's "liveness endpoint respond[s]" claim is actually checked.
         pod = get_first_pod_by_selector(
             namespace, f"app.kubernetes.io/name={label_name}"
         )
@@ -125,15 +126,15 @@ def test_api_worker_split_mode(installer, temp_workdir: Path) -> None:
         f"Expected no api-worker Service, found: {worker_services.stdout.strip()}"
     )
 
-    # Worker pods: KASM_SERVE_API=FALSE, KASM_PROCESS=TRUE and the pool's own queue list.
+    # Worker pods: KASM_SERVE_API=TRUE, KASM_PROCESS=TRUE and the pool's own queue list.
     expected_queues = {"primary": "all", "restricted": "session,heartbeat"}
     for pool, queues in expected_queues.items():
         pod = get_first_pod_by_selector(
             namespace,
             f"app.kubernetes.io/name={release}-api-worker-{pool}-default",
         )
-        assert _pod_env(namespace, pod, "KASM_SERVE_API") == "FALSE", (
-            f"Expected KASM_SERVE_API=FALSE on {pool} worker pod {pod}"
+        assert _pod_env(namespace, pod, "KASM_SERVE_API") == "TRUE", (
+            f"Expected KASM_SERVE_API=TRUE on {pool} worker pod {pod}"
         )
         assert _pod_env(namespace, pod, "KASM_PROCESS") == "TRUE", (
             f"Expected KASM_PROCESS=TRUE on {pool} worker pod {pod}"

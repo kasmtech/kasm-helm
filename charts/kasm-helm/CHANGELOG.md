@@ -20,7 +20,7 @@ See [Migrating to connection-proxy](./README.md#migrating-to-connection-proxy) f
 
 - **The Kasm Manager service is removed.** The API absorbs its functions. `templates/manager-deployment.yaml` and `templates/manager-service.yaml` are deleted, and `components.manager` is removed from `values.yaml` and `values.schema.json` (the schema now rejects it). nginx no longer serves `/manager_api/`: agents call the API's Internal surface at `/api/internal/agent-vm/` and `/api/internal/agent-k8s/`, which proxy to the API service and honour the agent drain flag (`kasm_agent_draining`). The `manager_api.conf` entry of the proxy services ConfigMap is replaced by `internal_agents.conf`. Agents still configured with `/manager_api/...` paths must be upgraded to the matching release. See [Manager removed](./README.md#manager-removed).
 
-- **The API image is renamed from `kasmweb/api` to `kasmweb/appserver`.** The default `components.api.image.repository` is now `kasmweb/appserver`; if you override it (for example to a private registry mirror), update the repository name. The image now requires `KASM_SERVE_API` alongside `KASM_PROCESS`, which the chart sets: `TRUE` on the API pods, `FALSE` on `workerPool` pods. Worker pods no longer define a readinessProbe because they serve no HTTP API; their `/livez` livenessProbe is unchanged.
+- **The API image is renamed from `kasmweb/api` to `kasmweb/appserver`.** The default `components.api.image.repository` is now `kasmweb/appserver`; if you override it (for example to a private registry mirror), update the repository name. The image now requires `KASM_SERVE_API` alongside `KASM_PROCESS`; the chart sets `KASM_SERVE_API=TRUE` on both the API and `workerPool` pods, so every pod still serves the API.
 
 ### Added
 

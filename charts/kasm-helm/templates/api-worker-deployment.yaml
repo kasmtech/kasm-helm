@@ -3,9 +3,8 @@ Kasm API Worker Deployment definitions (components.api.workerPool non-empty only
 
 One Deployment per pool per zone. Each worker pod clones the api-deployment pod structure
 (same init containers, security context, POSTGRES_ and SERVER_ env, image) but always sets
-KASM_SERVE_API=FALSE and KASM_PROCESS=TRUE and adds the KASM_WORKER_* queue-consumption env vars.
-There is no Service: workers only consume BullMQ queues, they are never addressed directly. With no
-HTTP server there is nothing for a readinessProbe to check, so only the /livez livenessProbe is set.
+KASM_SERVE_API=TRUE and KASM_PROCESS=TRUE and adds the KASM_WORKER_* queue-consumption env vars.
+There is no Service: workers only consume BullMQ queues, they are never addressed directly.
 
 Resource names are shortened to <release>-api-<pool>[-<zone>] (D002); the selector/pod labels
 still carry the "apiWorker" component (kebab: api-worker) so they stay distinct from the api
@@ -89,7 +88,7 @@ spec:
             - name: SERVER_INTERNAL_SCHEMA
               value: "https"
             - name: KASM_SERVE_API
-              value: "FALSE"
+              value: "TRUE"
             - name: KASM_PROCESS
               value: "TRUE"
             - name: KASM_WORKER_QUEUES
@@ -132,6 +131,8 @@ spec:
           {{- if $.Values.applyHealthChecks }}
           livenessProbe:
             {{- include "health.probe" (dict "root" $ "component" "api" "probeType" "livenessProbe" "type" "http" "path" "/livez" "portName" $constants.api.livenessPortName) | nindent 12 }}
+          readinessProbe:
+            {{- include "health.probe" (dict "root" $ "component" "api" "probeType" "readinessProbe" "type" "http" "path" "/api/__healthcheck" "portName" $constants.api.portName) | nindent 12 }}
           {{- end }}
           {{- if $pool.resources }}
           resources: {{- toYaml $pool.resources | nindent 12 }}
