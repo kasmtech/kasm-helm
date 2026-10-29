@@ -13,11 +13,13 @@
 # scenario (D021) and dev31-images.yaml was deleted.
 #
 # Tags verified present on this host (2026-09-17):
-#   kasmweb/{api,proxy,kasm-guac,rdp-gateway,rdp-https-gateway}-private:integ-otel-openapi-pubsub
+#   kasmweb/{proxy,kasm-guac,rdp-gateway,rdp-https-gateway}-private:integ-otel-openapi-pubsub
+# The appserver-private tag is published by the first Kasm Builder run of integ after DEV-81
+# renamed kasmweb/api-private to kasmweb/appserver-private.
 components:
   api:
     image:
-      repository: kasmweb/api-private
+      repository: kasmweb/appserver-private
       tag: "integ-otel-openapi-pubsub"
   proxy:
     image:

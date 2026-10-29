@@ -3,8 +3,8 @@ Kasm API Worker Deployment definitions (components.api.workerPool non-empty only
 
 One Deployment per pool per zone. Each worker pod clones the api-deployment pod structure
 (same init containers, security context, POSTGRES_ and SERVER_ env, image) but always sets
-KASM_PROCESS=TRUE and adds the KASM_WORKER_* queue-consumption env vars. There is no Service:
-workers only consume BullMQ queues, they are never addressed directly.
+KASM_SERVE_API=TRUE and KASM_PROCESS=TRUE and adds the KASM_WORKER_* queue-consumption env vars.
+There is no Service: workers only consume BullMQ queues, they are never addressed directly.
 
 Resource names are shortened to <release>-api-<pool>[-<zone>] (D002); the selector/pod labels
 still carry the "apiWorker" component (kebab: api-worker) so they stay distinct from the api
@@ -79,14 +79,16 @@ spec:
             {{- include "kasm.trustedCaEnv" $ | indent 12 }}
             - name: "SERVER_ZONE_NAME"
               value: {{ $zone.name | quote }}
-            - name: "KASM_EPHEMERAL"
-              value: "true"
             - name: "SERVER_ID"
+              value: "auto"
+            - name: "MANAGER_ID"
               value: "auto"
             - name: SERVER_HOSTNAME
               value: {{ include "kasm.name" (list $ "apiWorker" "" $poolZone) | quote }}
             - name: SERVER_INTERNAL_SCHEMA
               value: "https"
+            - name: KASM_SERVE_API
+              value: "TRUE"
             - name: KASM_PROCESS
               value: "TRUE"
             - name: KASM_WORKER_QUEUES

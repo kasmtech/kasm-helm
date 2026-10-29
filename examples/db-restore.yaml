@@ -13,6 +13,8 @@
 #   - The PVC must already exist and contain your backup file before applying this job.
 #
 # Field reference:
+#   image               — Replace with your Kasm version, e.g. kasmweb/appserver:1.20.0
+#                         (kasmweb/api for 1.19 and earlier).
 #   POSTGRES_HOST       — DB service name. Retrieve with: kubectl -n {NAMESPACE} get service
 #   POSTGRES_DB         — Defaults to kasm. Only change if you overrode database.kasmDbName in my-values.yaml.
 #   POSTGRES_USER       — Defaults to kasmapp. Only change if you overrode database.kasmDbUser in my-values.yaml.
@@ -42,7 +44,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: kasm-db-restore
-          image: kasmweb/api:1.19.0  # <-- REPLACE with your Kasm version
+          image: kasmweb/appserver:1.20.0  # <-- REPLACE with your Kasm version
           imagePullPolicy: IfNotPresent
           env:
             - name: POSTGRES_HOST
