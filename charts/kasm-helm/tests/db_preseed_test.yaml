@@ -863,3 +863,174 @@ tests:
         equal:
           path: metadata.labels["my-label"]
           value: my-value
+
+  - it: renders cast_configs passthrough settings
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.cast_configs:
+        - casting_config_name: "My Cast"
+          key: "cast-key-001"
+          image_id: "image-uuid-001"
+          allow_kasm_smart_card_passthrough: true
+          allow_kasm_webauthn_passthrough: true
+          allow_kasm_ssh_agent_passthrough: true
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "allow_kasm_smart_card_passthrough: true"
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "allow_kasm_webauthn_passthrough: true"
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "allow_kasm_ssh_agent_passthrough: true"
+
+  - it: defaults cast_configs passthrough settings to false
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.cast_configs:
+        - casting_config_name: "My Cast"
+          key: "cast-key-001"
+          image_id: "image-uuid-001"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "allow_kasm_smart_card_passthrough: false"
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "allow_kasm_webauthn_passthrough: false"
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "allow_kasm_ssh_agent_passthrough: false"
+
+  - it: renders cast_configs into the cast_links table
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.cast_configs:
+        - casting_config_name: "My Cast"
+          key: "cast-key-001"
+          image_id: "image-uuid-001"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: '(?m)^cast_links: *\n- cast_link_id: "\$\{uuid:cast_link_id:1\}"$'
+      - documentIndex: 1
+        notMatchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "cast_configs:|cast_config_id:"
+
+  - it: keeps a cast_configs entry's legacy cast_config_id as its cast_link_id
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.cast_configs:
+        - cast_config_id: "cast-uuid-001"
+          casting_config_name: "My Cast"
+          key: "cast-key-001"
+          image_id: "image-uuid-001"
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: '(?m)^- cast_link_id: "cast-uuid-001"$'
+
+  - it: renders staging_configs passthrough settings
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.staging_configs:
+        - image_id: "image-uuid-001"
+          zone_id: "zone-uuid-001"
+          num_sessions: 1
+          expiration: 1
+          allow_kasm_smart_card_passthrough: true
+          allow_kasm_webauthn_passthrough: true
+          allow_kasm_ssh_agent_passthrough: true
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "allow_kasm_smart_card_passthrough: true"
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "allow_kasm_webauthn_passthrough: true"
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "allow_kasm_ssh_agent_passthrough: true"
+
+  - it: defaults staging_configs passthrough settings to false
+    set:
+      publicAddr: kasm.example.com
+      kasmConfig.generatePreseed: true
+      kasmConfig.defaultUsers: false
+      kasmZones:
+        - name: default
+          proxyAddress: kasm.example.com
+          primary: true
+      certificate.secretName: kasm-tls
+      dbManagement.initialize: true
+      kasmConfig.config.staging_configs:
+        - image_id: "image-uuid-001"
+          zone_id: "zone-uuid-001"
+          num_sessions: 1
+          expiration: 1
+    asserts:
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "allow_kasm_smart_card_passthrough: false"
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "allow_kasm_webauthn_passthrough: false"
+      - documentIndex: 1
+        matchRegex:
+          path: stringData["custom_properties.yaml"]
+          pattern: "allow_kasm_ssh_agent_passthrough: false"
