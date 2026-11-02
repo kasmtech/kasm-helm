@@ -69,6 +69,7 @@ See [Migrating to connection-proxy](./README.md#migrating-to-connection-proxy) f
 - The API and API-worker pods no longer set `KASM_EPHEMERAL`; the API image no longer reads it. `MANAGER_ID=auto`, which the chart already sets, is what marks each pod's manager row ephemeral.
 - `components.api.threadPool` caps how many synchronous request handlers the API server runs at once; requests past it queue. `components.api.threadPoolLogInterval` logs request-thread usage (in use, total, waiting). The values and their defaults are unchanged; only the descriptions, which still named CherryPy, are corrected.
 - `components.api.queueConcurrency` and `components.api.workerPool[].queueConcurrency` accept an integer, applied to every queue, as well as a per-queue object. `components.api.queueConcurrency` now defaults to `null` instead of `{}`, so an integer can override it without a Helm "cannot overwrite table" warning; leaving it unset uses the API image default, which is now 5 jobs per queue (previously 1).
+- Helper scripts updated to reflect docker image changes. <!-- hash:627002acaf9cabde47c779f050165ea7d0f0b71c -->
 
 ### Removed
 
