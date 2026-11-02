@@ -1,0 +1,34 @@
+suite: per-pod manager identity
+# The backend refuses to start without a manager ID. Pods have no installer to
+# persist one, so each generates its own per start (MANAGER_ID=auto) and its
+# managers row is ephemeral: deleted at clean shutdown, never drained from the
+# admin console.
+
+templates:
+  - templates/api-deployment.yaml
+  - templates/api-worker-deployment.yaml
+
+tests:
+  - it: api pods generate their manager ID per start
+    template: templates/api-deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MANAGER_ID
+            value: "auto"
+
+  - it: worker pods generate their manager ID per start
+    template: templates/api-worker-deployment.yaml
+    set:
+      components:
+        api:
+          workerPool:
+            - name: media
+              queues: "media,thumbnails"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MANAGER_ID
+            value: "auto"

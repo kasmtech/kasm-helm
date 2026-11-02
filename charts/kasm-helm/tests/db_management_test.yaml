@@ -389,7 +389,7 @@ tests:
           pattern: 'if ! tar -tf "\$DUMP_FILE" > /dev/null; then\s+echo "ERROR: [^"]+" >&2;\s+exit 1;\s+fi\s+echo "Restoring \$DUMP_FILE";\s+pg_restore --single-transaction '
       - matchRegex:
           path: spec.template.spec.containers[0].args[0]
-          pattern: 'if ! settings_table_exists; then\s+echo "ERROR: [^"]+" >&2;\s+exit 1;\s+fi\s+fi\s+python3 /src/api_server/server.pyc --upgrade-database'
+          pattern: 'if ! settings_table_exists; then\s+echo "ERROR: [^"]+" >&2;\s+exit 1;\s+fi\s+fi\s+python /kasm/src/api_server/server.py --upgrade-database'
 
   - it: skipBackupAndRestore=true with database.standalone=false fails with explanatory message
     template: templates/db-upgrade-job.yaml

@@ -76,9 +76,9 @@ E2E_CLUSTER_WARMUP_SECONDS ?= 10
 E2E_KEEP ?=
 # Extra values file layered onto every install in a scenario, used for branch-build image overrides.
 # Path is as seen inside the pytest container (tests/values is mounted at /e2e-values).
-# Defaults to pubsub-images.yaml (D021) so every scenario installs the kasm_backend develop
-# app images (api/proxy/guac/rdp-gateway/rdp-https-gateway) from the public kasmweb repos.
-# Override per-target only for a scenario that
+# Defaults to pubsub-images.yaml (D021) so every scenario installs the integ/otel-openapi-pubsub
+# private-registry app images (api/proxy/guac/rdp-gateway/rdp-https-gateway); database stays on the
+# chart's default released kasmweb/postgres tag. Override per-target only for a scenario that
 # genuinely needs a different overlay (none currently do).
 E2E_IMAGE_VALUES ?= /e2e-values/pubsub-images.yaml
 E2E_ARTIFACT_DIR ?= /e2e/artifacts
@@ -630,8 +630,9 @@ pytest-docker:
 	  -o log_cli_format='%(asctime)s %(levelname)s %(name)s: %(message)s' \
 	  -o log_cli_date_format='%H:%M:%S'
 
-# Every current-chart scenario installs with the E2E_IMAGE_VALUES default (pubsub-images.yaml,
-# D021), so its overlay renders are what get preloaded. KIND_LOAD_CHART_DIR pointing at the old
+# Every current-chart scenario now installs with the E2E_IMAGE_VALUES default (pubsub-images.yaml,
+# D021), so only its overlay renders need preloading -- a plain no-overlay render would just add
+# dead kasmweb/*:develop app images nothing installs. KIND_LOAD_CHART_DIR pointing at the old
 # 1.18.1 chart (the else branch below) still needs the plain render: Phase 1 keeps that chart's
 # own released images.
 kind-load-images: $(CRANE) $(HELM) ## Pull and load current chart images into kind (slow)
@@ -770,7 +771,7 @@ e2e-basic: kind-prep build-pytest ## Basic install and login page verification
 	$(MAKE) pytest-docker E2E_SCENARIO=e2e-basic PYTEST_ARGS="test_01_basic_deploy.py"
 
 # A non-empty components.api.workerPool depends on the pub/sub backend (API absorbing the
-# manager role, BullMQ-on-PostgreSQL) that is not in a released tag — covered
+# manager role, BullMQ-on-PostgreSQL) that only exists on integ/otel-openapi-pubsub — covered
 # by the E2E_IMAGE_VALUES default (tests/values/pubsub-images.yaml, D021, kasm-helm-tzy).
 e2e-split: kind-prep build-pytest ## components.api.workerPool — per-pool worker Deployments, no worker Service
 	$(MAKE) pytest-docker E2E_SCENARIO=e2e-split PYTEST_ARGS="-m e2e -q test_16_api_worker_split.py"
@@ -816,8 +817,8 @@ e2e-json-logging: kind-prep build-pytest ## Verify proxy stdout is JSON when obs
 	$(MAKE) pytest-docker E2E_SCENARIO=e2e-json-logging PYTEST_ARGS="-m e2e -q test_10_json_logging.py"
 
 # The e2e-observability-* and e2e-router targets depend on the OTel instrumentation (ClickHouse
-# env vars, the ngx_otel_module-carrying proxy image) that ships in the kasm_backend develop
-# build — covered by the E2E_IMAGE_VALUES default (tests/values/pubsub-images.yaml, D021).
+# env vars, the ngx_otel_module-carrying proxy image) that ships in the integ/otel-openapi-pubsub
+# branch build — covered by the E2E_IMAGE_VALUES default (tests/values/pubsub-images.yaml, D021).
 e2e-observability: kind-prep build-pytest ## Default observability install: collector + ClickHouse end-to-end telemetry flow
 	$(MAKE) pytest-docker E2E_SCENARIO=e2e-observability PYTEST_ARGS="-m e2e -q test_12_observability.py"
 

@@ -119,7 +119,7 @@ def get_api_image() -> str:
         return f"{api_image['repository']}:{tag}"
     except Exception:
         tag = os.environ.get("KASM_TAG", "develop")
-        return f"kasmweb/api:{tag}"
+        return f"kasmweb/appserver:{tag}"
 
 
 def get_chart_app_version() -> str:

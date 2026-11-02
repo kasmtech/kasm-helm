@@ -84,10 +84,12 @@ spec:
             {{- include "kasm.trustedCaEnv" $ | indent 12 }}
             - name: "SERVER_ZONE_NAME"
               value: {{ $zone.name | quote }}
-            - name: "KASM_EPHEMERAL"
-              value: "true"
             - name: "SERVER_ID"
               value: "auto"
+            - name: "MANAGER_ID"
+              value: "auto"
+            - name: KASM_SERVE_API
+              value: "TRUE"
             - name: KASM_PROCESS
               value: {{ $kasmProcess | quote }}
             {{- if not $hasWorkerPool }}
