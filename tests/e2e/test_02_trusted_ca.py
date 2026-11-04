@@ -29,8 +29,9 @@ def test_trusted_ca_init_and_curl_trusts_custom_cert(installer, temp_workdir: Pa
 
     server_dns_name = f"nginx-trust.{namespace}.svc.cluster.local"
 
-    # Python 3.13+ verifies with VERIFY_X509_STRICT, which rejects certs missing
-    # key usage or subject/authority key identifiers.
+    # Python 3.13+ verifies with VERIFY_X509_STRICT, which rejects a CA without
+    # KeyUsage or a SubjectKeyIdentifier, and a server cert without an
+    # AuthorityKeyIdentifier.
     ca_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     ca_subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "kasm-e2e-ca")])
     ca_cert = (
