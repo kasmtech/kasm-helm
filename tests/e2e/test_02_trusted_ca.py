@@ -29,7 +29,8 @@ def test_trusted_ca_init_and_curl_trusts_custom_cert(installer, temp_workdir: Pa
 
     server_dns_name = f"nginx-trust.{namespace}.svc.cluster.local"
 
-    # Generate CA + server cert
+    # Python 3.13+ verifies with VERIFY_X509_STRICT, which rejects certs missing
+    # key usage or subject/authority key identifiers.
     ca_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     ca_subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "kasm-e2e-ca")])
     ca_cert = (
@@ -41,6 +42,21 @@ def test_trusted_ca_init_and_curl_trusts_custom_cert(installer, temp_workdir: Pa
         .not_valid_before(datetime.now(timezone.utc) - timedelta(days=1))
         .not_valid_after(datetime.now(timezone.utc) + timedelta(days=30))
         .add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=True)
+        .add_extension(
+            x509.KeyUsage(
+                digital_signature=False,
+                content_commitment=False,
+                key_encipherment=False,
+                data_encipherment=False,
+                key_agreement=False,
+                key_cert_sign=True,
+                crl_sign=True,
+                encipher_only=False,
+                decipher_only=False,
+            ),
+            critical=True,
+        )
+        .add_extension(x509.SubjectKeyIdentifier.from_public_key(ca_key.public_key()), critical=False)
         .sign(ca_key, hashes.SHA256())
     )
 
@@ -55,6 +71,9 @@ def test_trusted_ca_init_and_curl_trusts_custom_cert(installer, temp_workdir: Pa
         .not_valid_before(datetime.now(timezone.utc) - timedelta(days=1))
         .not_valid_after(datetime.now(timezone.utc) + timedelta(days=30))
         .add_extension(x509.SubjectAlternativeName([x509.DNSName(server_dns_name)]), critical=False)
+        .add_extension(
+            x509.AuthorityKeyIdentifier.from_issuer_public_key(ca_key.public_key()), critical=False
+        )
         .sign(ca_key, hashes.SHA256())
     )
 
