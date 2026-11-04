@@ -1,44 +1,36 @@
-# Branch-build image overrides applied to every e2e scenario via the E2E_IMAGE_VALUES default
-# (Makefile). All app images (api, proxy, connectionProxy's nginx/guac/rdpGateway/
-# rdpHttpsGateway) come from this branch's build (integ/otel-openapi-pubsub) — the backend/OTel
-# rework (API absorbing the manager role, BullMQ-on-PostgreSQL pub/sub, OTel instrumentation)
-# only exists there, so released tags won't do.
+# Image overrides applied to every e2e scenario via the E2E_IMAGE_VALUES default (Makefile). All app
+# images (api, proxy, connectionProxy's nginx/guac/rdpGateway/rdpHttpsGateway) come from
+# kasm_backend's develop build: the backend/OTel rework (API absorbing the manager role,
+# BullMQ-on-PostgreSQL pub/sub, OTel instrumentation) is not in a released tag.
 #
-# There is no `postgres-private:integ-otel-openapi-pubsub` build, so `database.image` is
-# deliberately left untouched here — it stays on the chart's default released `kasmweb/postgres`
-# tag (D021).
+# develop publishes only refresh the public kasmweb/<image>:develop tags; the -private develop tags
+# are stale. Feature-branch and candidate-* tags exist only in the -private repos, so switch the
+# repositories to kasmweb/<image>-private when pointing this overlay at a branch build.
 #
-# Formerly split against tests/values/dev31-images.yaml (OTel-only scenarios vs. pub/sub
-# scenarios); DEV-31 merged into this integ branch, so a single overlay now covers every
-# scenario (D021) and dev31-images.yaml was deleted.
-#
-# Tags verified present on this host (2026-09-17):
-#   kasmweb/{proxy,kasm-guac,rdp-gateway,rdp-https-gateway}-private:integ-otel-openapi-pubsub
-# The appserver-private tag is published by the first Kasm Builder run of integ after DEV-81
-# renamed kasmweb/api-private to kasmweb/appserver-private.
+# `database.image` is deliberately left untouched here (D021).
 components:
   api:
     image:
-      repository: kasmweb/appserver-private
-      tag: "integ-otel-openapi-pubsub"
+      repository: kasmweb/appserver
+      tag: "develop"
   proxy:
     image:
-      repository: kasmweb/proxy-private
-      tag: "integ-otel-openapi-pubsub"
+      repository: kasmweb/proxy
+      tag: "develop"
   connectionProxy:
     nginx:
       image:
-        repository: kasmweb/proxy-private
-        tag: "integ-otel-openapi-pubsub"
+        repository: kasmweb/proxy
+        tag: "develop"
     guac:
       image:
-        repository: kasmweb/kasm-guac-private
-        tag: "integ-otel-openapi-pubsub"
+        repository: kasmweb/kasm-guac
+        tag: "develop"
     rdpGateway:
       image:
-        repository: kasmweb/rdp-gateway-private
-        tag: "integ-otel-openapi-pubsub"
+        repository: kasmweb/rdp-gateway
+        tag: "develop"
     rdpHttpsGateway:
       image:
-        repository: kasmweb/rdp-https-gateway-private
-        tag: "integ-otel-openapi-pubsub"
+        repository: kasmweb/rdp-https-gateway
+        tag: "develop"
