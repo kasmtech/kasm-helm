@@ -371,6 +371,26 @@ tests:
       - exists:
           path: spec.template.spec.volumes[?(@.name=="kasm-db-dump")].persistentVolumeClaim
 
+  # A restore that fails or produces no schema must stop the job: --upgrade-database
+  # would otherwise build a fresh, empty schema over the deployment's data.
+  - it: a failed or empty restore stops the upgrade job instead of upgrading an empty DB
+    template: templates/db-upgrade-job.yaml
+    set:
+      dbManagement:
+        initialize: false
+        upgrade:
+          enable: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: '^set -euo pipefail\n'
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: 'if ! tar -tf "\$DUMP_FILE" > /dev/null; then\s+echo "ERROR: [^"]+" >&2;\s+exit 1;\s+fi\s+echo "Restoring \$DUMP_FILE";\s+pg_restore --single-transaction '
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: 'if ! settings_table_exists; then\s+echo "ERROR: [^"]+" >&2;\s+exit 1;\s+fi\s+fi\s+python /kasm/src/api_server/server.py --upgrade-database'
+
   - it: skipBackupAndRestore=true with database.standalone=false fails with explanatory message
     template: templates/db-upgrade-job.yaml
     set:

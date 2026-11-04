@@ -613,7 +613,7 @@ components:
     #
     image:
       registry: docker.io
-      repository: kasmweb/api
+      repository: kasmweb/appserver
       # components.api.image.tag -- Tag for this component's image. Leave empty to fall back to the chart-wide `useImageTags`.
       tag: ""
     # components.api.replicas -- Override the replica count set by deploymentSize. Set to 0 to use the deploymentSize preset (default).
@@ -685,11 +685,11 @@ components:
     #           name: my-secret
     #           key: my-key
     extraEnv: []
-    # components.api.threadPool -- Number of CherryPy worker threads for the API server.
-    #  Increase under high concurrency. Default is 20.
+    # components.api.threadPool -- Most synchronous request handlers the API server runs at once; requests
+    #  past it queue. Each holds a database session, so raise it together with the database pool. Default is 20.
     threadPool: 20
-    # components.api.threadPoolLogInterval -- Seconds between background logs of CherryPy thread-pool usage
-    #  (Threads/Active/Idle/Queue). Set to 0 to disable. Default is 0.
+    # components.api.threadPoolLogInterval -- Seconds between background logs of request-thread usage
+    #  (in use, total, waiting). Set to 0 to disable. Default is 0.
     threadPoolLogInterval: 0
     # components.api.queues -- KASM_WORKER_QUEUES value used when workerPool is empty (every API replica also
     #  consumes BullMQ queues itself): a comma-separated queue list, or "all". Default "all".

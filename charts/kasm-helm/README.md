@@ -392,7 +392,7 @@ object
 				<div style="max-width: 520px;">
 <pre lang="json">
 registry: docker.io
-repository: kasmweb/api
+repository: kasmweb/appserver
 tag: ""
 </pre>
 </div>
@@ -495,7 +495,7 @@ int
 </pre>
 </div>
 			</td>
-			<td>Number of CherryPy worker threads for the API server.  Increase under high concurrency. Default is 20.</td>
+			<td>Most synchronous request handlers the API server runs at once; requests  past it queue. Each holds a database session, so raise it together with the database pool. Default is 20.</td>
 		</tr>
 		<tr>
 			<td id="components--api--threadPoolLogInterval"><a href="./values.yaml#L693">components.api.threadPoolLogInterval</a></td>
@@ -509,7 +509,7 @@ int
 </pre>
 </div>
 			</td>
-			<td>Seconds between background logs of CherryPy thread-pool usage  (Threads/Active/Idle/Queue). Set to 0 to disable. Default is 0.</td>
+			<td>Seconds between background logs of request-thread usage  (in use, total, waiting). Set to 0 to disable. Default is 0.</td>
 		</tr>
 		<tr>
 			<td id="components--api--workerPool"><a href="./values.yaml#L712">components.api.workerPool</a></td>

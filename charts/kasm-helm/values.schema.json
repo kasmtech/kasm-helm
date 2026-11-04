@@ -368,7 +368,7 @@
                   "type": "string"
                 },
                 "repository": {
-                  "default": "kasmweb/api",
+                  "default": "kasmweb/appserver",
                   "title": "repository",
                   "type": "string"
                 },
@@ -403,13 +403,13 @@
               "type": "object"
             },
             "threadPool": {
-              "description": "Number of CherryPy worker threads for the API server. Increase under high concurrency. Default is 20.",
+              "description": "Most synchronous request handlers the API server runs at once; requests past it queue. Each holds a database session, so raise it together with the database pool. Default is 20.",
               "title": "threadPool",
               "type": "integer",
               "default": 20
             },
             "threadPoolLogInterval": {
-              "description": "Seconds between background logs of CherryPy thread-pool usage (Threads/Active/Idle/Queue). Set to 0 to disable. Default is 0.",
+              "description": "Seconds between background logs of request-thread usage (in use, total, waiting). Set to 0 to disable. Default is 0.",
               "title": "threadPoolLogInterval",
               "type": "integer",
               "default": 0

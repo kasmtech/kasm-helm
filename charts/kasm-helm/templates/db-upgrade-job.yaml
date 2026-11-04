@@ -74,8 +74,12 @@ spec:
             - "-c"
           args:
             - |
+              set -euo pipefail
               export PGPASSWORD=$POSTGRES_PASSWORD;
-              if psql -v ON_ERROR_STOP=on -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -d $POSTGRES_DB -c "SELECT COUNT(*) FROM settings;" 2>&1 > /dev/null; then
+              function settings_table_exists() {
+                psql -v ON_ERROR_STOP=on -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT COUNT(*) FROM settings;" > /dev/null
+              }
+              if settings_table_exists; then
                 echo "Database exists, running upgrade now...";
               {{- if .Values.dbManagement.upgrade.skipBackupAndRestore }}
               else
@@ -84,10 +88,25 @@ spec:
               fi
               {{- else }}
               else
-                pg_restore -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -d $POSTGRES_DB /data/kasm-db-dump/$OLD_DB_BACKUP_FILENAME;
+                # --single-transaction makes a failed restore leave the DB empty, so the
+                # container restart (restartPolicy: OnFailure) retries it from scratch.
+                DUMP_FILE="/data/kasm-db-dump/$OLD_DB_BACKUP_FILENAME";
+                # pg_restore spins forever on a truncated tar archive instead of failing.
+                if ! tar -tf "$DUMP_FILE" > /dev/null; then
+                  echo "ERROR: $DUMP_FILE is not a complete tar archive. Refusing to restore it." >&2;
+                  exit 1;
+                fi
+                echo "Restoring $DUMP_FILE";
+                pg_restore --single-transaction -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" "$DUMP_FILE";
+                # --upgrade-database builds a fresh schema on an empty DB, which would
+                # silently replace the deployment's data.
+                if ! settings_table_exists; then
+                  echo "ERROR: restoring $OLD_DB_BACKUP_FILENAME left no 'settings' table. Refusing to upgrade an empty database." >&2;
+                  exit 1;
+                fi
               fi
               {{- end }}
-              python3 /src/api_server/server.pyc --upgrade-database --cfg /opt/kasm/current/conf/app/api/api.app.config.yaml --alembic-config /src/database/migration/alembic.ini;
+              python /kasm/src/api_server/server.py --upgrade-database --cfg /opt/kasm/current/conf/app/api/api.app.config.yaml --alembic-config /kasm/src/database/migration/alembic.ini;
           {{- include "kasm.securityContext" (list . 1000 "container") | nindent 10 }}
           volumeMounts:
             - name: tmp-data

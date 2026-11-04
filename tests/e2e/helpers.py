@@ -8,6 +8,7 @@ import re
 import subprocess
 import tempfile
 import time
+import uuid
 from dataclasses import dataclass
 from typing import Iterable, Optional
 import yaml
@@ -100,9 +101,8 @@ def get_api_image() -> str:
         # Mirror what helm_install layers onto every scenario install: the
         # E2E_IMAGE_VALUES overlay (tests/values/pubsub-images.yaml by default,
         # D021) replaces components.api.image wholesale. Without this, the
-        # dns-check helper pod below resolves to the released :develop tag,
-        # which was never preloaded into kind once every scenario switched to
-        # the branch-build overlay -- ErrImageNeverPull.
+        # dns-check helper pod below could resolve to an image other than the
+        # one preloaded into kind from the overlay -- ErrImageNeverPull.
         image_values = os.environ.get("E2E_IMAGE_VALUES", "").strip()
         if image_values and os.path.isfile(image_values):
             with open(image_values) as f:
@@ -119,7 +119,7 @@ def get_api_image() -> str:
         return f"{api_image['repository']}:{tag}"
     except Exception:
         tag = os.environ.get("KASM_TAG", "develop")
-        return f"kasmweb/api:{tag}"
+        return f"kasmweb/appserver:{tag}"
 
 
 def get_chart_app_version() -> str:
@@ -1128,6 +1128,7 @@ def curl_from_pod(
         curl_args.extend(["-H", f"Host: {host_header}"])
     curl_args.append(url)
 
+    container_name = f"curl-{uuid.uuid4().hex[:8]}"
     try:
         # The app images ship no curl; run it from an ephemeral container sharing the pod netns.
         result = kubectl(
@@ -1136,6 +1137,7 @@ def curl_from_pod(
                 pod_name,
                 "--profile=restricted",
                 f"--image={CURL_DEBUG_IMAGE}",
+                f"--container={container_name}",
                 "--attach",
                 "--quiet",
                 "--",
@@ -1156,11 +1158,54 @@ def curl_from_pod(
             stderr or stdout,
         )
         raise
-    if not result.stdout:
+    stdout = result.stdout
+    if not stdout:
+        # kubectl debug --attach returns nothing when curl exits before the attach lands.
+        stdout = _ephemeral_container_output(
+            namespace, pod_name, container_name, timeout_seconds=timeout_seconds + 30
+        )
+    if not stdout:
         raise AssertionError("curl returned empty output")
 
-    body, status_code_text = result.stdout.rsplit("\n", 1)
+    body, status_code_text = stdout.rsplit("\n", 1)
     return int(status_code_text.strip()), body
+
+
+def _ephemeral_container_output(
+    namespace: str,
+    pod_name: str,
+    container_name: str,
+    *,
+    timeout_seconds: int,
+) -> str:
+    exit_code_path = (
+        "{.status.ephemeralContainerStatuses[?(@.name==\""
+        + container_name
+        + "\")].state.terminated.exitCode}"
+    )
+    deadline = time.monotonic() + timeout_seconds
+    exit_code = ""
+    while time.monotonic() < deadline:
+        exit_code = kubectl(
+            ["get", "pod", pod_name, "-o", f"jsonpath={exit_code_path}"],
+            namespace=namespace,
+        ).stdout.strip()
+        if exit_code:
+            break
+        time.sleep(2)
+    if not exit_code:
+        raise AssertionError(
+            f"curl container {container_name} in {namespace}/{pod_name} did not finish "
+            f"within {timeout_seconds}s"
+        )
+    output = kubectl(["logs", pod_name, "-c", container_name], namespace=namespace).stdout
+    if exit_code != "0":
+        raise AssertionError(
+            f"curl in {namespace}/{pod_name} exited {exit_code}: {output.strip()[:1000]}"
+        )
+    LOGGER.info("[curl] read output of %s/%s from container logs after an empty attach",
+                pod_name, container_name)
+    return output
 
 
 def assert_login_page(body: str) -> None:
