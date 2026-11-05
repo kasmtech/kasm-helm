@@ -313,7 +313,7 @@ tests:
       # would still pass while those signals ship unattributable to a pod or zone.
       - matchRegex:
           path: data["config.yaml"]
-          pattern: 'logs:\n\s+receivers: \[syslog/nginx_access, syslog/nginx_error, otlp/local\]\n\s+processors: \[memory_limiter, resource, batch\]'
+          pattern: 'logs:\n\s+receivers: \[syslog/nginx_access, syslog/nginx_error, otlp/local\]\n\s+processors: \[memory_limiter, transform/nginx_error_scrub, resource, batch\]'
       - matchRegex:
           path: data["config.yaml"]
           pattern: 'traces:\n\s+receivers: \[otlp/nginx, otlp/local\]\n\s+processors: \[memory_limiter, resource, batch\]'

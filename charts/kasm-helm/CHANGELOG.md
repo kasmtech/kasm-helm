@@ -50,6 +50,7 @@ See [Migrating to connection-proxy](./README.md#migrating-to-connection-proxy) f
 ### Changed
 
 - nginx access logs (Kasm Proxy and Connection Proxy) record the requested path without its query string, log a non-empty query as `[redacted]`, and redact the referer's query, because component and session tokens travel in query strings.
+- The nginx sidecar collector redacts the query of the `request`, `upstream` and `referrer` fields in nginx error-log lines before forwarding them. nginx's own stderr copy of the error log is unchanged.
 - nginx access-log attributes are stored under flat keys (`url.path`, `http.request.method`, `http.response.status_code`) instead of nested objects, so `LogAttributes['url.path']` is queryable and the Admin UI's Logging page can filter on it. Query strings never enter the pipeline: the sidecar drops `query_string` and rebuilds the request line without it before anything copies it.
 - The nginx sidecars no longer stamp an `application` log attribute. The Admin UI's Application column and filters read `ServiceName`, which every component sets.
 - Sidecar-collected signals (Kasm Proxy, Connection Proxy, DB) carry `host.name` set to the pod name, matching what the Kasm app containers report, so the Logging page's Server filter lists every pod rather than only API pods.
