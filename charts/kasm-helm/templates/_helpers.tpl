@@ -527,7 +527,7 @@ Where:
   - -ec
   args:
   - |
-    while ! curl "{{- $schema -}}://{{- $service -}}:{{- $port -}}{{- $path -}}" 2>/dev/null; do echo "Waiting for the {{ $service }} server to start..."; sleep 5; done
+    while ! curl --connect-timeout 2 --max-time 15 "{{- $schema -}}://{{- $service -}}:{{- $port -}}{{- $path -}}" 2>/dev/null; do echo "Waiting for the {{ $service }} server to start..."; sleep 5; done
     echo "{{- $service }} up. Connecting!"
   {{- if or $context.Values.trustedCaBundle.enabled $merged.initMounts }}
   volumeMounts:
