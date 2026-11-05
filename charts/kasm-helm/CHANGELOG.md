@@ -127,6 +127,8 @@ See [Migrating to connection-proxy](./README.md#migrating-to-connection-proxy) f
 
 - The Kasm Proxy serves `/desktop/<id>/vnc/vnc.html` with `Cache-Control: no-store`. It is rendered with per-connection settings, and the 4-hour `/desktop/` caching let a browser reuse a copy with stale connection settings after a reconnect. Matches the backend nginx config.
 
+- The `*-is-ready` init containers notice an upstream becoming ready within seconds. Their healthcheck `curl` had no timeout, so a check that started while the upstream pod was still not Ready hung for about two minutes before retrying. These waits chain (API, then Proxy, then Connection Proxy), which could delay startup until after the `kasm-db-init` Job's `ttlSecondsAfterFinished` had removed it. Helm 4's `--wait` then reported `Job/<namespace>/<release>-db-init not ready. status: NotFound` and the install hung until `--timeout`. The check now uses `--connect-timeout 2`, so a dropped connection retries within seconds, and `--max-time 15`, well above the 5-second default readiness probe timeout, so an upstream that is Ready but slow to answer still passes.
+
 ## [1.1190.6] - 2026-07-28
 
 ### Fixed
