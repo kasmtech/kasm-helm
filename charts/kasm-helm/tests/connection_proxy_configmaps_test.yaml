@@ -184,6 +184,16 @@ tests:
       - exists:
           path: data["logging.conf"]
 
+  - it: nginx-shared access formats never write the request query or the referer query
+    template: templates/nginx-shared-configmap.yaml
+    asserts:
+      - notMatchRegex:
+          path: data["logging.conf"]
+          pattern: '\$request[",]|\$query_string|\$http_referer"'
+      - matchRegex:
+          path: data["logging.conf"]
+          pattern: 'kasm_referer_logged'
+
   - it: nginx-shared has shared map blocks in orchestrator.conf
     template: templates/nginx-shared-configmap.yaml
     asserts:

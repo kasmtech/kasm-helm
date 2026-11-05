@@ -39,8 +39,8 @@ data:
       include       /etc/nginx/mime.types;
       default_type  application/octet-stream;
 
-      log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
-                        '$status $body_bytes_sent "$http_referer" '
+      log_format  main  '$remote_addr - $remote_user [$time_local] "$request_method $kasm_request_path $server_protocol" '
+                        '$status $body_bytes_sent "$kasm_referer_logged" '
                         '"$http_user_agent" "$http_x_forwarded_for"';
 
       sendfile        on;
@@ -70,6 +70,24 @@ data:
     gzip_types text/plain text/css application/javascript application/x-javascript text/xml application/xml application/xml+rss text/javascript image/x-icon image/vnd.microsoft.icon image/bmp image/svg+xml;
 
   logging.conf: |
+    # Component and session JWTs travel in query strings, so the log keeps the
+    # requested path and never the query. $request_uri (not $uri) so the path is the
+    # one the client asked for, before index and rewrite handling.
+    map $request_uri $kasm_request_path {
+      default             $request_uri;
+      '~^(?<path>[^?]*)\?'  $path;
+    }
+
+    map $args $kasm_query_logged {
+      ''       '';
+      default  '[redacted]';
+    }
+
+    map $http_referer $kasm_referer_logged {
+      default             $http_referer;
+      '~^(?<ref>[^?]*)\?'  '$ref?[redacted]';
+    }
+
     log_format json_combined escape=json
       '{'
         '"upstream_response_length": "$upstream_response_length",'
@@ -77,13 +95,13 @@ data:
         '"server_addr": "$server_addr",'
         '"server_port": "$server_port",'
         '"request_method": "$request_method",'
-        '"http_referer": "$http_referer",'
+        '"http_referer": "$kasm_referer_logged",'
         '"http_user_agent": "$http_user_agent",'
         '"http_x_forwarded_for": "$http_x_forwarded_for",'
         '"http_x_header": "$http_x_header",'
         '"nginx_version": "$nginx_version",'
         '"server_protocol": "$server_protocol",'
-        '"request":"$request",'
+        '"request":"$request_method $kasm_request_path $server_protocol",'
         '"request_length": "$request_length",'
         '"request_time": "$request_time",'
         '"upstream_response_time": "$upstream_response_time",'
@@ -99,8 +117,8 @@ data:
         '"upstream_connect_time": "$upstream_connect_time",'
         '"upstream_response_time": "$upstream_response_time",'
         '"upstream_status": "$upstream_status",'
-        '"uri": "$uri",'
-        '"query_string": "$query_string",'
+        '"uri": "$kasm_request_path",'
+        '"query_string": "$kasm_query_logged",'
         '"remote_user": "$remote_user",'
         '"cookie_username": "$cookie_username",'
         '"upstream_header_time": "$upstream_header_time"'
