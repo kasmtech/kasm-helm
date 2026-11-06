@@ -23,7 +23,13 @@ tests:
           pattern: 'transform/nginx_scrub:\n\s+trace_statements:'
       - matchRegex:
           path: data["config.yaml"]
-          pattern: 'replace_pattern\(attributes\["http\.target"\], "\\\\\?\.\*\$", ""\) where resource\.attributes\["service\.name"\] == "kasm-proxy"'
+          pattern: 'replace_pattern\(attributes\["http\.target"\], "\\\\\?\.\*\$", ""\) where attributes\["http\.target"\] != nil'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'delete_key\(attributes, "url\.query"\)'
+      - notMatchRegex:
+          path: data["config.yaml"]
+          pattern: 'replace_pattern\(attributes\["http\.(target|url)"\].*kasm-proxy'
 
   # Assert per pipeline: the log processors belong on logs only and the span scrub on traces
   # only, ahead of tail_sampling so buffered spans never hold the raw query string.

@@ -330,7 +330,7 @@ chart.
 
 A BYO config inherits nothing from the chart's gateway template. Carry over its `transform/severity`,
 `filter/healthcheck` and `transform/nginx_scrub` processors (all three examples include them) or the
-Admin UI's level filter stops matching, healthcheck noise reaches storage, and `kasm-proxy` spans
+Admin UI's level filter stops matching, healthcheck noise reaches storage, and span URL attributes
 keep raw query strings. See §4, "Attributes the Admin UI relies on".
 
 ## 10. Disabling telemetry
