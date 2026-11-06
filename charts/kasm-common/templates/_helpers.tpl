@@ -673,9 +673,12 @@ otlp:
 {{- $serviceName := .serviceName -}}
 - type: json_parser
   parse_from: attributes.message
+  # $msec has millisecond resolution; $time_iso8601 is whole seconds and sorts a request's
+  # access record ahead of its own span.
   timestamp:
-    parse_from: attributes.time_iso8601
-    layout: "%Y-%m-%dT%H:%M:%S%z"
+    parse_from: attributes.msec
+    layout_type: epoch
+    layout: s.ms
 - type: severity_parser
   parse_from: attributes.http_status
   overwrite_text: true
