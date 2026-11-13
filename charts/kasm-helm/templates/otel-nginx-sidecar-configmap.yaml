@@ -71,6 +71,15 @@ data:
     processors:
       {{- include "kasm.common.otelResourceProcessor" (dict "context" $ "zone" true) | nindent 6 }}
 
+      # nginx's error log can't be formatted, so drop the query of its request, upstream and
+      # referrer fields here, as the access log does; tokens travel in query strings.
+      transform/nginx_error_scrub:
+        log_statements:
+          - context: log
+            statements:
+              - replace_pattern(body, "((?:request|upstream|referrer):\\s\"[^\"?\\s]*(?:\\s[^\"?\\s]*)?)\\?[^\"\\s]*", "$$1?[redacted]") where IsString(body)
+              - replace_pattern(attributes["message"], "((?:request|upstream|referrer):\\s\"[^\"?\\s]*(?:\\s[^\"?\\s]*)?)\\?[^\"\\s]*", "$$1?[redacted]") where IsString(attributes["message"])
+
       {{- include "kasm.common.otelBatchProcessor" . | nindent 6 }}
 
 {{ include "kasm.common.otelMemoryLimiter" (dict "limitMib" 96 "spikeLimitMib" 32) | indent 6 }}
@@ -84,7 +93,7 @@ data:
       pipelines:
         logs:
           receivers: [syslog/nginx_access, syslog/nginx_error, otlp/local]
-          processors: [memory_limiter, resource, batch]
+          processors: [memory_limiter, transform/nginx_error_scrub, resource, batch]
           exporters: [otlp]
 
         traces:

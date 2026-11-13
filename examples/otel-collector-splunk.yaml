@@ -84,14 +84,17 @@ data:
             - 'attributes["url.path"] == "/api/__healthcheck" and attributes["http.response.status_code"] == "200"'
             - 'resource.attributes["service.name"] == "kasm-api" and IsMatch(body, "/api/__healthcheck HTTP/1\\.[01]. 200 ")'
 
-      # ngx_otel_module's http.target/http.url span attributes carry the raw query string (JWTs and
-      # session passwords have been observed in it). Strip it before tail sampling buffers the span.
+      # Span URL attributes carry the raw query string (JWTs and session passwords have been seen in
+      # it), from nginx and the Python HTTP instrumentations alike. Strip it from every service's
+      # spans before tail sampling buffers them.
       transform/nginx_scrub:
         trace_statements:
           - context: span
             statements:
-              - replace_pattern(attributes["http.target"], "\\?.*$", "") where resource.attributes["service.name"] == "kasm-proxy" and attributes["http.target"] != nil
-              - replace_pattern(attributes["http.url"], "\\?.*$", "") where resource.attributes["service.name"] == "kasm-proxy" and attributes["http.url"] != nil
+              - replace_pattern(attributes["http.target"], "\\?.*$", "") where attributes["http.target"] != nil
+              - replace_pattern(attributes["http.url"], "\\?.*$", "") where attributes["http.url"] != nil
+              - replace_pattern(attributes["url.full"], "\\?.*$", "") where attributes["url.full"] != nil
+              - delete_key(attributes, "url.query")
 
       tail_sampling:
         decision_wait: 30s
